@@ -1,0 +1,176 @@
+.console {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  text-align: left;
+}
+
+.console__header h1 {
+  margin: 0 0 4px;
+  font-size: 28px;
+}
+
+.console__subtitle {
+  margin: 0 0 16px;
+  color: #565b66;
+}
+
+.console__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.console__actions button {
+  font: inherit;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #c9ccd4;
+  background: #f6f7f9;
+  color: #1b1d22;
+  cursor: pointer;
+}
+
+.console__actions button:hover:not(:disabled) {
+  border-color: #7a8394;
+}
+
+.console__actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.panel {
+  border: 1px solid #d7dae0;
+  border-radius: 8px;
+  padding: 16px;
+  background: #fff;
+}
+
+.panel__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.panel__heading h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.badge {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.badge--ok {
+  background: #e3f6e8;
+  border-color: #9ad3aa;
+  color: #17612c;
+}
+
+.badge--error {
+  background: #fdeaea;
+  border-color: #e3a2a2;
+  color: #8a1f1f;
+}
+
+.badge--idle {
+  background: #eef0f3;
+  border-color: #c9ccd4;
+  color: #4a4f59;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 0;
+}
+
+.facts dt {
+  color: #565b66;
+}
+
+.facts dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.message {
+  margin: 0 0 8px;
+  color: #3d4149;
+}
+
+.message--error {
+  color: #8a1f1f;
+}
+
+.reply {
+  margin: 0;
+  padding: 12px;
+  border-radius: 6px;
+  background: #f4f5f7;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (prefers-color-scheme: dark) {
+  .console__subtitle,
+  .facts dt {
+    color: #a6acb8;
+  }
+
+  .console__actions button {
+    background: #23262d;
+    border-color: #3a3f49;
+    color: #eef0f3;
+  }
+
+  .panel {
+    background: #1a1c21;
+    border-color: #343943;
+  }
+
+  .badge--ok {
+    background: #16321f;
+    border-color: #2f6b41;
+    color: #a7e0b8;
+  }
+
+  .badge--error {
+    background: #3a1d1d;
+    border-color: #7a3a3a;
+    color: #f0b4b4;
+  }
+
+  .badge--idle {
+    background: #23262d;
+    border-color: #3a3f49;
+    color: #a6acb8;
+  }
+
+  .message {
+    color: #c7ccd5;
+  }
+
+  .message--error {
+    color: #f0b4b4;
+  }
+
+  .reply {
+    background: #23262d;
+  }
+}

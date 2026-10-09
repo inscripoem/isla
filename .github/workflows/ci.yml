@@ -1,0 +1,28 @@
+name: CI
+
+# Coverage: frozen install, strict typecheck, lint, offline boundary tests and a production build.
+# Not covered: live provider tests (test/live is intentionally empty), semantic evaluation and
+# remote branch protection. This workflow defines CI; it does not assert that remote CI or branch
+# protection is configured.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
