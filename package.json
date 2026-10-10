@@ -12,12 +12,23 @@
     "lint": "oxlint",
     "typecheck": "tsc -b",
     "test": "vitest run",
+    "test:m1": "vitest run test/offline/m1-performance.test.ts",
+    "test:m2": "vitest run test/offline/m2-console.test.ts",
+    "test:m3": "vitest run test/offline/m3-decision.test.ts",
+    "test:m4": "vitest run test/offline/m4-dialogue.test.ts",
+    "test:m5": "vitest run test/offline/m5-runtime.test.ts",
+    "test:m6": "vitest run test/offline/m6-storage.test.ts",
+    "test:composition": "vitest run test/offline/composition.test.ts",
+    "test:readiness": "vitest run test/offline/contracts.test.ts test/offline/requirements.test.ts test/offline/boundaries.test.ts",
+    "req:schema": "tsx src/evaluation/emit-req-schema.ts",
+    "verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
     "preview": "vite preview"
   },
   "dependencies": {
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "ws": "^8.22.0"
+    "ws": "^8.22.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
@@ -29,6 +40,7 @@
     "tsx": "^4.23.15",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "yaml": "^2.9.1"
   }
 }

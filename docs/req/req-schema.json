@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "0.2"
+    },
+    "generatedFrom": {
+      "type": "string",
+      "minLength": 1
+    },
+    "requirements": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "functional",
+              "non-functional",
+              "invariant"
+            ]
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "must",
+              "should",
+              "could",
+              "wont"
+            ]
+          },
+          "owner": {
+            "type": "string",
+            "enum": [
+              "M1",
+              "M2",
+              "M3",
+              "M4",
+              "M5",
+              "M6"
+            ]
+          },
+          "collaborators": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "M1",
+                "M2",
+                "M3",
+                "M4",
+                "M5",
+                "M6"
+              ]
+            }
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "under-review",
+              "approved",
+              "pending-measurement"
+            ]
+          },
+          "acceptance": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "deterministic",
+                    "pending-metric"
+                  ]
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "cases": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "required": [
+                "kind",
+                "description",
+                "cases"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "category",
+          "priority",
+          "owner",
+          "collaborators",
+          "source",
+          "status",
+          "acceptance"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "version",
+    "generatedFrom",
+    "requirements"
+  ],
+  "additionalProperties": false
+}

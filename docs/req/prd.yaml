@@ -1,0 +1,78 @@
+document: Isla product requirements (scoped preparation register)
+revision: "2026-10-10.1"
+status: under-review
+language: en
+notes: >
+  Scoped preparation artifact. It records the agreed first-slice intent and
+  deterministic acceptance links without inventing final quality or
+  performance numbers, and without claiming team-wide approval.
+
+product:
+  name: Isla
+  summary: A reusable AI VTuber runtime with a local console and replaceable decision, dialogue, speech and avatar adapters.
+  first_release:
+    - one character
+    - local text input
+    - response selection with an explicit reply intent
+    - persona-conditioned dialogue
+    - speech with subtitles and a supported avatar reaction
+    - operator Stop with explicit Resume
+    - SQLite-backed event, decision and delivery records
+
+first_slice:
+  statement: Send an audience message from the console and receive a spoken reply with subtitles and a supported avatar reaction; Stop cancels playback, and later conversation distinguishes completed speech from an interrupted segment.
+  deterministic_acceptance:
+    - C-01
+    - C-13
+    - C-03
+    - C-04
+  pending_cases:
+    - C-05
+    - C-08
+    - C-09
+    - C-16
+  pending_measurement:
+    - NFR-01
+    - NFR-03
+    - NFR-04
+    - NFR-02 recovery duration
+    - NFR-05 retention and deletion
+
+modules:
+  - id: M1
+    scope: Speech synthesis, browser playback and avatar adapters
+  - id: M2
+    scope: Local console input, configuration, control and presentation
+  - id: M3
+    scope: Response selection, reply intent and rule reactions
+  - id: M4
+    scope: Dialogue generation, persona and memory semantics
+  - id: M5
+    scope: Authoritative lifecycle, scheduling, validation, cancellation and dispatch
+  - id: M6
+    scope: SQLite storage, replay, evaluation tooling and CI
+
+interfaces:
+  protocol: "0.2"
+  application_contract_version: "0.2"
+  diagnostic_protocol: 1
+  application_readiness: null
+  reference: docs/team/INTERFACES.en.md
+  contracts: src/contracts/app
+
+requirements:
+  registry: docs/req/requirements.yaml
+  schema: docs/req/req-schema.json
+  case_registry: docs/req/case-registry.yaml
+  case_schema: docs/req/case-schema.json
+
+non_goals:
+  - Streaming connectors
+  - Model-driven interruption
+  - Multi-character coordination
+  - Model training
+  - Adapter marketplace
+
+evidence:
+  readiness_review: docs/team/READINESS-REVIEW.en.md
+  trace: docs/req/trace.en.md

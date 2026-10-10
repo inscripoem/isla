@@ -2,7 +2,7 @@
 
 Isla is a planned AI VTuber framework: a configurable character runtime with replaceable decision, dialogue, speech and avatar adapters, plus a local console.
 
-This checkout contains the initial runnable foundation, under review (2026-10-09). It provides local health checks and WebSocket diagnostics. Character conversations, Jev, TTS, VTube Studio and SQLite persistence are not implemented yet.
+This checkout contains the runnable diagnostic foundation and parallel-development preparation, under review (2026-10-10). It provides local health checks and WebSocket diagnostics. Character conversations, Jev, TTS, VTube Studio and SQLite persistence are not implemented yet.
 
 ## Run locally
 
@@ -32,21 +32,37 @@ pnpm test
 pnpm build
 ```
 
-Tests run locally without model services and exercise HTTP/WebSocket success, rejection and lifecycle behavior. The build produces the browser bundle; the runtime runs through `tsx`. The initial CI workflow repeats these checks. Remote CI, branch protection, live provider tests and the full course gates remain unverified or unimplemented.
+Tests run locally without model services and exercise HTTP/WebSocket success, rejection and lifecycle behavior. The build produces the browser bundle; the runtime runs through `tsx`. The initial CI workflow repeats these checks. The [initial scaffold CI passed](https://github.com/inscripoem/isla/actions/runs/37954077638) at commit c717f77. Main requires an approved PR; only a human may merge it. Live provider tests and the full course gates remain pending; that run does not validate subsequent changes.
 
-## Where to work
+## Team development
 
-| Area | Current entry | Responsibility |
+Start with [the team development index](docs/team/README.md). The [work plan](docs/team/PLAN.en.md) describes the confirmed allocation, directories and first parallel tasks; [interfaces](docs/team/INTERFACES.en.md) and [candidate requirements](docs/team/REQUIREMENTS.en.md) remain subject to their stated acceptance status.
+
+| Role | Main directory | State |
 | --- | --- | --- |
-| M2 console | `src/console/ConsoleApp.tsx` | Browser UI and connection state |
-| M5 runtime | `src/runtime/cli.ts`, `server.ts` | Local service, lifecycle and integration |
-| Shared contracts | `src/contracts/` | Diagnostic message and health boundaries |
-| Shared verification | `test/offline/`, `.github/workflows/ci.yml` | Owner-authored tests and M6 CI coordination |
+| M1 speech/player/avatar | `src/performance/` | Planned |
+| M2 console | `src/console/` | Existing |
+| M3 response decisions | `src/decision/` | Planned |
+| M4 dialogue/memory | `src/dialogue/` | Planned |
+| M5 runtime — CHANG Xuben | `src/runtime/` | Existing |
+| M6 storage/evaluation/CI | `src/storage/`, `src/evaluation/`, `.github/workflows/` | Requirements tooling and CI exist; storage planned |
 
-M1 speech/player/avatar adapters, M3 response decisions, M4 dialogue/memory and M6 SQLite/evaluation are future work. No empty implementations stand in for these modules.
+Shared contracts use `src/contracts/` (application schemas and ports under `src/contracts/app/`); tests use `test/offline/` and, when implemented, `test/live/`. The [architecture blueprint](architecture-blueprint.md) defines editing boundaries. Planned directories are not empty substitute implementations. Each owner can begin against the shared contracts and explicit fixtures; see [readiness kits](docs/team/READINESS-KITS.en.md).
+
+Each role has an independently runnable conformance command:
+
+```sh
+pnpm test:m1 && pnpm test:m2 && pnpm test:m3
+pnpm test:m4 && pnpm test:m5 && pnpm test:m6
+pnpm test:composition   # offline fixture loop
+pnpm test:readiness     # contracts, requirements, import boundaries
+pnpm verify             # typecheck, lint, all tests, build
+```
+
+These fixtures prove contract boundaries and Stop/receipt semantics; they are not evidence of live providers, browser audio or SQLite persistence.
 
 Diagnostics use version `1`: send `{"v":1,"kind":"ping"}` or `{"v":1,"kind":"get_health"}` to `/diag`. Application actions such as `input.submit` are rejected. This diagnostic protocol is separate from the planned application protocol `0.2`.
 
-Keep dependencies, caches and execution data outside OneDrive. Chinese counterparts and all review-only planning materials remain in the separate OneDrive course workspace; they are excluded from this repository. Genuine development records are kept in the adjacent external evidence directory.
+Keep dependencies, caches and execution data outside OneDrive. Current English collaboration documents are maintained in `docs/team/`; Chinese understanding copies remain in OneDrive. Internal raw records, historical review-only drafts and sharing ZIPs remain in OneDrive or external evidence storage. Coursework submission packages use an explicit English-only whitelist and exclude Chinese copies. Genuine development records are kept in the adjacent external evidence directory.
 
 Product references: [AIRI](https://github.com/moeru-ai/airi), [Cortico](https://github.com/Pal-AI-Lab/Cortico), [cortico-world-vtuber](https://github.com/Pal-AI-Lab/cortico-world-vtuber), and the public [Neuro SDK](https://github.com/VedalAI/neuro-sdk). These are references, not claims about Neuro-sama's private implementation.
