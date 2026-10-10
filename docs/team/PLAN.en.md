@@ -1,6 +1,6 @@
 # Isla — Team Work Plan v0.2
 
-Status: under review · 2026-10-10.2 · [Project overview](../../README.md)
+Status: under review · 2026-10-10.5 · [Project overview](../../README.md)
 
 ## Requirements and course-deliverable work
 
@@ -89,7 +89,7 @@ M1-02, M4-02 and M3-02 can subsequently proceed in parallel behind the unchanged
 
 M6-02 prepares measurement tooling alongside the offline work and compares implemented providers once usable results exist. M3/M4 supply semantic cases, M1/M2/M5 supply their observations. S1-01 records authentic evidence throughout; R1–R6 refine the existing course-deliverable work, not additional module assignments.
 
-Current readiness: shared application schemas and port interfaces live in `src/contracts/app/`; explicit fixtures, deliberately faulty adapters and reusable conformance suites live under `test/`; the offline composition runner and per-role commands are runnable. See [readiness kits](READINESS-KITS.en.md) for commands, ports to implement and replacement instructions. Live providers, production modules, real browser/SQLite behavior, final quality targets remain pending; passing a fixture kit is not product acceptance.
+Current readiness: shared application schemas and port interfaces live in `src/contracts/app/`; explicit fixtures, deliberately faulty adapters and reusable conformance suites live under `test/`; the offline composition runner and per-role commands are runnable. See [readiness kits](READINESS-KITS.en.md) for commands, ports to implement and replacement instructions. M5-01 now provides the production response-cycle coordinator with peer ports injected; it is under review. [M5 handoff](HANDOFF-M5-01.en.md) records its validation and the next I1-01 collaboration step. Other product modules, live providers, real browser/SQLite behavior and final quality targets remain pending; passing a fixture kit is not product acceptance.
 
 ### Readiness command map
 

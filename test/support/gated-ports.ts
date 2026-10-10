@@ -3,14 +3,17 @@ import type {
   DialogueEnd,
   DialoguePort,
   DialogueRequest,
+  DialogueSegment,
   PerformanceCommand,
   PerformanceReceipt,
   PlayerPort,
   ReactionPort,
+  ReceiptStage,
   RendererPort,
   SelectionPort,
   SynthesisPort,
 } from '../../src/contracts'
+import { FIXTURE_SESSION_ID } from './fixture-data'
 import {
   decisionResultSchema,
   dialogueEndSchema,
@@ -476,5 +479,453 @@ export function createCapturingPlayer(delegate: PlayerPort): CapturingPlayer {
       return delegate.cancel(request, context)
     },
     status: () => delegate.status(),
+  }
+}
+
+/** A promise that never settles, used to prove a wait is really bounded. */
+const NEVER_SETTLES: Promise<never> = new Promise(() => {})
+
+/** Selection that never returns; only a real deadline can end the wait. */
+export function createNeverSettlingSelectionPort(): SelectionPort {
+  return {
+    select: () => NEVER_SETTLES,
+  }
+}
+
+/**
+ * Selection that hangs on its first call and then behaves normally, so a
+ * revoked first cycle can be followed by a valid one on the same coordinator.
+ */
+export function createHangOnceSelectionPort(): SelectionPort {
+  let calls = 0
+  return {
+    async select(request) {
+      calls += 1
+      if (calls === 1) return await NEVER_SETTLES
+      return selectionResultSchema.parse({
+        requestId: request.requestId,
+        sessionId: request.sessionId,
+        epoch: request.epoch,
+        snapshotRevision: request.snapshotRevision,
+        disposition: 'respond',
+        selectedEventIds: [request.candidates[0].eventId],
+        replyIntent: 'answer',
+        reasonCode: 'fixture-selected',
+        provider: 'fixture',
+        modelVersion: 'fixture-v1',
+        usage: fixtureUsage({ requestId: request.requestId }),
+      })
+    },
+  }
+}
+
+/** Dialogue that never returns; only a real deadline can end the wait. */
+export function createNeverSettlingDialoguePort(onEnter?: () => void): DialoguePort {
+  return {
+    generate() {
+      onEnter?.()
+      return NEVER_SETTLES
+    },
+  }
+}
+
+/** Synthesis that never returns. */
+export function createNeverSettlingSynthesisPort(onEnter?: () => void): SynthesisPort {
+  return {
+    prepare() {
+      onEnter?.()
+      return NEVER_SETTLES
+    },
+  }
+}
+
+/** Reaction that never returns. */
+export function createNeverSettlingReactionPort(onEnter?: () => void): ReactionPort {
+  return {
+    decide() {
+      onEnter?.()
+      return NEVER_SETTLES
+    },
+  }
+}
+
+/** Renderer whose avatar dispatch never returns; speech must still proceed. */
+export function createNeverSettlingRendererPort(): RendererPort {
+  return {
+    capabilities: () => ({
+      rendererId: 'renderer-never',
+      characterId: 'character-fixture',
+      capabilityRevision: 1,
+      actions: [
+        { actionId: 'smile', description: 'smile', observability: 'observable', parameterBounds: [] },
+      ],
+    }),
+    execute: () => NEVER_SETTLES,
+  }
+}
+
+/** Player whose playback never returns and whose cancellation reports idle. */
+export function createNeverSettlingPlayerPort(): PlayerPort {
+  return {
+    execute: () => NEVER_SETTLES,
+    cancel: async () => null,
+    status: () => ({ idle: true, activeOutputId: null, lastStage: null }),
+  }
+}
+
+/**
+ * Dialogue that returns a completed end immediately but only emits a segment
+ * once the gate opens, i.e. after the bounded call has already finished.
+ */
+export function createLateSinkDialoguePort(gate: Promise<void>, onEnter?: () => void): DialoguePort {
+  return {
+    async generate(request, _context, sink): Promise<DialogueEnd> {
+      onEnter?.()
+      void gate
+        .then(() =>
+          sink.segment(
+            dialogueSegmentSchema.parse({
+              requestId: request.requestId,
+              sessionId: request.sessionId,
+              epoch: request.epoch,
+              turnId: request.turnId,
+              segmentId: `${request.turnId}-late-sink`,
+              index: 0,
+              text: 'A segment emitted after completion.',
+              model: 'fixture',
+              modelVersion: 'fixture-v1',
+            }),
+          ),
+        )
+        .catch(() => {})
+      return dialogueEndSchema.parse({
+        requestId: request.requestId,
+        sessionId: request.sessionId,
+        epoch: request.epoch,
+        turnId: request.turnId,
+        status: 'completed',
+        segmentCount: 0,
+        usage: fixtureUsage({ requestId: request.requestId }),
+      })
+    },
+  }
+}
+
+/** Selection whose peer promise rejects only after its signal is aborted. */
+export function createAbortingRejectionSelectionPort(): SelectionPort {
+  return {
+    select(_request, context) {
+      return new Promise<never>((_resolve, reject) => {
+        const rejectLater = (): void => {
+          setTimeout(() => reject(new Error('late selection rejection after abort')), 1)
+        }
+        if (context.signal.aborted) rejectLater()
+        else context.signal.addEventListener('abort', rejectLater, { once: true })
+      })
+    },
+  }
+}
+
+/**
+ * Player whose execute never settles on its own; only cancellation evidence
+ * resolves it. The first `immediate` executes complete right away so a kept
+ * first segment plus an interrupted later segment (C-04 history) is possible.
+ */
+export function createCancelReleasingPlayerPort(immediate = 1): PlayerPort {
+  let immediateRemaining = immediate
+  let pending: { command: PerformanceCommand; resolve: (receipt: PerformanceReceipt) => void } | null = null
+  return {
+    async execute(command) {
+      if (immediateRemaining > 0) {
+        immediateRemaining -= 1
+        return performanceReceiptSchema.parse({
+          receiptId: `receipt-audio-${command.outputId}`,
+          outputId: command.outputId,
+          sessionId: command.sessionId,
+          epoch: command.epoch,
+          turnId: command.turnId,
+          segmentId: command.segmentId,
+          modality: 'audio',
+          stage: 'completed',
+          localTimeMs: 1200,
+          chunkIds: null,
+          reasonCode: null,
+          source: 'fixture-player',
+        })
+      }
+      return new Promise<PerformanceReceipt>((resolve) => {
+        pending = { command, resolve }
+      })
+    },
+    async cancel(request) {
+      if (pending === null) return null
+      const { command, resolve } = pending
+      pending = null
+      const receipt = performanceReceiptSchema.parse({
+        receiptId: `receipt-cancel-${request.requestId}`,
+        outputId: command.outputId,
+        sessionId: command.sessionId,
+        epoch: request.revokedEpoch,
+        turnId: command.turnId,
+        segmentId: command.segmentId,
+        modality: 'audio',
+        stage: 'cancelled',
+        localTimeMs: null,
+        chunkIds: null,
+        reasonCode: 'fixture-cancel',
+        source: 'fixture-player',
+      })
+      resolve(receipt)
+      return receipt
+    },
+    status: () => ({ idle: true, activeOutputId: null, lastStage: null }),
+  }
+}
+
+function scriptedSegment(
+  request: DialogueRequest,
+  index: number,
+  overrides: Partial<DialogueSegment> = {},
+): DialogueSegment {
+  return dialogueSegmentSchema.parse({
+    requestId: request.requestId,
+    sessionId: request.sessionId,
+    epoch: request.epoch,
+    turnId: request.turnId,
+    segmentId: `${request.turnId}-seg-${index}`,
+    index,
+    text: `scripted segment ${index}`,
+    model: 'fixture',
+    modelVersion: 'fixture-v1',
+    ...overrides,
+  })
+}
+
+function scriptedEnd(request: DialogueRequest, segmentCount: number): DialogueEnd {
+  return dialogueEndSchema.parse({
+    requestId: request.requestId,
+    sessionId: request.sessionId,
+    epoch: request.epoch,
+    turnId: request.turnId,
+    status: 'completed',
+    segmentCount,
+    usage: fixtureUsage({ requestId: request.requestId }),
+  })
+}
+
+/** Dialogue whose only segment is punctuation and must not be spoken. */
+export function createPunctuationOnlyDialoguePort(): DialoguePort {
+  return {
+    async generate(request, _context, sink): Promise<DialogueEnd> {
+      await sink.segment(scriptedSegment(request, 0, { text: '...' }))
+      return scriptedEnd(request, 1)
+    },
+  }
+}
+
+/** Dialogue that emits a schema-invalid segment. */
+export function createMalformedSegmentDialoguePort(): DialoguePort {
+  return {
+    async generate(request, _context, sink): Promise<DialogueEnd> {
+      await sink.segment({ segmentId: 'broken' } as unknown as DialogueSegment)
+      return scriptedEnd(request, 1)
+    },
+  }
+}
+
+/** Dialogue that reuses index 0 for a second segment. */
+export function createRepeatedIndexDialoguePort(): DialoguePort {
+  return {
+    async generate(request, _context, sink): Promise<DialogueEnd> {
+      await sink.segment(scriptedSegment(request, 0))
+      await sink.segment(scriptedSegment(request, 1, { index: 0, segmentId: `${request.turnId}-seg-1` }))
+      return scriptedEnd(request, 1)
+    },
+  }
+}
+
+/** Dialogue that finishes with a mismatched segment count. */
+export function createWrongEndCountDialoguePort(): DialoguePort {
+  return {
+    async generate(request, _context, sink): Promise<DialogueEnd> {
+      await sink.segment(scriptedSegment(request, 0))
+      return scriptedEnd(request, 0)
+    },
+  }
+}
+
+export interface StagedCancelPlayer extends PlayerPort {
+  /** Release the first, deliberately delayed cancellation evidence. */
+  releaseFirst(): void
+  cancelCalls(): number
+}
+
+/**
+ * Player whose first cancellation is held and resolves with non-terminal
+ * evidence, while later cancellations resolve terminal immediately. It proves
+ * an earlier Stop completion cannot clear a later Stop's confirmation.
+ */
+export function createStagedCancelPlayer(sessionId = FIXTURE_SESSION_ID): StagedCancelPlayer {
+  let calls = 0
+  let releaseFirst: (() => void) | null = null
+  const receipt = (request: { revokedEpoch: number }, stage: 'started' | 'cancelled', suffix: string) =>
+    performanceReceiptSchema.parse({
+      receiptId: `receipt-staged-${suffix}`,
+      outputId: 'output-staged',
+      sessionId,
+      epoch: request.revokedEpoch,
+      turnId: 'turn-staged',
+      segmentId: 'segment-staged',
+      modality: 'audio',
+      stage,
+      localTimeMs: null,
+      chunkIds: null,
+      reasonCode: null,
+      source: 'staged-player',
+    })
+  return {
+    releaseFirst: () => releaseFirst?.(),
+    cancelCalls: () => calls,
+    execute: () => new Promise<PerformanceReceipt>(() => {}),
+    async cancel(request) {
+      calls += 1
+      if (calls === 1) {
+        return await new Promise<PerformanceReceipt>((resolve) => {
+          releaseFirst = () => resolve(receipt(request, 'started', 'first'))
+        })
+      }
+      return receipt(request, 'cancelled', 'second')
+    },
+    status: () => ({ idle: true, activeOutputId: null, lastStage: null }),
+  }
+}
+
+/**
+ * Player whose first execute returns a completed receipt for its own output,
+ * but every later execute returns a completed receipt for the previous output.
+ * It proves an old terminal receipt cannot confirm the current output.
+ */
+export function createHistoricalReceiptPlayer(): PlayerPort {
+  let previous: PerformanceCommand | null = null
+  let calls = 0
+  return {
+    async execute(command) {
+      calls += 1
+      const target = calls > 1 && previous !== null ? previous : command
+      previous = command
+      return performanceReceiptSchema.parse({
+        receiptId: `receipt-hist-${target.outputId}`,
+        outputId: target.outputId,
+        sessionId: target.sessionId,
+        epoch: target.epoch,
+        turnId: target.turnId,
+        segmentId: target.segmentId,
+        modality: 'audio',
+        stage: 'completed',
+        localTimeMs: 100,
+        chunkIds: null,
+        reasonCode: null,
+        source: 'historical-player',
+      })
+    },
+    async cancel() {
+      return null
+    },
+    status: () => ({ idle: true, activeOutputId: null, lastStage: null }),
+  }
+}
+
+function receiptFor(
+  command: PerformanceCommand,
+  stage: ReceiptStage,
+  receiptId: string,
+  source: string,
+): PerformanceReceipt {
+  return performanceReceiptSchema.parse({
+    receiptId,
+    outputId: command.outputId,
+    sessionId: command.sessionId,
+    epoch: command.epoch,
+    turnId: command.turnId,
+    segmentId: command.segmentId,
+    modality: 'audio',
+    stage,
+    localTimeMs: null,
+    chunkIds: null,
+    reasonCode: null,
+    source,
+  })
+}
+
+/** Player whose execute returns a non-terminal `accepted` receipt. */
+export function createAcceptedReceiptPlayer(): CapturingPlayer {
+  return createCapturingPlayer({
+    async execute(command) {
+      return receiptFor(command, 'accepted', `receipt-accepted-${command.outputId}`, 'accepted-player')
+    },
+    async cancel() {
+      return null
+    },
+    status: () => ({ idle: true, activeOutputId: null, lastStage: null }),
+  })
+}
+
+/** Player whose execute returns a schema-invalid receipt. */
+export function createMalformedReceiptPlayer(): PlayerPort {
+  return {
+    async execute() {
+      return { outputId: 'not-a-receipt' } as unknown as PerformanceReceipt
+    },
+    async cancel() {
+      return null
+    },
+    status: () => ({ idle: true, activeOutputId: null, lastStage: null }),
+  }
+}
+
+/** Player whose execute stage/receipt id is scripted per call. */
+export function createScriptedReceiptPlayer(
+  makeSpec: (command: PerformanceCommand, call: number) => { stage: ReceiptStage; receiptId?: string },
+): CapturingPlayer {
+  let calls = 0
+  return createCapturingPlayer({
+    async execute(command) {
+      const spec = makeSpec(command, calls)
+      calls += 1
+      return receiptFor(command, spec.stage, spec.receiptId ?? `receipt-${command.outputId}`, 'scripted-player')
+    },
+    async cancel() {
+      return null
+    },
+    status: () => ({ idle: true, activeOutputId: null, lastStage: null }),
+  })
+}
+
+export interface CancelTerminalPlayer extends PlayerPort {
+  commands(): PerformanceCommand[]
+}
+
+/**
+ * Player whose first execute completes and whose later execute never settles,
+ * while cancel returns valid terminal evidence for the latest output without
+ * resolving execute. It proves delivery can be finalized from cancel evidence.
+ */
+export function createCancelTerminalPlayer(): CancelTerminalPlayer {
+  const commands: PerformanceCommand[] = []
+  return {
+    commands: () => [...commands],
+    async execute(command) {
+      commands.push(command)
+      if (commands.length === 1) {
+        return receiptFor(command, 'completed', `receipt-audio-${command.outputId}`, 'cancel-terminal-player')
+      }
+      return new Promise<PerformanceReceipt>(() => {})
+    },
+    async cancel(request) {
+      const command = commands[commands.length - 1]
+      if (command === undefined) return null
+      return receiptFor(command, 'cancelled', `receipt-cancel-${request.requestId}`, 'cancel-terminal-player')
+    },
+    status: () => ({ idle: true, activeOutputId: null, lastStage: null }),
   }
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PerformanceReceipt } from '../../src/contracts'
-import { createFixtureRunner } from '../support/runner-factories'
+import { createCoordinatorRunner, createFixtureRunner } from '../support/runner-factories'
+import type { RunnerOptions } from '../support/runner-factories'
 import type { ContractRunner, TurnOutcome } from '../support/contract-runner'
 import * as correct from '../support/correct-ports'
 import { createGate } from '../support/context'
@@ -32,6 +33,15 @@ import {
   fixtureRuntimeEvent,
 } from '../support/fixture-data'
 
+/**
+ * Every regression runs against both the fixture reference runner and the
+ * production coordinator, with identical assertions.
+ */
+const runnerFactories: ReadonlyArray<[string, (options?: RunnerOptions) => ContractRunner]> = [
+  ['fixture', createFixtureRunner],
+  ['coordinator', createCoordinatorRunner],
+]
+
 async function waitUntil(predicate: () => boolean, timeoutMs = 500): Promise<void> {
   const start = Date.now()
   while (!predicate()) {
@@ -42,13 +52,13 @@ async function waitUntil(predicate: () => boolean, timeoutMs = 500): Promise<voi
 
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
 
-describe('C-03 deferred providers after Stop and Resume', () => {
+describe.each(runnerFactories)('C-03 deferred providers after Stop and Resume (%s)', (_label, createRunner) => {
   it('rejects a deferred selection result entered before Stop with zero dispatch', async () => {
     const gate = createGate()
     const entered = createGate()
     const player = createCountingPlayer(correct.createFixturePlayer())
     const renderer = correct.createCountingRenderer(correct.createFixtureRendererPort())
-    const runner = createFixtureRunner({
+    const runner = createRunner({
       selection: createGatedSelectionPort(gate.promise, () => entered.release()),
       player,
       renderer,
@@ -74,7 +84,7 @@ describe('C-03 deferred providers after Stop and Resume', () => {
     const entered = createGate()
     const player = createCountingPlayer(correct.createFixturePlayer())
     const renderer = correct.createCountingRenderer(correct.createFixtureRendererPort())
-    const runner = createFixtureRunner({
+    const runner = createRunner({
       dialogue: createGatedDialoguePort(gate.promise, 1, () => entered.release()),
       player,
       renderer,
@@ -98,7 +108,7 @@ describe('C-03 deferred providers after Stop and Resume', () => {
     const entered = createGate()
     const player = createCountingPlayer(correct.createFixturePlayer())
     const renderer = correct.createCountingRenderer(correct.createFixtureRendererPort())
-    const runner = createFixtureRunner({
+    const runner = createRunner({
       synthesis: createGatedSynthesisPort(gate.promise, () => entered.release()),
       player,
       renderer,
@@ -122,7 +132,7 @@ describe('C-03 deferred providers after Stop and Resume', () => {
     const entered = createGate()
     const player = createCountingPlayer(correct.createFixturePlayer())
     const renderer = correct.createCountingRenderer(correct.createFixtureRendererPort())
-    const runner = createFixtureRunner({
+    const runner = createRunner({
       reaction: createGatedReactionPort(gate.promise, () => entered.release()),
       player,
       renderer,
@@ -146,7 +156,7 @@ describe('C-03 deferred providers after Stop and Resume', () => {
     const entered = createGate()
     const player = createCountingPlayer(correct.createFixturePlayer())
     const renderer = correct.createCountingRenderer(correct.createFixtureRendererPort())
-    const runner = createFixtureRunner({
+    const runner = createRunner({
       dialogue: createLateDialoguePort(gate.promise, () => entered.release()),
       player,
       renderer,
@@ -166,11 +176,11 @@ describe('C-03 deferred providers after Stop and Resume', () => {
   })
 })
 
-describe('prompt Stop while dependencies are held', () => {
+describe.each(runnerFactories)('prompt Stop while dependencies are held (%s)', (_label, createRunner) => {
   it('resolves Stop while a store append is held', async () => {
     const gate = createGate()
     const store = correct.createFixtureEventStore()
-    const runner = createFixtureRunner({ store })
+    const runner = createRunner({ store })
     await runner.resume()
     await runner.accept('held append')
     await Promise.resolve()
@@ -192,7 +202,7 @@ describe('prompt Stop while dependencies are held', () => {
   it('resolves Stop while a delivery commit is held', async () => {
     const gate = createGate()
     const store = correct.createFixtureEventStore()
-    const runner = createFixtureRunner({ store })
+    const runner = createRunner({ store })
     await runner.resume()
     await runner.accept('held commit')
     await Promise.resolve()
@@ -213,7 +223,7 @@ describe('prompt Stop while dependencies are held', () => {
   it('resolves Stop while cancellation evidence is held and refuses early Resume', async () => {
     const gate = createGate()
     const player = createGatedCancelPlayer(correct.createFixturePlayer(), gate.promise)
-    const runner = createFixtureRunner({ player })
+    const runner = createRunner({ player })
     await runner.resume()
     await runner.accept('held cancel')
     const stopAck = await runner.stop()
@@ -225,7 +235,7 @@ describe('prompt Stop while dependencies are held', () => {
   })
 })
 
-describe('C-10 receipt reconciliation', () => {
+describe.each(runnerFactories)('C-10 receipt reconciliation (%s)', (_label, createRunner) => {
   async function startHeldTurn(): Promise<{
     runner: ContractRunner
     command: { outputId: string; sessionId: string; epoch: number; turnId: string; segmentId: string }
@@ -236,7 +246,7 @@ describe('C-10 receipt reconciliation', () => {
     const gate = createGate()
     const holdPlayer = correct.createFixturePlayer({ hold: true })
     const player = createCapturingPlayer(holdPlayer)
-    const runner = createFixtureRunner({ player })
+    const runner = createRunner({ player })
     await runner.resume()
     await runner.accept('receipts')
     runner.hooks.onPlaybackStart = async () => {
@@ -317,11 +327,11 @@ describe('C-10 receipt reconciliation', () => {
   })
 })
 
-describe('C-11 adapter substitution', () => {
+describe.each(runnerFactories)('C-11 adapter substitution (%s)', (_label, createRunner) => {
   it('preserves observable outcome and passed selection/intent under substitution', async () => {
-    async function run(options: Parameters<typeof createFixtureRunner>[0] = {}) {
+    async function run(options: RunnerOptions = {}) {
       const dialogue = createCapturingDialoguePort(correct.createFixtureDialoguePort())
-      const runner = createFixtureRunner({ ...options, dialogue })
+      const runner = createRunner({ ...options, dialogue })
       await runner.resume()
       await runner.accept('first question', 'cand-1')
       await runner.accept('second question', 'cand-2')
@@ -359,10 +369,10 @@ describe('C-11 adapter substitution', () => {
   })
 })
 
-describe('C-14 invalid selection and fallback authority', () => {
+describe.each(runnerFactories)('C-14 invalid selection and fallback authority (%s)', (_label, createRunner) => {
   it('uses the M5 fallback for malformed and wrong-revision selection', async () => {
     for (const selection of [createMalformedSelectionPort(), createWrongRevisionSelectionPort()]) {
-      const runner = createFixtureRunner({ selection })
+      const runner = createRunner({ selection })
       await runner.resume()
       await runner.accept('fallback')
       const turn = await runner.runTurn()
@@ -374,7 +384,7 @@ describe('C-14 invalid selection and fallback authority', () => {
 
   it('treats an expired selection result as stale without fallback', async () => {
     const gate = createGate()
-    const runner = createFixtureRunner({ selection: createGatedSelectionPort(gate.promise) })
+    const runner = createRunner({ selection: createGatedSelectionPort(gate.promise) })
     await runner.resume()
     await runner.accept('expired')
     const turnPromise = runner.runTurn()
@@ -388,7 +398,7 @@ describe('C-14 invalid selection and fallback authority', () => {
   it('does not fall back after Stop', async () => {
     const gate = createGate()
     const player = createCountingPlayer(correct.createFixturePlayer())
-    const runner = createFixtureRunner({ selection: createGatedSelectionPort(gate.promise), player })
+    const runner = createRunner({ selection: createGatedSelectionPort(gate.promise), player })
     await runner.resume()
     await runner.accept('stop fallback')
     const turnPromise = runner.runTurn()
@@ -400,9 +410,9 @@ describe('C-14 invalid selection and fallback authority', () => {
   })
 })
 
-describe('C-15 attempt accounting', () => {
+describe.each(runnerFactories)('C-15 attempt accounting (%s)', (_label, createRunner) => {
   it('adds exactly one attempt per new eligible input and none while unchanged', async () => {
-    const runner = createFixtureRunner({ selection: correct.createDeferringSelectionPort() })
+    const runner = createRunner({ selection: correct.createDeferringSelectionPort() })
     await runner.resume()
     await runner.accept('first')
     await runner.runTurn()
@@ -415,10 +425,10 @@ describe('C-15 attempt accounting', () => {
   })
 })
 
-describe('persistence and projection integrity', () => {
+describe.each(runnerFactories)('persistence and projection integrity (%s)', (_label, createRunner) => {
   it('exports and reads exactly the committed runtime events', async () => {
     const store = correct.createFixtureEventStore()
-    const runner = createFixtureRunner({ store })
+    const runner = createRunner({ store })
     await runner.resume()
     await runner.accept('export')
     await runner.runTurn()
@@ -445,7 +455,7 @@ describe('persistence and projection integrity', () => {
 
   it('does not commit spoken memory when the atomic write fails', async () => {
     const store = correct.createFixtureEventStore()
-    const runner = createFixtureRunner({ store })
+    const runner = createRunner({ store })
     await runner.resume()
     await runner.accept('failed commit')
     store.failNextCommit = true
@@ -459,9 +469,9 @@ describe('persistence and projection integrity', () => {
   })
 })
 
-describe('result correlation and input eligibility', () => {
+describe.each(runnerFactories)('result correlation and input eligibility (%s)', (_label, createRunner) => {
   it('uses the M5 fallback when selection correlation is broken', async () => {
-    const runner = createFixtureRunner({ selection: createCorrelationBreakingSelectionPort() })
+    const runner = createRunner({ selection: createCorrelationBreakingSelectionPort() })
     await runner.resume()
     await runner.accept('broken correlation')
     const turn = await runner.runTurn()
@@ -471,7 +481,7 @@ describe('result correlation and input eligibility', () => {
   })
 
   it('uses the M5 fallback when selection throws', async () => {
-    const runner = createFixtureRunner({ selection: createThrowingSelectionPort() })
+    const runner = createRunner({ selection: createThrowingSelectionPort() })
     await runner.resume()
     await runner.accept('throws')
     const turn = await runner.runTurn()
@@ -482,7 +492,7 @@ describe('result correlation and input eligibility', () => {
   it('does not dispatch a preparation result with broken correlation', async () => {
     const player = createCountingPlayer(correct.createFixturePlayer())
     const renderer = correct.createCountingRenderer(correct.createFixtureRendererPort())
-    const runner = createFixtureRunner({
+    const runner = createRunner({
       synthesis: createCorrelationBreakingSynthesisPort(),
       player,
       renderer,
@@ -498,7 +508,7 @@ describe('result correlation and input eligibility', () => {
   it('no-ops a reaction with broken correlation but still speaks', async () => {
     const player = createCountingPlayer(correct.createFixturePlayer())
     const renderer = correct.createCountingRenderer(correct.createFixtureRendererPort())
-    const runner = createFixtureRunner({
+    const runner = createRunner({
       reaction: createCorrelationBreakingReactionPort(),
       player,
       renderer,
@@ -512,7 +522,7 @@ describe('result correlation and input eligibility', () => {
   })
 
   it('filters expired inputs before selection', async () => {
-    const runner = createFixtureRunner()
+    const runner = createRunner()
     await runner.resume()
     await runner.accept('expires soon')
     runner.clock.advance(60001)
@@ -524,7 +534,7 @@ describe('result correlation and input eligibility', () => {
   it('rechecks input expiry before creating a turn', async () => {
     const gate = createGate()
     const entered = createGate()
-    const runner = createFixtureRunner({
+    const runner = createRunner({
       inputTtlMs: 1000,
       selection: createGatedSelectionPort(gate.promise, () => entered.release()),
     })
@@ -540,13 +550,13 @@ describe('result correlation and input eligibility', () => {
   })
 })
 
-describe('capability refresh and reaction options', () => {
+describe.each(runnerFactories)('capability refresh and reaction options (%s)', (_label, createRunner) => {
   it('no-ops a reaction that outlives a capability change but still speaks', async () => {
     const gate = createGate()
     const entered = createGate()
     const player = createCountingPlayer(correct.createFixturePlayer())
     const renderer = createRevisionSwitchingRenderer(1)
-    const runner = createFixtureRunner({
+    const runner = createRunner({
       reaction: createGatedReactionPort(gate.promise, () => entered.release()),
       renderer,
       player,
@@ -565,7 +575,7 @@ describe('capability refresh and reaction options', () => {
 
   it('includes no-op among reaction options when no action is mapped', async () => {
     const renderer = correct.createCountingRenderer(createEmptyCapabilityRenderer())
-    const runner = createFixtureRunner({ renderer })
+    const runner = createRunner({ renderer })
     await runner.resume()
     await runner.accept('no mapped actions')
     const turn = await runner.runTurn()
@@ -575,10 +585,10 @@ describe('capability refresh and reaction options', () => {
   })
 })
 
-describe('only accepted registered facts authorize delivery', () => {
+describe.each(runnerFactories)('only accepted registered facts authorize delivery (%s)', (_label, createRunner) => {
   it('does not commit when the returned receipt targets an unregistered output', async () => {
     const store = correct.createFixtureEventStore()
-    const runner = createFixtureRunner({ store, player: createMismatchedReceiptPlayer() })
+    const runner = createRunner({ store, player: createMismatchedReceiptPlayer() })
     await runner.resume()
     await runner.accept('ghost output')
     await runner.runTurn()
@@ -589,7 +599,7 @@ describe('only accepted registered facts authorize delivery', () => {
 
   it('does not commit when the returned receipt has a mismatched modality', async () => {
     const store = correct.createFixtureEventStore()
-    const runner = createFixtureRunner({ store, player: createWrongModalityReceiptPlayer() })
+    const runner = createRunner({ store, player: createWrongModalityReceiptPlayer() })
     await runner.resume()
     await runner.accept('wrong modality')
     await runner.runTurn()
@@ -599,7 +609,7 @@ describe('only accepted registered facts authorize delivery', () => {
 
   it('blocks new turns while an output is unknown and resumes after evidence', async () => {
     const player = createCapturingPlayer(createUnknownReceiptPlayer())
-    const runner = createFixtureRunner({ player })
+    const runner = createRunner({ player })
     await runner.resume()
     await runner.accept('unknown output')
     await runner.runTurn()
@@ -631,7 +641,7 @@ describe('only accepted registered facts authorize delivery', () => {
   it('does not play a second segment while the first output stays unknown', async () => {
     const store = correct.createFixtureEventStore()
     const player = createCountingPlayer(createUnknownReceiptPlayer())
-    const runner = createFixtureRunner({ segmentCount: 2, store, player })
+    const runner = createRunner({ segmentCount: 2, store, player })
     await runner.resume()
     await runner.accept('two segments unresolved first')
     await runner.runTurn()

@@ -16,7 +16,7 @@
     "test:m2": "vitest run test/offline/m2-console.test.ts",
     "test:m3": "vitest run test/offline/m3-decision.test.ts",
     "test:m4": "vitest run test/offline/m4-dialogue.test.ts",
-    "test:m5": "vitest run test/offline/m5-runtime.test.ts",
+    "test:m5": "vitest run test/offline/m5-runtime.test.ts test/offline/m5-coordinator.test.ts",
     "test:m6": "vitest run test/offline/m6-storage.test.ts",
     "test:composition": "vitest run test/offline/composition.test.ts",
     "test:readiness": "vitest run test/offline/contracts.test.ts test/offline/requirements.test.ts test/offline/boundaries.test.ts",
