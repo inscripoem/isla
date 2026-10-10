@@ -1,0 +1,212 @@
+version: "0.2"
+generatedFrom: docs/team/REQUIREMENTS.en.md
+requirements:
+  - id: FR-01
+    title: Select one eligible message or wait and provide a supported reply intent
+    category: functional
+    priority: must
+    owner: M3
+    collaborators: [M5, M2]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Eligibility, reservation and expiry are verified; malformed, wrong-revision and expired results follow the validated M5 fallback.
+        cases: [C-13, C-14, C-15]
+      - kind: pending-metric
+        description: Intent-adherence and selection-quality rubric requires human reference labels.
+        cases: [C-16]
+
+  - id: FR-02
+    title: Generate a persona-conditioned reply that distinguishes delivered and interrupted speech
+    category: functional
+    priority: must
+    owner: M4
+    collaborators: [M5, M6]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Unplayed text is excluded from confirmed spoken history and the selected intent is received.
+        cases: [C-01, C-04, C-13]
+
+  - id: FR-03
+    title: Map an interaction to an available avatar reaction with an explicit fallback
+    category: functional
+    priority: should
+    owner: M1
+    collaborators: [M3, M5]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Only current supported actions reach the adapter; unsupported or failed decisions follow no-op.
+        cases: [C-06, C-11]
+
+  - id: FR-04
+    title: Coordinate speech, subtitles and avatar actions for the same turn and segment
+    category: functional
+    priority: must
+    owner: M1
+    collaborators: [M5, M2]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Identity, ordering and completion/cancellation receipts are verified; duplicate or contradictory receipts do not advance output.
+        cases: [C-01, C-04, C-10]
+
+  - id: FR-05
+    title: Stop output, cancel pending work and explicitly resume the session
+    category: functional
+    priority: must
+    owner: M5
+    collaborators: [M1, M2]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Late results cannot restart output; Stop is immediate and Resume requires confirmed evidence.
+        cases: [C-03, C-04]
+      - kind: pending-metric
+        description: Reconnect-while-audio-pending recovery remains an implemented-by-later-module case pending its own test.
+        cases: [C-08]
+
+  - id: FR-06
+    title: Persist and replay events, decisions and delivery outcomes
+    category: functional
+    priority: should
+    owner: M6
+    collaborators: [M4, M2]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Stored fixtures reconstruct order and outcomes; replay is isolated from live state.
+        cases: [C-12, C-17]
+
+  - id: NFR-01
+    title: Responsiveness and synchronization
+    category: non-functional
+    priority: must
+    owner: M5
+    collaborators: [M1, M2, M3, M4, M6]
+    source: docs/team/REQUIREMENTS.en.md
+    status: pending-measurement
+    acceptance:
+      - kind: pending-metric
+        description: p95 input-to-first-audible-output and Stop-to-silence thresholds require a reviewed measured baseline.
+        cases: []
+
+  - id: NFR-02
+    title: Failure recovery
+    category: non-functional
+    priority: must
+    owner: M5
+    collaborators: [M1, M2, M3, M4, M6]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Receipt conflicts and storage write failure produce safe outcomes without fabricating completion.
+        cases: [C-10, C-17]
+      - kind: pending-metric
+        description: Decision-timeout and synthesis-failure recovery duration remain full-product cases pending their own tests.
+        cases: [C-05, C-09]
+
+  - id: NFR-03
+    title: Response quality
+    category: non-functional
+    priority: should
+    owner: M3
+    collaborators: [M4, M6]
+    source: docs/team/REQUIREMENTS.en.md
+    status: pending-measurement
+    acceptance:
+      - kind: pending-metric
+        description: Selection appropriateness, intent adherence and persona consistency need human reference labels and thresholds.
+        cases: [C-16]
+
+  - id: NFR-04
+    title: Bounded resource use
+    category: non-functional
+    priority: must
+    owner: M3
+    collaborators: [M4, M5, M6]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: At most one response-provider attempt per decision opportunity; unchanged input causes no polling.
+        cases: [C-15]
+      - kind: pending-metric
+        description: Total token and cost caps require a reviewed measured baseline.
+        cases: []
+
+  - id: NFR-05
+    title: Privacy and control security
+    category: non-functional
+    priority: must
+    owner: M5
+    collaborators: [M4, M6]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Untrusted content cannot grant control privileges or change control policy.
+        cases: [C-07]
+      - kind: pending-metric
+        description: Retention and deletion periods require a reviewed policy, not an asserted threshold.
+        cases: []
+
+  - id: NFR-06
+    title: Adapter replaceability
+    category: non-functional
+    priority: should
+    owner: M1
+    collaborators: [M3, M4, M5, M6]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: A substituted selection/reaction/synthesis/renderer set preserves the passed plan and observable delivery.
+        cases: [C-11]
+
+  - id: INV-01
+    title: No pending or late output restarts playback while stopped
+    category: invariant
+    priority: must
+    owner: M5
+    collaborators: [M1]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Zero unauthorized dispatches in late-result and Stop cases.
+        cases: [C-03, C-04]
+
+  - id: INV-02
+    title: Only current validated avatar commands may be dispatched
+    category: invariant
+    priority: must
+    owner: M5
+    collaborators: [M1]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Zero renderer calls for a no-op reaction in capability tests.
+        cases: [C-06]
+
+  - id: INV-03
+    title: Audience content and model output cannot grant control privileges
+    category: invariant
+    priority: must
+    owner: M5
+    collaborators: [M4, M6]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Zero privileged transitions from untrusted inputs.
+        cases: [C-07]

@@ -1,9 +1,13 @@
 name: CI
 
-# Coverage: frozen install, strict typecheck, lint, offline boundary tests and a production build.
-# Not covered: live provider tests (test/live is intentionally empty), semantic evaluation and
-# remote branch protection. This workflow defines CI; it does not assert that remote CI or branch
-# protection is configured.
+# Coverage: frozen install, strict typecheck, lint, all offline tests (diagnostic
+# boundary plus the M1-M6 role conformance kits, the offline composition runner,
+# browser/backend import-boundary checks, contract schema checks and requirements
+# registry/schema validation) and a production build.
+# Not covered: live provider tests (test/live is intentionally empty), real browser
+# audio/VTS/SQLite behavior, semantic evaluation and remote branch protection.
+# This workflow defines CI; it does not assert that remote CI or branch protection
+# is configured.
 
 on:
   push:

@@ -1,3 +1,5 @@
-# Foundation development instruction
+# Task entry
 
-Read AGENTS.md and architecture-blueprint.md. The user approved the runnable-foundation plan; the supervising reviewer approved its positive and negative test expectations before build. Continue from the official Vite scaffold within that scope, verify actual behavior and report failures and limitations. Changes beyond this increment require a new plan and user approval. Preserve authentic development and review records.
+Read [AGENTS.md](AGENTS.md), then follow its role-based entry for the member's requested task. For example: "I am M3. Start my first task."
+
+AGENTS.md defines task lookup, planning approval, boundaries and verification. Do not repeat the completed parallel-readiness increment or treat this file as authorization to implement every module. For discussion or documentation requests, retain that scope.

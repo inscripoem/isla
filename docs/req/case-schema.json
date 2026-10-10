@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "0.2"
+    },
+    "cases": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "implemented",
+              "pending"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "verifier": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "test": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "file",
+                  "test"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "title",
+          "verifier"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "version",
+    "cases"
+  ],
+  "additionalProperties": false
+}

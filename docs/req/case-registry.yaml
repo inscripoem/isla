@@ -1,0 +1,112 @@
+version: "0.2"
+cases:
+  - id: C-01
+    status: implemented
+    title: Normal turn
+    verifier:
+      file: test/offline/composition.test.ts
+      test: "C-01/C-13: selection-to-delivery preserves identities and ordering"
+
+  - id: C-02
+    status: implemented
+    title: Duplicate input and control
+    verifier:
+      file: test/offline/composition.test.ts
+      test: "C-02: duplicate input and duplicate control are idempotent"
+
+  - id: C-03
+    status: implemented
+    title: Generation stop with a late result
+    verifier:
+      file: test/offline/composition.test.ts
+      test: "C-03: a result arriving after Stop is stale and never delivered"
+
+  - id: C-04
+    status: implemented
+    title: Playback stop during the second segment
+    verifier:
+      file: test/conformance/runtime.conformance.ts
+      test: c04-second-partial
+
+  - id: C-05
+    status: pending
+    title: Decision timeout
+    verifier: null
+
+  - id: C-06
+    status: implemented
+    title: Invalid capability and no-op reaction
+    verifier:
+      file: test/conformance/runtime.conformance.ts
+      test: noop-zero-renderer
+
+  - id: C-07
+    status: implemented
+    title: Untrusted control
+    verifier:
+      file: test/conformance/runtime.conformance.ts
+      test: untrusted-control-refused
+
+  - id: C-08
+    status: pending
+    title: Reconnect while audio pending
+    verifier: null
+
+  - id: C-09
+    status: pending
+    title: Synthesis failure after dialogue
+    verifier: null
+
+  - id: C-10
+    status: implemented
+    title: Conflicting and resolving receipts
+    verifier:
+      file: test/offline/regressions.test.ts
+      test: "resolves unknown to completed and never overwrites a completed fact"
+
+  - id: C-11
+    status: implemented
+    title: Provider substitution
+    verifier:
+      file: test/offline/regressions.test.ts
+      test: "preserves observable outcome and passed selection/intent under substitution"
+
+  - id: C-12
+    status: implemented
+    title: Replay isolation
+    verifier:
+      file: test/conformance/runtime.conformance.ts
+      test: replay-no-live-change
+
+  - id: C-13
+    status: implemented
+    title: Response plan selection and intent
+    verifier:
+      file: test/offline/composition.test.ts
+      test: "C-01/C-13: selection-to-delivery preserves identities and ordering"
+
+  - id: C-14
+    status: implemented
+    title: Invalid selection and fallback
+    verifier:
+      file: test/offline/regressions.test.ts
+      test: "uses the M5 fallback for malformed and wrong-revision selection"
+
+  - id: C-15
+    status: implemented
+    title: Wait and attempt accounting
+    verifier:
+      file: test/offline/regressions.test.ts
+      test: "adds exactly one attempt per new eligible input and none while unchanged"
+
+  - id: C-16
+    status: pending
+    title: Intent and late fallback semantics
+    verifier: null
+
+  - id: C-17
+    status: implemented
+    title: Persistence and recovery
+    verifier:
+      file: test/offline/composition.test.ts
+      test: "C-17: a storage failure degrades the session, blocks work and keeps Stop responsive"
