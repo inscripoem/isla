@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { createFixtureRunner } from '../support/runner-factories'
+import { createCoordinatorRunner, createFixtureRunner } from '../support/runner-factories'
+import type { RunnerOptions } from '../support/runner-factories'
+import type { ContractRunner } from '../support/contract-runner'
 import { createFixtureEventStore } from '../support/correct-ports'
 import {
   FIXTURE_SESSION_ID,
@@ -7,9 +9,18 @@ import {
   fixturePerformanceReceipt,
 } from '../support/fixture-data'
 
-describe('offline composition (fixture contract runner)', () => {
+/**
+ * The same composition assertions run against both the fixture reference runner
+ * and the production coordinator; neither variant weakens the other.
+ */
+const runnerFactories: ReadonlyArray<[string, (options?: RunnerOptions) => ContractRunner]> = [
+  ['fixture', createFixtureRunner],
+  ['coordinator', createCoordinatorRunner],
+]
+
+describe.each(runnerFactories)('offline composition (%s)', (_label, createRunner) => {
   it('C-01/C-13: selection-to-delivery preserves identities and ordering', async () => {
-    const runner = createFixtureRunner()
+    const runner = createRunner()
     await runner.resume()
     await runner.accept('What did you say about the concert?')
     const turn = await runner.runTurn()
@@ -30,7 +41,7 @@ describe('offline composition (fixture contract runner)', () => {
   })
 
   it('C-03: a result arriving after Stop is stale and never delivered', async () => {
-    const runner = createFixtureRunner()
+    const runner = createRunner()
     await runner.resume()
     await runner.accept('late question')
     runner.hooks.beforeSelect = async () => {
@@ -43,7 +54,7 @@ describe('offline composition (fixture contract runner)', () => {
   })
 
   it('C-04: Stop during the second segment keeps the first and dispatches no more', async () => {
-    const runner = createFixtureRunner({ segmentCount: 2 })
+    const runner = createRunner({ segmentCount: 2 })
     await runner.resume()
     await runner.accept('two segments')
     runner.hooks.afterSegmentDispatch = async (index) => {
@@ -58,7 +69,7 @@ describe('offline composition (fixture contract runner)', () => {
   })
 
   it('C-02: duplicate input and duplicate control are idempotent', async () => {
-    const runner = createFixtureRunner()
+    const runner = createRunner()
     await runner.resume()
     await runner.accept('hello', 'm-compose-1')
     expect((await runner.accept('hello', 'm-compose-1')).status).toBe('duplicate')
@@ -78,7 +89,7 @@ describe('offline composition (fixture contract runner)', () => {
   })
 
   it('C-10: a receipt for an unregistered output is rejected', async () => {
-    const runner = createFixtureRunner()
+    const runner = createRunner()
     await runner.resume()
     const before = runner.rejectedReceipts()
     await runner.endpoint.handlePlayerMessage({
@@ -95,7 +106,7 @@ describe('offline composition (fixture contract runner)', () => {
 
   it('C-17: a storage failure degrades the session, blocks work and keeps Stop responsive', async () => {
     const store = createFixtureEventStore()
-    const runner = createFixtureRunner({ store })
+    const runner = createRunner({ store })
     await runner.resume()
     store.failNextCommit = true
     await runner.accept('this delivery will fail to persist')
