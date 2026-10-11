@@ -34,6 +34,9 @@ opencode.json
 .env
 .env.*
 *.env
+# The example file documents variable names only and must stay committable.
+# Without this negation the `.env.*` rule above swallows it silently.
+!.env.example
 *.sqlite
 *.sqlite-*
 *.db

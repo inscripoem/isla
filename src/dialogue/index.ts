@@ -1,7 +1,10 @@
+// 按领域导出对话模块的公共接口、实现和策略定义。
 export * from './text'
 export * from './segment-id'
 export * from './usage'
 export * from './persona'
+export * from './persona-content'
+export * from './memory-semantics'
 export * from './context'
 export * from './dialogue-port'
 export * from './memory-commit'

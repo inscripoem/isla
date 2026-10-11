@@ -4,16 +4,28 @@ import * as faulty from '../support/faulty-ports'
 import { createCallContext } from '../support/context'
 import {
   FIXTURE_SESSION_ID,
+  FIXTURE_TURN_ID,
   fixtureCommitDelivery,
   fixtureDialogueRequest,
 } from '../support/fixture-data'
 import {
   ALLOWED_DELIVERY_PAIRS,
+  CHARACTER_CONTENT,
+  FIXTURE_CHARACTER_PROFILE,
+  PERSONA_AUTHORING_STATUS,
+  SPOKEN_ADMISSION,
+  classifyMemoryBucket,
   createDeliveryMemoryStore,
   createDialoguePort,
   deriveSegmentId,
+  intentTemplatesFor,
   isAllowedDeliveryPair,
   isSubstantiveSpeech,
+  isTruncatedSpeech,
+  personaAuthoringIssues,
+  renderDialoguePrompt,
+  renderPersonaBlock,
+  resolveCharacterProfile,
 } from '../../src/dialogue'
 import type {
   AssembledDialogueContext,
@@ -30,6 +42,11 @@ import type {
   DialogueSink,
 } from '../../src/contracts'
 import { REPLY_INTENTS } from '../../src/contracts'
+
+/** Captures the assembled context handed to a text source. */
+function captureView(): { view: AssembledDialogueContext | null } {
+  return { view: null }
+}
 
 /**
  * Fixture deadlines such as `atMs: 60_000` live in the injected clock's domain,
@@ -353,5 +370,220 @@ describe('M4 context assembly', () => {
     )
     expect(await memory.confirmedHistory(FIXTURE_SESSION_ID)).toHaveLength(0)
     expect(memory.records()).toHaveLength(1)
+  })
+})
+
+describe('M4 memory semantics', () => {
+  it('admits a delivered audio segment that carries a receipt', async () => {
+    const memory = createDeliveryMemoryStore()
+    await memory.commit(fixtureCommitDelivery())
+
+    const history = await memory.confirmedHistory(FIXTURE_SESSION_ID)
+    expect(history).toHaveLength(1)
+    expect(history[0] === undefined ? null : classifyMemoryBucket(history[0])).toMatchObject({
+      bucket: 'spoken',
+    })
+  })
+
+  it('keeps a delivered audio segment without a receipt out of spoken history', async () => {
+    const memory = createDeliveryMemoryStore()
+    await memory.commit(fixtureCommitDelivery({ receiptId: null, textHash: 'hash-noreceipt' }))
+
+    // A delivery claim with no playback evidence is held back, but not thrown
+    // away: the record stays auditable.
+    expect(await memory.confirmedHistory(FIXTURE_SESSION_ID)).toHaveLength(0)
+    expect(memory.records()).toHaveLength(1)
+  })
+
+  it('never admits partial or undelivered text', async () => {
+    const memory = createDeliveryMemoryStore()
+    await memory.commit(
+      fixtureCommitDelivery({
+        segmentId: 'seg-partial',
+        textHash: 'hash-partial',
+        classification: 'partial-unknown',
+        terminalOutcome: 'cancelled',
+      }),
+    )
+    await memory.commit(
+      fixtureCommitDelivery({
+        segmentId: 'seg-none',
+        textHash: 'hash-none',
+        classification: 'not-delivered',
+        terminalOutcome: 'failed',
+      }),
+    )
+
+    expect(await memory.confirmedHistory(FIXTURE_SESSION_ID)).toHaveLength(0)
+    expect(memory.records()).toHaveLength(2)
+    expect(SPOKEN_ADMISSION['partial-unknown']).toBe('audit-only')
+    expect(SPOKEN_ADMISSION['not-delivered']).toBe('audit-only')
+  })
+
+  it('detects an utterance that stops mid-sentence', () => {
+    expect(isTruncatedSpeech('We were just about to sa')).toBe(true)
+    expect(isTruncatedSpeech('We talked about the concert.')).toBe(false)
+    expect(isTruncatedSpeech('He said "hello."')).toBe(false)
+  })
+})
+
+describe('M4 context continuity', () => {
+  it('marks an interrupted turn instead of presenting it as complete', async () => {
+    const memory = createDeliveryMemoryStore()
+    await memory.commit(
+      fixtureCommitDelivery({
+        turnId: 'turn-cut',
+        segmentId: 'seg-0',
+        textHash: 'hash-cut',
+        text: 'We were just about to sa',
+      }),
+    )
+
+    const capture = captureView()
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      memory,
+      textSource: capturingTextSource(capture),
+    })
+    await generate(port)
+
+    // The words were delivered, so they stay in context — but they are marked.
+    // Without the marker a model reads a fragment as a finished statement and
+    // continues from a sentence the audience never heard completed.
+    expect(capture.view?.turns).toHaveLength(1)
+    expect(capture.view?.turns[0]?.interrupted).toBe(true)
+    expect(capture.view === null ? '' : renderDialoguePrompt(capture.view)).toContain(
+      '[cut off mid-sentence]',
+    )
+  })
+
+  it('keeps one entry per utterance when a segment is confirmed for two modalities', async () => {
+    const memory = createDeliveryMemoryStore()
+    await memory.commit(
+      fixtureCommitDelivery({ turnId: 'turn-d', segmentId: 'seg-0', textHash: 'hash-d' }),
+    )
+    await memory.commit(
+      fixtureCommitDelivery({
+        turnId: 'turn-d',
+        segmentId: 'seg-0',
+        textHash: 'hash-d',
+        modality: 'subtitle',
+      }),
+    )
+
+    const capture = captureView()
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      memory,
+      textSource: capturingTextSource(capture),
+    })
+    await generate(port)
+
+    expect(capture.view?.history).toHaveLength(1)
+    expect(capture.view?.exclusions.some((entry) => entry.reason === 'duplicate-modality')).toBe(
+      true,
+    )
+  })
+
+  it('drops memory from an older persona before current-persona memory', async () => {
+    const memory = createDeliveryMemoryStore()
+    memory.noteTurnPersona('turn-old', 'character-fixture@0')
+    await memory.commit(
+      fixtureCommitDelivery({
+        turnId: 'turn-old',
+        segmentId: 'seg-0',
+        textHash: 'hash-old',
+        text: 'Old persona line.',
+      }),
+    )
+    memory.noteTurnPersona('turn-new', 'character-fixture@1')
+    await memory.commit(
+      fixtureCommitDelivery({
+        turnId: 'turn-new',
+        segmentId: 'seg-0',
+        textHash: 'hash-new',
+        text: 'Current persona line.',
+      }),
+    )
+
+    const capture = captureView()
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      memory,
+      textSource: capturingTextSource(capture),
+    })
+    await generate(
+      port,
+      fixtureDialogueRequest({ contextLimits: { maxTurns: 8, maxCharacters: 5 } }),
+    )
+
+    // Both turns were heard. Only the budget forces a choice, and speech from a
+    // superseded persona is what gives way first — the newest turn is never
+    // dropped, because an empty context reads as amnesia.
+    expect(capture.view?.turns.map((turn) => turn.turnId)).toEqual(['turn-new'])
+    expect(
+      capture.view?.exclusions.some((entry) => entry.reason === 'trim-stale-persona'),
+    ).toBe(true)
+    expect(capture.view?.truncatedByCharacterLimit).toBe(true)
+  })
+
+  it('remembers which persona produced a turn', async () => {
+    const memory = createDeliveryMemoryStore()
+    const port = createDialoguePort({ clock: FIXTURE_CLOCK, memory })
+    await generate(port)
+    await memory.commit(fixtureCommitDelivery({ turnId: FIXTURE_TURN_ID }))
+
+    expect(memory.audit()[0]?.personaVersion).toBe('character-fixture@1')
+  })
+})
+
+describe('M4 persona authoring', () => {
+  it('exposes a template slot for every reply intent', () => {
+    expect(Object.keys(CHARACTER_CONTENT.intentTemplates).sort()).toEqual(
+      [...REPLY_INTENTS].sort(),
+    )
+  })
+
+  it('reports what is still missing from the authored persona', () => {
+    const issues = personaAuthoringIssues()
+    // A draft is allowed to be incomplete and must not turn the suite red; a
+    // persona marked ready must be clean.
+    if (PERSONA_AUTHORING_STATUS === 'ready') {
+      expect(issues).toEqual([])
+    } else {
+      expect(issues.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('resolves the authored persona without rewriting its words', () => {
+    const profile = resolveCharacterProfile(
+      CHARACTER_CONTENT.profileId,
+      CHARACTER_CONTENT.version,
+    )
+    expect(profile?.origin).toBe('author')
+    expect(
+      profile === null ? [] : intentTemplatesFor(profile, 'answer'),
+    ).toEqual(CHARACTER_CONTENT.intentTemplates.answer)
+  })
+
+  it('renders a persona block without inventing sections', () => {
+    const block = renderPersonaBlock(FIXTURE_CHARACTER_PROFILE)
+    expect(block.startsWith('Persona:')).toBe(true)
+    expect(block).toContain('Style:')
+    // The fixture profile declares no boundaries, so none are rendered.
+    expect(block).not.toContain('Never:')
+  })
+
+  it('speaks nothing when the persona has no template for the intent', () => {
+    const silent = resolveCharacterProfile('silent', '1', [
+      {
+        profileId: 'silent',
+        version: '1',
+        personaSummary: 'Says nothing.',
+        styleNotes: [],
+        origin: 'harness',
+      },
+    ])
+    expect(silent === null ? null : intentTemplatesFor(silent, 'answer')).toEqual([])
   })
 })

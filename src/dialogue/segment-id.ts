@@ -1,27 +1,24 @@
 import type { DialogueRequest } from '../contracts'
 
 /**
- * Segment identity and the finalized-text registry.
+ * 片段身份与最终文本注册表。
  *
- * Identity rule: a segment is identified by its turn and its position within
- * that turn. The request id is deliberately NOT part of the identity, because
- * the same turn may be regenerated and a segment must keep one stable identity
- * for the whole turn.
+ * 身份规则：片段由所属回合及其在回合中的位置确定。请求 ID 特意不参与身份，
+ * 因为同一回合可能重新生成，而片段在整个回合期间必须保持稳定身份。
  *
- * If the identity rule ever needs to change, change `deriveSegmentId` only;
- * every caller derives ids through it.
+ * 如果身份规则需要调整，只修改 `deriveSegmentId` 即可；所有调用方都通过
+ * 该函数生成片段 ID。
  */
 export function deriveSegmentId(request: DialogueRequest, index: number): string {
   return `${request.turnId}-seg-${index}`
 }
 
 export interface FinalizedSegmentRegistry {
-  /** Previously finalized text for a segment, or null when unseen. */
+  /** 片段此前已确定的文本；从未见过该片段时返回 null。 */
   finalizedText(segmentId: string): string | null
   /**
-   * Registers candidate text and returns the text that is authoritative for
-   * this segment. A later, different candidate is ignored rather than applied,
-   * which makes immutability a structural property instead of a coincidence.
+   * 注册候选文本，并返回该片段的权威文本。之后出现的不同候选文本会被忽略而
+   * 不会应用，因此不可变性是结构性保证，而不是偶然结果。
    */
   finalize(segmentId: string, text: string): string
 }
