@@ -1,6 +1,6 @@
 # Parallel development: role kits
 
-Revision: 2026-10-10.4. Status: under review. These kits provide shared contracts, deterministic substitutes and executable examples. They do not implement the production modules or prove live audio, VTS, model quality or SQLite durability.
+Revision: 2026-10-10.5. Status: under review. These kits provide shared contracts, deterministic substitutes and executable examples. M5-01 also includes the production coordinator and its test-only conformance adapter, under review; see [handoff](HANDOFF-M5-01.en.md). Other module implementations and live audio, VTS, model quality or SQLite durability remain pending.
 
 ## Run the prepared version
 
@@ -44,7 +44,7 @@ M4 emits segments through `DialoguePort.generate(request, context, sink)` and re
 
 `ContractRunner` in `test/support/contract-runner.ts` is a test driver, not an application interface. It adds methods such as runTurn, trace inspection and controlled test hooks around a fixture RuntimeEndpointPort. The M5 collector accepts a factory returning that test-driver shape; implementing only RuntimeEndpointPort does not automatically satisfy the collector.
 
-When implementing M5, provide a test-only adapter connecting your coordinator's cycle driver, endpoint, trace and injected dependencies to that shape. Use `RunnerOptions` in `test/support/runner-factories.ts` to see the dependency substitutions used by the suite. Keep this adapter under `test/`; production code must not import the fixture coordinator or its policy. This preserves the same observable tests while M5 supplies the actual lifecycle and scheduling implementation.
+M5 now supplies `src/runtime/coordinator.ts` and the test-only `test/support/coordinator-runner.ts` adapter connecting its cycle driver, endpoint, trace and injected dependencies to that shape. Use `RunnerOptions` in `test/support/runner-factories.ts` to see the dependency substitutions used by the suite. Keep this adapter under `test/`; production code must not import the fixture coordinator or its policy. This preserves the same observable tests while M5 supplies the actual lifecycle and scheduling implementation.
 
 I1-01 integrates one real offline loop using the confirmed module owners. Preserve normal delivery, Stop, stale-result and receipt behavior before I2-01 connects real providers. See [INTERFACES](INTERFACES.en.md) for authority and [case-registry](../req/case-registry.yaml) for exact coverage. Full C-05/C-08/C-09/C-16 and live measurements remain pending.
 

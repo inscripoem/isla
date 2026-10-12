@@ -2,7 +2,7 @@
 
 Isla is a planned AI VTuber framework: a configurable character runtime with replaceable decision, dialogue, speech and avatar adapters, plus a local console.
 
-This checkout contains the runnable diagnostic foundation and parallel-development preparation, under review (2026-10-10). It provides local health checks and WebSocket diagnostics. Character conversations, Jev, TTS, VTube Studio and SQLite persistence are not implemented yet.
+This checkout contains the diagnostic foundation, shared development kits and the M5 response-cycle coordinator, under review (2026-10-10). The console provides health checks and WebSocket diagnostics. The coordinator is exercised with injected peer substitutes; real dialogue, Jev, TTS, VTube Studio, browser playback and SQLite integration await their module owners.
 
 ## Run locally
 
@@ -44,7 +44,7 @@ Start with [the team development index](docs/team/README.md). The [work plan](do
 | M2 console | `src/console/` | Existing |
 | M3 response decisions | `src/decision/` | Planned |
 | M4 dialogue/memory | `src/dialogue/` | Planned |
-| M5 runtime — CHANG Xuben | `src/runtime/` | Existing |
+| M5 runtime — CHANG Xuben | `src/runtime/` | M5-01 coordinator under review; [handoff](docs/team/HANDOFF-M5-01.en.md) |
 | M6 storage/evaluation/CI | `src/storage/`, `src/evaluation/`, `.github/workflows/` | Requirements tooling and CI exist; storage planned |
 
 Shared contracts use `src/contracts/` (application schemas and ports under `src/contracts/app/`); tests use `test/offline/` and, when implemented, `test/live/`. The [architecture blueprint](architecture-blueprint.md) defines editing boundaries. Planned directories are not empty substitute implementations. Each owner can begin against the shared contracts and explicit fixtures; see [readiness kits](docs/team/READINESS-KITS.en.md).
@@ -54,12 +54,12 @@ Each role has an independently runnable conformance command:
 ```sh
 pnpm test:m1 && pnpm test:m2 && pnpm test:m3
 pnpm test:m4 && pnpm test:m5 && pnpm test:m6
-pnpm test:composition   # offline fixture loop
+pnpm test:composition   # fixture and production-coordinator loops
 pnpm test:readiness     # contracts, requirements, import boundaries
 pnpm verify             # typecheck, lint, all tests, build
 ```
 
-These fixtures prove contract boundaries and Stop/receipt semantics; they are not evidence of live providers, browser audio or SQLite persistence.
+M5 tests exercise the production coordinator and retain the independent fixture reference. Both implementations run the same composition and regression assertions. See the [M5-01 handoff](docs/team/HANDOFF-M5-01.en.md) for imports, configuration and I1-01 integration requests. These checks do not certify live providers, browser audio or SQLite persistence.
 
 Diagnostics use version `1`: send `{"v":1,"kind":"ping"}` or `{"v":1,"kind":"get_health"}` to `/diag`. Application actions such as `input.submit` are rejected. This diagnostic protocol is separate from the planned application protocol `0.2`.
 
