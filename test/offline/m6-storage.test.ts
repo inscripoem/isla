@@ -1,17 +1,25 @@
 import { describe, expect, it } from 'vitest'
 import { collectStorageViolations } from '../conformance/storage.conformance'
-import * as correct from '../support/correct-ports'
 import * as faulty from '../support/faulty-ports'
+import { createEventStore, createMemoryProjection } from '../../src/storage'
 
 describe('M6 storage conformance', () => {
-  it('accepts the correct event store and projection', async () => {
+  it('accepts the M6 event store and projection', async () => {
     const violations = await collectStorageViolations(() => {
-      const store = correct.createFixtureEventStore()
+      let failNextCommit = false
+      const store = createEventStore({
+        beforeCommit: () => {
+          if (failNextCommit) {
+            failNextCommit = false
+            throw new Error('simulated storage failure')
+          }
+        },
+      })
       return {
         store,
-        projection: correct.createFixtureMemoryProjection(),
+        projection: createMemoryProjection(),
         setFailNextCommit: () => {
-          store.failNextCommit = true
+          failNextCommit = true
         },
       }
     })
