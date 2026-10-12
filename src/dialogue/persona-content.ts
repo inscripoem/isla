@@ -32,6 +32,16 @@ export type PersonaAuthoringStatus = 'draft' | 'ready'
 export const PERSONA_AUTHORING_STATUS: PersonaAuthoringStatus = 'draft'
 
 export interface PersonaContent {
+  /**
+   * 角色设定集（长篇）的路径：`prompts/dialogue/character.md`。
+   *
+   * 它不会被渲染进上下文，存在的目的是让人（以及 NFR-03 的评分员）能读到完整
+   * 人设，并让本文件可追溯到来源。测试会断言该路径仍然有效，因此重命名设定集
+   * 会立刻失败，而不会让人设悄悄失去出处。
+   */
+  sourceDocument: string
+  /** 本内容所依据的设定集版本；不是 profile 版本，两者独立演进。 */
+  sourceVersion: string
   /** DialogueRequest.characterProfileId 使用的身份标识。 */
   profileId: string
   /** 角色含义变化时递增；重写时不得复用旧版本号。 */
@@ -40,6 +50,15 @@ export interface PersonaContent {
   personaSummary: string
   /** 简短的语气规则，每项一条，使用祈使语气。 */
   styleNotes: readonly string[]
+  /**
+   * 每个回合都必须成立的事实：在意的人、喜欢的事物、共同的经历——忘掉任何一条
+   * 都会让她在普通回复里听起来像另一个人。
+   *
+   * 这里刻意设了上限。本块每轮都会渲染，而且与已确认历史共用同一份字符预算：
+   * 清单越长，被挤掉的历史越多，反而伤及本想支持的连续性。超出上限的内容留在
+   * 设定集里，等按需召回。
+   */
+  standingFacts: readonly string[]
   /** 每种意图的台词，按说话顺序排列；最多说出前两条。 */
   intentTemplates: Readonly<Record<ReplyIntent, readonly string[]>>
   /** 硬性约束：角色绝不说出、声称或承诺的内容。 */
@@ -47,12 +66,17 @@ export interface PersonaContent {
 }
 
 export const CHARACTER_CONTENT: PersonaContent = {
-  // ── 1. 身份 ────────────────────────────────────────────────────────────────
-  profileId: 'TODO-profile-id',
+  // ── 1. 出处 ────────────────────────────────────────────────────────────────
+  // 完整设定集在这里，本文件只承载每轮必须生效的那部分。
+  sourceDocument: 'prompts/dialogue/character.md',
+  sourceVersion: 'draft',
+
+  // ── 2. 身份 ────────────────────────────────────────────────────────────────
+  profileId: 'testvtb',
   version: '1',
 
   // ── 2. 角色是谁 ────────────────────────────────────────────────────────────
-  personaSummary: 'TODO: two sentences describing the character.',
+  personaSummary: 'A witch full of love and courage, who is always charming and resilient. I am able to respond flexibly even to tricky questions.',
 
   // ── 3. 说话方式 ─────────────────────────────────────────────────────────────
   styleNotes: [
@@ -60,7 +84,15 @@ export const CHARACTER_CONTENT: PersonaContent = {
     'TODO: second style rule.',
   ],
 
-  // ── 4. 各种意图下说什么 ─────────────────────────────────────────────────────
+  // ── 4. 每轮都必须成立的事实（最多 5 条，每条一句话）───────────────────────────
+  // 从设定集第 3–6 节里挑最重要的几条提升到这里，并保持两处文字一致。
+  // 判据：忘掉它会在普通回复里让她像另一个人 → 值得占一个常驻位置。
+  standingFacts: [
+    'TODO: first standing fact, one short sentence.',
+    'TODO: second standing fact.',
+  ],
+
+  // ── 5. 各种意图下说什么 ─────────────────────────────────────────────────────
   // 不要删除意图键。没有台词模板的意图表示角色无话可说，该回合以无语音结束。
   intentTemplates: {
     // 有实质内容地回答选中的消息。
@@ -77,6 +109,6 @@ export const CHARACTER_CONTENT: PersonaContent = {
     'check-correction': ['TODO: verification request.'],
   },
 
-  // ── 5. 角色绝不做什么 ───────────────────────────────────────────────────────
+  // ── 6. 角色绝不做什么 ───────────────────────────────────────────────────────
   boundaries: ['TODO: first hard boundary.', 'TODO: second hard boundary.'],
 }

@@ -17,11 +17,22 @@ import { isSubstantiveSpeech } from './text'
  * 将表格替换为真实模型调用，但下面的解析、校验和渲染逻辑保持不变。
  */
 
+/**
+ * 每轮常驻事实的上限。
+ *
+ * `standingFacts` 与已确认历史共用同一份字符预算，清单无上限就会挤掉它本应
+ * 支持的记忆。角色标记为 ready 后由校验强制执行；草稿阶段仅作为问题报告。
+ */
+export const MAX_STANDING_FACTS = 5
+export const MAX_STANDING_FACT_CHARACTERS = 80
+
 export interface CharacterProfile {
   profileId: string
   version: string
   personaSummary: string
   styleNotes: readonly string[]
+  /** 每轮都必须成立的事实；缺少表示没有常驻事实。 */
+  standingFacts?: readonly string[]
   /** 缺少该字段表示角色对任何意图都没有可说内容。 */
   intentTemplates?: Readonly<Record<ReplyIntent, readonly string[]>>
   boundaries?: readonly string[]
@@ -60,6 +71,7 @@ export const AUTHOR_CHARACTER_PROFILE: CharacterProfile = {
   version: CHARACTER_CONTENT.version,
   personaSummary: CHARACTER_CONTENT.personaSummary,
   styleNotes: CHARACTER_CONTENT.styleNotes,
+  standingFacts: CHARACTER_CONTENT.standingFacts,
   intentTemplates: CHARACTER_CONTENT.intentTemplates,
   boundaries: CHARACTER_CONTENT.boundaries,
   origin: 'author',
@@ -130,6 +142,12 @@ function hasPlaceholder(text: string): boolean {
 export function collectPersonaContentIssues(content: PersonaContent): readonly string[] {
   const issues: string[] = []
 
+  if (content.sourceDocument.trim().length === 0 || hasPlaceholder(content.sourceDocument)) {
+    issues.push('sourceDocument is missing: the persona must point at its character bible')
+  }
+  if (content.sourceVersion.trim().length === 0 || hasPlaceholder(content.sourceVersion)) {
+    issues.push('sourceVersion is missing or still a placeholder')
+  }
   if (content.profileId.trim().length === 0 || hasPlaceholder(content.profileId)) {
     issues.push('profileId is missing or still a placeholder')
   }
@@ -142,6 +160,24 @@ export function collectPersonaContentIssues(content: PersonaContent): readonly s
   for (const note of content.styleNotes) {
     if (note.trim().length === 0 || hasPlaceholder(note)) {
       issues.push(`styleNotes contains an empty or placeholder entry: "${note}"`)
+    }
+  }
+  if (content.standingFacts.length === 0) {
+    issues.push('standingFacts is empty: nothing is guaranteed to hold on every turn')
+  }
+  if (content.standingFacts.length > MAX_STANDING_FACTS) {
+    issues.push(
+      `standingFacts has ${content.standingFacts.length} entries, at most ${MAX_STANDING_FACTS} are allowed`,
+    )
+  }
+  for (const fact of content.standingFacts) {
+    if (fact.trim().length === 0 || hasPlaceholder(fact)) {
+      issues.push(`standingFacts contains an empty or placeholder entry: "${fact}"`)
+    }
+    if (fact.length > MAX_STANDING_FACT_CHARACTERS) {
+      issues.push(
+        `standingFacts entry exceeds ${MAX_STANDING_FACT_CHARACTERS} characters: "${fact}"`,
+      )
     }
   }
   if (content.boundaries.length === 0) {
@@ -195,6 +231,11 @@ export function renderPersonaBlock(profile: CharacterProfile): string {
   if (profile.styleNotes.length > 0) {
     lines.push('Style:')
     for (const note of profile.styleNotes) lines.push(`- ${note}`)
+  }
+  const standingFacts = (profile.standingFacts ?? []).slice(0, MAX_STANDING_FACTS)
+  if (standingFacts.length > 0) {
+    lines.push('Always true:')
+    for (const fact of standingFacts) lines.push(`- ${fact}`)
   }
   const boundaries = profile.boundaries ?? []
   if (boundaries.length > 0) {

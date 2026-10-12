@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { collectDialogueViolations } from '../conformance/dialogue.conformance'
 import * as faulty from '../support/faulty-ports'
@@ -12,9 +14,11 @@ import {
   ALLOWED_DELIVERY_PAIRS,
   CHARACTER_CONTENT,
   FIXTURE_CHARACTER_PROFILE,
+  MAX_STANDING_FACTS,
   PERSONA_AUTHORING_STATUS,
   SPOKEN_ADMISSION,
   classifyMemoryBucket,
+  collectPersonaContentIssues,
   createDeliveryMemoryStore,
   createDialoguePort,
   deriveSegmentId,
@@ -570,8 +574,45 @@ describe('M4 persona authoring', () => {
     const block = renderPersonaBlock(FIXTURE_CHARACTER_PROFILE)
     expect(block.startsWith('Persona:')).toBe(true)
     expect(block).toContain('Style:')
-    // The fixture profile declares no boundaries, so none are rendered.
+    // The fixture profile declares neither boundaries nor standing facts, so
+    // neither section is rendered.
     expect(block).not.toContain('Never:')
+    expect(block).not.toContain('Always true:')
+  })
+
+  it('caps the standing facts that reach every turn', () => {
+    const overFull = {
+      ...CHARACTER_CONTENT,
+      standingFacts: Array.from(
+        { length: MAX_STANDING_FACTS + 1 },
+        (_unused, index) => `Fact number ${index}.`,
+      ),
+    }
+    expect(
+      collectPersonaContentIssues(overFull).some((issue) => issue.includes('at most')),
+    ).toBe(true)
+
+    const withinCap = { ...CHARACTER_CONTENT, standingFacts: ['She is a witch.'] }
+    expect(
+      collectPersonaContentIssues(withinCap).some((issue) => issue.includes('at most')),
+    ).toBe(false)
+  })
+
+  it('rejects a standing fact that is too long for a per-turn block', () => {
+    const verbose = { ...CHARACTER_CONTENT, standingFacts: ['x'.repeat(200)] }
+    expect(
+      collectPersonaContentIssues(verbose).some((issue) => issue.includes('characters')),
+    ).toBe(true)
+  })
+
+  it('points at a character bible that still exists', () => {
+    // The long-form persona lives outside this file; if it is renamed or moved,
+    // the persona silently loses its source. This keeps the link honest.
+    expect(CHARACTER_CONTENT.sourceDocument.length).toBeGreaterThan(0)
+    const bible = fileURLToPath(
+      new URL(`../../${CHARACTER_CONTENT.sourceDocument}`, import.meta.url),
+    )
+    expect(existsSync(bible)).toBe(true)
   })
 
   it('speaks nothing when the persona has no template for the intent', () => {
