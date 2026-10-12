@@ -24,7 +24,14 @@ import { isSubstantiveSpeech } from './text'
  * 支持的记忆。角色标记为 ready 后由校验强制执行；草稿阶段仅作为问题报告。
  */
 export const MAX_STANDING_FACTS = 5
-export const MAX_STANDING_FACT_CHARACTERS = 80
+/**
+ * 单条常驻事实的字符上限。
+ *
+ * 取 110 而不是更小的值：一条事实要同时说清主体与关系才不至于被误读，压缩过
+ * 度会退化成模糊的标签。真正的约束是「条数 × 长度」总量，条数上限已经封住
+ * 了最坏情况（5 × 110 = 550 字符，约占默认 2000 字符预算的四分之一）。
+ */
+export const MAX_STANDING_FACT_CHARACTERS = 110
 
 export interface CharacterProfile {
   profileId: string
@@ -127,6 +134,48 @@ export const PERSONA_PLACEHOLDER_MARKERS: readonly string[] = [
   'PLACEHOLDER',
   '待填',
 ]
+
+/**
+ * 设定集条目上的机器可读标记。
+ *
+ * 设定集（`sourceDocument`）与 `standingFacts` 是同一批事实的两份拷贝，而
+ * 运行时只读后者。没有标记时，两处不一致不会产生任何报错 —— 设定集会静默
+ * 变成过期文档，评审看到的和模型读到的不是同一件事。`[S]` 让这件事变成
+ * 可测试的：见 `standingFactsFromBible`。
+ */
+export const BIBLE_MARKERS = {
+  /** 常驻：必须逐字出现在 `standingFacts` 中。 */
+  standing: '[S]',
+  /** 召回候选：将来按需检索的池子，当前不进任何 prompt。 */
+  recall: '[R]',
+  /** 仅供人阅读：给评审或作者看，永不渲染。 */
+  human: '[H]',
+} as const
+
+/**
+ * 从设定集正文中抽取所有标为 `[S]` 的条目。
+ *
+ * 只做解析，不判断对错：把「两处是否一致」留给测试，使不一致成为构建失败，
+ * 而不是一条谁也不会读的日志。
+ *
+ * 只接受引用块（行首为 `>`）中的标记：说明文字里出现的 `[S]` 是文档，不是
+ * 事实。超出 `MAX_STANDING_FACT_CHARACTERS` 的条目会明确报出，因为超长通常
+ * 意味着作者在设定集里换行了，而换行会让这条事实在比对时对不上。
+ */
+export function standingFactsFromBible(bible: string): readonly string[] {
+  const facts: string[] = []
+  for (const rawLine of bible.split(/\r?\n/)) {
+    if (!/^\s*>/.test(rawLine)) continue
+    const marker = rawLine.indexOf(BIBLE_MARKERS.standing)
+    if (marker === -1) continue
+    const text = rawLine
+      .slice(marker + BIBLE_MARKERS.standing.length)
+      .replace(/^[\s>*-]+/, '')
+      .trim()
+    if (text.length > 0) facts.push(text)
+  }
+  return facts
+}
 
 function hasPlaceholder(text: string): boolean {
   const upper = text.toUpperCase()

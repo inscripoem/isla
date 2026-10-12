@@ -12,6 +12,7 @@ import type {
 } from '../contracts'
 import { assembleDialogueContext } from './context'
 import type { AssembledDialogueContext } from './context'
+import type { PersonaRecallPort } from './persona-recall'
 import { createFinalizedSegmentRegistry, deriveSegmentId } from './segment-id'
 import { isSubstantiveSpeech, normalizeFinalText } from './text'
 import { buildDialogueUsage } from './usage'
@@ -76,6 +77,11 @@ export interface DialoguePortOptions {
    * 使裁剪上下文时能够识别由旧角色写入的记忆。
    */
   memory?: DialogueMemory
+  /**
+   * 人设事实召回器。省略即不召回，与 `PERSONA_RECALL_POLICY = 'off'` 等效。
+   * 召回段与已确认历史共用同一份字符预算，见 ./persona-recall。
+   */
+  personaRecall?: PersonaRecallPort
   textSource?: DialogueTextSource
   /** 无论传入何值，都不会超过 MAX_DIALOGUE_SEGMENTS。 */
   maxSegments?: number
@@ -167,6 +173,7 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
         profile,
         ...(options.history === undefined ? {} : { history: options.history }),
         ...(options.memory === undefined ? {} : { memory: options.memory }),
+        ...(options.personaRecall === undefined ? {} : { personaRecall: options.personaRecall }),
       })
 
       const candidates = (await source.compose(view, maxSegments)).slice(0, maxSegments)

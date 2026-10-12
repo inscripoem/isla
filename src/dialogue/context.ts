@@ -6,6 +6,7 @@ import type {
 } from '../contracts'
 import type { CharacterProfile } from './persona'
 import { intentTemplatesFor, personaVersionKey, renderPersonaBlock } from './persona'
+import type { PersonaRecallPort, RecalledFact } from './persona-recall'
 import { classifyMemoryBucket, isTruncatedSpeech, modalityRank, trimRank } from './memory-semantics'
 import type { MemoryBucketReason } from './memory-semantics'
 
@@ -84,6 +85,12 @@ export interface AssembledDialogueContext {
   styleNotes: readonly string[]
   /** 已解析角色针对该意图的台词模板，按说话顺序排列。 */
   replyTemplates: readonly string[]
+  /**
+   * 按需召回的人设事实，已去重并计入同一份预算。默认策略下恒为空 —— 见
+   * ./persona-recall。它们**不是**交付记忆：不进 `confirmedHistory`、不声称
+   * 「她说过」。
+   */
+  recalledFacts: readonly RecalledFact[]
   selectedInputText: string
   replyIntent: ReplyIntent
   /** 保留在上下文中的确认回合，最旧的在前。 */
@@ -109,6 +116,10 @@ export interface AssembleDialogueContextInput {
   history?: HistoryQueryPort
   /** 可选的带版本来源；优先级高于 `history`。 */
   memory?: MemoryEntrySource
+  /**
+   * 人设事实召回器。省略表示不召回，与 `PERSONA_RECALL_POLICY = 'off'` 等效。
+   */
+  personaRecall?: PersonaRecallPort
 }
 
 function referenceIdentifiers(record: ConfirmedDelivery): readonly string[] {
@@ -225,9 +236,30 @@ export async function assembleDialogueContext(
     }
   }
 
+  /*
+   * 召回发生在历史裁剪**之前**：两者共用同一份 `maxCharacters`，因此必须先知道
+   * 召回块占了多少，历史才有正确的剩余预算。顺序反过来会让召回悄悄超出总预算。
+   *
+   * 召回项与常驻事实去重——已经每轮出现的文本再召回一次，只是把同一件事渲染两遍。
+   * 未启用召回（省略 `personaRecall`）时结果为空数组，上下文与关闭该功能时完全
+   * 一致，调用方不必写分支。
+   */
+  const recalledFacts: readonly RecalledFact[] =
+    input.personaRecall === undefined
+      ? []
+      : input.personaRecall.recall({
+          inputText: request.selectedInput.text,
+          recentHistory: allTurns.slice(-maxTurns).map((turn) => turn.text),
+          replyIntent: request.responsePlan.replyIntent,
+          standingFacts: profile.standingFacts ?? [],
+        })
+
+  const recalledCharacters = recalledFacts.reduce((total, entry) => total + entry.fact.text.length, 0)
+  const availableHistoryCharacters = Math.max(0, maxCharacters - recalledCharacters)
+
   const kept = trimToCharacterBudget({
     turns: recent,
-    maxCharacters,
+    maxCharacters: availableHistoryCharacters,
     activePersonaVersion: personaVersionKey(profile.profileId, profile.version),
     exclusions,
   })
@@ -240,18 +272,24 @@ export async function assembleDialogueContext(
   if (kept.turns.some((turn) => turn.interrupted)) {
     warnings.push('context contains an interrupted utterance; it is marked, not completed')
   }
+  if (recalledCharacters > maxCharacters) {
+    warnings.push('recalled persona facts exceed the character budget on their own')
+  }
+
+  const historyCharacters = kept.turns.reduce((total, turn) => total + turn.characters, 0)
 
   return {
     personaBlock: renderPersonaBlock(profile),
     personaSummary: profile.personaSummary,
     styleNotes: profile.styleNotes,
     replyTemplates: intentTemplatesFor(profile, request.responsePlan.replyIntent),
+    recalledFacts,
     selectedInputText: request.selectedInput.text,
     replyIntent: request.responsePlan.replyIntent,
     turns: kept.turns,
     history: historyFlat,
     exclusions,
-    estimatedCharacters: kept.turns.reduce((total, turn) => total + turn.characters, 0),
+    estimatedCharacters: historyCharacters + recalledCharacters,
     truncatedByTurnLimit,
     truncatedByCharacterLimit: kept.truncated,
     warnings,
@@ -332,6 +370,18 @@ function trimToCharacterBudget(input: {
  */
 export function renderDialoguePrompt(view: AssembledDialogueContext): string {
   const lines: string[] = [view.personaBlock]
+
+  /*
+   * 召回段放在常驻人设之后、历史之前：它是背景知识而非对话记录，紧跟人设能
+   * 让模型把它读成「关于她的事实」，而不是「她说过的话」。provenance 用设定集
+   * 条目 id 渲染，评审可据此回溯到 character.md。
+   */
+  if (view.recalledFacts.length > 0) {
+    lines.push('Relevant background:')
+    for (const entry of view.recalledFacts) {
+      lines.push(`- ${entry.fact.text} (bible: ${entry.fact.id})`)
+    }
+  }
 
   if (view.turns.length > 0) {
     lines.push('Already said (confirmed spoken):')

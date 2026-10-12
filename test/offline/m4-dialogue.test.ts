@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { collectDialogueViolations } from '../conformance/dialogue.conformance'
@@ -14,6 +14,7 @@ import {
   ALLOWED_DELIVERY_PAIRS,
   CHARACTER_CONTENT,
   FIXTURE_CHARACTER_PROFILE,
+  MAX_STANDING_FACT_CHARACTERS,
   MAX_STANDING_FACTS,
   PERSONA_AUTHORING_STATUS,
   SPOKEN_ADMISSION,
@@ -30,6 +31,7 @@ import {
   renderDialoguePrompt,
   renderPersonaBlock,
   resolveCharacterProfile,
+  standingFactsFromBible,
 } from '../../src/dialogue'
 import type {
   AssembledDialogueContext,
@@ -377,6 +379,72 @@ describe('M4 context assembly', () => {
   })
 })
 
+describe('M4 persona recall seam', () => {
+  it('recalls nothing by default, leaving the prompt unchanged', async () => {
+    const capture: { view: AssembledDialogueContext | null } = { view: null }
+    const port = createDialoguePort({ clock: FIXTURE_CLOCK, 
+      textSource: capturingTextSource(capture),
+    })
+    await generate(port, fixtureDialogueRequest())
+
+    const view = capture.view
+    expect(view).not.toBeNull()
+    expect(view?.recalledFacts).toEqual([])
+    expect(renderDialoguePrompt(view as AssembledDialogueContext)).not.toContain(
+      'Relevant background:',
+    )
+  })
+
+  it('renders recalled facts with their bible provenance when enabled', async () => {
+    const capture: { view: AssembledDialogueContext | null } = { view: null }
+    const port = createDialoguePort({ clock: FIXTURE_CLOCK, 
+      textSource: capturingTextSource(capture),
+      personaRecall: {
+        recall: () => [
+          { fact: { id: 'likes-purple', text: 'She likes purple-red.', keywords: ['purple'] }, score: 3 },
+        ],
+      },
+    })
+    await generate(port, fixtureDialogueRequest())
+
+    const view = capture.view as AssembledDialogueContext
+    expect(view.recalledFacts).toHaveLength(1)
+    const prompt = renderDialoguePrompt(view)
+    expect(prompt).toContain('Relevant background:')
+    expect(prompt).toContain('(bible: likes-purple)')
+  })
+
+  it('charges recalled facts against the same character budget as history', async () => {
+    const memory = createDeliveryMemoryStore()
+    for (const turnId of ['turn-a', 'turn-b', 'turn-c']) {
+      await memory.commit(
+        fixtureCommitDelivery({ turnId, segmentId: 'seg-0', textHash: `hash-${turnId}` }),
+      )
+    }
+
+    async function historyTurns(recalledLength: number): Promise<number> {
+      const capture: { view: AssembledDialogueContext | null } = { view: null }
+      const port = createDialoguePort({ clock: FIXTURE_CLOCK, 
+        history: memory,
+        textSource: capturingTextSource(capture),
+        personaRecall: {
+          recall: () => [
+            { fact: { id: 'big', text: 'x'.repeat(recalledLength), keywords: [] }, score: 1 },
+          ],
+        },
+      })
+      await generate(
+        port,
+        fixtureDialogueRequest({ contextLimits: { maxTurns: 8, maxCharacters: 200 } }),
+      )
+      return capture.view?.turns.length ?? -1
+    }
+
+    // More recalled characters must leave less room for confirmed history.
+    expect(await historyTurns(0)).toBeGreaterThan(await historyTurns(150))
+  })
+})
+
 describe('M4 memory semantics', () => {
   it('admits a delivered audio segment that carries a receipt', async () => {
     const memory = createDeliveryMemoryStore()
@@ -613,6 +681,25 @@ describe('M4 persona authoring', () => {
       new URL(`../../${CHARACTER_CONTENT.sourceDocument}`, import.meta.url),
     )
     expect(existsSync(bible)).toBe(true)
+  })
+
+  it('keeps the [S] lines in the bible identical to the standing facts', () => {
+    // The bible and standingFacts are two copies of the same claims, and only
+    // the latter reaches the model. Without this check a divergence would make
+    // the bible silently stale — reviewers would read claims the character no
+    // longer holds. Marking is what turns that into a build failure.
+    const biblePath = fileURLToPath(
+      new URL(`../../${CHARACTER_CONTENT.sourceDocument}`, import.meta.url),
+    )
+    const marked = standingFactsFromBible(readFileSync(biblePath, 'utf8'))
+    expect(marked.length).toBeGreaterThan(0)
+    expect([...marked].sort()).toEqual([...CHARACTER_CONTENT.standingFacts].sort())
+  })
+
+  it('keeps every standing fact within the per-turn character cap', () => {
+    for (const fact of CHARACTER_CONTENT.standingFacts) {
+      expect(fact.length).toBeLessThanOrEqual(MAX_STANDING_FACT_CHARACTERS)
+    }
   })
 
   it('speaks nothing when the persona has no template for the intent', () => {

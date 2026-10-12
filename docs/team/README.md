@@ -1,6 +1,6 @@
 # Team Development
 
-Document revision: 2026-10-10.5. The team-confirmed allocation is unchanged.
+Document revision: 2026-10-13.1. The team-confirmed allocation is unchanged.
 
 Start an agent from the repository root with a short request such as "I am M3. Start my first task." [AGENTS.md](../../AGENTS.md) maps the role to its task, directories, tests and planning workflow. If the tool does not load AGENTS.md automatically, explicitly ask it to read that file. Review its proposed plan before authorizing code changes; members do not need to repeat the full project instructions in each prompt.
 
@@ -10,6 +10,7 @@ Start an agent from the repository root with a short request such as "I am M3. S
 | [Candidate requirements](REQUIREMENTS.en.md) | Six functional and six non-functional candidates, invariants and acceptance gaps |
 | [Interfaces and handoff](INTERFACES.en.md) | C1–C7 contracts, existing acceptance-case IDs and integration responsibilities |
 | [M5-01 handoff](HANDOFF-M5-01.en.md) | Production coordinator, actual verification, configuration and per-owner I1-01 requests |
+| [M4-01 handoff](HANDOFF-M4-01.en.md) | Production dialogue/persona/memory module, actual verification, configuration and per-owner I1-01 requests |
 | [Readiness kits](READINESS-KITS.en.md) | Per-role commands, ports to implement, fixture replacement instructions and version-change coordination |
 | [Readiness review](READINESS-REVIEW.en.md) | Supervisory review of the approved contract and test design |
 | [Requirements registry](../req/requirements.yaml) | Machine-readable requirements with JSON schema, PRD and trace record under `docs/req/` |
