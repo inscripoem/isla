@@ -34,6 +34,8 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-18 | implemented | `test/offline/m6-storage.test.ts` | INV-04 event identity/sequence uniqueness |
 | C-19 | implemented | `test/offline/m6-storage.test.ts` | INV-05 atomic commit persists nothing |
 | C-20 | implemented | `test/offline/m6-storage.test.ts` | INV-06 projection does not advance across a gap |
+| C-21 | implemented | `test/conformance/storage.conformance.ts` | confirmed history is fully-delivered only |
+| C-22 | implemented | `test/offline/m6-storage.test.ts` | JSONL export carries event version attribution |
 
 ## Requirement trace
 
@@ -44,7 +46,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | FR-03 | M1 | C-06, C-11 | — |
 | FR-04 | M1 | C-01, C-04, C-10 | — |
 | FR-05 | M5 | C-03, C-04 | C-08 |
-| FR-06 | M6 | C-12, C-17 | — |
+| FR-06 | M6 | C-12, C-17, C-21, C-22 | — |
 | NFR-01 | M5 | — | metric baseline |
 | NFR-02 | M5 | C-10, C-17 | C-05, C-09, recovery duration |
 | NFR-03 | M3 | — | C-16, human rubric |

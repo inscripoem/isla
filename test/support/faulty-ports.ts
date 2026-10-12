@@ -8,6 +8,7 @@ import type {
   DialogueEnd,
   DialoguePort,
   EventStorePort,
+  HistoryQueryPort,
   InputAck,
   MemoryProjectionPort,
   PlayerPort,
@@ -304,6 +305,17 @@ export function createFaultyEventStore(): FaultyEventStore {
   }
   record.store = store
   return record
+}
+
+export function createFaultyHistoryQuery(store: {
+  readonly deliveries: ConfirmedDelivery[]
+}): HistoryQueryPort {
+  return {
+    async confirmedHistory(sessionId) {
+      // Fault: returns every record for the session, including partial/not-delivered.
+      return store.deliveries.filter((record) => record.sessionId === sessionId)
+    },
+  }
 }
 
 export function createFaultyMemoryProjection(): MemoryProjectionPort & { appliedCount: () => number } {

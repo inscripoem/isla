@@ -40,9 +40,11 @@ describe('M6 storage conformance', () => {
   it('accepts the M6 event store and projection', async () => {
     const violations = await collectStorageViolations(() => {
       const { backend, failNextCommit } = createFailingBackend()
+      const store = createEventStore(backend)
       return {
-        store: createEventStore(backend),
+        store,
         projection: createMemoryProjection(),
+        history: createHistoryQuery(store.deliveries),
         setFailNextCommit: failNextCommit,
       }
     })
@@ -55,6 +57,7 @@ describe('M6 storage conformance', () => {
       return {
         store: store.store,
         projection: faulty.createFaultyMemoryProjection(),
+        history: faulty.createFaultyHistoryQuery(store),
         setFailNextCommit: () => {
           store.failNextCommit = true
         },
@@ -66,6 +69,7 @@ describe('M6 storage conformance', () => {
     expect(codes).toContain('delivery-changed-content-conflict')
     expect(codes).toContain('atomic-failure-reported')
     expect(codes).toContain('projection-no-gap-claim')
+    expect(codes).toContain('history-fully-delivered-only')
   })
 })
 
@@ -204,5 +208,16 @@ describe('M6 storage invariants', () => {
     expect((await projection.apply(fixtureRuntimeEvent({ eventId: 'inv06-2', seq: 2 }))).appliedSeq).toBe(0)
     expect((await projection.apply(fixtureRuntimeEvent({ eventId: 'inv06-1', seq: 1 }))).appliedSeq).toBe(1)
     expect((await projection.apply(fixtureRuntimeEvent({ eventId: 'inv06-1', seq: 1 }))).appliedSeq).toBe(1)
+  })
+})
+
+describe('M6 JSONL export (FR-06)', () => {
+  it('carries event version attribution', async () => {
+    const store = createEventStore()
+    await store.append(
+      fixtureRuntimeEvent({ eventId: 'evt-version', seq: 1, versions: { persona: 'testvtb@1' } }),
+    )
+    const jsonl = await store.exportJsonl(FIXTURE_SESSION_ID)
+    expect(jsonl).toContain('"persona":"testvtb@1"')
   })
 })

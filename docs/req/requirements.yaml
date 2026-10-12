@@ -84,6 +84,9 @@ requirements:
       - kind: deterministic
         description: Stored fixtures reconstruct order and outcomes; replay is isolated from live state.
         cases: [C-12, C-17]
+      - kind: deterministic
+        description: Confirmed history returns only fully-delivered records; the JSONL export carries event version attribution.
+        cases: [C-21, C-22]
 
   - id: NFR-01
     title: Responsiveness and synchronization
