@@ -110,3 +110,24 @@ cases:
     verifier:
       file: test/offline/composition.test.ts
       test: "C-17: a storage failure degrades the session, blocks work and keeps Stop responsive"
+
+  - id: C-18
+    status: implemented
+    title: Event identity and session-sequence uniqueness
+    verifier:
+      file: test/offline/m6-storage.test.ts
+      test: "INV-04: rejects a reused event id with different content and a reused session sequence"
+
+  - id: C-19
+    status: implemented
+    title: Atomic delivery and supporting-event commit
+    verifier:
+      file: test/offline/m6-storage.test.ts
+      test: "INV-05: a failed atomic commit persists nothing"
+
+  - id: C-20
+    status: implemented
+    title: Memory projection gap and idempotence
+    verifier:
+      file: test/offline/m6-storage.test.ts
+      test: "INV-06: the memory projection does not advance across a gap and is idempotent"

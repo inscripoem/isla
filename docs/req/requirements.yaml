@@ -210,3 +210,42 @@ requirements:
       - kind: deterministic
         description: Zero privileged transitions from untrusted inputs.
         cases: [C-07]
+
+  - id: INV-04
+    title: Event identifiers and session sequence numbers are unique
+    category: invariant
+    priority: must
+    owner: M6
+    collaborators: [M5]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Reusing an event id with different content, or a session sequence number, is rejected without overwriting the committed record (storage of FR-06).
+        cases: [C-18]
+
+  - id: INV-05
+    title: A delivery and its supporting event commit atomically
+    category: invariant
+    priority: must
+    owner: M6
+    collaborators: [M5, M4]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: A failed atomic write is reported for both the delivery and the event and persists no partial record (FR-06; C-17).
+        cases: [C-19]
+
+  - id: INV-06
+    title: A memory projection never advances across a gap and is idempotent
+    category: invariant
+    priority: must
+    owner: M6
+    collaborators: [M4]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: A gap does not advance the projection and reapplying an applied event does not advance it (FR-06; C-12).
+        cases: [C-20]

@@ -5,28 +5,45 @@ import { FIXTURE_SESSION_ID, fixtureCommitDelivery, fixtureRuntimeEvent } from '
 import {
   createEventStore,
   createHistoryQuery,
+  createInMemoryBackend,
   createMemoryProjection,
   createReplayReader,
 } from '../../src/storage'
+import type { StorageBackend, StorageMutation } from '../../src/storage'
+
+/**
+ * Test-only fault injection (READINESS-KITS: keep fault-injection controls in the
+ * test adapter). Wraps the in-memory backend so the next commit throws once;
+ * production code exposes no failure switch.
+ */
+function createFailingBackend(): { backend: StorageBackend; failNextCommit: () => void } {
+  const base = createInMemoryBackend()
+  let shouldFail = false
+  return {
+    backend: {
+      ...base,
+      commit: (mutations: readonly StorageMutation[]) => {
+        if (shouldFail) {
+          shouldFail = false
+          throw new Error('simulated storage failure')
+        }
+        base.commit(mutations)
+      },
+    },
+    failNextCommit: () => {
+      shouldFail = true
+    },
+  }
+}
 
 describe('M6 storage conformance', () => {
   it('accepts the M6 event store and projection', async () => {
     const violations = await collectStorageViolations(() => {
-      let failNextCommit = false
-      const store = createEventStore({
-        beforeCommit: () => {
-          if (failNextCommit) {
-            failNextCommit = false
-            throw new Error('simulated storage failure')
-          }
-        },
-      })
+      const { backend, failNextCommit } = createFailingBackend()
       return {
-        store,
+        store: createEventStore(backend),
         projection: createMemoryProjection(),
-        setFailNextCommit: () => {
-          failNextCommit = true
-        },
+        setFailNextCommit: failNextCommit,
       }
     })
     expect(violations).toEqual([])
@@ -145,5 +162,47 @@ describe('M6 confirmed history (C6/C7)', () => {
     const history = createHistoryQuery(store.deliveries)
     const confirmed = await history.confirmedHistory(FIXTURE_SESSION_ID)
     expect(confirmed).toHaveLength(1)
+  })
+})
+
+describe('M6 storage invariants', () => {
+  it('INV-04: rejects a reused event id with different content and a reused session sequence', async () => {
+    const store = createEventStore()
+    const first = fixtureRuntimeEvent({ eventId: 'inv04-a', seq: 1 })
+    expect((await store.append(first)).outcome).toBe('stored')
+    expect((await store.append(first)).outcome).toBe('duplicate')
+    expect(
+      (await store.append(fixtureRuntimeEvent({ eventId: 'inv04-a', seq: 1, type: 'input.dropped' })))
+        .outcome,
+    ).toBe('failed')
+    expect((await store.append(fixtureRuntimeEvent({ eventId: 'inv04-b', seq: 1 }))).outcome).toBe(
+      'failed',
+    )
+  })
+
+  it('INV-05: a failed atomic commit persists nothing', async () => {
+    const { backend, failNextCommit } = createFailingBackend()
+    const store = createEventStore(backend)
+    await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({ turnId: 'inv05-ok', segmentId: 's', textHash: 'h', text: 'ok' }),
+      fixtureRuntimeEvent({ eventId: 'inv05-1', seq: 1, type: 'delivery.committed' }),
+    )
+    const before = (await store.readSession(FIXTURE_SESSION_ID)).length
+
+    failNextCommit()
+    const failed = await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({ turnId: 'inv05-fail', segmentId: 's', textHash: 'hf', text: 'fail' }),
+      fixtureRuntimeEvent({ eventId: 'inv05-2', seq: 2, type: 'delivery.committed' }),
+    )
+
+    expect(failed.event.outcome).toBe('failed')
+    expect((await store.readSession(FIXTURE_SESSION_ID)).length).toBe(before)
+  })
+
+  it('INV-06: the memory projection does not advance across a gap and is idempotent', async () => {
+    const projection = createMemoryProjection()
+    expect((await projection.apply(fixtureRuntimeEvent({ eventId: 'inv06-2', seq: 2 }))).appliedSeq).toBe(0)
+    expect((await projection.apply(fixtureRuntimeEvent({ eventId: 'inv06-1', seq: 1 }))).appliedSeq).toBe(1)
+    expect((await projection.apply(fixtureRuntimeEvent({ eventId: 'inv06-1', seq: 1 }))).appliedSeq).toBe(1)
   })
 })

@@ -1,0 +1,23 @@
+# AI-use log (D1 / gate G6)
+# A pull request that changes code or prompts must update this file.
+# One entry per supervised change. English only.
+version: 1
+entries:
+  - date: 2026-10-12
+    task: M6-01
+    branch: m6-storage
+    change: "Implement in-memory M6 storage ports (EventStorePort, MemoryProjectionPort, ReplayReaderPort, HistoryQueryPort)"
+    requirements: [FR-06]
+    invariants: [INV-04, INV-05, INV-06]
+    commits: [f6bfae0, 77791d5]
+    agent: opencode/deepseek-v4-flash
+    human_review: "Corrected a production fault-injection API leak; moved failure injection into the test adapter"
+  - date: 2026-10-12
+    task: M6-01
+    branch: m6-storage
+    change: "Replace production fault hooks with an injected StorageBackend (ADR-001); add traceability artifacts"
+    requirements: [FR-06]
+    invariants: [INV-04, INV-05, INV-06]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Directed by the M6 owner after reviewing AGENTS.md and READINESS-KITS"
