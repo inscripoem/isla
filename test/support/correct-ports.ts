@@ -469,6 +469,11 @@ export interface FixtureEventStore extends EventStorePort {
   /** Test hooks to hold an acknowledgement for responsiveness checks. */
   beforeAppend?: () => Promise<void>
   beforeCommit?: () => Promise<void>
+  /** Test hooks to forge, throw or mismatch the next acknowledgement. */
+  throwNextAppend?: boolean
+  throwNextCommit?: boolean
+  mutateAppendAck?: (ack: AppendAck) => AppendAck
+  mutateCommitAck?: (ack: AtomicCommitAck) => AtomicCommitAck
 }
 
 function sameContent(a: unknown, b: unknown): boolean {
@@ -489,74 +494,98 @@ export function createFixtureEventStore(): FixtureEventStore {
     failNextCommit: false,
     async append(event): Promise<AppendAck> {
       if (store.beforeAppend !== undefined) await store.beforeAppend()
+      if (store.throwNextAppend) {
+        store.throwNextAppend = false
+        throw new Error('fixture append throw')
+      }
+      let ack: AppendAck
       if (store.failNextAppend) {
         store.failNextAppend = false
-        return { outcome: 'failed', eventId: event.eventId, seq: event.seq, reasonCode: 'storage_unavailable', message: 'fixture append failure' }
+        ack = { outcome: 'failed', eventId: event.eventId, seq: event.seq, reasonCode: 'storage_unavailable', message: 'fixture append failure' }
+      } else {
+        const sameId = events.find((stored) => stored.eventId === event.eventId)
+        if (sameId !== undefined) {
+          ack = sameContent(sameId, event)
+            ? { outcome: 'duplicate', eventId: event.eventId, seq: event.seq }
+            : { outcome: 'failed', eventId: event.eventId, seq: event.seq, reasonCode: 'conflict', message: 'reused event id with different content' }
+        } else if (events.some((stored) => stored.sessionId === event.sessionId && stored.seq === event.seq)) {
+          ack = { outcome: 'failed', eventId: event.eventId, seq: event.seq, reasonCode: 'conflict', message: 'duplicate sequence number in session' }
+        } else {
+          events.push(event)
+          ack = { outcome: 'stored', eventId: event.eventId, seq: event.seq }
+        }
       }
-      const sameId = events.find((stored) => stored.eventId === event.eventId)
-      if (sameId !== undefined) {
-        return sameContent(sameId, event)
-          ? { outcome: 'duplicate', eventId: event.eventId, seq: event.seq }
-          : { outcome: 'failed', eventId: event.eventId, seq: event.seq, reasonCode: 'conflict', message: 'reused event id with different content' }
+      if (store.mutateAppendAck !== undefined) {
+        const mutate = store.mutateAppendAck
+        store.mutateAppendAck = undefined
+        ack = mutate(ack)
       }
-      if (events.some((stored) => stored.sessionId === event.sessionId && stored.seq === event.seq)) {
-        return { outcome: 'failed', eventId: event.eventId, seq: event.seq, reasonCode: 'conflict', message: 'duplicate sequence number in session' }
-      }
-      events.push(event)
-      return { outcome: 'stored', eventId: event.eventId, seq: event.seq }
+      return ack
     },
     async commitDeliveryWithEvent(delivery, event): Promise<AtomicCommitAck> {
       if (store.beforeCommit !== undefined) await store.beforeCommit()
+      if (store.throwNextCommit) {
+        store.throwNextCommit = false
+        throw new Error('fixture commit throw')
+      }
       const failure: AtomicCommitAck = {
         delivery: { status: 'failed', reasonCode: 'storage_unavailable', message: 'fixture atomic failure' },
         event: { outcome: 'failed', eventId: event.eventId, seq: event.seq, reasonCode: 'storage_unavailable', message: 'fixture atomic failure' },
       }
+      let atomic: AtomicCommitAck
       if (store.failNextCommit) {
         store.failNextCommit = false
-        return failure
-      }
-      const sameId = events.find((stored) => stored.eventId === event.eventId)
-      if (sameId !== undefined && !sameContent(sameId, event)) {
-        return failure
-      }
-      if (events.some((stored) => stored.sessionId === event.sessionId && stored.seq === event.seq && stored.eventId !== event.eventId)) {
-        return { ...failure, event: { outcome: 'failed', eventId: event.eventId, seq: event.seq, reasonCode: 'conflict', message: 'duplicate sequence number in session' } }
-      }
-      const key = deliveryKey(delivery)
-      const existing = deliveries.find((record) => deliveryKey(record) === key)
-      let deliveryAck: DeliveryCommitAck
-      if (existing === undefined) {
-        deliveries.push({
-          sessionId: delivery.sessionId,
-          turnId: delivery.turnId,
-          segmentId: delivery.segmentId,
-          textHash: delivery.textHash,
-          text: delivery.text,
-          outputId: delivery.outputId,
-          receiptId: delivery.receiptId,
-          classification: delivery.classification,
-          modality: delivery.modality,
-        })
-        deliveryAck = deliveryCommitAckSchema.parse({ status: 'applied', effectiveClassification: delivery.classification, recordId: key })
-      } else if (existing.textHash !== delivery.textHash) {
-        deliveryAck = deliveryCommitAckSchema.parse({
-          status: 'conflict',
-          recordedClassification: existing.classification,
-          incomingClassification: delivery.classification,
-          conflictRecordId: `${key}:conflict`,
-        })
-      } else if (existing.classification === delivery.classification) {
-        deliveryAck = deliveryCommitAckSchema.parse({ status: 'duplicate', effectiveClassification: existing.classification, recordId: key })
+        atomic = failure
       } else {
-        deliveryAck = deliveryCommitAckSchema.parse({
-          status: 'conflict',
-          recordedClassification: existing.classification,
-          incomingClassification: delivery.classification,
-          conflictRecordId: `${key}:conflict`,
-        })
+        const sameId = events.find((stored) => stored.eventId === event.eventId)
+        if (sameId !== undefined && !sameContent(sameId, event)) {
+          atomic = failure
+        } else if (events.some((stored) => stored.sessionId === event.sessionId && stored.seq === event.seq && stored.eventId !== event.eventId)) {
+          atomic = { ...failure, event: { outcome: 'failed', eventId: event.eventId, seq: event.seq, reasonCode: 'conflict', message: 'duplicate sequence number in session' } }
+        } else {
+          const key = deliveryKey(delivery)
+          const existing = deliveries.find((record) => deliveryKey(record) === key)
+          let deliveryAck: DeliveryCommitAck
+          if (existing === undefined) {
+            deliveries.push({
+              sessionId: delivery.sessionId,
+              turnId: delivery.turnId,
+              segmentId: delivery.segmentId,
+              textHash: delivery.textHash,
+              text: delivery.text,
+              outputId: delivery.outputId,
+              receiptId: delivery.receiptId,
+              classification: delivery.classification,
+              modality: delivery.modality,
+            })
+            deliveryAck = deliveryCommitAckSchema.parse({ status: 'applied', effectiveClassification: delivery.classification, recordId: key })
+          } else if (existing.textHash !== delivery.textHash) {
+            deliveryAck = deliveryCommitAckSchema.parse({
+              status: 'conflict',
+              recordedClassification: existing.classification,
+              incomingClassification: delivery.classification,
+              conflictRecordId: `${key}:conflict`,
+            })
+          } else if (existing.classification === delivery.classification) {
+            deliveryAck = deliveryCommitAckSchema.parse({ status: 'duplicate', effectiveClassification: existing.classification, recordId: key })
+          } else {
+            deliveryAck = deliveryCommitAckSchema.parse({
+              status: 'conflict',
+              recordedClassification: existing.classification,
+              incomingClassification: delivery.classification,
+              conflictRecordId: `${key}:conflict`,
+            })
+          }
+          if (sameId === undefined) events.push(event)
+          atomic = { delivery: deliveryAck, event: sameId !== undefined ? { outcome: 'duplicate', eventId: event.eventId, seq: event.seq } : { outcome: 'stored', eventId: event.eventId, seq: event.seq } }
+        }
       }
-      if (sameId === undefined) events.push(event)
-      return { delivery: deliveryAck, event: sameId !== undefined ? { outcome: 'duplicate', eventId: event.eventId, seq: event.seq } : { outcome: 'stored', eventId: event.eventId, seq: event.seq } }
+      if (store.mutateCommitAck !== undefined) {
+        const mutate = store.mutateCommitAck
+        store.mutateCommitAck = undefined
+        atomic = mutate(atomic)
+      }
+      return atomic
     },
     async readSession(sessionId): Promise<RuntimeEvent[]> {
       return events.filter((event) => event.sessionId === sessionId).sort((a, b) => a.seq - b.seq)

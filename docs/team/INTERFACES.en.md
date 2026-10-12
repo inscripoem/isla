@@ -1,6 +1,6 @@
 # Interface and handoff baseline v0.2
 
-Revision: 2026-10-10.2. Status: under review. Shared schemas and offline fixtures exist; production VTuber modules and application transport remain to be implemented. This is an evolvable baseline coordinated by M5 with affected producers and consumers.
+Revision: 2026-10-10.5. Status: under review. Shared schemas and offline fixtures exist; the M5-01 production coordinator is under review, while peer modules and application transport integration remain pending. This is an evolvable baseline coordinated by M5 with affected producers and consumers.
 
 ## Executable contract map
 
@@ -113,3 +113,7 @@ The [case registry](../req/case-registry.yaml) records current tests and pending
 Handoff includes task/requirement IDs, exact imports/variants, actual commands, positive/negative results, cancellation/failure behavior and remaining gaps. The consuming owner verifies the same contract revision; [role kits](READINESS-KITS.en.md) link replacement examples.
 
 Before changing an interface, trace consumers and update implementations, examples and tests together. Strict decoders need coordinated rollout even for optional fields. Breaking changes need a version/migration decision; this baseline is not permanently frozen.
+
+## M5-01 implementation handoff
+
+The [M5-01 handoff](HANDOFF-M5-01.en.md) documents the implemented coordinator, local configuration, event records and requested I1-01 reviews. Shared C1–C7 schemas and port signatures remain unchanged. Application protocol 0.2 remains separate from diagnostic protocol 1. M1/M2/M3/M4/M6 retain their existing ownership; integrating their real modules is the next team checkpoint.

@@ -1,6 +1,6 @@
 # Requirements trace and approval record
 
-Date: 2026-10-10. Status: under review. Scope: shared preparation, not completed product features, not a complete coursework D1.
+Date: 2026-10-10. Status: under review. Scope: shared preparation and the M5-01 coordinator increment; not complete product acceptance or coursework D1.
 
 This record links candidate requirements to machine-checkable acceptance criteria, cases, owners and automated checks. It records the actual supervisory review decision; it does not claim individual approval by all six team members.
 
@@ -66,3 +66,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 - The first-slice checks prove contract boundaries and Stop/receipt semantics for the cited cases only; they do not prove C-05/C-08/C-09/C-16 or any live provider, browser audio or durable SQLite behavior.
 - NFR-02 recovery duration and NFR-05 retention remain pending, not accepted.
 - A finite fixture suite is not a universal security or correctness proof.
+
+## M5-01 production increment
+
+The composition and regression suites now run the same assertions against the independent fixture reference and `src/runtime/coordinator.ts`, through the test-only adapter. `test/offline/m5-coordinator.test.ts` adds production-specific deadline, cancellation, receipt, persistence and input-boundary checks. This supplies scoped M5 evidence for the existing requirement/case links; it does not change requirement owners or promote pending product cases. See the [M5-01 handoff](../team/HANDOFF-M5-01.en.md) for actual commands/results and remaining I1-01 reviews. Status: under review.
