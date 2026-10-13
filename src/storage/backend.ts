@@ -37,8 +37,11 @@ export function deliveryKey(
 }
 
 export interface StorageBackend {
-  /** Committed event with this identity, if any. */
-  eventById(eventId: string): RuntimeEvent | undefined
+  /**
+   * Committed event with this identity in this session, if any. Event identity
+   * is session-scoped (INTERFACES C7): two sessions may each hold `evt-1`.
+   */
+  eventById(sessionId: string, eventId: string): RuntimeEvent | undefined
   /** Event id owning this session sequence, if any (M5 assigns seq). */
   sequenceOwner(sessionId: string, seq: number): string | undefined
   /** Committed events for a session (unordered). */

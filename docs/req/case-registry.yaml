@@ -145,3 +145,10 @@ cases:
     verifier:
       file: test/offline/m6-storage.test.ts
       test: "carries event version attribution"
+
+  - id: C-23
+    status: implemented
+    title: Event identity is session-scoped
+    verifier:
+      file: test/offline/m6-storage.test.ts
+      test: "stores the same event id in two sessions independently"

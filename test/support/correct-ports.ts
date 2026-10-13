@@ -503,7 +503,9 @@ export function createFixtureEventStore(): FixtureEventStore {
         store.failNextAppend = false
         ack = { outcome: 'failed', eventId: event.eventId, seq: event.seq, reasonCode: 'storage_unavailable', message: 'fixture append failure' }
       } else {
-        const sameId = events.find((stored) => stored.eventId === event.eventId)
+        const sameId = events.find(
+          (stored) => stored.sessionId === event.sessionId && stored.eventId === event.eventId,
+        )
         if (sameId !== undefined) {
           ack = sameContent(sameId, event)
             ? { outcome: 'duplicate', eventId: event.eventId, seq: event.seq }
@@ -537,7 +539,9 @@ export function createFixtureEventStore(): FixtureEventStore {
         store.failNextCommit = false
         atomic = failure
       } else {
-        const sameId = events.find((stored) => stored.eventId === event.eventId)
+        const sameId = events.find(
+          (stored) => stored.sessionId === event.sessionId && stored.eventId === event.eventId,
+        )
         if (sameId !== undefined && !sameContent(sameId, event)) {
           atomic = failure
         } else if (events.some((stored) => stored.sessionId === event.sessionId && stored.seq === event.seq && stored.eventId !== event.eventId)) {

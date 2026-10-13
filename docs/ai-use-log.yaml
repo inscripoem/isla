@@ -21,3 +21,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Directed by the M6 owner after reviewing AGENTS.md and READINESS-KITS"
+  - date: 2026-10-13
+    task: M6-01
+    branch: m6-storage
+    change: "Session-scope event identity (PR #9 review item 1); fixture aligned to C7"
+    requirements: [FR-06]
+    invariants: [INV-04]
+    cases: [C-23]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "M5 review requested session scoping; implemented with ADR-002"

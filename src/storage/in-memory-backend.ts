@@ -7,10 +7,15 @@ import { deliveryKey, type StorageBackend, type StorageMutation } from './backen
  * Production default for `createEventStore`. SQLite will implement the same
  * `StorageBackend` interface; no store logic changes when it does.
  *
- * Indexing (behaviour-preserving efficiency): events are indexed by `eventId`,
- * session sequences by `sessionId:seq`, and deliveries by their composite key,
- * so identity and conflict checks are O(1) rather than linear scans.
+ * Indexing: events are indexed by `sessionId:eventId` (event identity is
+ * session-scoped, INTERFACES C7), session sequences by `sessionId:seq`, and
+ * deliveries by their composite key, so identity and conflict checks are O(1)
+ * rather than linear scans.
  */
+function eventKey(sessionId: string, eventId: string): string {
+  return `${sessionId}\u0000${eventId}`
+}
+
 export function createInMemoryBackend(): StorageBackend {
   const eventsById = new Map<string, RuntimeEvent>()
   const sequenceOwners = new Map<string, string>()
@@ -21,7 +26,7 @@ export function createInMemoryBackend(): StorageBackend {
   function apply(mutation: StorageMutation): void {
     if (mutation.kind === 'event') {
       const { event } = mutation
-      eventsById.set(event.eventId, event)
+      eventsById.set(eventKey(event.sessionId, event.eventId), event)
       sequenceOwners.set(`${event.sessionId}:${event.seq}`, event.eventId)
       const bucket = eventsBySession.get(event.sessionId)
       if (bucket === undefined) eventsBySession.set(event.sessionId, [event])
@@ -33,7 +38,7 @@ export function createInMemoryBackend(): StorageBackend {
   }
 
   return {
-    eventById: (eventId) => eventsById.get(eventId),
+    eventById: (sessionId, eventId) => eventsById.get(eventKey(sessionId, eventId)),
     sequenceOwner: (sessionId, seq) => sequenceOwners.get(`${sessionId}:${seq}`),
     sessionEvents: (sessionId) => eventsBySession.get(sessionId) ?? [],
     deliveryByKey: (key) => deliveriesByKey.get(key),

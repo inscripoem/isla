@@ -73,6 +73,30 @@ describe('M6 storage conformance', () => {
   })
 })
 
+describe('M6 event identity is session-scoped (C-23)', () => {
+  it('stores the same event id in two sessions independently', async () => {
+    const store = createEventStore()
+    const shared = { eventId: 'evt-shared', seq: 1 }
+    const sessionA = 'session-alpha'
+    const sessionB = 'session-beta'
+
+    const ackA = await store.append(fixtureRuntimeEvent({ ...shared, sessionId: sessionA }))
+    const ackB = await store.append(fixtureRuntimeEvent({ ...shared, sessionId: sessionB }))
+    expect(ackA.outcome).toBe('stored')
+    expect(ackB.outcome).toBe('stored')
+
+    expect((await store.readSession(sessionA)).map((event) => event.eventId)).toEqual(['evt-shared'])
+    expect((await store.readSession(sessionB)).map((event) => event.eventId)).toEqual(['evt-shared'])
+
+    const jsonlA = await store.exportJsonl(sessionA)
+    const jsonlB = await store.exportJsonl(sessionB)
+    expect(jsonlA).toContain('"sessionId":"session-alpha"')
+    expect(jsonlB).toContain('"sessionId":"session-beta"')
+    expect(jsonlA).not.toContain('session-beta')
+    expect(jsonlB).not.toContain('session-alpha')
+  })
+})
+
 describe('M6 replay reader (C-12 isolation)', () => {
   it('reads committed events without mutating live state', async () => {
     const store = createEventStore()

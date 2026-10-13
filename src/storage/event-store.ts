@@ -116,7 +116,7 @@ export function createEventStore(backend: StorageBackend = createInMemoryBackend
     deliveries: backend.deliveries(),
 
     async append(event): Promise<AppendAck> {
-      const sameId = backend.eventById(event.eventId)
+      const sameId = backend.eventById(event.sessionId, event.eventId)
       if (sameId !== undefined) {
         return sameContent(sameId, event)
           ? appendAckSchema.parse({ outcome: 'duplicate', eventId: event.eventId, seq: event.seq })
@@ -152,7 +152,7 @@ export function createEventStore(backend: StorageBackend = createInMemoryBackend
           event: eventFailure,
         })
 
-      const sameId = backend.eventById(event.eventId)
+      const sameId = backend.eventById(event.sessionId, event.eventId)
       if (sameId !== undefined && !sameContent(sameId, event)) return failure(storageFailure(event))
 
       const owner = backend.sequenceOwner(event.sessionId, event.seq)

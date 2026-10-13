@@ -69,6 +69,27 @@ export async function collectStorageViolations(create: () => StorageKit): Promis
     check('atomic-no-partial-mutation', after === before, 'a failed atomic write must not persist a partial event')
   }
 
+  // Event identity is session-scoped (INTERFACES C7): the same event id in two
+  // sessions must be stored independently.
+  const otherSessionId = 'session-conformance-other'
+  const otherSessionEvent = fixtureRuntimeEvent({
+    sessionId: otherSessionId,
+    eventId: 'evt-1',
+    seq: 1,
+  })
+  const otherAck = await store.append(otherSessionEvent)
+  check(
+    'append-session-scoped-identity',
+    otherAck.outcome === 'stored',
+    'the same event id in a different session must be stored independently',
+  )
+  const otherEvents = await store.readSession(otherSessionId)
+  check(
+    'read-session-isolated',
+    otherEvents.length === 1 && otherEvents[0]?.eventId === 'evt-1',
+    'each session must read its own events independently',
+  )
+
   if (kit.history !== undefined) {
     // A not-delivered record must never appear in confirmed spoken history.
     const notDelivered = fixtureCommitDelivery({

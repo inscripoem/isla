@@ -215,7 +215,7 @@ requirements:
         cases: [C-07]
 
   - id: INV-04
-    title: Event identifiers and session sequence numbers are unique
+    title: Event identity within a session and session sequence numbers are unique
     category: invariant
     priority: must
     owner: M6
@@ -224,8 +224,8 @@ requirements:
     status: under-review
     acceptance:
       - kind: deterministic
-        description: Reusing an event id with different content, or a session sequence number, is rejected without overwriting the committed record (storage of FR-06).
-        cases: [C-18]
+        description: Within a session, reusing an event id with different content or a session sequence number is rejected without overwriting; the same event id in another session is stored independently (FR-06; C7 session-scoped identity).
+        cases: [C-18, C-23]
 
   - id: INV-05
     title: A delivery and its supporting event commit atomically

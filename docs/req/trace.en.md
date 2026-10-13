@@ -36,6 +36,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-20 | implemented | `test/offline/m6-storage.test.ts` | INV-06 projection does not advance across a gap |
 | C-21 | implemented | `test/conformance/storage.conformance.ts` | confirmed history is fully-delivered only |
 | C-22 | implemented | `test/offline/m6-storage.test.ts` | JSONL export carries event version attribution |
+| C-23 | implemented | `test/offline/m6-storage.test.ts` | event identity is session-scoped |
 
 ## Requirement trace
 
@@ -56,7 +57,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-01 | M5 | C-03, C-04 | — |
 | INV-02 | M5 | C-06 | — |
 | INV-03 | M5 | C-07 | — |
-| INV-04 | M6 | C-18 | — |
+| INV-04 | M6 | C-18, C-23 | — |
 | INV-05 | M6 | C-19 | — |
 | INV-06 | M6 | C-20 | — |
 
