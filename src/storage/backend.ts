@@ -21,13 +21,25 @@ import type { ConfirmedDelivery, RuntimeEvent } from '../contracts'
  * --------
  * `commit` must be atomic: it applies every mutation or none. A storage failure
  * throws, and the caller converts that into `failed` acknowledgements without
- * partial state (FR-06; C-17).
+ * partial state (FR-06; C-17). Reads must return records isolated from caller
+ * mutation (INV-07).
  */
 
 /** A single atomic mutation: a committed event and/or a committed delivery. */
 export type StorageMutation =
   | { readonly kind: 'event'; readonly event: RuntimeEvent }
-  | { readonly kind: 'delivery'; readonly record: ConfirmedDelivery }
+  | {
+      readonly kind: 'delivery'
+      readonly record: ConfirmedDelivery
+      /** Sequence of the supporting event; orders confirmed history (INV-08). */
+      readonly eventSeq: number
+    }
+
+/** A committed delivery with the sequence of its supporting event. */
+export interface StoredDelivery {
+  readonly record: ConfirmedDelivery
+  readonly eventSeq: number
+}
 
 /** Composite delivery identity: sessionId:turnId:segmentId:modality. */
 export function deliveryKey(
@@ -48,8 +60,8 @@ export interface StorageBackend {
   sessionEvents(sessionId: string): RuntimeEvent[]
   /** Committed delivery with this composite key, if any. */
   deliveryByKey(key: string): ConfirmedDelivery | undefined
-  /** Live committed delivery records (consumed by HistoryQueryPort). */
-  deliveries(): ConfirmedDelivery[]
+  /** Committed deliveries with their supporting event sequence. */
+  storedDeliveries(): readonly StoredDelivery[]
   /** Apply all mutations atomically; throw on storage failure. */
   commit(mutations: readonly StorageMutation[]): void
 }

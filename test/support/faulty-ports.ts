@@ -1,3 +1,4 @@
+import type { StoredDelivery } from '../../src/storage'
 import type {
   AppendAck,
   AtomicCommitAck,
@@ -308,12 +309,15 @@ export function createFaultyEventStore(): FaultyEventStore {
 }
 
 export function createFaultyHistoryQuery(source: {
-  deliveries(): readonly ConfirmedDelivery[]
+  storedDeliveries(): readonly StoredDelivery[]
 }): HistoryQueryPort {
   return {
     async confirmedHistory(sessionId) {
-      // Fault: returns every record for the session, including partial/not-delivered.
-      return source.deliveries().filter((record) => record.sessionId === sessionId)
+      // Fault: returns every record for the session in insertion order, including partial/not-delivered.
+      return source
+        .storedDeliveries()
+        .map(({ record }) => record)
+        .filter((record) => record.sessionId === sessionId)
     },
   }
 }

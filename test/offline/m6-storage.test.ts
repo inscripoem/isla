@@ -57,7 +57,9 @@ describe('M6 storage conformance', () => {
       return {
         store: store.store,
         projection: faulty.createFaultyMemoryProjection(),
-        history: faulty.createFaultyHistoryQuery({ deliveries: () => store.deliveries }),
+        history: faulty.createFaultyHistoryQuery({
+          storedDeliveries: () => store.deliveries.map((record) => ({ record, eventSeq: 0 })),
+        }),
         setFailNextCommit: () => {
           store.failNextCommit = true
         },
@@ -174,6 +176,29 @@ describe('M6 confirmed history (C6/C7)', () => {
     const history = createHistoryQuery(backend)
     const confirmed = await history.confirmedHistory(FIXTURE_SESSION_ID)
     expect(confirmed.map((record) => record.text)).toEqual(['spoken'])
+  })
+
+  it('returns supporting-event seq order even when insertion order differs (C-25)', async () => {
+    const backend = createInMemoryBackend()
+    const store = createEventStore(backend)
+    // Commit a later supporting-event seq first, then an earlier one.
+    await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({ turnId: 't-late', segmentId: 's-late', textHash: 'h-late', text: 'late' }),
+      fixtureRuntimeEvent({ eventId: 'evt-late', seq: 5, type: 'delivery.committed' }),
+    )
+    await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({
+        turnId: 't-early',
+        segmentId: 's-early',
+        textHash: 'h-early',
+        text: 'early',
+      }),
+      fixtureRuntimeEvent({ eventId: 'evt-early', seq: 2, type: 'delivery.committed' }),
+    )
+
+    const history = createHistoryQuery(backend)
+    const confirmed = await history.confirmedHistory(FIXTURE_SESSION_ID)
+    expect(confirmed.map((record) => record.text)).toEqual(['early', 'late'])
   })
 
   it('does not duplicate history when an identical delivery is committed twice', async () => {

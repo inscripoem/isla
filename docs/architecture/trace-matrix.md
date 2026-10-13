@@ -15,6 +15,7 @@ Every requirement maps to its enforcing component, interface, test/evidence and 
 | INV-05 | A delivery and its supporting event commit together or not at all | `src/storage/backend.ts` (`commit`) + `event-store.ts` | `StorageBackend` | C-19 | `m6-storage.test.ts::INV-05`; conformance `atomic-no-partial-mutation` | `storage_unavailable` acks | ADR-001 | in review |
 | INV-06 | A memory projection never advances across a gap | `src/storage/memory-projection.ts` | `MemoryProjectionPort` | C-20 | `m6-storage.test.ts::INV-06`; conformance `projection-no-gap-claim` | `appliedSeq` | — | in review |
 | INV-07 | Committed records are isolated from caller mutation | `src/storage/in-memory-backend.ts` | `StorageBackend` | C-24 | `m6-storage.test.ts` (isolation tests) | — | ADR-002 | in review |
+| INV-08 | Confirmed history is ordered by the supporting event seq | `src/storage/history-query.ts` | `HistoryQueryPort` | C-25 | `m6-storage.test.ts` (ordering test) | — | ADR-002 | in review |
 
 Other requirements (FR-01..FR-05, NFR-01..NFR-06) remain governed by `docs/req/trace.en.md` and are
 pending their owners' rows here.

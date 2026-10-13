@@ -166,7 +166,11 @@ export function createEventStore(backend: StorageBackend = createInMemoryBackend
       let deliveryAck: DeliveryCommitAck
 
       if (existing === undefined) {
-        mutations.push({ kind: 'delivery', record: toConfirmedDelivery(delivery) })
+        mutations.push({
+          kind: 'delivery',
+          record: toConfirmedDelivery(delivery),
+          eventSeq: event.seq,
+        })
         deliveryAck = deliveryCommitAckSchema.parse({
           status: 'applied',
           effectiveClassification: delivery.classification,

@@ -38,6 +38,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-22 | implemented | `test/offline/m6-storage.test.ts` | JSONL export carries event version attribution |
 | C-23 | implemented | `test/offline/m6-storage.test.ts` | event identity is session-scoped |
 | C-24 | implemented | `test/offline/m6-storage.test.ts` | committed records are isolated from caller mutation |
+| C-25 | implemented | `test/offline/m6-storage.test.ts` | confirmed history is ordered by the supporting event sequence |
 
 ## Requirement trace
 
@@ -62,6 +63,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-05 | M6 | C-19 | — |
 | INV-06 | M6 | C-20 | — |
 | INV-07 | M6 | C-24 | — |
+| INV-08 | M6 | C-25 | — |
 
 ## Approval record
 

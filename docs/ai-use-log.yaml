@@ -41,3 +41,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "M5 review requested an isolation boundary; implemented with ADR-002"
+  - date: 2026-10-13
+    task: M6-01
+    branch: m6-storage
+    change: "Order confirmed history by the supporting event seq (PR #9 review item 3; issue #22 ordering wording)"
+    requirements: [FR-06]
+    invariants: [INV-08]
+    cases: [C-25]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "M5 review required the documented ordering; implemented with ADR-002"

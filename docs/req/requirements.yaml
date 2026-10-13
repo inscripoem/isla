@@ -265,3 +265,16 @@ requirements:
       - kind: deterministic
         description: Mutating a caller's input after commit, or a returned record, cannot change committed state or JSONL output (FR-06 storage boundary).
         cases: [C-24]
+
+  - id: INV-08
+    title: Confirmed history is ordered by the supporting event sequence
+    category: invariant
+    priority: must
+    owner: M6
+    collaborators: [M4, M5]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: confirmedHistory(sessionId) returns fully-delivered records ordered by the supporting event seq ascending, independent of insertion order (FR-06; M4/M5 issue #22).
+        cases: [C-25]

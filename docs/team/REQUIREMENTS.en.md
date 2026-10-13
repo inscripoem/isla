@@ -49,6 +49,7 @@ Every final entry requires metric + threshold + verification. TBD means not read
 | INV-05 | A delivery update and its supporting event commit atomically — never partially. FR-06; C-17. | M6 storage (`StorageBackend.commit`) | Conformance `atomic-no-partial-mutation` and case C-19; report `failed` for both and persist nothing. |
 | INV-06 | A memory projection never advances across a gap and is idempotent. FR-06; C-12. | M6 storage (`memory-projection`) | Conformance `projection-no-gap-claim` and case C-20; do not advance `appliedSeq`. |
 | INV-07 | Committed event and delivery records are isolated from caller mutation. FR-06. | M6 storage (`in-memory-backend` deep-copies on write and read) | Case C-24; mutating an input or a returned record cannot change committed state or JSONL output. |
+| INV-08 | Confirmed history is ordered by the supporting event sequence (ascending). FR-06; issue #22. | M6 storage (`history-query` over `StoredDelivery.eventSeq`) | Case C-25; `confirmedHistory` returns seq order independent of insertion order. |
 
 ## Promotion to D1
 

@@ -159,3 +159,10 @@ cases:
     verifier:
       file: test/offline/m6-storage.test.ts
       test: "a returned record mutation cannot change committed state"
+
+  - id: C-25
+    status: implemented
+    title: Confirmed history is ordered by the supporting event sequence
+    verifier:
+      file: test/offline/m6-storage.test.ts
+      test: "returns supporting-event seq order even when insertion order differs"

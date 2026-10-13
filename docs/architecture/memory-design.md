@@ -40,7 +40,8 @@ live authority by M5. Shared document — M5 coordination pending. Date: 2026-10
 
 - `readSession(sessionId)` → committed events ordered by `seq` ascending.
 - `confirmedHistory(sessionId)` → only `fully-delivered` records, ordered by the supporting event
-  `seq` ascending; partial/unknown and generated-only text excluded.
+  `seq` ascending (enforced by INV-08 / case C-25; each delivery retains its supporting `event_seq`),
+  independent of insertion order; partial/unknown and generated-only text excluded.
 - Replay (`ReplayReaderPort.load`) is an **isolated read model**: it never mutates live state and
   never calls a live provider/renderer (C-12).
 

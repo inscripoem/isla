@@ -13,6 +13,7 @@ ever violated (a concrete action, not "fix the bug").
 | INV-05 | A delivery update and its supporting event commit atomically — never partially | FR-06; C-17 | `src/storage/backend.ts` `commit` (atomic) + `event-store.ts` | C-19 → `m6-storage.test.ts::INV-05`; conformance `atomic-failure-reported`, `atomic-no-partial-mutation` | Report `failed` for both; leave no partial record; mark evidence incomplete |
 | INV-06 | A memory projection never advances across a gap and is idempotent | FR-06; C-12 | `src/storage/memory-projection.ts` | C-20 → `m6-storage.test.ts::INV-06`; conformance `projection-no-gap-claim`, `projection-idempotent` | Do not advance `appliedSeq`; an incomplete projection must not claim current history |
 | INV-07 | Committed event and delivery records are isolated from caller mutation | FR-06 | `src/storage/in-memory-backend.ts` (deep copy on write and read) | C-24 → `m6-storage.test.ts` (isolation tests) | The backend returns copies; mutating an input or a returned record leaves committed state and JSONL output unchanged (see ADR-002) |
+| INV-08 | Confirmed history is ordered by the supporting event sequence | FR-06 | `src/storage/history-query.ts` over `StoredDelivery.eventSeq` | C-25 → `m6-storage.test.ts` (ordering test) | Return ascending by `eventSeq`; never rely on insertion order (see ADR-002) |
 
 Related existing invariants (owned elsewhere): INV-01, INV-02, INV-03 in `docs/team/REQUIREMENTS.en.md`
 and `docs/req/requirements.yaml`.
