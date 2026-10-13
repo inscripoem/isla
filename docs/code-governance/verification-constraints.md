@@ -27,6 +27,7 @@ The rules the verification agent applies and the QA records the team maintains.
 | INV-04 (session-scoped identity/sequence uniqueness) | C-18, C-23 | `m6-storage.test.ts`; conformance `append-duplicate`, `append-changed-content`, `append-seq-unique`, `append-session-scoped-identity` |
 | INV-05 (atomic delivery + event) | C-19 | `m6-storage.test.ts::INV-05`; conformance `atomic-failure-reported`, `atomic-no-partial-mutation` |
 | INV-06 (projection no gap / idempotent) | C-20 | `m6-storage.test.ts::INV-06`; conformance `projection-no-gap-claim`, `projection-idempotent` |
+| INV-07 (record isolation) | C-24 | `m6-storage.test.ts` (isolation tests) |
 | FR-06 (history excludes non-delivered) | C-17, C-21 | `m6-storage.test.ts` (confirmed-history tests); conformance `history-fully-delivered-only` |
 | FR-06 (JSONL export carries `versions`) | C-22 | `m6-storage.test.ts` (version attribution) |
 | FR-06 / C-12 (replay isolation) | C-12 | `m6-storage.test.ts` (replay-isolation test) |

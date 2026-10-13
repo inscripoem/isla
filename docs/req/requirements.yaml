@@ -252,3 +252,16 @@ requirements:
       - kind: deterministic
         description: A gap does not advance the projection and reapplying an applied event does not advance it (FR-06; C-12).
         cases: [C-20]
+
+  - id: INV-07
+    title: Committed records are isolated from caller mutation
+    category: invariant
+    priority: must
+    owner: M6
+    collaborators: [M4, M5]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Mutating a caller's input after commit, or a returned record, cannot change committed state or JSONL output (FR-06 storage boundary).
+        cases: [C-24]

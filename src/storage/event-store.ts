@@ -52,12 +52,6 @@ import { createInMemoryBackend } from './in-memory-backend'
  * - Replay reads through `readSession`; it never mutates live state (C-12).
  */
 
-/** Concrete event store: the port plus a live confirmed-delivery view. */
-export interface EventStore extends EventStorePort {
-  /** Live committed delivery records consumed by `HistoryQueryPort`. */
-  readonly deliveries: ConfirmedDelivery[]
-}
-
 function sameContent(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b)
 }
@@ -86,7 +80,7 @@ function toConfirmedDelivery(delivery: {
   }
 }
 
-export function createEventStore(backend: StorageBackend = createInMemoryBackend()): EventStore {
+export function createEventStore(backend: StorageBackend = createInMemoryBackend()): EventStorePort {
   // Single ordered view shared by readSession and exportJsonl, so they cannot disagree.
   function sessionEventsInOrder(sessionId: string): RuntimeEvent[] {
     return [...backend.sessionEvents(sessionId)].sort((a, b) => a.seq - b.seq)
@@ -113,8 +107,6 @@ export function createEventStore(backend: StorageBackend = createInMemoryBackend
   }
 
   return {
-    deliveries: backend.deliveries(),
-
     async append(event): Promise<AppendAck> {
       const sameId = backend.eventById(event.sessionId, event.eventId)
       if (sameId !== undefined) {

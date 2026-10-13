@@ -7,13 +7,25 @@ import { deliveryKey, type StorageBackend, type StorageMutation } from './backen
  * Production default for `createEventStore`. SQLite will implement the same
  * `StorageBackend` interface; no store logic changes when it does.
  *
- * Indexing: events are indexed by `sessionId:eventId` (event identity is
- * session-scoped, INTERFACES C7), session sequences by `sessionId:seq`, and
- * deliveries by their composite key, so identity and conflict checks are O(1)
- * rather than linear scans.
+ * Isolation boundary (INV-07)
+ * ---------------------------
+ * The backend owns its copies: it deep-copies every record on write and on
+ * read, so mutating a caller's input after commit, or a returned record, cannot
+ * change committed state. SQLite reads produce fresh rows, so the same boundary
+ * holds for the future backend.
+ *
+ * Indexing
+ * --------
+ * Events are indexed by `sessionId:eventId` (event identity is session-scoped,
+ * INTERFACES C7), session sequences by `sessionId:seq`, and deliveries by their
+ * composite key, so identity and conflict checks are O(1).
  */
 function eventKey(sessionId: string, eventId: string): string {
   return `${sessionId}\u0000${eventId}`
+}
+
+function copy<T>(value: T): T {
+  return structuredClone(value)
 }
 
 export function createInMemoryBackend(): StorageBackend {
@@ -25,7 +37,7 @@ export function createInMemoryBackend(): StorageBackend {
 
   function apply(mutation: StorageMutation): void {
     if (mutation.kind === 'event') {
-      const { event } = mutation
+      const event = copy(mutation.event)
       eventsById.set(eventKey(event.sessionId, event.eventId), event)
       sequenceOwners.set(`${event.sessionId}:${event.seq}`, event.eventId)
       const bucket = eventsBySession.get(event.sessionId)
@@ -33,16 +45,23 @@ export function createInMemoryBackend(): StorageBackend {
       else bucket.push(event)
       return
     }
-    deliveriesByKey.set(deliveryKey(mutation.record), mutation.record)
-    deliveries.push(mutation.record)
+    const record = copy(mutation.record)
+    deliveriesByKey.set(deliveryKey(record), record)
+    deliveries.push(record)
   }
 
   return {
-    eventById: (sessionId, eventId) => eventsById.get(eventKey(sessionId, eventId)),
+    eventById: (sessionId, eventId) => {
+      const event = eventsById.get(eventKey(sessionId, eventId))
+      return event === undefined ? undefined : copy(event)
+    },
     sequenceOwner: (sessionId, seq) => sequenceOwners.get(`${sessionId}:${seq}`),
-    sessionEvents: (sessionId) => eventsBySession.get(sessionId) ?? [],
-    deliveryByKey: (key) => deliveriesByKey.get(key),
-    deliveries: () => deliveries,
+    sessionEvents: (sessionId) => (eventsBySession.get(sessionId) ?? []).map(copy),
+    deliveryByKey: (key) => {
+      const record = deliveriesByKey.get(key)
+      return record === undefined ? undefined : copy(record)
+    },
+    deliveries: () => deliveries.map(copy),
     commit: (mutations) => {
       for (const mutation of mutations) apply(mutation)
     },

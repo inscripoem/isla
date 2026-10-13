@@ -31,3 +31,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "M5 review requested session scoping; implemented with ADR-002"
+  - date: 2026-10-13
+    task: M6-01
+    branch: m6-storage
+    change: "Isolate committed records (deep copy on write/read); back the history query by the store (PR #9 review item 2)"
+    requirements: [FR-06]
+    invariants: [INV-07]
+    cases: [C-24]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "M5 review requested an isolation boundary; implemented with ADR-002"

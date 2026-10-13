@@ -44,7 +44,7 @@ describe('M6 storage conformance', () => {
       return {
         store,
         projection: createMemoryProjection(),
-        history: createHistoryQuery(store.deliveries),
+        history: createHistoryQuery(backend),
         setFailNextCommit: failNextCommit,
       }
     })
@@ -57,7 +57,7 @@ describe('M6 storage conformance', () => {
       return {
         store: store.store,
         projection: faulty.createFaultyMemoryProjection(),
-        history: faulty.createFaultyHistoryQuery(store),
+        history: faulty.createFaultyHistoryQuery({ deliveries: () => store.deliveries }),
         setFailNextCommit: () => {
           store.failNextCommit = true
         },
@@ -128,7 +128,8 @@ describe('M6 replay reader (C-12 isolation)', () => {
 
 describe('M6 confirmed history (C6/C7)', () => {
   it('returns only fully-delivered records for the requesting session', async () => {
-    const store = createEventStore()
+    const backend = createInMemoryBackend()
+    const store = createEventStore(backend)
     await store.commitDeliveryWithEvent(
       fixtureCommitDelivery({ turnId: 't1', segmentId: 's1', textHash: 'h1', text: 'spoken' }),
       fixtureRuntimeEvent({ eventId: 'e1', seq: 1, type: 'delivery.committed' }),
@@ -170,13 +171,14 @@ describe('M6 confirmed history (C6/C7)', () => {
       }),
     )
 
-    const history = createHistoryQuery(store.deliveries)
+    const history = createHistoryQuery(backend)
     const confirmed = await history.confirmedHistory(FIXTURE_SESSION_ID)
     expect(confirmed.map((record) => record.text)).toEqual(['spoken'])
   })
 
   it('does not duplicate history when an identical delivery is committed twice', async () => {
-    const store = createEventStore()
+    const backend = createInMemoryBackend()
+    const store = createEventStore(backend)
     const delivery = fixtureCommitDelivery({ turnId: 't1', segmentId: 's1', textHash: 'h1', text: 'spoken' })
     await store.commitDeliveryWithEvent(
       delivery,
@@ -187,9 +189,63 @@ describe('M6 confirmed history (C6/C7)', () => {
       fixtureRuntimeEvent({ eventId: 'e2', seq: 2, type: 'delivery.committed' }),
     )
 
-    const history = createHistoryQuery(store.deliveries)
+    const history = createHistoryQuery(backend)
     const confirmed = await history.confirmedHistory(FIXTURE_SESSION_ID)
     expect(confirmed).toHaveLength(1)
+  })
+})
+
+describe('M6 record isolation (C-24)', () => {
+  it('an input mutation after commit cannot change committed events', async () => {
+    const store = createEventStore()
+    const event = fixtureRuntimeEvent({ eventId: 'iso-1', seq: 1 })
+    await store.append(event)
+    // Mutate the original input object after it was committed.
+    ;(event.payload as Record<string, unknown>).injected = true
+
+    const [stored] = await store.readSession(FIXTURE_SESSION_ID)
+    expect(stored?.payload).toEqual({})
+    expect(await store.exportJsonl(FIXTURE_SESSION_ID)).not.toContain('injected')
+  })
+
+  it('a returned record mutation cannot change committed state', async () => {
+    const store = createEventStore()
+    await store.append(fixtureRuntimeEvent({ eventId: 'iso-2', seq: 1 }))
+
+    const [returned] = await store.readSession(FIXTURE_SESSION_ID)
+    ;(returned!.payload as Record<string, unknown>).injected = true
+
+    const [again] = await store.readSession(FIXTURE_SESSION_ID)
+    expect(again?.payload).toEqual({})
+    expect(await store.exportJsonl(FIXTURE_SESSION_ID)).not.toContain('injected')
+  })
+
+  it('a replayed record mutation cannot change committed state', async () => {
+    const store = createEventStore()
+    await store.append(fixtureRuntimeEvent({ eventId: 'iso-4', seq: 1 }))
+
+    const archive = await createReplayReader(store).load(FIXTURE_SESSION_ID)
+    ;(archive.events[0]!.payload as Record<string, unknown>).injected = true
+
+    const [again] = await store.readSession(FIXTURE_SESSION_ID)
+    expect(again?.payload).toEqual({})
+    expect(await store.exportJsonl(FIXTURE_SESSION_ID)).not.toContain('injected')
+  })
+
+  it('a returned delivery mutation cannot change confirmed history', async () => {
+    const backend = createInMemoryBackend()
+    const store = createEventStore(backend)
+    await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({ turnId: 'iso-t', segmentId: 'iso-s', textHash: 'iso-h', text: 'spoken' }),
+      fixtureRuntimeEvent({ eventId: 'iso-3', seq: 1, type: 'delivery.committed' }),
+    )
+
+    const history = createHistoryQuery(backend)
+    const first = await history.confirmedHistory(FIXTURE_SESSION_ID)
+    first[0]!.text = 'tampered'
+
+    const second = await history.confirmedHistory(FIXTURE_SESSION_ID)
+    expect(second[0]?.text).toBe('spoken')
   })
 })
 

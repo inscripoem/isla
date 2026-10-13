@@ -307,13 +307,13 @@ export function createFaultyEventStore(): FaultyEventStore {
   return record
 }
 
-export function createFaultyHistoryQuery(store: {
-  readonly deliveries: ConfirmedDelivery[]
+export function createFaultyHistoryQuery(source: {
+  deliveries(): readonly ConfirmedDelivery[]
 }): HistoryQueryPort {
   return {
     async confirmedHistory(sessionId) {
       // Fault: returns every record for the session, including partial/not-delivered.
-      return store.deliveries.filter((record) => record.sessionId === sessionId)
+      return source.deliveries().filter((record) => record.sessionId === sessionId)
     },
   }
 }

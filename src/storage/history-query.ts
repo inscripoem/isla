@@ -10,6 +10,13 @@ import type { ConfirmedDelivery, HistoryQueryPort } from '../contracts'
  * qualify. Generated text that was never spoken, partially spoken text, and
  * unresolved (`unknown`) outcomes are excluded (C-17; D2.5 memory/state design).
  *
+ * Source
+ * ------
+ * The delivery set is read through a source on each query (never a captured
+ * snapshot), so the query reflects committed state and records stay isolated
+ * from caller mutation (INV-07). The event store's backend implements this
+ * source. Ordering by the supporting event sequence is applied separately.
+ *
  * Contract
  * --------
  * Implements `HistoryQueryPort` from `src/contracts/app/ports.ts`. Types are
@@ -26,21 +33,25 @@ import type { ConfirmedDelivery, HistoryQueryPort } from '../contracts'
  * Behaviour
  * ---------
  * confirmedHistory(sessionId) -> ConfirmedDelivery[]
+ *   - read the committed deliveries from the source
  *   - filter by sessionId
  *   - keep records whose classification is exactly `fully-delivered`
- *   - return the survivors
- *
- * @param deliveries committed delivery records owned by the event store
  */
-export function createHistoryQuery(
-  deliveries: readonly ConfirmedDelivery[],
-): HistoryQueryPort {
+
+/** Read access to committed deliveries; implemented by the storage backend. */
+export interface DeliveriesSource {
+  deliveries(): readonly ConfirmedDelivery[]
+}
+
+export function createHistoryQuery(source: DeliveriesSource): HistoryQueryPort {
   return {
     async confirmedHistory(sessionId) {
       // Keep only fully-delivered receipts for this session.
-      return deliveries.filter(
-        (record) => record.sessionId === sessionId && record.classification === 'fully-delivered',
-      )
+      return source
+        .deliveries()
+        .filter(
+          (record) => record.sessionId === sessionId && record.classification === 'fully-delivered',
+        )
     },
   }
 }

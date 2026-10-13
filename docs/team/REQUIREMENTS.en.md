@@ -48,6 +48,7 @@ Every final entry requires metric + threshold + verification. TBD means not read
 | INV-04 | Event identity is session-scoped: within a session a committed event id and a session sequence number are unique; the same event id in another session is independent. FR-06; C7. | M6 storage (`event-store` over `StorageBackend`, keyed `sessionId:eventId`) | Conformance `append-seq-unique` / `append-changed-content` / `append-session-scoped-identity` and cases C-18/C-23; reject with `failed`/`conflict`, keep the existing record, never reject across sessions. |
 | INV-05 | A delivery update and its supporting event commit atomically — never partially. FR-06; C-17. | M6 storage (`StorageBackend.commit`) | Conformance `atomic-no-partial-mutation` and case C-19; report `failed` for both and persist nothing. |
 | INV-06 | A memory projection never advances across a gap and is idempotent. FR-06; C-12. | M6 storage (`memory-projection`) | Conformance `projection-no-gap-claim` and case C-20; do not advance `appliedSeq`. |
+| INV-07 | Committed event and delivery records are isolated from caller mutation. FR-06. | M6 storage (`in-memory-backend` deep-copies on write and read) | Case C-24; mutating an input or a returned record cannot change committed state or JSONL output. |
 
 ## Promotion to D1
 

@@ -152,3 +152,10 @@ cases:
     verifier:
       file: test/offline/m6-storage.test.ts
       test: "stores the same event id in two sessions independently"
+
+  - id: C-24
+    status: implemented
+    title: Committed records are isolated from caller mutation
+    verifier:
+      file: test/offline/m6-storage.test.ts
+      test: "a returned record mutation cannot change committed state"
