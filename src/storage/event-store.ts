@@ -134,22 +134,31 @@ export function createEventStore(backend: StorageBackend = createInMemoryBackend
     },
 
     async commitDeliveryWithEvent(delivery, event): Promise<AtomicCommitAck> {
-      const failure = (eventFailure: AppendAck): AtomicCommitAck =>
+      // A failed atomic commit reports the actual cause on both sides: a conflict
+      // (identity/sequence reuse or changed content) or a storage failure. The
+      // delivery acknowledgement must not claim a storage failure for a conflict.
+      const failure = (
+        reasonCode: 'storage_unavailable' | 'conflict',
+        eventFailure: AppendAck,
+      ): AtomicCommitAck =>
         atomicCommitAckSchema.parse({
           delivery: {
             status: 'failed',
-            reasonCode: 'storage_unavailable',
-            message: 'atomic commit failed',
+            reasonCode,
+            message: reasonCode === 'conflict' ? 'conflicting atomic commit' : 'atomic commit failed',
           },
           event: eventFailure,
         })
 
       const sameId = backend.eventById(event.sessionId, event.eventId)
-      if (sameId !== undefined && !sameContent(sameId, event)) return failure(storageFailure(event))
+      if (sameId !== undefined && !sameContent(sameId, event)) {
+        return failure('conflict', conflictFailure(event))
+      }
 
       const owner = backend.sequenceOwner(event.sessionId, event.seq)
       if (owner !== undefined && owner !== event.eventId) {
         return failure(
+          'conflict',
           appendAckSchema.parse({
             outcome: 'failed',
             eventId: event.eventId,
@@ -205,7 +214,7 @@ export function createEventStore(backend: StorageBackend = createInMemoryBackend
         try {
           backend.commit(mutations)
         } catch {
-          return failure(storageFailure(event))
+          return failure('storage_unavailable', storageFailure(event))
         }
       }
 

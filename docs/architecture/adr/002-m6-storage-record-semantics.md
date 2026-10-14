@@ -1,7 +1,7 @@
 # ADR-002 — M6 storage record semantics: session-scoped identity, record isolation, history ordering
 
 Status: under review (M6). Shared-architecture coordination with M5 pending.
-Date: 2026-10-13 · Owner: M6 · Requirements: FR-06 · Invariants: INV-04, INV-05, INV-07, INV-08 · Cases: C-19, C-23, C-24, C-25, C-38.
+Date: 2026-10-13 · Owner: M6 · Requirements: FR-06 · Invariants: INV-04, INV-05, INV-07, INV-08 · Cases: C-19, C-23, C-24, C-25, C-38, C-39.
 Relates to: ADR-001 (persistence seam). Revision type: ADD-R (review feedback; structure intact).
 
 ## Context
@@ -29,8 +29,13 @@ code guaranteed.
 ### D1 — Event identity is session-scoped
 - Key events by `(sessionId, eventId)`; `StorageBackend.eventById(sessionId, eventId)`.
 - Sequence uniqueness remains per session (`sessionId:seq`), unchanged.
-- Enabled by `INV-04`; verified by `C-23`.
-- **Alternatives:** global `eventId` (rejected — violates C7; collides across sessions).
+- A conflicting `commitDeliveryWithEvent` (reused event id with changed content, or a reused session
+  sequence) reports **`conflict`** — not `storage_unavailable` — on **both** the delivery and the event
+  acknowledgement, matching the runtime-policy catalog. Verified by `C-39`.
+- Enabled by `INV-04`; verified by `C-23` and `C-39`.
+- **Alternatives:** global `eventId` (rejected — violates C7; collides across sessions); a single
+  generic `storage_unavailable` reason for every failed atomic commit (rejected — erases the cause and
+  contradicts the catalog's `conflict` response).
 
 ### D2 — Committed records are isolated from caller mutation
 - The backend is the isolation boundary: it deep-copies on write and on read (`structuredClone`).

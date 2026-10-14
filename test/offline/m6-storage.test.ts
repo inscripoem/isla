@@ -369,6 +369,52 @@ describe('M6 storage invariants', () => {
   })
 })
 
+describe('M6 atomic commit failure causes (C-39)', () => {
+  it('reports a conflict (not a storage failure) when the supporting event id is reused with changed content', async () => {
+    const backend = createInMemoryBackend()
+    const store = createEventStore(backend)
+    const history = createHistoryQuery(backend)
+    await store.append(fixtureRuntimeEvent({ eventId: 'cause-1', seq: 1 }))
+
+    const ack = await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({
+        turnId: 'cause-t',
+        segmentId: 'cause-s',
+        textHash: 'cause-h',
+        text: 'x',
+      }),
+      fixtureRuntimeEvent({ eventId: 'cause-1', seq: 1, type: 'delivery.committed' }),
+    )
+
+    expect(ack.delivery.status).toBe('failed')
+    if (ack.delivery.status === 'failed') expect(ack.delivery.reasonCode).toBe('conflict')
+    expect(ack.event.outcome).toBe('failed')
+    if (ack.event.outcome === 'failed') expect(ack.event.reasonCode).toBe('conflict')
+    // A conflicting commit persists nothing.
+    expect(await history.confirmedHistory(FIXTURE_SESSION_ID)).toHaveLength(0)
+  })
+
+  it('reports a conflict on both sides when the supporting event reuses a session sequence', async () => {
+    const store = createEventStore()
+    await store.append(fixtureRuntimeEvent({ eventId: 'cause-seq-a', seq: 1 }))
+
+    const ack = await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({
+        turnId: 'cause-t2',
+        segmentId: 'cause-s2',
+        textHash: 'cause-h2',
+        text: 'y',
+      }),
+      fixtureRuntimeEvent({ eventId: 'cause-seq-b', seq: 1, type: 'delivery.committed' }),
+    )
+
+    expect(ack.delivery.status).toBe('failed')
+    if (ack.delivery.status === 'failed') expect(ack.delivery.reasonCode).toBe('conflict')
+    expect(ack.event.outcome).toBe('failed')
+    if (ack.event.outcome === 'failed') expect(ack.event.reasonCode).toBe('conflict')
+  })
+})
+
 describe('M6 JSONL export (FR-06)', () => {
   it('carries event version attribution', async () => {
     const store = createEventStore()

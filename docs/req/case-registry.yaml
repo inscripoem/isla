@@ -173,3 +173,10 @@ cases:
     verifier:
       file: test/offline/m6-storage.test.ts
       test: "INV-05: a later mutation that cannot be published leaves no partial state"
+
+  - id: C-39
+    status: implemented
+    title: A conflicting atomic commit reports the conflict cause on both sides
+    verifier:
+      file: test/offline/m6-storage.test.ts
+      test: "reports a conflict (not a storage failure) when the supporting event id is reused with changed content"

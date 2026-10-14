@@ -226,6 +226,9 @@ requirements:
       - kind: deterministic
         description: Within a session, reusing an event id with different content or a session sequence number is rejected without overwriting; the same event id in another session is stored independently (FR-06; C7 session-scoped identity).
         cases: [C-18, C-23]
+      - kind: deterministic
+        description: A conflicting atomic commit reports the conflict cause on both the delivery and the event acknowledgement and persists nothing (FR-06; C-17).
+        cases: [C-39]
 
   - id: INV-05
     title: A delivery and its supporting event commit atomically

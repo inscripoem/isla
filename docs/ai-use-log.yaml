@@ -61,3 +61,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "M5 re-review (Medium): preserve atomicity when a later mutation fails; ADR-002 D4"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-storage
+    change: "PR #9 follow-up: report a conflicting atomic commit as `conflict` (not `storage_unavailable`) on both the delivery and the event acknowledgement"
+    requirements: [FR-06]
+    invariants: [INV-04]
+    cases: [C-39]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Self-review: the catalog promises a `conflict` response; ADR-002 D1"
