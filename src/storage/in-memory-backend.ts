@@ -95,8 +95,8 @@ export function createInMemoryBackend(): StorageBackend {
     },
     sequenceOwner: (sessionId, seq) => sequenceOwners.get(`${sessionId}:${seq}`),
     sessionEvents: (sessionId) => (eventsBySession.get(sessionId) ?? []).map(copy),
-    deliveryByKey: (key) => {
-      const record = deliveriesByKey.get(key)
+    deliveryByKey: (sessionId, turnId, segmentId, modality) => {
+      const record = deliveriesByKey.get(deliveryKey({ sessionId, turnId, segmentId, modality }))
       return record === undefined ? undefined : copy(record)
     },
     storedDeliveries: () =>

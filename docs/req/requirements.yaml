@@ -90,6 +90,9 @@ requirements:
       - kind: deterministic
         description: M5 retains original segment index and generating persona identity/version through delivery and M6 history; legacy unknowns remain explicit null, changed attribution conflicts, and history preserves supporting-event sequence order.
         cases: [C-46, C-47]
+      - kind: deterministic
+        description: The SQLite backend passes the storage conformance suite, its committed data survives reopen with session isolation and ordered confirmed history, and the delivery terminal outcome is persisted for recovery.
+        cases: [C-29, C-30, C-31]
 
   - id: NFR-01
     title: Responsiveness and synchronization

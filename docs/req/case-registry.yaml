@@ -188,6 +188,26 @@ cases:
       file: test/offline/m6-sqlite.test.ts
       test: "rolls back a failed migration, leaving the prior version intact"
 
+  - id: C-29
+    status: implemented
+    title: SQLite backend passes the storage conformance suite
+    verifier:
+      file: test/offline/m6-sqlite-backend.test.ts
+      test: "passes the storage conformance suite over SQLite"
+
+  - id: C-30
+    status: implemented
+    title: SQLite persistence survives reopen with isolation and order
+    verifier:
+      file: test/offline/m6-sqlite-backend.test.ts
+      test: "survives reopen with ordered confirmed history"
+
+  - id: C-31
+    status: implemented
+    title: SQLite persists the delivery terminal outcome for recovery
+    verifier:
+      file: test/offline/m6-sqlite-backend.test.ts
+      test: "persists the delivery terminal outcome for recovery"
   - id: C-38
     status: implemented
     title: A commit whose later mutation cannot be published leaves no partial state

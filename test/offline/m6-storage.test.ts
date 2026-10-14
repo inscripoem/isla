@@ -124,6 +124,8 @@ describe('M6 storage conformance', () => {
     expect(codes).toContain('atomic-failure-reported')
     expect(codes).toContain('projection-no-gap-claim')
     expect(codes).toContain('history-fully-delivered-only')
+    expect(codes).toContain('read-isolation')
+    expect(codes).toContain('history-ordered')
   })
 
   it('detects session-blind, mutable and unordered storage faults', async () => {

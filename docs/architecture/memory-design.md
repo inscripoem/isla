@@ -88,3 +88,6 @@ turns pending recovery; **Stop and local cancellation never wait for a database 
 - **Migrations:** applied in a transaction (rollback on failure) and idempotent when current; an
   existing database is backed up under `<dbDir>/backups/` before pending migrations.
 - **Pragmas:** WAL journal, foreign keys, busy timeout.
+- **Backend (B2; ADR-004):** `src/storage/sqlite/backend.ts` implements `StorageBackend` over this
+  schema — reads build fresh rows (INV-07), `commit` is one transaction (INV-05), `event_seq` orders
+  history (INV-08); the full delivery including `terminal_outcome` is persisted for recovery (C-17).

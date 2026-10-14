@@ -597,6 +597,23 @@ export async function collectStorageViolations(create: () => StorageKit): Promis
       confirmed.every((record) => record.turnId !== 'turn-hist'),
       'a not-delivered record must not appear in confirmed history',
     )
+
+    // Ordering (INV-08): insertion order must not matter — a later supporting
+    // event seq committed first must still sort after an earlier one.
+    await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({ turnId: 'turn-late', segmentId: 'seg-late', textHash: 'hash-late', text: 'late' }),
+      fixtureRuntimeEvent({ eventId: 'evt-late', seq: 70, type: 'delivery.committed' }),
+    )
+    await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({ turnId: 'turn-early', segmentId: 'seg-early', textHash: 'hash-early', text: 'early' }),
+      fixtureRuntimeEvent({ eventId: 'evt-early', seq: 60, type: 'delivery.committed' }),
+    )
+    const ordered = (await kit.history.confirmedHistory(FIXTURE_SESSION_ID)).map((record) => record.text)
+    check(
+      'history-ordered',
+      ordered.indexOf('early') < ordered.indexOf('late'),
+      'confirmed history must be ordered by supporting event seq, not insertion order',
+    )
   }
 
   // --- Delivery attribution is preserved through writes and history reads ---
@@ -1367,6 +1384,34 @@ export async function collectStorageViolations(create: () => StorageKit): Promis
     induceFailure: kit.induceFailure,
     sessionId: 'session-followup-atomic-failure',
   })
+
+  // INV-07: committed records are isolated from caller mutation.
+  const inputEvent = fixtureRuntimeEvent({ eventId: 'evt-isolation', seq: 200 })
+  await store.append(inputEvent)
+  ;(inputEvent.payload as Record<string, unknown>).tampered = true
+  const afterInput = (await store.readSession(FIXTURE_SESSION_ID)).find(
+    (event) => event.eventId === 'evt-isolation',
+  )
+  check(
+    'input-isolation',
+    afterInput !== undefined && afterInput.payload.tampered === undefined,
+    'mutating a committed input must not change stored state',
+  )
+
+  const readEvent = (await store.readSession(FIXTURE_SESSION_ID)).find(
+    (event) => event.eventId === 'evt-isolation',
+  )
+  if (readEvent !== undefined) (readEvent.payload as Record<string, unknown>).tampered = true
+  const afterRead = (await store.readSession(FIXTURE_SESSION_ID)).find(
+    (event) => event.eventId === 'evt-isolation',
+  )
+  check(
+    'read-isolation',
+    afterRead !== undefined && afterRead.payload.tampered === undefined,
+    'mutating a returned record must not change stored state',
+  )
+
+  
 
   return [...violations(), ...atomicFailureViolations]
 }

@@ -284,7 +284,12 @@ export function createEventStore(backend: StorageBackend = createInMemoryBackend
       }
 
       const key = deliveryKey(delivery)
-      const existing = backend.deliveryByKey(key)
+      const existing = backend.deliveryByKey(
+        delivery.sessionId,
+        delivery.turnId,
+        delivery.segmentId,
+        delivery.modality,
+      )
       const mutations: StorageMutation[] = []
       let deliveryAck: DeliveryCommitAck
 
@@ -293,6 +298,7 @@ export function createEventStore(backend: StorageBackend = createInMemoryBackend
           kind: 'delivery',
           record: toConfirmedDelivery(delivery),
           eventSeq: event.seq,
+          terminalOutcome: delivery.terminalOutcome,
         })
         deliveryAck = deliveryCommitAckSchema.parse({
           status: 'applied',
