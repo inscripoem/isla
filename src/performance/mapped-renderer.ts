@@ -266,7 +266,12 @@ export function createMappedRenderer(deps: MappedRendererDeps): RendererPort {
         if (binding.signal.aborted) {
           return receipt(commandSnapshot, 'cancelled', null, deps.receipts.localNowMs())
         }
-        const dispatched = deps.driver.dispatch(driverAction, binding.signal)
+        let dispatched: Promise<RendererObservation>
+        try {
+          dispatched = deps.driver.dispatch(driverAction, binding.signal)
+        } catch {
+          return receipt(commandSnapshot, 'failed', 'driver_error', deps.receipts.localNowMs())
+        }
         return await settleDispatch(commandSnapshot, dispatched, binding.signal)
       } finally {
         binding.release()
