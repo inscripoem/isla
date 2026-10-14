@@ -27,9 +27,14 @@ inside `pnpm test`, but are not named gates; G1/G4/G6 are absent). The course di
 - Enabled by `INV-12`; verified by **C-34** (valid repo → no violations) and **C-35** (injected defect → violation).
 
 ### D2 — The gates are explicit and blocking
-- CI names **G2** (static/boundary), **G3** (schema), **G5** (regression), **G6** (ai-use-log) and the
-  **trace** fitness function as blocking steps; **G1** is documented (required PR label); **G4** is
-  scaffolded and reports **not run** without provider access (team-gated).
+- `.github/workflows/ci.yml` names them as blocking steps: **G2** `pnpm typecheck && pnpm lint`; **G3**
+  `pnpm test:readiness`; **trace** `pnpm test:trace`; **G5** `pnpm test`; **G6** `pnpm gate:ai-use-log`
+  over the pull-request diff; then `pnpm build`.
+- **G6** is `src/evaluation/ai-use-log-gate.ts` — a code/prompt change must also update
+  `docs/ai-use-log.yaml` (INV-13).
+- **G1** is a pull-request review gate (a `tests-approved` label), not a CI step. **G4** is scaffolded
+  and reports **not run** without an evaluation set + provider access (team-gated).
+- The README documents the gate design (D7); branch protection remains a human/remote setting.
 
 ## Alternatives considered
 

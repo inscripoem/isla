@@ -236,6 +236,13 @@ cases:
       file: test/offline/trace-fitness.test.ts
       test: "flags a trace row referencing a missing component"
 
+  - id: C-36
+    status: implemented
+    title: Gate G6 requires the AI-use log for code/prompt changes
+    verifier:
+      file: test/offline/ai-use-log-gate.test.ts
+      test: "requires the log when a code file changes"
+
   - id: C-38
     status: implemented
     title: A commit whose later mutation cannot be published leaves no partial state

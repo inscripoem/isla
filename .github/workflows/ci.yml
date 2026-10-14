@@ -1,13 +1,21 @@
 name: CI
 
-# Coverage: frozen install, strict typecheck, lint, all offline tests (diagnostic
-# boundary plus the M1-M6 role conformance kits, the offline composition runner,
-# browser/backend import-boundary checks, contract schema checks and requirements
-# registry/schema validation) and a production build.
-# Not covered: live provider tests (test/live is intentionally empty), real browser
-# audio/VTS/SQLite behavior, semantic evaluation and remote branch protection.
-# This workflow defines CI; it does not assert that remote CI or branch protection
-# is configured.
+# Blocking gates (D7), enforced in code (ADR-006). Coverage:
+#   G2  static analysis  — typecheck + lint on every commit
+#   G3  schema + boundary — requirements registry validates; import/permission
+#       boundaries hold (the readiness suite)
+#   trace — traceability fitness functions (INV-12): a broken chain link fails
+#   G5  regression       — every offline suite passes, zero regression
+#   G6  AI-use log       — a code/prompt change must update docs/ai-use-log.yaml
+#   build                — production bundle
+# Not covered here and reported honestly: G1 (tests approved before
+# implementation) is a pull-request review gate, not a CI step; G4 (semantic
+# evaluation) needs an evaluation set + provider access and is scaffolded to
+# report "not run" rather than "pass"; live provider tests (test/live is
+# intentionally empty), real browser audio/VTS behaviour and remote branch
+# protection are out of scope. This workflow defines the gates; it does not
+# assert that remote branch protection is configured. Only a human merge is
+# permitted.
 
 on:
   push:
@@ -18,6 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 12
@@ -26,7 +36,25 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm lint
-      - run: pnpm test
-      - run: pnpm build
+
+      - name: G2 - static analysis (typecheck + lint)
+        run: pnpm typecheck && pnpm lint
+
+      - name: G3 - requirements schema + import/permission boundaries
+        run: pnpm test:readiness
+
+      - name: trace - traceability fitness functions
+        run: pnpm test:trace
+
+      - name: G5 - regression (all offline suites)
+        run: pnpm test
+
+      - name: G6 - AI-use log updated for code/prompt changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          CHANGED="$(git diff --name-only "$BASE_SHA" HEAD 2>/dev/null || git diff --name-only HEAD~1 HEAD 2>/dev/null || true)"
+          pnpm gate:ai-use-log $CHANGED
+
+      - name: build
+        run: pnpm build

@@ -373,3 +373,16 @@ requirements:
       - kind: deterministic
         description: A broken chain link (unregistered invariant, unknown trace case, missing component, unresolved ADR reference, or a failure mode without a fallback) fails the trace gate; a valid repository produces no violations.
         cases: [C-34, C-35]
+
+  - id: INV-13
+    title: A code or prompt change updates the AI-use log
+    category: invariant
+    priority: must
+    owner: M6
+    collaborators: [M5]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: A change under src/ or prompts/ without a matching change to docs/ai-use-log.yaml fails gate G6.
+        cases: [C-36]
