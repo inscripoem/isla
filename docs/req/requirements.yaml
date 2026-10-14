@@ -237,8 +237,8 @@ requirements:
     status: under-review
     acceptance:
       - kind: deterministic
-        description: A failed atomic write is reported for both the delivery and the event and persists no partial record (FR-06; C-17).
-        cases: [C-19]
+        description: A failed atomic write is reported for both the delivery and the event and persists no partial record; if any mutation in the batch cannot be prepared, none is published, so every index and history view is unchanged (FR-06; C-17).
+        cases: [C-19, C-38]
 
   - id: INV-06
     title: A memory projection never advances across a gap and is idempotent

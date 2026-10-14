@@ -19,10 +19,12 @@ import type { ConfirmedDelivery, RuntimeEvent } from '../contracts'
  *
  * Contract
  * --------
- * `commit` must be atomic: it applies every mutation or none. A storage failure
- * throws, and the caller converts that into `failed` acknowledgements without
- * partial state (FR-06; C-17). Reads must return records isolated from caller
- * mutation (INV-07).
+ * `commit` must be atomic: it applies every mutation or none. A backend must
+ * complete the fallible preparation/validation of the whole batch **before**
+ * publishing any mutation, so a failure on a later mutation cannot leave an
+ * earlier one applied. A storage failure throws, and the caller converts that
+ * into `failed` acknowledgements without partial state (FR-06; C-17). Reads must
+ * return records isolated from caller mutation (INV-07).
  */
 
 /** A single atomic mutation: a committed event and/or a committed delivery. */

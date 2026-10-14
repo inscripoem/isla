@@ -1,7 +1,7 @@
 # ADR-002 — M6 storage record semantics: session-scoped identity, record isolation, history ordering
 
 Status: under review (M6). Shared-architecture coordination with M5 pending.
-Date: 2026-10-13 · Owner: M6 · Requirements: FR-06 · Invariants: INV-04, INV-07, INV-08 · Cases: C-23, C-24, C-25.
+Date: 2026-10-13 · Owner: M6 · Requirements: FR-06 · Invariants: INV-04, INV-05, INV-07, INV-08 · Cases: C-19, C-23, C-24, C-25, C-38.
 Relates to: ADR-001 (persistence seam). Revision type: ADD-R (review feedback; structure intact).
 
 ## Context
@@ -17,6 +17,12 @@ correctness gap against the existing contract:
    internal references from reads, so mutating an input or a returned record changed committed state.
 3. **History was unordered.** `confirmedHistory` filtered deliveries without ordering and without the
    supporting event sequence, though the memory-design retrieval policy promises ascending order.
+
+A later re-review found a **fourth** gap: `StorageBackend.commit` applied mutations one at a time and
+performed the fallible deep copy *inside* that loop, so a failure preparing a later mutation (for
+example a payload that cannot be structurally cloned) could leave an earlier mutation already
+published — a partial write with a `failed` acknowledgement. INV-05 therefore understated what the
+code guaranteed.
 
 ## Decisions
 
@@ -39,10 +45,25 @@ correctness gap against the existing contract:
 - Enabled by `INV-08`; verified by `C-25`.
 - **Alternatives:** rely on insertion order (rejected — not guaranteed, especially under SQLite).
 
+### D4 — The whole commit batch is prepared before any mutation is published
+- `StorageBackend.commit` is atomic across the **whole batch**: a backend completes every fallible
+  step (e.g. deep-copying each event/record) **before** publishing any mutation, so a failure on a
+  later mutation cannot leave an earlier one applied.
+- The in-memory backend splits the former `apply` into a fallible `prepare` pass and an infallible
+  `publish` pass (`src/storage/in-memory-backend.ts`). A payload that cannot be structurally cloned
+  makes the whole batch fail with **no** index or history view changed.
+- Enabled by `INV-05`; verified by **C-38** (a later unpublishable mutation leaves no partial state)
+  in addition to **C-19**.
+- **Alternatives:** apply-then-roll-back (rejected — needs an undo log covering every index and view);
+  validate and reject unpublishable payloads before committing (a valid option, but rejection must
+  still leave state unchanged, so preparation is the mechanism either way).
+
 ## Consequences
 
 - The persistence seam now encodes the real contract; SQLite must satisfy the same guarantees.
 - Event identity, isolation and ordering are machine-checked (conformance + M6 tests).
+- Atomicity is total for a prepared batch (D4): a partial write with a `failed` acknowledgement is
+  no longer possible; a backend must prepare the whole batch before publishing.
 - `EventStore.deliveries` (an unordered, mutable view) is removed; history is built from the backend.
 
 ## Design process (ADD-R)
@@ -53,7 +74,7 @@ correctness gap against the existing contract:
    pattern (Information Hiding: backend owns copies; ordered projection).
 4. **Replacement patterns** — Information Hiding; Record/Playback (ordered read view).
 5. **Instantiate** — freeze `src/contracts/*`; add per-fix assertions; write Delta-002.
-6. **Record** — this ADR + trace rows + INV-04/07/08 + C-23/24/25.
+6. **Record** — this ADR + trace rows + INV-04/05/07/08 + C-19/23/24/25/38.
 7. **Evaluate** — 3-tier verify (structural → regression → behavioral).
 
 ## Re-open triggers

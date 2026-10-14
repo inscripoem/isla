@@ -51,3 +51,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "M5 review required the documented ordering; implemented with ADR-002"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-storage
+    change: "PR #9 follow-up: make StorageBackend.commit atomic across the whole batch (prepare all, then publish); a later unpublishable mutation leaves no partial state"
+    requirements: [FR-06]
+    invariants: [INV-05]
+    cases: [C-38]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "M5 re-review (Medium): preserve atomicity when a later mutation fails; ADR-002 D4"

@@ -308,6 +308,59 @@ describe('M6 storage invariants', () => {
     expect((await store.readSession(FIXTURE_SESSION_ID)).length).toBe(before)
   })
 
+  it('INV-05: a later mutation that cannot be published leaves no partial state', async () => {
+    const backend = createInMemoryBackend()
+    const store = createEventStore(backend)
+    const history = createHistoryQuery(backend)
+
+    // A payload that cannot be structurally cloned makes the *event* mutation
+    // unpublishable. The delivery mutation precedes it in the batch, so it must
+    // not be published either.
+    const uncopyable = fixtureRuntimeEvent({
+      eventId: 'inv05-bad',
+      seq: 1,
+      type: 'delivery.committed',
+      payload: { uncopyable: () => 1 },
+    })
+
+    const ack = await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({
+        turnId: 'inv05-t',
+        segmentId: 'inv05-s',
+        textHash: 'inv05-h',
+        text: 'nope',
+      }),
+      uncopyable,
+    )
+
+    expect(ack.delivery.status).toBe('failed')
+    expect(ack.event.outcome).toBe('failed')
+    // No partial state in any view: no event and no confirmed-history record.
+    expect(await store.readSession(FIXTURE_SESSION_ID)).toHaveLength(0)
+    expect(await history.confirmedHistory(FIXTURE_SESSION_ID)).toHaveLength(0)
+  })
+
+  it('INV-05: the backend publishes a batch only when every mutation is prepared', () => {
+    const backend = createInMemoryBackend()
+    const good: StorageMutation = {
+      kind: 'event',
+      event: fixtureRuntimeEvent({ eventId: 'ok-1', seq: 1 }),
+    }
+    const bad: StorageMutation = {
+      kind: 'event',
+      event: fixtureRuntimeEvent({
+        eventId: 'bad-1',
+        seq: 2,
+        payload: { uncopyable: () => 1 },
+      }),
+    }
+
+    // The whole batch fails even though the earlier mutation is valid.
+    expect(() => backend.commit([good, bad])).toThrow()
+    expect(backend.sessionEvents(FIXTURE_SESSION_ID)).toHaveLength(0)
+    expect(backend.sequenceOwner(FIXTURE_SESSION_ID, 1)).toBeUndefined()
+  })
+
   it('INV-06: the memory projection does not advance across a gap and is idempotent', async () => {
     const projection = createMemoryProjection()
     expect((await projection.apply(fixtureRuntimeEvent({ eventId: 'inv06-2', seq: 2 }))).appliedSeq).toBe(0)

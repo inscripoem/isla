@@ -166,3 +166,10 @@ cases:
     verifier:
       file: test/offline/m6-storage.test.ts
       test: "returns supporting-event seq order even when insertion order differs"
+
+  - id: C-38
+    status: implemented
+    title: A commit whose later mutation cannot be published leaves no partial state
+    verifier:
+      file: test/offline/m6-storage.test.ts
+      test: "INV-05: a later mutation that cannot be published leaves no partial state"
