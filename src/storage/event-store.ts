@@ -11,6 +11,7 @@ import {
 } from '../contracts'
 import { deliveryKey, type StorageBackend, type StorageMutation } from './backend'
 import { createInMemoryBackend } from './in-memory-backend'
+import { canonicalJson, jsonValueIssue } from './payload'
 
 /**
  * M6 storage — durable event store (C6/C7, FR-06).
@@ -38,8 +39,14 @@ import { createInMemoryBackend } from './in-memory-backend'
  * exportJsonl(sessionId)  -> one JSON string per committed event, newline joined,
  *                            matching `readSession` exactly.
  *
- * Content equality is canonical: object key order is irrelevant, so a
- * re-serialised equivalent event is a `duplicate`, not a `conflict` (ADR-002 D1).
+ * Content equality and the payload contract
+ * -----------------------------------------
+ * An event `payload` must be a **JSON value** (see `./payload`): the durable
+ * store persists it as JSON, so an unsupported value is rejected with
+ * `unsupported_payload` before publication rather than silently altered. For
+ * accepted events, equality is canonical — object key order is irrelevant and
+ * array order is significant — so a re-serialised equivalent event is a
+ * `duplicate`, not a `conflict` (ADR-002 D1).
  *
  * Persistence seam
  * ----------------
@@ -55,77 +62,14 @@ import { createInMemoryBackend } from './in-memory-backend'
  * - Replay reads through `readSession`; it never mutates live state (C-12).
  */
 
-/** A plain record (object literal) or an object with no prototype. */
-function isPlainObject(value: object): boolean {
-  const prototype = Object.getPrototypeOf(value)
-  return prototype === Object.prototype || prototype === null
-}
-
 /**
- * Canonical, key-order-insensitive rendering of a JSON-like value, used to
- * decide whether two events carry "the same content" (ADR-002 D1).
- *
- * Plain objects and arrays are rendered recursively with object keys sorted, so
- * key order never affects equality; array order does. Everything else keeps
- * JSON semantics and is then re-canonicalised, so a value with its own
- * serialisation (notably `Date#toJSON`) is not flattened to an empty object.
- * Values JSON would drop (functions, `undefined`, symbols) or reject (`bigint`,
- * cycles) get a stable marker, so two structurally different events never
- * compare equal by accident.
+ * True when two events carry the same content. Both values are JSON values by
+ * the time they are compared (validated by `jsonValueIssue` before publication),
+ * so equality is the canonical rendering: object key order is irrelevant and
+ * array order is significant (ADR-002 D1).
  */
-function canonical(value: unknown, seen: WeakSet<object> = new WeakSet()): string {
-  if (value === null) return 'null'
-  switch (typeof value) {
-    case 'bigint':
-      return `bigint:${String(value)}`
-    case 'function':
-      return 'function'
-    case 'symbol':
-      return `symbol:${String(value)}`
-    case 'undefined':
-      return 'undefined'
-    case 'object':
-      break
-    default:
-      return JSON.stringify(value)
-  }
-  const object = value as object
-  if (seen.has(object)) return 'cycle'
-  seen.add(object)
-  try {
-    if (Array.isArray(object)) {
-      return `[${object.map((item) => canonical(item, seen)).join(',')}]`
-    }
-    if (isPlainObject(object)) {
-      const record = object as Record<string, unknown>
-      const entries = Object.keys(record)
-        .sort()
-        .map((key) => `${JSON.stringify(key)}:${canonical(record[key], seen)}`)
-      return `{${entries.join(',')}}`
-    }
-    return serialiseOpaque(object)
-  } finally {
-    seen.delete(object)
-  }
-}
-
-/**
- * Render a non-plain object (Date, Map, Set, class instance, ...) through JSON,
- * then canonicalise the result so key order inside its JSON projection is still
- * irrelevant. A value JSON cannot represent (e.g. a cycle) gets a marker.
- */
-function serialiseOpaque(value: object): string {
-  try {
-    const json = JSON.stringify(value)
-    return json === undefined ? 'undefined' : canonical(JSON.parse(json))
-  } catch {
-    return 'unserialisable'
-  }
-}
-
-/** True when two values have the same canonical content (key order irrelevant). */
 function sameContent(a: unknown, b: unknown): boolean {
-  return canonical(a) === canonical(b)
+  return canonicalJson(a) === canonicalJson(b)
 }
 
 function toConfirmedDelivery(delivery: {
@@ -178,8 +122,21 @@ export function createEventStore(backend: StorageBackend = createInMemoryBackend
     })
   }
 
+  function unsupportedFailure(event: RuntimeEvent, issue: string): AppendAck {
+    return appendAckSchema.parse({
+      outcome: 'failed',
+      eventId: event.eventId,
+      seq: event.seq,
+      reasonCode: 'unsupported_payload',
+      message: `unsupported event payload: ${issue}`,
+    })
+  }
+
   return {
     async append(event): Promise<AppendAck> {
+      const payloadIssue = jsonValueIssue(event.payload)
+      if (payloadIssue !== null) return unsupportedFailure(event, payloadIssue)
+
       const sameId = backend.eventById(event.sessionId, event.eventId)
       if (sameId !== undefined) {
         return sameContent(sameId, event)
@@ -206,21 +163,32 @@ export function createEventStore(backend: StorageBackend = createInMemoryBackend
     },
 
     async commitDeliveryWithEvent(delivery, event): Promise<AtomicCommitAck> {
-      // A failed atomic commit reports the actual cause on both sides: a conflict
-      // (identity/sequence reuse or changed content) or a storage failure. The
-      // delivery acknowledgement must not claim a storage failure for a conflict.
+      // A failed atomic commit reports the actual cause on both sides: an
+      // unsupported payload, a conflict (identity/sequence reuse or changed
+      // content), or a storage failure. The delivery acknowledgement must not
+      // claim one cause for another.
       const failure = (
-        reasonCode: 'storage_unavailable' | 'conflict',
+        reasonCode: 'storage_unavailable' | 'conflict' | 'unsupported_payload',
         eventFailure: AppendAck,
       ): AtomicCommitAck =>
         atomicCommitAckSchema.parse({
           delivery: {
             status: 'failed',
             reasonCode,
-            message: reasonCode === 'conflict' ? 'conflicting atomic commit' : 'atomic commit failed',
+            message:
+              reasonCode === 'conflict'
+                ? 'conflicting atomic commit'
+                : reasonCode === 'unsupported_payload'
+                  ? 'unsupported event payload'
+                  : 'atomic commit failed',
           },
           event: eventFailure,
         })
+
+      const payloadIssue = jsonValueIssue(event.payload)
+      if (payloadIssue !== null) {
+        return failure('unsupported_payload', unsupportedFailure(event, payloadIssue))
+      }
 
       const sameId = backend.eventById(event.sessionId, event.eventId)
       if (sameId !== undefined && !sameContent(sameId, event)) {

@@ -91,3 +91,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Self-review (mock M5): the first canonical implementation flattened Date payloads to `{}`; ADR-002 D1"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-storage
+    change: "PR #9 follow-up: define an event payload contract (JSON values) and reject unsupported payloads with `unsupported_payload` before publication; canonical comparison for accepted values (fixes sparse-array-vs-empty equality)"
+    requirements: [FR-06]
+    invariants: [INV-04]
+    cases: [C-41, C-43, C-44]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "M5 re-review: sparse array conflated with empty array; ADR-002 D1"

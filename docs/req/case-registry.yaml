@@ -190,7 +190,21 @@ cases:
 
   - id: C-41
     status: implemented
-    title: Event content equality compares non-plain values by content and keeps array order significant
+    title: Event content equality keeps array order significant
     verifier:
       file: test/offline/m6-storage.test.ts
-      test: "keeps array order significant and compares non-plain values by content"
+      test: "keeps array order significant"
+
+  - id: C-43
+    status: implemented
+    title: An event whose payload is not a JSON value is rejected before publication
+    verifier:
+      file: test/offline/m6-storage.test.ts
+      test: "rejects an event whose payload is not a JSON value before publication"
+
+  - id: C-44
+    status: implemented
+    title: A sparse array payload is not conflated with an empty array
+    verifier:
+      file: test/offline/m6-storage.test.ts
+      test: "does not treat a sparse array payload as an empty array"

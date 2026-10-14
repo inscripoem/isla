@@ -230,11 +230,11 @@ requirements:
         description: A conflicting atomic commit reports the conflict cause on both the delivery and the event acknowledgement and persists nothing (FR-06; C-17).
         cases: [C-39]
       - kind: deterministic
-        description: Event content equality is canonical (object key order is irrelevant), so a re-serialised equivalent event is a duplicate rather than a conflict (FR-06).
-        cases: [C-40]
+        description: Event content equality is canonical (object key order is irrelevant) and keeps array order significant, so a re-serialised equivalent event is a duplicate rather than a conflict (FR-06).
+        cases: [C-40, C-41]
       - kind: deterministic
-        description: Event content equality compares non-plain values (for example a Date) by their content and keeps array order significant (FR-06).
-        cases: [C-41]
+        description: An event payload must be a JSON value; an unsupported payload (undefined, function, symbol, bigint, non-finite number, sparse-array hole, Date/Map/Set, cycle) is rejected with `unsupported_payload` before publication and persists nothing, including in the atomic delivery path (FR-06).
+        cases: [C-43, C-44]
 
   - id: INV-05
     title: A delivery and its supporting event commit atomically

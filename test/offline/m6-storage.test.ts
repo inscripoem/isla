@@ -3,6 +3,7 @@ import { collectStorageViolations } from '../conformance/storage.conformance'
 import * as faulty from '../support/faulty-ports'
 import { FIXTURE_SESSION_ID, fixtureCommitDelivery, fixtureRuntimeEvent } from '../support/fixture-data'
 import {
+  canonicalJson,
   createEventStore,
   createHistoryQuery,
   createInMemoryBackend,
@@ -313,9 +314,8 @@ describe('M6 storage invariants', () => {
     const store = createEventStore(backend)
     const history = createHistoryQuery(backend)
 
-    // A payload that cannot be structurally cloned makes the *event* mutation
-    // unpublishable. The delivery mutation precedes it in the batch, so it must
-    // not be published either.
+    // A payload that is not a JSON value is rejected before publication. The
+    // delivery mutation is in the same batch, so it must not be published either.
     const uncopyable = fixtureRuntimeEvent({
       eventId: 'inv05-bad',
       seq: 1,
@@ -334,7 +334,11 @@ describe('M6 storage invariants', () => {
     )
 
     expect(ack.delivery.status).toBe('failed')
+    if (ack.delivery.status === 'failed') {
+      expect(ack.delivery.reasonCode).toBe('unsupported_payload')
+    }
     expect(ack.event.outcome).toBe('failed')
+    if (ack.event.outcome === 'failed') expect(ack.event.reasonCode).toBe('unsupported_payload')
     // No partial state in any view: no event and no confirmed-history record.
     expect(await store.readSession(FIXTURE_SESSION_ID)).toHaveLength(0)
     expect(await history.confirmedHistory(FIXTURE_SESSION_ID)).toHaveLength(0)
@@ -450,25 +454,17 @@ describe('M6 content equality is key-order insensitive (C-40, C-41)', () => {
     expect((await store.append(changed)).outcome).toBe('failed')
   })
 
-  it('keeps array order significant and compares non-plain values by content', async () => {
+  it('keeps array order significant', async () => {
     const store = createEventStore()
     await store.append(
-      fixtureRuntimeEvent({
-        eventId: 'eq-2',
-        seq: 1,
-        payload: { at: new Date(0), tags: ['a', 'b'] },
-      }),
+      fixtureRuntimeEvent({ eventId: 'eq-2', seq: 1, payload: { tags: ['a', 'b'], n: 1 } }),
     )
 
-    // Different key order, same array order, same Date -> duplicate.
+    // Different key order, same array order -> duplicate.
     expect(
       (
         await store.append(
-          fixtureRuntimeEvent({
-            eventId: 'eq-2',
-            seq: 1,
-            payload: { tags: ['a', 'b'], at: new Date(0) },
-          }),
+          fixtureRuntimeEvent({ eventId: 'eq-2', seq: 1, payload: { n: 1, tags: ['a', 'b'] } }),
         )
       ).outcome,
     ).toBe('duplicate')
@@ -477,27 +473,164 @@ describe('M6 content equality is key-order insensitive (C-40, C-41)', () => {
     expect(
       (
         await store.append(
-          fixtureRuntimeEvent({
-            eventId: 'eq-2',
-            seq: 1,
-            payload: { at: new Date(0), tags: ['b', 'a'] },
-          }),
+          fixtureRuntimeEvent({ eventId: 'eq-2', seq: 1, payload: { tags: ['b', 'a'], n: 1 } }),
         )
       ).outcome,
     ).toBe('failed')
 
-    // A different Date must be a conflict, not treated as an empty object.
+    // A different array length is a conflict too.
     expect(
       (
         await store.append(
-          fixtureRuntimeEvent({
-            eventId: 'eq-2',
-            seq: 1,
-            payload: { at: new Date(1), tags: ['a', 'b'] },
-          }),
+          fixtureRuntimeEvent({ eventId: 'eq-2', seq: 1, payload: { tags: ['a'], n: 1 } }),
         )
       ).outcome,
     ).toBe('failed')
+  })
+})
+
+describe('M6 event payload contract (C-43, C-44)', () => {
+  it('rejects an event whose payload is not a JSON value before publication', async () => {
+    const backend = createInMemoryBackend()
+    const store = createEventStore(backend)
+    const history = createHistoryQuery(backend)
+
+    const cyclic: Record<string, unknown> = {}
+    cyclic['self'] = cyclic
+    const unsupported: Record<string, unknown>[] = [
+      { value: undefined },
+      { value: () => 1 },
+      { value: Symbol('x') },
+      { value: 10n },
+      { value: Number.NaN },
+      { value: Number.POSITIVE_INFINITY },
+      { value: new Date(0) },
+      { value: new Map() },
+      { value: new Set() },
+      { value: { nested: () => 1 } },
+      cyclic,
+    ]
+
+    for (const [index, payload] of unsupported.entries()) {
+      const ack = await store.append(
+        fixtureRuntimeEvent({ eventId: `unsup-${index}`, seq: index + 1, payload }),
+      )
+      expect(ack.outcome).toBe('failed')
+      if (ack.outcome === 'failed') expect(ack.reasonCode).toBe('unsupported_payload')
+    }
+    // Nothing was persisted.
+    expect(await store.readSession(FIXTURE_SESSION_ID)).toHaveLength(0)
+    expect(await history.confirmedHistory(FIXTURE_SESSION_ID)).toHaveLength(0)
+
+    // The same rule applies to the delivery path, and stays atomic.
+    const ack = await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({
+        turnId: 'unsup-t',
+        segmentId: 'unsup-s',
+        textHash: 'unsup-h',
+        text: 'x',
+      }),
+      fixtureRuntimeEvent({
+        eventId: 'unsup-del',
+        seq: 50,
+        type: 'delivery.committed',
+        payload: { value: () => 1 },
+      }),
+    )
+    expect(ack.delivery.status).toBe('failed')
+    if (ack.delivery.status === 'failed') expect(ack.delivery.reasonCode).toBe('unsupported_payload')
+    expect(ack.event.outcome).toBe('failed')
+    if (ack.event.outcome === 'failed') expect(ack.event.reasonCode).toBe('unsupported_payload')
+    expect(await history.confirmedHistory(FIXTURE_SESSION_ID)).toHaveLength(0)
+  })
+
+  it('does not treat a sparse array payload as an empty array', async () => {
+    const store = createEventStore()
+
+    // A one-hole array has no JSON representation of its hole, so it is rejected
+    // (it must not be stored, and must not be confused with `[]`).
+    const sparse = await store.append(
+      fixtureRuntimeEvent({ eventId: 'hole-1', seq: 1, payload: { value: Array(1) } }),
+    )
+    expect(sparse.outcome).toBe('failed')
+    if (sparse.outcome === 'failed') expect(sparse.reasonCode).toBe('unsupported_payload')
+
+    // Reusing the identity with an empty array is therefore stored, not a duplicate.
+    const empty = await store.append(
+      fixtureRuntimeEvent({ eventId: 'hole-1', seq: 1, payload: { value: [] } }),
+    )
+    expect(empty.outcome).toBe('stored')
+
+    // An explicit array of nulls is a JSON value and stays distinct from `[]`.
+    const nulls = await store.append(
+      fixtureRuntimeEvent({ eventId: 'hole-2', seq: 2, payload: { value: [null] } }),
+    )
+    expect(nulls.outcome).toBe('stored')
+    expect(await store.readSession(FIXTURE_SESSION_ID)).toHaveLength(2)
+
+    // Defence in depth: the comparator itself never conflates a hole with `[]`.
+    expect(canonicalJson({ value: Array(1) })).not.toBe(canonicalJson({ value: [] }))
+    expect(canonicalJson({ value: [null] })).not.toBe(canonicalJson({ value: [] }))
+  })
+})
+
+describe('M6 storage integration (through the ports)', () => {
+  it('drives a session end-to-end and stays consistent across every view', async () => {
+    const backend = createInMemoryBackend()
+    const store = createEventStore(backend)
+    const history = createHistoryQuery(backend)
+    const replay = createReplayReader(store)
+    const projection = createMemoryProjection()
+
+    // Accepted payloads, including equal content in a different key order.
+    await store.append(
+      fixtureRuntimeEvent({ eventId: 'i-1', seq: 1, payload: { a: 1, b: [1, 2] } }),
+    )
+    await store.append(
+      fixtureRuntimeEvent({ eventId: 'i-2', seq: 2, payload: { b: [1, 2], a: 1 } }),
+    )
+    await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({ turnId: 't1', segmentId: 's1', textHash: 'h1', text: 'spoken' }),
+      fixtureRuntimeEvent({ eventId: 'i-3', seq: 3, type: 'delivery.committed' }),
+    )
+    await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({
+        turnId: 't2',
+        segmentId: 's2',
+        textHash: 'h2',
+        text: 'unspoken',
+        classification: 'not-delivered',
+      }),
+      fixtureRuntimeEvent({ eventId: 'i-4', seq: 4, type: 'delivery.committed' }),
+    )
+
+    // A rejected payload must leave every view unchanged.
+    const before = await store.readSession(FIXTURE_SESSION_ID)
+    await store.append(
+      fixtureRuntimeEvent({ eventId: 'i-bad', seq: 99, payload: { bad: () => 1 } }),
+    )
+
+    const events = await store.readSession(FIXTURE_SESSION_ID)
+    expect(events.map((event) => event.seq)).toEqual([1, 2, 3, 4])
+    expect(events).toEqual(before)
+
+    // Export agrees with the committed events, one JSON object per line.
+    const lines = (await store.exportJsonl(FIXTURE_SESSION_ID)).split('\n')
+    expect(lines).toHaveLength(events.length)
+    expect(lines[0]).toBe(JSON.stringify(events[0]))
+
+    // Replay is an isolated view that matches committed state and does not mutate it.
+    const archive = await replay.load(FIXTURE_SESSION_ID)
+    expect(archive.events).toEqual(events)
+    expect(await store.readSession(FIXTURE_SESSION_ID)).toEqual(events)
+
+    // Confirmed history excludes non-delivered records.
+    const confirmed = await history.confirmedHistory(FIXTURE_SESSION_ID)
+    expect(confirmed.map((record) => record.text)).toEqual(['spoken'])
+
+    // The projection advances one event at a time and refuses a gap.
+    expect((await projection.apply(events[0]!)).appliedSeq).toBe(1)
+    expect((await projection.apply(events[2]!)).appliedSeq).toBe(1)
   })
 })
 
