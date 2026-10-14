@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>M1-01 fixed-audio player demo</title>
+  </head>
+  <body>
+    <main>
+      <h1>M1-01 fixed-audio browser player demo</h1>
+      <p>
+        This isolated demo drives the real browser <code>PlaybackController</code> with the real
+        <code>createDomMediaDriver()</code>, the pre-generated fixed WAV assets and a single
+        observer. It records API observations only; it does not measure acoustic output or
+        silence.
+      </p>
+      <section>
+        <button id="play-0" type="button">Play segment 0</button>
+        <button id="play-1" type="button">Play segment 1</button>
+        <button id="stop" type="button">Stop</button>
+        <button id="dispose" type="button">Dispose</button>
+      </section>
+      <section>
+        <h2>Status</h2>
+        <pre id="status"></pre>
+      </section>
+      <section>
+        <h2>Test renderer display (separate from playback)</h2>
+        <pre id="renderer"></pre>
+      </section>
+      <section>
+        <h2>Observed receipts (single observer sender)</h2>
+        <pre id="events"></pre>
+      </section>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
