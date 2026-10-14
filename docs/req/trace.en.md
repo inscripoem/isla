@@ -51,6 +51,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-39 | implemented | `test/offline/m6-storage.test.ts` | a conflicting atomic commit reports the conflict cause on both sides |
 | C-40 | implemented | `test/offline/m6-storage.test.ts` | event content equality is insensitive to object key order |
 | C-41 | implemented | `test/offline/m6-storage.test.ts` | event content equality keeps array order significant |
+| C-42 | implemented | `test/offline/m6-sqlite-backend.test.ts` | the SQLite backend rolls back the whole batch when a later mutation fails |
 | C-43 | implemented | `test/offline/m6-storage.test.ts` | an event whose payload is not a JSON value is rejected before publication |
 | C-44 | implemented | `test/offline/m6-storage.test.ts` | a sparse array payload is not conflated with an empty array |
 | C-46 | implemented | `test/offline/m5-attribution.test.ts` | M6 delivery attribution persistence: strict fields, nulls, ordering and conflicts |
@@ -76,7 +77,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-02 | M5 | C-06 | — |
 | INV-03 | M5 | C-07 | — |
 | INV-04 | M6 | C-18, C-23, C-39, C-40, C-41, C-43, C-44 | — |
-| INV-05 | M6 | C-19, C-38 | — |
+| INV-05 | M6 | C-19, C-38, C-42 | — |
 | INV-06 | M6 | C-20 | — |
 | INV-07 | M6 | C-24 | — |
 | INV-08 | M6 | C-25 | — |

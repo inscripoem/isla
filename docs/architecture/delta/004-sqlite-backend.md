@@ -1,7 +1,7 @@
 # Delta Specification 004 — SQLite backend
 
 Status: under review (M6). Date: 2026-10-14. ADR: ADR-004. Requirements: FR-06.
-Cases: C-29, C-30. Revision type: ADD (new capability).
+Invariants: INV-05. Cases: C-29, C-30, C-42. Revision type: ADD (new capability).
 
 ## OBSOLETED
 
@@ -18,6 +18,7 @@ Zero callers of the single-argument form remain.
 | `createSqliteBackend` | `src/storage/sqlite/backend.ts` | tests / composition |
 | row codecs (`eventToRow`, `rowToEvent`, `rowToDelivery`, `EventRow`, `DeliveryRow`) | `src/storage/sqlite/codec.ts` | `sqlite/backend.ts` |
 | B2 tests | `test/offline/m6-sqlite-backend.test.ts` | `test:m6` |
+| Batch-atomic rollback regression (C-42) | `test/offline/m6-sqlite-backend.test.ts` | `test:m6` |
 
 ## MODIFIED
 

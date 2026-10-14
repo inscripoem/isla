@@ -257,6 +257,9 @@ requirements:
       - kind: deterministic
         description: A failed atomic write is reported for both the delivery and the event and persists no partial record; if any mutation in the batch cannot be prepared, none is published, so every index and history view is unchanged (FR-06; C-17).
         cases: [C-19, C-38]
+      - kind: deterministic
+        description: The SQLite backend applies every mutation of a batch in one transaction and rolls back on any failure, so a failing later mutation leaves no partial state (FR-06).
+        cases: [C-42]
 
   - id: INV-06
     title: A memory projection never advances across a gap and is idempotent
