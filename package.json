@@ -20,6 +20,7 @@
     "test:m6": "vitest run test/offline/m6-storage.test.ts test/offline/m6-storage-properties.test.ts test/offline/m6-sqlite.test.ts test/offline/m6-sqlite-backend.test.ts test/offline/m6-recovery.test.ts test/offline/m6-durability.test.ts",
     "test:composition": "vitest run test/offline/composition.test.ts",
     "test:readiness": "vitest run test/offline/contracts.test.ts test/offline/requirements.test.ts test/offline/boundaries.test.ts",
+    "test:trace": "vitest run test/offline/trace-fitness.test.ts",
     "req:schema": "tsx src/evaluation/emit-req-schema.ts",
     "verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
     "preview": "vite preview"

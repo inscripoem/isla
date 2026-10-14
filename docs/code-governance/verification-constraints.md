@@ -36,6 +36,7 @@ The rules the verification agent applies and the QA records the team maintains.
 | FR-06 (SQLite persistence/reopen) | C-30 | `m6-sqlite-backend.test.ts` (reopen + isolation) |
 | FR-06 (delivery terminal outcome persisted) | C-31 | `m6-sqlite-backend.test.ts` (terminal outcome for recovery) |
 | INV-12 (restart restores only confirmed history; no replay) | C-32, C-33 | `m6-recovery.test.ts` (recovery view; restart + isolation) |
+| INV-13 (traceability chain machine-checked) | C-34, C-35 | `trace-fitness.test.ts` (valid repo → no violations; injected defect → violation); `pnpm test:trace` |
 | FR-06 (history excludes non-delivered) | C-17, C-21 | `m6-storage.test.ts` (confirmed-history tests); conformance `history-fully-delivered-only` |
 | FR-06 (JSONL export carries `versions`) | C-22 | `m6-storage.test.ts` (version attribution) |
 | FR-06 (in-memory vs SQLite agreement) | C-45 | `m6-sqlite-backend.test.ts` (cross-backend integration: state, export, history, payload rejection) |
