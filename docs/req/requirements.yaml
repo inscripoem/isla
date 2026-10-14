@@ -303,3 +303,29 @@ requirements:
       - kind: deterministic
         description: Delivery records retain the original segment index and generating persona identity/version through normal completion, Stop and late receipts. M6 preserves those values on read and reports a conflict on changed attribution; legacy unknowns remain null rather than being inferred.
         cases: [C-46, C-47]
+
+  - id: INV-10
+    title: Storage configuration and schema version are validated before use
+    category: invariant
+    priority: must
+    owner: M6
+    collaborators: [M5]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: An empty path override is rejected (never silently defaulted) and an unsupported (newer) schema version is rejected (never silently opened or forward-migrated) (FR-06 SQLite storage).
+        cases: [C-26, C-27]
+
+  - id: INV-11
+    title: A schema migration is recoverable
+    category: invariant
+    priority: must
+    owner: M6
+    collaborators: [M5]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: An existing database is backed up before pending migrations and each migration is transactional, so a failure leaves the prior version intact (FR-06).
+        cases: [C-27, C-28]

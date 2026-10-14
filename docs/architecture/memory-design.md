@@ -77,3 +77,14 @@ The table describes the persistence target. Current main supplies an in-memory b
 Startup begins **stopped** with a new session identity, restores only confirmed history, and leaves
 unresolved outputs `unknown` without replay. Storage failure marks evidence incomplete and blocks new
 turns pending recovery; **Stop and local cancellation never wait for a database write**.
+
+## Schema, migration and configuration (B1; ADR-003)
+
+- **Configuration:** `resolveStorageConfig` — `ISLA_STORAGE_DB_PATH` override; default
+  `.cache/isla/isla.db` (ignored local storage, outside OneDrive). An empty override is rejected
+  (fail-fast, never a silent default).
+- **Schema version:** a single-row `schema_version` table, independent of contract `0.2` and diagnostic
+  protocol `1`. An unsupported (newer) version is rejected — never silently opened or forward-migrated.
+- **Migrations:** applied in a transaction (rollback on failure) and idempotent when current; an
+  existing database is backed up under `<dbDir>/backups/` before pending migrations.
+- **Pragmas:** WAL journal, foreign keys, busy timeout.

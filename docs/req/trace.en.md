@@ -39,6 +39,9 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-23 | implemented | `test/offline/m6-storage.test.ts` | event identity is session-scoped |
 | C-24 | implemented | `test/offline/m6-storage.test.ts` | committed records are isolated from caller mutation |
 | C-25 | implemented | `test/offline/m6-storage.test.ts` | confirmed history is ordered by the supporting event sequence |
+| C-26 | implemented | `test/offline/m6-sqlite.test.ts` | SQLite storage configuration is validated (fail-fast) |
+| C-27 | implemented | `test/offline/m6-sqlite.test.ts` | schema migrations are versioned, idempotent and recoverable |
+| C-28 | implemented | `test/offline/m6-sqlite.test.ts` | a failed migration rolls back and leaves the prior version intact |
 | C-38 | implemented | `test/offline/m6-storage.test.ts` | a commit whose later mutation cannot be published leaves no partial state |
 | C-39 | implemented | `test/offline/m6-storage.test.ts` | a conflicting atomic commit reports the conflict cause on both sides |
 | C-40 | implemented | `test/offline/m6-storage.test.ts` | event content equality is insensitive to object key order |
@@ -73,6 +76,8 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-07 | M6 | C-24 | — |
 | INV-08 | M6 | C-25 | — |
 | INV-09 | M5 | C-46, C-47 | M4/SQLite consumer rollout |
+| INV-10 | M6 | C-26, C-27 | — |
+| INV-11 | M6 | C-27, C-28 | — |
 
 ## Approval record
 
