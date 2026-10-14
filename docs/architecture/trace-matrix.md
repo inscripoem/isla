@@ -1,7 +1,7 @@
 # Trace matrix
 
 Status: under review. M6 rows contributed here; other owners' rows pending. Shared document —
-M5 coordination pending. Date: 2026-10-12.
+Step A coordination under review. Updated: 2026-10-15.
 
 Every requirement maps to its enforcing component, interface, test/evidence and runtime monitor.
 
@@ -16,6 +16,7 @@ Every requirement maps to its enforcing component, interface, test/evidence and 
 | INV-06 | A memory projection never advances across a gap | `src/storage/memory-projection.ts` | `MemoryProjectionPort` | C-20 | `m6-storage.test.ts::INV-06`; conformance `projection-no-gap-claim` | `appliedSeq` | — | in review |
 | INV-07 | Committed records are isolated from caller mutation | `src/storage/in-memory-backend.ts` | `StorageBackend` | C-24 | `m6-storage.test.ts` (isolation tests) | — | ADR-002 | in review |
 | INV-08 | Confirmed history is ordered by the supporting event seq | `src/storage/history-query.ts` | `HistoryQueryPort` | C-25 | `m6-storage.test.ts` (ordering test) | — | ADR-002 | in review |
+| INV-09 / FR-06 | Original index/persona survive delivery and history reads | `coordinator.ts`, `storage.ts`, `event-store.ts` | C6/C7 | C-45, C-46 | `m5-attribution.test.ts` (production M5 + in-memory M6) | delivery conflict acknowledgement | ADR-002 Step A amendment | under review |
 
 Other requirements (FR-01..FR-05, NFR-01..NFR-06) remain governed by `docs/req/trace.en.md` and are
 pending their owners' rows here.

@@ -314,6 +314,9 @@ export function fixtureCommitDelivery(
     classification: 'fully-delivered',
     terminalOutcome: 'completed',
     modality: 'audio',
+    segmentIndex: 0,
+    personaProfileId: 'character-fixture',
+    personaProfileVersion: '1',
     ...overrides,
   }
 }

@@ -9,8 +9,8 @@ defined response and operational fallback.
 | Failure mode | Detection | Response | Fallback (concrete) | Owner |
 | --- | --- | --- | --- | --- |
 | Storage write unavailable (`append`/`commit`) | Backend throws on `commit`; store returns `failed` (`storage_unavailable`) | Do not acknowledge persistence | Mark evidence incomplete; block new turns pending recovery; **Stop and local cancellation never wait for the write** | M6 |
-| Duplicate event / delivery | Existing identity match | Return `duplicate`; do not duplicate state | Keep first record; no replay of output | M6 |
-| Conflicting content (same id, changed text) | `textHash`/content mismatch | Return `conflict`; never overwrite | Preserve recorded fact; record the conflict | M6 |
+| Duplicate event / delivery | Existing identity and accepted content match, including delivery classification/index/persona attribution | Return `duplicate`; do not duplicate state | Keep first record; no replay of output | M6 |
+| Conflicting content (same id, changed text or attribution) | `textHash`/content, `segmentIndex`, `personaProfileId` or `personaProfileVersion` mismatch | Return `conflict`; never overwrite | Preserve recorded fact; record the conflict | M6 |
 | Unsupported event payload (not a JSON value) | Payload validated before publication | Reject with `unsupported_payload`; persist nothing | Keep the prior record unchanged; the producer must send a JSON value | M6 |
 | Interrupted atomic commit | Backend failure mid-commit | `commit` is atomic — no partial state | Resume from last committed state; unresolved outputs stay `unknown` | M6 |
 | Projection gap | `event.seq > appliedSeq + 1` | Do not advance `appliedSeq` | Projection must not claim current history until it catches up | M6 |

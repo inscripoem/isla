@@ -87,6 +87,9 @@ requirements:
       - kind: deterministic
         description: Confirmed history returns only fully-delivered records; the JSONL export carries event version attribution.
         cases: [C-21, C-22]
+      - kind: deterministic
+        description: M5 retains original segment index and generating persona identity/version through delivery and M6 history; legacy unknowns remain explicit null, changed attribution conflicts, and history preserves supporting-event sequence order.
+        cases: [C-45, C-46]
 
   - id: NFR-01
     title: Responsiveness and synchronization
@@ -287,3 +290,16 @@ requirements:
       - kind: deterministic
         description: confirmedHistory(sessionId) returns fully-delivered records ordered by the supporting event seq ascending, independent of insertion order (FR-06; M4/M5 issue #22).
         cases: [C-25]
+
+  - id: INV-09
+    title: Original delivery attribution is preserved
+    category: invariant
+    priority: must
+    owner: M5
+    collaborators: [M4, M6]
+    source: docs/team/INTERFACES.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Delivery records retain the original segment index and generating persona identity/version through normal completion, Stop and late receipts. M6 preserves those values on read and reports a conflict on changed attribution; legacy unknowns remain null rather than being inferred.
+        cases: [C-45, C-46]

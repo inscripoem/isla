@@ -3,6 +3,53 @@
 # One entry per supervised change. English only.
 version: 1
 entries:
+  - date: "2026-10-15"
+    task: I1-01-Step-A
+    change: >-
+      Add original segment index and generating persona identity/version to delivery
+      writes and history records, propagate captured attribution through M5 and the
+      M6 in-memory conversion, and reject changed attribution on reused identities.
+      Reconcile seven previously unsubmitted storage-test files with merged PR9,
+      retaining actual M6 regressions and testing two M5 coordinators sharing storage.
+    requirements: [FR-06]
+    invariants: [INV-09]
+    cases: [C-45, C-46]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 1.19.0
+    launch_flags: [--pure, --agent, build, --variant, xhigh]
+    sessions:
+      - ses_ec4f7ba92ffe4XQpBv6xdaD6Db
+      - ses_ec4cd86e8ffef7keihgOOeYuJ6
+    supervision: >-
+      Codex inspected the current main and unpublished edits, coordinated genuine
+      OpenCode implementation and acceptance sessions, independently reviewed the
+      diffs and verification, and maintained documentation and this factual record.
+      OpenCode authored application and test changes. Review strengthened the
+      old-epoch receipt and out-of-order insertion cases and aligned the reference
+      fixture with original segment indices and separate event-version fields.
+    human_review: >-
+      The M5 member approved Step A implementation and inclusion of relevant
+      unsubmitted changes. The result and M4/M6 consumer rollout remain under review.
+      The M5 member subsequently authorized publication after PR29 merged; affected-owner review remains pending.
+    transcript_record: >-
+      Original session information and messages were archived through the local
+      OpenCode API without rewriting message/provider/model/agent metadata.
+      The first large session was interrupted and continued in a focused session;
+      failed tool attempts and the interruption remain in the private records.
+      These are API-assembled export-format archives, not byte-identical CLI exports.
+    verification:
+      initial_full_suite: "pnpm verify: 356 tests in 18 files on main 3668e4c; typecheck, lint and build passed."
+      publication_full_suite: "pnpm verify: 409 tests in 18 files on merged PR29 (b316080); typecheck, lint and build passed."
+      m6: "pnpm test:m6: 47 passed."
+      focused: "Attribution and shared-store suites: 13 passed."
+    scope: >-
+      M5 and M6 are actual implementations in the focused acceptance tests; other
+      pipeline dependencies remain explicit substitutes. SQLite migration/recovery,
+      archived-session selection, live providers and full product acceptance remain
+      separate. Application protocol 0.2 and diagnostic protocol 1 are unchanged.
   - date: 2026-10-12
     task: M6-01
     branch: m6-storage

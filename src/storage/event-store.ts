@@ -32,9 +32,9 @@ import { canonicalJson, jsonValueIssue } from './payload'
  * commitDeliveryWithEvent(delivery, event)
  *   - atomic: the receipt and its supporting event are persisted together or not
  *     at all (C-17). delivery key = sessionId:turnId:segmentId:modality.
- *   - no existing receipt -> `applied`; changed textHash -> `conflict`;
- *     same textHash + same classification -> `duplicate`;
- *     same textHash + different classification -> `conflict`.
+ *   - no existing receipt -> `applied`; changed textHash, segment index or
+ *     persona attribution -> `conflict`; same content and classification ->
+ *     `duplicate`; same textHash + different classification -> `conflict`.
  * readSession(sessionId) -> events for the session, `seq` strictly increasing.
  * exportJsonl(sessionId)  -> one JSON string per committed event, newline joined,
  *                            matching `readSession` exactly.
@@ -82,6 +82,9 @@ function toConfirmedDelivery(delivery: {
   receiptId: string | null
   classification: ConfirmedDelivery['classification']
   modality: ConfirmedDelivery['modality']
+  segmentIndex: ConfirmedDelivery['segmentIndex']
+  personaProfileId: ConfirmedDelivery['personaProfileId']
+  personaProfileVersion: ConfirmedDelivery['personaProfileVersion']
 }): ConfirmedDelivery {
   return {
     sessionId: delivery.sessionId,
@@ -93,6 +96,9 @@ function toConfirmedDelivery(delivery: {
     receiptId: delivery.receiptId,
     classification: delivery.classification,
     modality: delivery.modality,
+    segmentIndex: delivery.segmentIndex,
+    personaProfileId: delivery.personaProfileId,
+    personaProfileVersion: delivery.personaProfileVersion,
   }
 }
 
@@ -225,7 +231,15 @@ export function createEventStore(backend: StorageBackend = createInMemoryBackend
           effectiveClassification: delivery.classification,
           recordId: key,
         })
-      } else if (existing.textHash !== delivery.textHash) {
+      } else if (
+        existing.textHash !== delivery.textHash ||
+        // Attribution is part of the immutable identity: the same delivery key
+        // with a changed segment index or persona must conflict, never be
+        // silently accepted as a duplicate or overwrite the recorded history.
+        existing.segmentIndex !== delivery.segmentIndex ||
+        existing.personaProfileId !== delivery.personaProfileId ||
+        existing.personaProfileVersion !== delivery.personaProfileVersion
+      ) {
         deliveryAck = deliveryCommitAckSchema.parse({
           status: 'conflict',
           recordedClassification: existing.classification,
