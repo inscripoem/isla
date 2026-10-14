@@ -17,6 +17,9 @@ None.
 | AI-use-log gate (`collectAiUseLogViolations`) | `src/evaluation/ai-use-log-gate.ts` | CI gate G6; `gate:ai-use-log` |
 | G6 tests | `test/offline/ai-use-log-gate.test.ts` | — |
 | Named blocking CI gates | `.github/workflows/ci.yml` | — |
+| Frozen-path manifest | `docs/architecture/frozen.yaml` | trace fitness functions |
+| PR handoff template | `.github/PULL_REQUEST_TEMPLATE.md` | — |
+| QA records | `docs/review-memo.md`, `docs/debt-register.md`, `docs/bug-diary.md` | — |
 
 ## MODIFIED
 
@@ -24,7 +27,8 @@ None.
 | --- | --- |
 | `docs/architecture/invariants.md` | **register completed**: added INV-01..03 (M5), INV-11 and INV-12/13 rows (gaps the tool found) |
 | `README.md` | documents the blocking-gate design (D7) |
-| `docs/architecture/adr/006-gate-tooling.md` | D2 updated with the exact CI gate steps |
+| `docs/architecture/adr/006-gate-tooling.md` | D2 updated with the exact CI gate steps; D3 (governance documents) added |
+| `src/evaluation/trace-fitness.ts` | frozen check also validates that frozen paths exist |
 
 ## FROZEN
 

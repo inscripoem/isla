@@ -188,13 +188,16 @@ export function collectTraceViolations(fs: TraceFs, options: TraceOptions = {}):
     }
   }
 
-  // 7. Frozen paths are unmodified (CI passes the changed-file list).
-  if (options.changedFiles !== undefined && fs.exists(FROZEN_MANIFEST)) {
+  // 7. Frozen paths exist and are unmodified (CI passes the changed-file list).
+  if (fs.exists(FROZEN_MANIFEST)) {
     const manifest = parseYaml(fs.read(FROZEN_MANIFEST)) as { frozen?: unknown } | null
     const frozen = Array.isArray(manifest?.frozen) ? (manifest.frozen as unknown[]) : []
     for (const entry of frozen) {
       if (typeof entry !== 'string') continue
-      if (options.changedFiles.includes(entry)) add('frozen-modified', `frozen path modified: ${entry}`)
+      if (!fs.exists(entry)) add('frozen-path-missing', `frozen path does not exist: ${entry}`)
+      if (options.changedFiles !== undefined && options.changedFiles.includes(entry)) {
+        add('frozen-modified', `frozen path modified: ${entry}`)
+      }
     }
   }
 

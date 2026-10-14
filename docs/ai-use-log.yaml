@@ -515,3 +515,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Wired the gates into ci.yml; README documents the gate design; ADR-006 D2"
+  - date: 2026-10-14
+    task: R3
+    branch: m6-r3-gates
+    change: "R3 commit 3: frozen manifest, PR handoff template, D4 QA records (sub-issue #17)"
+    requirements: [FR-06]
+    invariants: [INV-12]
+    cases: [C-35]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Governance documents; ADR-006 D3"
