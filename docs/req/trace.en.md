@@ -47,6 +47,9 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-31 | implemented | `test/offline/m6-sqlite-backend.test.ts` | SQLite persists the delivery terminal outcome for recovery |
 | C-32 | implemented | `test/offline/m6-recovery.test.ts` | recovery view separates confirmed history from unresolved records |
 | C-33 | implemented | `test/offline/m6-recovery.test.ts` | restart restores only confirmed history and keeps the rest unknown |
+| C-34 | implemented | `test/offline/trace-fitness.test.ts` | traceability fitness functions accept a valid repository |
+| C-35 | implemented | `test/offline/trace-fitness.test.ts` | traceability fitness functions reject a broken chain |
+
 | C-38 | implemented | `test/offline/m6-storage.test.ts` | a commit whose later mutation cannot be published leaves no partial state |
 | C-39 | implemented | `test/offline/m6-storage.test.ts` | a conflicting atomic commit reports the conflict cause on both sides |
 | C-40 | implemented | `test/offline/m6-storage.test.ts` | event content equality is insensitive to object key order |
@@ -88,6 +91,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-10 | M6 | C-26, C-27 | — |
 | INV-11 | M6 | C-27, C-28, C-48 | — |
 | INV-12 | M6 | C-32, C-33 | — |
+| INV-13 | M6 | C-34, C-35 | — |
 
 ## Approval record
 

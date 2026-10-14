@@ -222,6 +222,20 @@ cases:
     verifier:
       file: test/offline/m6-recovery.test.ts
       test: "restores only confirmed history after reopen and keeps the rest unknown (no replay)"
+  - id: C-34
+    status: implemented
+    title: Traceability fitness functions accept a valid repository
+    verifier:
+      file: test/offline/trace-fitness.test.ts
+      test: "reports no violations on the committed repository"
+
+  - id: C-35
+    status: implemented
+    title: Traceability fitness functions reject a broken chain
+    verifier:
+      file: test/offline/trace-fitness.test.ts
+      test: "flags a trace row referencing a missing component"
+
   - id: C-38
     status: implemented
     title: A commit whose later mutation cannot be published leaves no partial state
