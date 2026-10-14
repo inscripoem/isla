@@ -106,31 +106,50 @@ export function collectTraceViolations(fs: TraceFs, options: TraceOptions = {}):
 
   const caseIds = new Set(cases.registry.cases.map((entry) => entry.id))
 
-  // 2. Every invariant is registered with a verification.
+  // 2. Every invariant is registered with a verification and an explicit owner.
+  //    The Owner column keeps a shared register classifiable when several roles
+  //    contribute rows (mixed-artifact rule, ADR-006).
   const invariantsText = readOr(`${ARCH}/invariants.md`)
   if (invariantsText !== null) {
     const table = parseTables(invariantsText).find((candidate) => columnIndex(candidate.header, 'ID') >= 0)
     const byId = new Map((table?.rows ?? []).map((row) => [(row[0] ?? '').trim(), row]))
     const verifyColumn = table ? columnIndex(table.header, 'Verification') : -1
+    const ownerColumn = table ? columnIndex(table.header, 'Owner') : -1
+    if (table !== undefined && ownerColumn < 0) {
+      add('invariants-no-owner-column', 'invariants.md table has no Owner column')
+    }
     for (const requirement of requirements.registry.requirements) {
       if (requirement.category !== 'invariant') continue
       const row = byId.get(requirement.id)
       if (row === undefined) {
         add('invariant-unregistered', `invariant ${requirement.id} has no row in invariants.md`)
-      } else if (verifyColumn >= 0 && (row[verifyColumn] ?? '').length === 0) {
-        add('invariant-no-verification', `invariant ${requirement.id} has no verification`)
+      } else {
+        if (verifyColumn >= 0 && (row[verifyColumn] ?? '').length === 0) {
+          add('invariant-no-verification', `invariant ${requirement.id} has no verification`)
+        }
+        if (ownerColumn >= 0 && (row[ownerColumn] ?? '').trim().length === 0) {
+          add('invariant-no-owner', `invariant ${requirement.id} has no owner`)
+        }
       }
     }
   }
 
-  // 3. Trace-matrix rows reference existing components and cases.
+  // 3. Trace-matrix rows reference existing components and cases, and carry an
+  //    explicit owner so shared rows stay classifiable.
   const traceText = readOr(`${ARCH}/trace-matrix.md`)
   if (traceText !== null) {
     for (const table of parseTables(traceText)) {
       const componentColumn = columnIndex(table.header, 'Enforcing component')
       if (componentColumn < 0) continue
       const caseColumn = columnIndex(table.header, 'Case')
+      const ownerColumn = columnIndex(table.header, 'Owner')
+      if (ownerColumn < 0) {
+        add('trace-no-owner-column', 'trace-matrix.md table has no Owner column')
+      }
       for (const row of table.rows) {
+        if (ownerColumn >= 0 && (row[ownerColumn] ?? '').trim().length === 0) {
+          add('trace-no-owner', 'a trace-matrix row has no owner')
+        }
         for (const match of (row[componentColumn] ?? '').matchAll(SRC_PATH)) {
           const path = match[1] ?? ''
           // Skip brace-glob shorthand (e.g. `{a,b}.ts`) — not a literal path.

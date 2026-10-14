@@ -1,7 +1,7 @@
 # ADR-006 — Governance gate tooling and traceability fitness functions
 
 Status: under review (M6). Shared-architecture coordination with M5 pending.
-Date: 2026-10-14 · Owner: M6 · Invariants: INV-12 · Cases: C-34, C-35.
+Date: 2026-10-14 · Owner: M6 · Invariants: INV-12 · Cases: C-34, C-35, C-37.
 Relates to: ADR-001..005. Revision type: ADD (new capability, R3 / #17).
 
 ## Context
@@ -21,10 +21,14 @@ inside `pnpm test`, but are not named gates; G1/G4/G6 are absent). The course di
   4. every runtime-policy row has an operational fallback;
   5. every `ADR-00N` reference resolves, and every ADR file is referenced;
   6. the option ledger records ≥1 entry;
-  7. frozen paths are unmodified (CI supplies the changed-file list).
+  7. frozen paths are unmodified (CI supplies the changed-file list);
+  8. every governed shared table (`invariants.md`, `trace-matrix.md`) carries an explicit **Owner**
+     column with a non-empty owner per row — so a row contributed by several roles stays classifiable
+     when PRs are merged.
 - Uses a tolerant Markdown-table parser (`src/evaluation/markdown.ts`) — **no new schema**; revisit
   machine-readable YAML sources + a generator later.
-- Enabled by `INV-12`; verified by **C-34** (valid repo → no violations) and **C-35** (injected defect → violation).
+- Enabled by `INV-12`; verified by **C-34** (valid repo → no violations), **C-35** (injected defect → violation)
+  and **C-37** (governed row without an owner → violation).
 
 ### D2 — The gates are explicit and blocking
 - `.github/workflows/ci.yml` names them as blocking steps: **G2** `pnpm typecheck && pnpm lint`; **G3**
@@ -58,7 +62,7 @@ inside `pnpm test`, but are not named gates; G1/G4/G6 are absent). The course di
 
 1. Review inputs — D7 gates; the visibility playbook. 2. Drivers — verifiable governance.
 3. Decompose — parse vs checks. 4. Concepts — fitness functions; injected filesystem. 5. Instantiate —
-`markdown.ts`, `trace-fitness.ts`. 6. Record — this ADR + rows + INV-12 + C-34/C-35 + Delta-006.
+`markdown.ts`, `trace-fitness.ts`. 6. Record — this ADR + rows + INV-12 + C-34/C-35/C-37 + Delta-006.
 7. Evaluate — 3-tier verify.
 
 ## Re-open triggers

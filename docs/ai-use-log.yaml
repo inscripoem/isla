@@ -545,3 +545,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Governance documents; ADR-006 D3"
+  - date: 2026-10-14
+    task: R3
+    branch: m6-r3-gates
+    change: "R3 commit 4: explicit Owner indicators on shared governed tables (invariants.md, trace-matrix.md) + trace-fitness enforcement; case C-37"
+    requirements: [FR-06]
+    invariants: [INV-12]
+    cases: [C-37]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Owner-approved Option A (mixed-artifact classification); ADR-006"

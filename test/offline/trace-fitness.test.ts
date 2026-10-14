@@ -68,6 +68,20 @@ describe('traceability fitness functions reject defects (C-35)', () => {
     expect(codes(base, { [path]: mutated })).toContain('invariant-unregistered')
   })
 
+  it('flags an invariant table without an Owner column', () => {
+    const base = nodeTraceFs(ROOT)
+    const path = 'docs/architecture/invariants.md'
+    const mutated = base.read(path).replace('| Fallback | Owner |', '| Fallback | Role |')
+    expect(codes(base, { [path]: mutated })).toContain('invariants-no-owner-column')
+  })
+
+  it('flags a trace row with no owner', () => {
+    const base = nodeTraceFs(ROOT)
+    const path = 'docs/architecture/trace-matrix.md'
+    const mutated = base.read(path).replace(/\|\s*M6\s*\|\s*$/m, '|  |')
+    expect(codes(base, { [path]: mutated })).toContain('trace-no-owner')
+  })
+
   it('flags a modified frozen path', () => {
     const found = collectTraceViolations(nodeTraceFs(ROOT), {
       changedFiles: ['src/contracts/app/ports.ts'],
