@@ -22,6 +22,7 @@ Every requirement maps to its enforcing component, interface, test/evidence and 
 | FR-06 | Durable SQLite persistence with the same store contract | `src/storage/sqlite/backend.ts` | `StorageBackend` | C-29 | `m6-sqlite-backend.test.ts` (conformance over SQLite) | — | ADR-004 | in review |
 | FR-06 | Committed data survives reopen (session isolation, ordered history) | `src/storage/sqlite/backend.ts` | `EventStorePort` | C-30 | `m6-sqlite-backend.test.ts` (reopen/isolation) | — | ADR-004 | in review |
 | FR-06 | Delivery terminal outcome persisted for recovery | `src/storage/sqlite/backend.ts` | `StorageBackend` | C-31 | `m6-sqlite-backend.test.ts` (terminal outcome) | — | ADR-004 | in review |
+| FR-06 | In-memory and SQLite backends agree end-to-end (committed state, export, history, payload rejection) | `src/storage/sqlite/backend.ts` + `in-memory-backend.ts` | `StorageBackend` | C-45 | `m6-sqlite-backend.test.ts` (cross-backend integration) | — | ADR-004 | in review |
 | INV-11 | Restart restores only confirmed history; unresolved stays unknown, no replay | `src/storage/recovery-view.ts` | `RecoveryView` (M6 helper) | C-32, C-33 | `m6-recovery.test.ts` | — | ADR-005 | in review |
 
 Other requirements (FR-01..FR-05, NFR-01..NFR-06) remain governed by `docs/req/trace.en.md` and are

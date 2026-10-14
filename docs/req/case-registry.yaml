@@ -271,6 +271,13 @@ cases:
       file: test/offline/m6-storage.test.ts
       test: "does not treat a sparse array payload as an empty array"
 
+  - id: C-45
+    status: implemented
+    title: The in-memory and SQLite backends agree end-to-end on accepted and rejected payloads
+    verifier:
+      file: test/offline/m6-sqlite-backend.test.ts
+      test: "keeps the in-memory and SQLite backends in agreement end-to-end"
+
   - id: C-46
     status: implemented
     title: M6 attribution validation, legacy unknowns, ordering and conflict preservation
