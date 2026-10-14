@@ -5,31 +5,36 @@ import type { PersonaContent } from './persona-content'
 import { isSubstantiveSpeech } from './text'
 
 /**
- * 角色配置文件及其到上下文的映射。
+ * Character profiles and their mapping into context.
  *
- * 两种配置来源并列存在，但绝不混用：
- *   - `harness` —— 离线 fixture 配置，用于让共享一致性套件在没有正式角色配置
- *     时仍可运行。它不是真实角色，不要为了改善角色语气而修改它。
- *   - `author` —— 从 ./content 读取的正式角色，由角色作者维护。这里不会重写
- *     或默认替换其中的措辞。
+ * Two configuration origins coexist and are never mixed:
+ *   - `harness` - the offline fixture profile, which lets the shared conformance
+ *     kit run without an authored character. It is not a real character; do not
+ *     edit it to improve the character's tone.
+ *   - `author` - the authored character, read from ./content and maintained by the
+ *     character author. Nothing here rewrites or defaults over its wording.
  *
- * M4-01 使用固定表格，使流水线能够在没有在线提供方时完成集成和测试。M4-02
- * 将表格替换为真实模型调用，但下面的解析、校验和渲染逻辑保持不变。
+ * M4-01 uses a fixed table so the pipeline can be integrated and tested with no
+ * online provider. M4-02 replaces the table with real model calls, while the
+ * resolution, validation and rendering logic below stays the same.
  */
 
 /**
- * 每轮常驻事实的上限。
+ * Cap on standing facts rendered every turn.
  *
- * `standingFacts` 与已确认历史共用同一份字符预算，清单无上限就会挤掉它本应
- * 支持的记忆。角色标记为 ready 后由校验强制执行；草稿阶段仅作为问题报告。
+ * `standingFacts` shares one character budget with confirmed history, so an
+ * unbounded list would crowd out the memory it is meant to support. Enforced by
+ * validation once the character is marked ready; a draft only reports issues.
  */
 export const MAX_STANDING_FACTS = 5
 /**
- * 单条常驻事实的字符上限。
+ * Character cap for a single standing fact.
  *
- * 取 110 而不是更小的值：一条事实要同时说清主体与关系才不至于被误读，压缩过
- * 度会退化成模糊的标签。真正的约束是「条数 × 长度」总量，条数上限已经封住
- * 了最坏情况（5 × 110 = 550 字符，约占默认 2000 字符预算的四分之一）。
+ * 110 rather than a smaller value: a fact has to state both its subject and its
+ * relation to avoid being misread, and over-compressing degrades it into a vague
+ * label. The real constraint is the total of `count x length`, and the count cap
+ * already seals the worst case (5 x 110 = 550 characters, roughly a quarter of the
+ * default 2000-character budget).
  */
 export const MAX_STANDING_FACT_CHARACTERS = 110
 
@@ -38,21 +43,23 @@ export interface CharacterProfile {
   version: string
   personaSummary: string
   styleNotes: readonly string[]
-  /** 每轮都必须成立的事实；缺少表示没有常驻事实。 */
+  /** Facts that must hold on every turn; absent means no standing facts. */
   standingFacts?: readonly string[]
-  /** 缺少该字段表示角色对任何意图都没有可说内容。 */
+  /** An absent field means the character has nothing to say for any intent. */
   intentTemplates?: Readonly<Record<ReplyIntent, readonly string[]>>
   boundaries?: readonly string[]
   /**
-   * `harness` 配置是测试脚手架，`author` 配置来自 ./content。校验结果会报告
-   * 来源，避免把 fixture 角色误认为正式角色。
+   * A `harness` profile is test scaffolding; an `author` profile comes from
+   * ./content. Validation reports the origin so a fixture character is never
+   * mistaken for the authored one.
    */
   origin: 'harness' | 'author'
 }
 
 /**
- * 共享离线 fixture 所需的配置。`character-fixture` 必须持续注册并产生有效文本，
- * 否则一致性套件会失去基线，而不是发现真正的缺陷。
+ * The profile the shared offline kit needs. `character-fixture` must stay
+ * registered and keep producing valid text, or the conformance suite loses its
+ * baseline instead of discovering a real defect.
  */
 const FIXTURE_INTENT_REPLY_LINES: Readonly<Record<ReplyIntent, readonly string[]>> = {
   answer: ['We talked about the concert.', 'It was loud and fun.'],
@@ -60,7 +67,8 @@ const FIXTURE_INTENT_REPLY_LINES: Readonly<Record<ReplyIntent, readonly string[]
   acknowledge: ['Thanks for saying that.'],
   support: ['That sounds rough, but you have got this.'],
   playful: ['I would rate it eleven out of ten.'],
-  // 特意请求核实而不是直接同意：契约要求该意图请求验证，不能直接承认纠正。
+  // Asks for verification instead of agreeing outright: the contract requires this
+  // intent to request checking, not to accept the correction directly.
   'check-correction': ['Let me double-check that before I agree.'],
 }
 
@@ -90,16 +98,20 @@ export const DEFAULT_CHARACTER_PROFILES: readonly CharacterProfile[] = [
 ]
 
 /**
- * 用于记忆版本管理的角色身份。两部分都很重要：不同 profile ID 下的同一版本号
- * 代表不同角色。记忆记录保存此键，以便之后识别旧角色说过的话。
+ * Character identity used for memory versioning. Both parts matter: the same
+ * version number under a different profile id is a different character. Memory
+ * records store this key so words spoken by a superseded character stay
+ * identifiable afterwards.
  */
 export function personaVersionKey(profileId: string, version: string): string {
   return `${profileId}@${version}`
 }
 
 /**
- * 按身份和版本解析角色配置。两者必须同时匹配：配置版本变化意味着角色已变化，
- * 不能静默替换。未知配置返回 null，由调用方报告生成失败，而不是凭空创建角色。
+ * Resolve a profile by identity and version. Both must match: a changed profile
+ * version means the character changed and must not be substituted silently. An
+ * unknown profile returns null, and the caller reports a generation failure rather
+ * than inventing a character.
  */
 export function resolveCharacterProfile(
   profileId: string,
@@ -113,8 +125,9 @@ export function resolveCharacterProfile(
 }
 
 /**
- * 返回该配置针对某意图的台词，顺序即说话顺序。空数组具有明确含义：角色没有
- * 可说内容，调用方应将其转为无语音结果，而不是临时编造填充台词。
+ * Reply lines for one intent, in speaking order. An empty array has a definite
+ * meaning: the character has nothing to say, and the caller must turn that into a
+ * voiceless result rather than improvising a filler line.
  */
 export function intentTemplatesFor(
   profile: CharacterProfile,
@@ -124,8 +137,12 @@ export function intentTemplatesFor(
 }
 
 /**
- * 不得出现在“ready”角色中的占位标记。发布后仍说出“TODO”的角色比缺失角色更
- * 糟糕，因为它看似已经编写完成，实际却并未完成。
+ * Placeholder markers that must not appear in a ready character. A character that
+ * ships still saying "TODO" is worse than a missing one, because it looks authored
+ * while being unfinished.
+ *
+ * The CJK marker is data, not a comment: it detects an author who was writing in
+ * Chinese and left the slot unfilled.
  */
 export const PERSONA_PLACEHOLDER_MARKERS: readonly string[] = [
   'TODO',
@@ -136,31 +153,34 @@ export const PERSONA_PLACEHOLDER_MARKERS: readonly string[] = [
 ]
 
 /**
- * 设定集条目上的机器可读标记。
+ * Machine-readable markers on bible entries.
  *
- * 设定集（`sourceDocument`）与 `standingFacts` 是同一批事实的两份拷贝，而
- * 运行时只读后者。没有标记时，两处不一致不会产生任何报错 —— 设定集会静默
- * 变成过期文档，评审看到的和模型读到的不是同一件事。`[S]` 让这件事变成
- * 可测试的：见 `standingFactsFromBible`。
+ * The bible (`sourceDocument`) and `standingFacts` are two copies of the same
+ * claims, and only the latter reaches the runtime. Without a marker, a divergence
+ * between them raises nothing at all - the bible quietly becomes a stale document,
+ * and reviewers read something different from what the model reads. `[S]` turns
+ * that into something testable: see `standingFactsFromBible`.
  */
 export const BIBLE_MARKERS = {
-  /** 常驻：必须逐字出现在 `standingFacts` 中。 */
+  /** Standing: must appear verbatim in `standingFacts`. */
   standing: '[S]',
-  /** 召回候选：将来按需检索的池子，当前不进任何 prompt。 */
+  /** Recall candidate: the pool for future on-demand retrieval, not yet prompted. */
   recall: '[R]',
-  /** 仅供人阅读：给评审或作者看，永不渲染。 */
+  /** Human-only: for reviewers and the author, never rendered. */
   human: '[H]',
 } as const
 
 /**
- * 从设定集正文中抽取所有标为 `[S]` 的条目。
+ * Extract every entry marked `[S]` from the bible body.
  *
- * 只做解析，不判断对错：把「两处是否一致」留给测试，使不一致成为构建失败，
- * 而不是一条谁也不会读的日志。
+ * Parsing only, no judgement: whether the two copies agree is left to a test, so a
+ * divergence becomes a build failure instead of a log nobody reads.
  *
- * 只接受引用块（行首为 `>`）中的标记：说明文字里出现的 `[S]` 是文档，不是
- * 事实。超出 `MAX_STANDING_FACT_CHARACTERS` 的条目会明确报出，因为超长通常
- * 意味着作者在设定集里换行了，而换行会让这条事实在比对时对不上。
+ * Only markers inside a blockquote (a line starting with `>`) are accepted: an
+ * `[S]` in prose is documentation, not a fact. Entries longer than
+ * `MAX_STANDING_FACT_CHARACTERS` are reported explicitly, because an over-long
+ * entry usually means the author wrapped the line in the bible, and a wrapped line
+ * will not compare equal to the single-line standing fact.
  */
 export function standingFactsFromBible(bible: string): readonly string[] {
   const facts: string[] = []
@@ -183,10 +203,11 @@ function hasPlaceholder(text: string): boolean {
 }
 
 /**
- * 校验正式角色内容。返回可读的问题列表，绝不抛出异常：草稿角色允许不完整，
- * 报告问题优于在编写过程中使测试套件崩溃。
+ * Validate authored character content. Returns a readable list of problems and
+ * never throws: a draft is allowed to be incomplete, and reporting problems beats
+ * crashing the suite while the author is still writing.
  *
- * 当 `PERSONA_AUTHORING_STATUS` 为 'ready' 后，同样的检查将成为强制要求。
+ * Once `PERSONA_AUTHORING_STATUS` is 'ready', the same checks become mandatory.
  */
 export function collectPersonaContentIssues(content: PersonaContent): readonly string[] {
   const issues: string[] = []
@@ -265,14 +286,15 @@ export function personaAuthoringStatus(): 'draft' | 'ready' {
   return PERSONA_AUTHORING_STATUS
 }
 
-/** 正式角色存在的问题；编写完成并标记为 ready 后应为空。 */
+/** Problems with the authored character; expected to be empty once marked ready. */
 export function personaAuthoringIssues(): readonly string[] {
   return collectPersonaContentIssues(CHARACTER_CONTENT)
 }
 
 /**
- * 将角色渲染为上下文区块。空章节会被省略，而不是渲染成空标题，因为这里的
- * 每一行都会在每个回合消耗上下文空间。
+ * Render a character as a context block. Empty sections are omitted rather than
+ * rendered as empty headings, because every line here costs context space on every
+ * single turn.
  */
 export function renderPersonaBlock(profile: CharacterProfile): string {
   const lines: string[] = [`Persona: ${profile.personaSummary}`]

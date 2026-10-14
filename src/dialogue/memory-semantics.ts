@@ -2,23 +2,28 @@ import type { ConfirmedDelivery, DeliveryClassification, Modality } from '../con
 import { isSubstantiveSpeech } from './text'
 
 /**
- * M4 记忆语义：哪些内容算作已说出口、哪些内容只能进入审计视图，以及在
- * 有界上下文中按什么顺序丢弃带版本的记忆。
+ * M4 memory semantics: what counts as already spoken, what is only allowed into
+ * the audit view, and in which order versioned memory is dropped from a bounded
+ * context.
  *
- * 权限划分——修改本文件前请先阅读。
- *   M5 决定如何对一次交付进行分类。M4 不会升级、降级或“修正”分类。M4 负责
- *   准入：给定一条记录，决定它是否可以进入口述历史，并被回忆为听众确实听到
- *   的内容。拒绝一项声明并不违背 M5 的分类，而是拒绝记住缺乏证据的内容。
+ * Division of authority - read this before changing the file.
+ *   M5 decides how a delivery is classified. M4 does not upgrade, downgrade or
+ *   otherwise "correct" a classification. M4 owns ADMISSION: given a record, it
+ *   decides whether that record may enter spoken history and be recalled as
+ *   something the listener actually heard. Refusing a claim does not contradict
+ *   M5's classification; it refuses to remember something the evidence does not
+ *   support.
  *
- * FR-02 依赖本文件。如果缺乏播放证据的记录进入口述历史，后续每次回复都可能
- * 引用听众从未听到的话，而且只有当人发现角色记住了它从未说过的内容时，错误
- * 才会暴露。
+ * FR-02 depends on this file. If a record without playback evidence entered
+ * spoken history, every later reply could reference words the listener never
+ * heard, and the fault would only surface when a human noticed the character
+ * remembering something it never said.
  */
 
 /**
- * `spoken` —— 可以进入确认历史，并在后续上下文中被回忆。
- * `audit-only` —— 仅为追踪而保留，绝不回忆，也不汇总到上下文中。
- *                “听众可能听到了”不等于记忆。
+ * `spoken` - may enter confirmed history and be recalled in later context.
+ * `audit-only` - retained for traceability only; never recalled, never folded
+ *                into context. "The audience might have heard it" is not memory.
  */
 export type MemoryBucket = 'spoken' | 'audit-only'
 
@@ -34,20 +39,23 @@ export interface MemoryBucketDecision {
 }
 
 /**
- * 策略——音频必须有播放证据才能算作已说出口。
+ * Policy - audio needs playback evidence before it counts as spoken.
  *
- * M1 的 receipt 是声音确实播放过的唯一证据；M5 的分类建立在该证据之上。因此，
- * 没有 receipt 的 `fully-delivered` 音频记录只有声明而没有证据，必须暂缓进入
- * 记忆。
+ * M1's receipt is the only evidence that sound actually played, and M5's
+ * classification is built on top of that evidence. A `fully-delivered` audio
+ * record with no receipt therefore carries a claim without proof and must be
+ * held back from memory.
  *
- * 如需放宽策略，只改这里：
- *   1. 'required' —— 每条 fully-delivered 记录都需要 receiptId。
- *   2. 'required-for-audio' —— 音频需要 receipt；字幕和头像是展示而非播放，
- *                              因此不需要（默认值）。
- *   3. 'preferred' —— 信任 M5 的分类，receipt 只作为元数据；仅当确认 M5 会漏记
- *                    真实播放音频的 receipt 时才选择此项。
- * 无论选择哪项，`not-fully-delivered` 都只能进入审计视图；这是 FR-02 的要求，
- * 不是可调策略。
+ * To relax the policy, change only this constant:
+ *   1. 'required' - every fully-delivered record needs a receiptId.
+ *   2. 'required-for-audio' - audio needs a receipt; subtitle and avatar are
+ *                             presentation rather than playback, so they do not
+ *                             (the default).
+ *   3. 'preferred' - trust M5's classification and treat the receipt as metadata;
+ *                    choose this only if M5 is known to omit receipts for audio
+ *                    that really did play.
+ * Whichever is chosen, `not-fully-delivered` can only ever reach the audit view.
+ * That is an FR-02 requirement, not a tunable policy.
  */
 export type SpokenReceiptPolicy = 'required' | 'required-for-audio' | 'preferred'
 export const SPOKEN_RECEIPT_POLICY: SpokenReceiptPolicy = 'required-for-audio'
@@ -58,12 +66,13 @@ function hasReceipt(record: ConfirmedDelivery): boolean {
 }
 
 /**
- * 决定一条记录是否准入。
+ * Decide whether a record is admitted.
  *
- * 以下顺序是有意保持保守：
- *   1. 除 `fully-delivered` 外全部排除——部分交付或从未交付的文本不是记忆；
- *   2. 不含字母或数字的文本排除——没有可听见的内容；
- *   3. 没有 receipt 的音频排除——只有声明，没有证明。
+ * The order is deliberately conservative:
+ *   1. everything other than `fully-delivered` is excluded - partially delivered
+ *      or never delivered text is not memory;
+ *   2. text with no letter or digit is excluded - there is nothing audible;
+ *   3. audio without a receipt is excluded - a claim, not proof.
  */
 export function classifyMemoryBucket(record: ConfirmedDelivery): MemoryBucketDecision {
   if (record.classification !== 'fully-delivered') {
@@ -82,14 +91,16 @@ export function classifyMemoryBucket(record: ConfirmedDelivery): MemoryBucketDec
 }
 
 /**
- * 哪些分类可以进入口述历史。
+ * Which classifications may enter spoken history.
  *
- * `fully-delivered` —— 按上方 receipt 策略决定是否准入。
- * `partial-unknown` —— 永不准入。播放可能开始后中断，回忆它会把半句话重新
- *                       当作完整陈述。
- * `not-delivered` —— 永不准入。
+ * `fully-delivered` - admission depends on the receipt policy above.
+ * `partial-unknown` - never admitted. Playback may have started and then been
+ *                     interrupted; recalling it would present half a sentence
+ *                     as a finished statement.
+ * `not-delivered` - never admitted.
  *
- * 冲突会冻结记录：既不准入，也不覆盖。被冻结的记录只能在审计视图中看到。
+ * A conflict freezes a record: it is neither admitted nor overwritten. A frozen
+ * record is visible only in the audit view.
  */
 export const SPOKEN_ADMISSION: Readonly<
   Record<DeliveryClassification, 'admitted' | 'audit-only'>
@@ -100,19 +111,23 @@ export const SPOKEN_ADMISSION: Readonly<
 }
 
 /* -------------------------------------------------------------------------- */
-/* 被中断的语音                                                               */
+/* Interrupted speech                                                         */
 /* -------------------------------------------------------------------------- */
 
 /**
- * 表示陈述结束的字符。用于检测在句中停止的发言：完整交付文本不等于句子完整，
- * 上下文不能把被截断的片段呈现为听众已经听完整的想法。
+ * Characters that end a statement. Used to detect speech that stopped mid
+ * sentence: fully delivered text is not the same as a complete sentence, and
+ * context must not present a truncated fragment as a finished thought.
+ *
+ * The set includes CJK terminators because persona content and listener input are
+ * not guaranteed to be English. These are data, not comments.
  */
 const SENTENCE_TERMINATORS = new Set(['.', '!', '?', '…', '。', '！', '？'])
 
-/** 可能跟在终止符后的引号和括号，例如 `He said "hello."`。 */
+/** Quotes and brackets that may follow a terminator, as in `He said "hello."`. */
 const SENTENCE_CLOSERS = new Set(['”', '"', "'", ')', ']', '】', '」'])
 
-/** 移除末尾闭合符，使 `"hello."` 按真实句末判断。 */
+/** Strip trailing closers so `"hello."` is judged on its real final character. */
 function stripClosers(text: string): string {
   let end = text.length
   while (end > 0 && SENTENCE_CLOSERS.has(text.charAt(end - 1))) {
@@ -122,10 +137,11 @@ function stripClosers(text: string): string {
 }
 
 /**
- * 当文本结尾没有结束句子时返回 true。
+ * True when the text does not end a sentence.
  *
- * 这是启发式判断而非语法分析：目的是让组装逻辑标记片段，而不是把它呈现为
- * 完整内容。假阴性会导致缺少标记，但不是正确性错误；假阳性只会多加一个标记。
+ * A heuristic, not a parse: the goal is to make assembly mark a fragment rather
+ * than present it as complete. A false negative only omits a marker and is not a
+ * correctness error; a false positive only adds one.
  */
 export function isTruncatedSpeech(text: string): boolean {
   const trimmed = text.trim()
@@ -137,12 +153,13 @@ export function isTruncatedSpeech(text: string): boolean {
 }
 
 /* -------------------------------------------------------------------------- */
-/* 带版本的记忆与裁剪                                                         */
+/* Versioned memory and trimming                                              */
 /* -------------------------------------------------------------------------- */
 
 /**
- * 同一片段被多次确认时的模态优先级（例如音频和字幕）。上下文只保留其中一个；
- * 同时展示两者会重复计算同一段话，并增加字符预算。
+ * Modality preference when one segment is confirmed more than once, for example
+ * by audio and by subtitle. Context keeps only one of them: showing both counts
+ * the same utterance twice and inflates the character budget.
  */
 export const MODALITY_PREFERENCE: readonly Modality[] = ['audio', 'subtitle', 'avatar']
 
@@ -152,12 +169,16 @@ export function modalityRank(modality: Modality): number {
 }
 
 /**
- * 裁剪类别，顺序从“最先丢弃”到“最后丢弃”。
+ * Trim classes, ordered from "dropped first" to "dropped last".
  *
- * 记忆有两种版本信息，预算紧张时都会影响保留结果：
- *   - 角色版本：记录知道是哪一个角色说的。旧角色说过的话仍是听众听到的内容，
- *     因此不会立即删除；空间不足时才优先删除，因为当前角色的连续性更重要。
- *   - 截断状态：被中断的片段连续性低于完整陈述，因此先于完整陈述被删除。
+ * Memory carries two kinds of version information, and both affect what survives
+ * a tight budget:
+ *   - persona version: the record knows which persona said it. Words from an
+ *     older persona are still words the audience heard, so they are not deleted
+ *     immediately; they give way first only under pressure, because continuity
+ *     with the current persona matters more.
+ *   - truncation: an interrupted fragment is less useful for continuity than a
+ *     complete statement, so it is dropped before complete statements.
  */
 export type TrimClass =
   | 'stale-persona-truncated'
@@ -173,16 +194,17 @@ export const TRIM_ORDER: readonly TrimClass[] = [
 ]
 
 export interface TrimInput {
-  /** 生成记录时使用的角色版本；未知时为 null。 */
+  /** Persona version used when the record was produced; null when unknown. */
   personaVersion: string | null
-  /** 当前正在组装的回合所使用的角色版本。 */
+  /** Persona version of the turn currently being assembled. */
   activePersonaVersion: string | null
   truncated: boolean
 }
 
 /**
- * 未知角色版本按当前版本处理，而不是按过期版本处理：M4 无法证明记录过旧，
- * 删除它会静默缩短角色对实际说过内容的记忆。
+ * An unknown persona version is treated as current rather than stale: M4 cannot
+ * prove the record is out of date, and dropping it would silently shorten the
+ * character's memory of what was really said.
  */
 export function trimClassOf(input: TrimInput): TrimClass {
   const stale =
@@ -202,12 +224,20 @@ export function trimRank(input: TrimInput): number {
 }
 
 /**
- * 策略——有界上下文裁剪。
+ * Policy - trimming a bounded context.
  *
- * `alwaysKeepMostRecent` 是保护措施：即使单个回合超过字符预算，也保留最新回合。
- * 全部删除会让角色失去仍在进行主题的记忆，表现为失忆，而不是上下文窗口被截断。
+ * `keepNewestWithinBudget` replaced an earlier `alwaysKeepMostRecent` flag, which
+ * kept the newest turn even when it alone exceeded the character budget. That
+ * made the configured cap advisory rather than binding, and a zero budget still
+ * produced content.
+ *
+ * The cap is now hard: the newest turn is protected only while it fits, and when
+ * a single turn cannot fit it is dropped too, with an exclusion recorded so the
+ * loss is auditable. Stored evidence is unaffected - only the context view is
+ * trimmed. See `trimToCharacterBudget` in ./context for the order and the
+ * character-counting rule.
  */
 export const MEMORY_TRIM_POLICY = {
   dropOrder: TRIM_ORDER,
-  alwaysKeepMostRecent: true,
+  keepNewestWithinBudget: true,
 } as const

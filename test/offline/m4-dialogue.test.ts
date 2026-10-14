@@ -324,6 +324,63 @@ describe('M4 delivery memory', () => {
     expect(memory.records()).toHaveLength(0)
   })
 
+  /*
+   * Playback that started and then failed is a legitimate partial delivery: C6
+   * permits it and M5 produces it. Rejecting it would leave M6 holding a delivery
+   * M4 refused, and a composed session would degrade for a valid outcome.
+   */
+  it('accepts a partial delivery that failed after playback started', async () => {
+    const memory = createDeliveryMemoryStore()
+    const ack = await memory.commit(
+      fixtureCommitDelivery({
+        segmentId: 'seg-failed',
+        textHash: 'hash-failed',
+        text: 'half a sentence',
+        classification: 'partial-unknown',
+        terminalOutcome: 'failed',
+      }),
+    )
+    expect(ack.status).toBe('applied')
+
+    // Accepted for audit only. It still never becomes something she "said",
+    // because admission requires fully-delivered.
+    expect(await memory.confirmedHistory(FIXTURE_SESSION_ID)).toHaveLength(0)
+    expect(memory.records()).toHaveLength(1)
+  })
+
+  /*
+   * The store is the only thing allowed to decide what a record means, so nothing
+   * outside it may keep a handle on one. Without the isolation boundary, mutating a
+   * partial delivery after commit made it appear in spoken history with no second
+   * commit.
+   */
+  it('isolates committed records from later caller mutation', async () => {
+    const memory = createDeliveryMemoryStore()
+    const delivery = fixtureCommitDelivery({
+      segmentId: 'seg-mutable',
+      textHash: 'hash-mutable',
+      text: 'half a sentence',
+      classification: 'partial-unknown',
+      terminalOutcome: 'cancelled',
+    })
+    await memory.commit(delivery)
+
+    delivery.classification = 'fully-delivered'
+    delivery.text = 'a completely different line'
+    delivery.receiptId = 'receipt-invented'
+
+    expect(await memory.confirmedHistory(FIXTURE_SESSION_ID)).toHaveLength(0)
+    expect(memory.records()[0]?.classification).toBe('partial-unknown')
+    expect(memory.records()[0]?.text).toBe('half a sentence')
+
+    // A returned view is a copy too, so editing it cannot reach stored state.
+    const view = memory.records()
+    const first = view[0]
+    if (first !== undefined) first.classification = 'not-delivered'
+    expect(memory.records()[0]?.classification).toBe('partial-unknown')
+    expect(memory.audit()[0]?.delivery.text).toBe('half a sentence')
+  })
+
   it('defines a pairing rule for every delivery classification', () => {
     expect(Object.keys(ALLOWED_DELIVERY_PAIRS).sort()).toEqual([
       'fully-delivered',
@@ -332,6 +389,9 @@ describe('M4 delivery memory', () => {
     ])
     expect(isAllowedDeliveryPair('fully-delivered', 'completed')).toBe(true)
     expect(isAllowedDeliveryPair('fully-delivered', 'failed')).toBe(false)
+    expect(isAllowedDeliveryPair('partial-unknown', 'failed')).toBe(true)
+    // Permitted is not the same as admitted: the pair stays audit-only.
+    expect(SPOKEN_ADMISSION['partial-unknown']).toBe('audit-only')
   })
 })
 
@@ -559,7 +619,7 @@ describe('M4 context continuity', () => {
 
   it('drops memory from an older persona before current-persona memory', async () => {
     const memory = createDeliveryMemoryStore()
-    memory.noteTurnPersona('turn-old', 'character-fixture@0')
+    memory.noteTurnPersona(FIXTURE_SESSION_ID, 'turn-old', 'character-fixture@0')
     await memory.commit(
       fixtureCommitDelivery({
         turnId: 'turn-old',
@@ -568,7 +628,7 @@ describe('M4 context continuity', () => {
         text: 'Old persona line.',
       }),
     )
-    memory.noteTurnPersona('turn-new', 'character-fixture@1')
+    memory.noteTurnPersona(FIXTURE_SESSION_ID, 'turn-new', 'character-fixture@1')
     await memory.commit(
       fixtureCommitDelivery({
         turnId: 'turn-new',
@@ -586,12 +646,12 @@ describe('M4 context continuity', () => {
     })
     await generate(
       port,
-      fixtureDialogueRequest({ contextLimits: { maxTurns: 8, maxCharacters: 5 } }),
+      fixtureDialogueRequest({ contextLimits: { maxTurns: 8, maxCharacters: 25 } }),
     )
 
-    // Both turns were heard. Only the budget forces a choice, and speech from a
-    // superseded persona is what gives way first — the newest turn is never
-    // dropped, because an empty context reads as amnesia.
+    // Both turns were heard and both fit individually; only the budget forces a
+    // choice. Speech from a superseded persona gives way first, and the newest turn
+    // survives because it is the one that still fits.
     expect(capture.view?.turns.map((turn) => turn.turnId)).toEqual(['turn-new'])
     expect(
       capture.view?.exclusions.some((entry) => entry.reason === 'trim-stale-persona'),
@@ -713,5 +773,273 @@ describe('M4 persona authoring', () => {
       },
     ])
     expect(silent === null ? null : intentTemplatesFor(silent, 'answer')).toEqual([])
+  })
+})
+
+describe('M4 session isolation', () => {
+  /*
+   * M5's turn counter is local to each session, so turn ids repeat. One dialogue
+   * instance therefore has to keep the sessions apart in all three places it holds
+   * state: the finalized-text registry, the delivery record key and the
+   * turn-to-persona mapping.
+   */
+  it('does not let one session inherit another session state', async () => {
+    const memory = createDeliveryMemoryStore()
+    let lines: readonly string[] = ['First session line.']
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      memory,
+      textSource: mutableTextSource(() => lines),
+    })
+
+    const first = await generate(
+      port,
+      fixtureDialogueRequest({ sessionId: 'session-one', turnId: 'turn-1' }),
+    )
+    lines = ['Second session line.']
+    const second = await generate(
+      port,
+      fixtureDialogueRequest({ sessionId: 'session-two', turnId: 'turn-1' }),
+    )
+
+    expect(first.segments[0]?.text).toBe('First session line.')
+    expect(second.segments[0]?.text).toBe('Second session line.')
+    expect(second.segments[0]?.segmentId).not.toBe(first.segments[0]?.segmentId)
+
+    // The same local turn id under two sessions is two deliveries, not a conflict.
+    const ackOne = await memory.commit(
+      fixtureCommitDelivery({
+        sessionId: 'session-one',
+        turnId: 'turn-1',
+        segmentId: 'seg-0',
+        textHash: 'hash-one',
+        text: 'First session line.',
+      }),
+    )
+    const ackTwo = await memory.commit(
+      fixtureCommitDelivery({
+        sessionId: 'session-two',
+        turnId: 'turn-1',
+        segmentId: 'seg-0',
+        textHash: 'hash-two',
+        text: 'Second session line.',
+      }),
+    )
+    expect(ackOne.status).toBe('applied')
+    expect(ackTwo.status).toBe('applied')
+
+    expect(await memory.confirmedHistory('session-one')).toHaveLength(1)
+    expect(await memory.confirmedHistory('session-two')).toHaveLength(1)
+  })
+
+  it('keeps persona attribution apart per session', async () => {
+    const memory = createDeliveryMemoryStore()
+    memory.noteTurnPersona('session-one', 'turn-1', 'character-fixture@1')
+    memory.noteTurnPersona('session-two', 'turn-1', 'character-fixture@0')
+
+    await memory.commit(
+      fixtureCommitDelivery({
+        sessionId: 'session-one',
+        turnId: 'turn-1',
+        segmentId: 'seg-0',
+        textHash: 'hash-one',
+      }),
+    )
+    await memory.commit(
+      fixtureCommitDelivery({
+        sessionId: 'session-two',
+        turnId: 'turn-1',
+        segmentId: 'seg-0',
+        textHash: 'hash-two',
+      }),
+    )
+
+    const entries = await memory.memoryEntries('session-one')
+    expect(entries).toHaveLength(1)
+    expect(entries[0]?.personaVersion).toBe('character-fixture@1')
+  })
+})
+
+describe('M4 character budget', () => {
+  it('honours a zero character budget instead of keeping one turn', async () => {
+    const memory = createDeliveryMemoryStore()
+    await memory.commit(
+      fixtureCommitDelivery({ turnId: 'turn-a', segmentId: 'seg-0', textHash: 'hash-a' }),
+    )
+
+    const capture = captureView()
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      history: memory,
+      textSource: capturingTextSource(capture),
+    })
+    await generate(
+      port,
+      fixtureDialogueRequest({ contextLimits: { maxTurns: 8, maxCharacters: 0 } }),
+    )
+
+    expect(capture.view?.turns).toEqual([])
+    expect(capture.view?.estimatedCharacters).toBe(0)
+    expect(capture.view?.truncatedByCharacterLimit).toBe(true)
+    expect(
+      capture.view?.warnings.some((warning) => warning.includes('newest confirmed turn')),
+    ).toBe(true)
+  })
+
+  /*
+   * The cap is hard, so a turn longer than the whole budget is dropped rather than
+   * kept over budget. Stored evidence is untouched: only the context view shrinks.
+   */
+  it('drops the newest turn when it alone exceeds the character budget', async () => {
+    const memory = createDeliveryMemoryStore()
+    await memory.commit(
+      fixtureCommitDelivery({
+        turnId: 'turn-long',
+        segmentId: 'seg-0',
+        textHash: 'hash-long',
+        text: `${'x'.repeat(200)}.`,
+      }),
+    )
+
+    const capture = captureView()
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      history: memory,
+      textSource: capturingTextSource(capture),
+    })
+    await generate(
+      port,
+      fixtureDialogueRequest({ contextLimits: { maxTurns: 8, maxCharacters: 40 } }),
+    )
+
+    expect(capture.view?.turns).toEqual([])
+    expect(capture.view?.exclusions.some((entry) => entry.reason === 'character-budget')).toBe(true)
+    expect(memory.records()).toHaveLength(1)
+  })
+
+  /*
+   * Recall is charged to the same budget, so it has to fit too. Warning only would
+   * let recall consume the whole cap and silently starve history on every turn.
+   */
+  it('drops recalled facts that cannot fit the character budget', async () => {
+    const capture = captureView()
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      textSource: capturingTextSource(capture),
+      personaRecall: {
+        recall: () => [
+          { fact: { id: 'small', text: 'Short.', keywords: [] }, score: 2 },
+          { fact: { id: 'huge', text: 'x'.repeat(500), keywords: [] }, score: 1 },
+        ],
+      },
+    })
+    await generate(
+      port,
+      fixtureDialogueRequest({ contextLimits: { maxTurns: 8, maxCharacters: 60 } }),
+    )
+
+    expect(capture.view?.recalledFacts.map((entry) => entry.fact.id)).toEqual(['small'])
+    expect(capture.view?.recallExclusions.map((entry) => entry.factId)).toEqual(['huge'])
+    expect(
+      capture.view?.warnings.some((warning) => warning.includes('recalled persona facts were dropped')),
+    ).toBe(true)
+  })
+
+  it('charges the rendering prefix and the interrupted marker', async () => {
+    const memory = createDeliveryMemoryStore()
+    await memory.commit(
+      fixtureCommitDelivery({
+        turnId: 'turn-cut',
+        segmentId: 'seg-0',
+        textHash: 'hash-cut',
+        text: 'We were just about to sa',
+      }),
+    )
+
+    const capture = captureView()
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      history: memory,
+      textSource: capturingTextSource(capture),
+    })
+    await generate(port)
+
+    const turn = capture.view?.turns[0]
+    expect(turn?.interrupted).toBe(true)
+    // '- ' prefix plus the text plus the marker, which is what the prompt contains.
+    expect(turn?.characters).toBe(2 + 'We were just about to sa'.length + ' [cut off mid-sentence]'.length)
+  })
+})
+
+describe('M4 history source composition', () => {
+  /*
+   * A local store holds only what this process has seen, so it is never a
+   * substitute for the durable source. Choosing it merely because it is non-empty
+   * would let one newly committed delivery replace reconstructed history.
+   */
+  it('treats the durable source as authoritative and the local store as attribution', async () => {
+    const durable = createDeliveryMemoryStore()
+    const local = createDeliveryMemoryStore()
+    for (const turnId of ['turn-1', 'turn-2', 'turn-3']) {
+      await durable.commit(
+        fixtureCommitDelivery({
+          turnId,
+          segmentId: 'seg-0',
+          textHash: `hash-${turnId}`,
+          text: `${turnId} line.`,
+        }),
+      )
+    }
+    // The port notes the persona while generating; M5 commits the delivery
+    // afterwards, so the attribution is already in place when the commit lands.
+    local.noteTurnPersona(FIXTURE_SESSION_ID, 'turn-3', 'character-fixture@0')
+    await local.commit(
+      fixtureCommitDelivery({
+        turnId: 'turn-3',
+        segmentId: 'seg-0',
+        textHash: 'hash-turn-3',
+        text: 'turn-3 line.',
+      }),
+    )
+
+    const capture = captureView()
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      history: durable,
+      memory: local,
+      textSource: capturingTextSource(capture),
+    })
+    await generate(
+      port,
+      fixtureDialogueRequest({ contextLimits: { maxTurns: 8, maxCharacters: 2000 } }),
+    )
+
+    const view = capture.view
+    expect(view?.historySource).toBe('history-port')
+    // Every durable record survives; the smaller local view does not truncate it.
+    expect(view?.turns.map((turn) => turn.turnId)).toEqual(['turn-1', 'turn-2', 'turn-3'])
+    // Attribution is the local store's job, and it only knows what it was told.
+    expect(view?.turns[2]?.personaVersion).toBe('character-fixture@0')
+    expect(view?.turns[0]?.personaVersion).toBeNull()
+  })
+
+  it('flags the in-memory store as a stand-in rather than durable history', async () => {
+    const memory = createDeliveryMemoryStore()
+    await memory.commit(
+      fixtureCommitDelivery({ turnId: 'turn-a', segmentId: 'seg-0', textHash: 'hash-a' }),
+    )
+
+    const capture = captureView()
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      memory,
+      textSource: capturingTextSource(capture),
+    })
+    await generate(port)
+
+    expect(capture.view?.historySource).toBe('local-stand-in')
+    expect(
+      capture.view?.warnings.some((warning) => warning.includes('no durable history source')),
+    ).toBe(true)
   })
 })

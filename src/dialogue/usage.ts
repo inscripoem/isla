@@ -1,16 +1,17 @@
 import type { UsageRecord } from '../contracts'
 
 /**
- * 对话用量报告。
+ * Dialogue usage reporting.
  *
- * 用量信息必须真实：M4-01 不调用模型，因此 token 数量报告为 null，
- * `usageMissing` 为 true。M4-02 通过同一个构造器提供实测数量；如果提供方
- * 没有返回数量，则保持 `usageMissing` 为 true，而不是臆造数字。
+ * Usage must be truthful: M4-01 calls no model, so token counts are reported as
+ * null with `usageMissing` true. M4-02 supplies measured counts through the same
+ * builder; if a provider returns no counts, `usageMissing` stays true rather than
+ * inventing numbers.
  */
 
 export const DIALOGUE_PROVIDER = 'isla-dialogue'
 
-/** 确定性 M4-01 文本源报告的模型身份。 */
+/** Model identity reported by the deterministic M4-01 text source. */
 export const FIXTURE_DIALOGUE_MODEL = 'fixture-v1'
 export const FIXTURE_DIALOGUE_MODEL_VERSION = 'fixture-v1'
 

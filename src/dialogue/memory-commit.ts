@@ -6,40 +6,55 @@ import type {
   DeliveryCommitAck,
 } from '../contracts'
 import type { MemoryEntry, MemoryEntrySource } from './context'
+import { deliveryKey, turnKey } from './delivery-key'
 import { classifyMemoryBucket } from './memory-semantics'
 
 /**
- * 交付记忆：生成文本只有在这里才能转为口述历史。
+ * Delivery memory: generated text only becomes spoken history here.
  *
- * 权限划分是有意设计的：
- *   - M4 决定生成是否结束（DialogueEnd）。
- *   - M1 决定声音是否实际播放（PerformanceReceipt）。
- *   - M5 决定交付如何分类（CommitDelivery）。
- *   - M4 只保存 M5 交付的结果，绝不升级分类。
+ * The division of authority is deliberate:
+ *   - M4 decides whether generation ended (DialogueEnd).
+ *   - M1 decides whether sound actually played (PerformanceReceipt).
+ *   - M5 decides how a delivery is classified (CommitDelivery).
+ *   - M4 only stores the result M5 delivered, and never upgrades a classification.
  *
- * 将未交付片段保存为已说内容，会使后续回复引用听众从未听到的话，因此下面的
- * 口述投影只接收 `fully-delivered` 记录。
+ * Storing an undelivered segment as already spoken would make later replies
+ * reference words the listener never heard, so the spoken projection below
+ * accepts only `fully-delivered` records.
+ *
+ * Call order (settled in issue #22, option 2): M5 builds the `RuntimeEvent`,
+ * allocates its session-scoped `seq` and calls M6's `commitDeliveryWithEvent`.
+ * `commit` here is a LOCAL VIEW UPDATE and must only be invoked after that
+ * atomic acknowledgement has succeeded. The ordering guarantee is persistence
+ * before spoken-memory admission.
+ *
+ * This store is not a durability claim. It holds only what this process has
+ * seen, so it must never be treated as the authoritative history source: see
+ * `assembleDialogueContext` for the composition rule.
  */
 
 type TerminalOutcome = CommitDelivery['terminalOutcome']
 
 /**
- * 策略——分类与 terminalOutcome 的配对（硬拒绝）。
+ * Policy — the pairing of a classification with a terminal outcome (hard reject).
  *
- * 原因：两个字段必须描述同一个结果。例如 `fully-delivered` + `failed` 是调用方
- * 错误，保存它会把从未播放的片段放入口述历史。
+ * The reason: the two fields describe one result. `fully-delivered` together with
+ * `failed`, for example, is a caller error, and storing it would put a segment
+ * that never played into spoken history.
  *
- * M4 负责人已批准将其作为拒绝规则，而不是警告。
+ * The module owner approved this as a rejection rule rather than a warning.
  *
- * 如需放宽，只改这里：
- *   1. 完全停止拒绝：将 `DELIVERY_PAIR_POLICY` 设为 'lenient'，`commit()` 将跳过
- *      检查并保存 M5 提供的任何配对。
- *   2. 缩小或扩大规则：编辑 `ALLOWED_DELIVERY_PAIRS`。配对只在该表中定义。
- *   3. 降级为记录警告：将 `commit()` 中的提前返回改为类似冲突的确认；被拒绝的
- *      配对不能复用 'applied' 状态。
+ * To relax it, change only this file:
+ *   1. Stop rejecting altogether: set `DELIVERY_PAIR_POLICY` to 'lenient' and
+ *      `commit()` skips the check and stores whatever pair M5 supplied.
+ *   2. Narrow or widen the rule: edit `ALLOWED_DELIVERY_PAIRS`. Pairs are defined
+ *      only in that table.
+ *   3. Downgrade to a logged warning: replace the early return in `commit()` with
+ *      a conflict-like acknowledgement. A rejected pair must not reuse the
+ *      'applied' status.
  *
- * 无论如何修改，都必须保留 `commit-no-overwrite`：冲突绝不覆盖已有记录，被拒绝
- * 的配对完全不会存储。
+ * Whatever changes, `commit-no-overwrite` must hold: a conflict never overwrites
+ * an existing record, and a rejected pair is not stored at all.
  */
 export type DeliveryPairPolicy = 'strict' | 'lenient'
 export const DELIVERY_PAIR_POLICY: DeliveryPairPolicy = 'strict'
@@ -48,7 +63,16 @@ export const ALLOWED_DELIVERY_PAIRS: Readonly<
   Record<DeliveryClassification, readonly TerminalOutcome[]>
 > = {
   'fully-delivered': ['completed'],
-  'partial-unknown': ['cancelled', 'unknown'],
+  /*
+   * `failed` belongs in this row. Playback started and then failed, so the
+   * audience did hear a fragment, which is exactly what `partial-unknown` means.
+   * C6 permits the combination and M5 produces it; rejecting it would leave M6
+   * holding a delivery M4 refused, degrading a session for a legitimate outcome.
+   *
+   * Accepting it does not weaken FR-02: admission still requires
+   * `fully-delivered`, so the record stays audit-only either way.
+   */
+  'partial-unknown': ['cancelled', 'unknown', 'failed'],
   'not-delivered': ['failed', 'cancelled', 'unknown'],
 }
 
@@ -60,51 +84,69 @@ export function isAllowedDeliveryPair(
 }
 
 /**
- * 已存交付及 M4 在旁边维护的版本元数据。
+ * A stored delivery plus the version metadata M4 keeps beside it.
  *
- * `personaVersion` 是 M4 内部字段：C6 线协议不携带它，M4 也不能为了记住说话者
- * 而向共享契约添加字段。对话端口记录回合使用的角色，下面的提交逻辑按 turnId
- * 查找它。null 表示 M4 没有记录，裁剪逻辑会将其视为当前版本，而不是过期版本。
+ * `personaVersion` is an M4-internal field: the C6 wire format does not carry it
+ * yet, and M4 must not add fields to the shared contract to remember who spoke.
+ * The dialogue port records which persona produced a turn, and the commit logic
+ * below looks it up. `null` means M4 has no record, and trimming then treats the
+ * record as current rather than stale.
  */
 export interface StoredDelivery {
   delivery: CommitDelivery
   personaVersion: string | null
-  /** 到达顺序，仅用于保持审计视图稳定。 */
+  /** Arrival order, kept only so the audit view is stable. */
   seq: number
 }
 
 /**
- * 对话端口生成回合时设置，M5 提交该回合交付时读取。保持接口窄化，使提交端口
- * 不依赖完整存储实现。
+ * Set by the dialogue port when it generates a turn, read when M5 commits that
+ * turn's delivery. Kept narrow so the commit port does not depend on a full
+ * store implementation.
+ *
+ * The session is required because a turn is only identified by
+ * `(sessionId, turnId)`: the session-scoped turn counter restarts for every
+ * session, so keying by `turnId` alone would hand one session's persona
+ * attribution to another session.
  */
 export interface TurnPersonaSink {
-  noteTurnPersona(turnId: string, personaVersion: string): void
+  noteTurnPersona(sessionId: string, turnId: string, personaVersion: string): void
 }
 
 /**
- * 对话端口需要的记忆能力：带版本的读取端，以及记录回合由哪个角色生成的位置。
- * `createDeliveryMemoryStore()` 同时满足两者；M4-02 可以改用 M6 存储而不改变
- * 此接口。
+ * The memory capability the dialogue port needs: a versioned read side, plus a
+ * place to record which persona generated a turn. `createDeliveryMemoryStore()`
+ * satisfies both; M4-02 can swap in M6-backed storage without changing this
+ * interface.
  */
 export type DialogueMemory = MemoryEntrySource & TurnPersonaSink
 
 export interface DeliveryMemoryStore {
-  /** 保存一次交付。操作幂等；矛盾输入绝不应用。 */
+  /** Store one delivery. Idempotent; a contradictory input is never applied. */
   commit(delivery: CommitDelivery): Promise<DeliveryCommitAck>
-  /** 仅返回口述历史：通过准入规则的记录。 */
+  /** Spoken history only: the records that passed admission. */
   confirmedHistory(sessionId: string): Promise<ConfirmedDelivery[]>
-  /** 完整审计视图，包括部分交付和从未交付的记录。 */
+  /** Full audit view, including partial deliveries and records never delivered. */
   records(): readonly CommitDelivery[]
-  /** 带版本元数据的审计视图；作为上下文组装的输入。 */
+  /** Audit view with version metadata; an input to context assembly. */
   audit(): readonly StoredDelivery[]
-  /** 提供给 `MemoryEntrySource` 的带版本确认记录。 */
+  /** Versioned confirmed records offered to `MemoryEntrySource`. */
   memoryEntries(sessionId: string): Promise<readonly MemoryEntry[]>
-  /** 记住哪个角色生成了某个回合。参见 TurnPersonaSink。 */
-  noteTurnPersona(turnId: string, personaVersion: string): void
+  /** Remember which persona generated a turn. See TurnPersonaSink. */
+  noteTurnPersona(sessionId: string, turnId: string, personaVersion: string): void
 }
 
-function deliveryRecordKey(delivery: CommitDelivery): string {
-  return `${delivery.turnId}:${delivery.segmentId}:${delivery.modality}`
+/**
+ * Isolation boundary — records are copied on the way in and on the way out.
+ *
+ * Without it a caller holds a reference to committed state, so mutating a
+ * delivery object after commit would silently rewrite history, including
+ * promoting a never-confirmed delivery into spoken history. The store is the only
+ * thing allowed to decide what a record means, so nothing outside it may retain a
+ * handle on one.
+ */
+function isolate(delivery: CommitDelivery): CommitDelivery {
+  return structuredClone(delivery)
 }
 
 function toConfirmedDelivery(delivery: CommitDelivery): ConfirmedDelivery {
@@ -154,13 +196,15 @@ export function createDeliveryMemoryStore(): DeliveryMemoryStore {
         }
       }
 
-      const key = deliveryRecordKey(delivery)
+      const key = deliveryKey(delivery)
       const existing = stored.get(key)
 
       if (existing === undefined) {
         stored.set(key, {
-          delivery,
-          personaVersion: turnPersona.get(delivery.turnId) ?? null,
+          delivery: Object.freeze(isolate(delivery)),
+          personaVersion:
+            turnPersona.get(turnKey({ sessionId: delivery.sessionId, turnId: delivery.turnId })) ??
+            null,
           seq: seq++,
         })
         return {
@@ -170,8 +214,11 @@ export function createDeliveryMemoryStore(): DeliveryMemoryStore {
         }
       }
 
-      // 文本哈希变化表示最终文本在稳定的片段身份下发生移动。这违反不可变性，
-      // 因此应报告冲突，而不是执行更新。
+      /*
+       * A changed text hash means the finalized text moved under a stable segment
+       * identity. That breaks immutability, so it is reported as a conflict
+       * rather than applied as an update.
+       */
       if (existing.delivery.textHash !== delivery.textHash) {
         return conflictAck(existing.delivery, delivery, key)
       }
@@ -188,29 +235,57 @@ export function createDeliveryMemoryStore(): DeliveryMemoryStore {
     },
 
     async confirmedHistory(sessionId) {
+      /*
+       * Ordered by arrival sequence within the session — the local analogue of
+       * M6's guarantee that persisted history returns in supporting-event `seq`
+       * order. Context assembly reads the tail as the most recent turns, so the
+       * order is part of the contract rather than an implementation accident.
+       *
+       * `seq` is session-scoped: it orders records within one session and must
+       * never be compared across sessions.
+       */
       return [...stored.values()]
         .filter((entry) => entry.delivery.sessionId === sessionId)
-        .filter((entry) => classifyMemoryBucket(toConfirmedDelivery(entry.delivery)).bucket === 'spoken')
+        .sort((left, right) => left.seq - right.seq)
+        .filter(
+          (entry) => classifyMemoryBucket(toConfirmedDelivery(entry.delivery)).bucket === 'spoken',
+        )
         .map((entry) => toConfirmedDelivery(entry.delivery))
     },
 
     records() {
-      return [...stored.values()].map((entry) => entry.delivery)
+      return [...stored.values()].map((entry) => isolate(entry.delivery))
     },
 
     audit() {
-      return [...stored.values()].sort((left, right) => left.seq - right.seq)
+      return [...stored.values()]
+        .sort((left, right) => left.seq - right.seq)
+        .map((entry) => ({
+          delivery: isolate(entry.delivery),
+          personaVersion: entry.personaVersion,
+          seq: entry.seq,
+        }))
     },
 
     async memoryEntries(sessionId) {
       return [...stored.values()]
         .filter((entry) => entry.delivery.sessionId === sessionId)
         .sort((left, right) => left.seq - right.seq)
-        .map((entry) => ({ delivery: toConfirmedDelivery(entry.delivery), personaVersion: entry.personaVersion }))
+        .map((entry) => ({
+          delivery: toConfirmedDelivery(entry.delivery),
+          personaVersion: entry.personaVersion,
+        }))
     },
 
-    noteTurnPersona(turnId, personaVersion) {
-      turnPersona.set(turnId, personaVersion)
+    noteTurnPersona(sessionId, turnId, personaVersion) {
+      /*
+       * Entries are never evicted. A receipt can arrive long after its turn was
+       * generated, and the attribution must still resolve to the persona that
+       * produced it, so dropping old entries would lose exactly the late-receipt
+       * case this exists for. The unbounded growth is a known limitation, to be
+       * resolved by the persistent attribution path (issue #22, item 3).
+       */
+      turnPersona.set(turnKey({ sessionId, turnId }), personaVersion)
     },
   }
 }

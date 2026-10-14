@@ -1,81 +1,95 @@
 /**
- * 人设事实的按需召回 —— **接口与开关**，实现留到 L3。
+ * On-demand recall of persona facts - the INTERFACE AND THE SWITCH. The
+ * implementation is left to layer L3.
  *
- * 为什么先落接缝而不落实现：
- *   1. 接口形状一旦在 M4-01 定型，NFR-03 的 A/B 归因口径就固定下来 —— 先有
- *      「召回开 / 关」这个轴，才谈得上比较召回对角色一致性的贡献。
- *   2. 开关默认 `off`，因此现有行为一字不变：不召回时上下文与今天完全相同，
- *      38 项测试不受影响。
+ * Why the seam lands before the implementation:
+ *   1. Once the interface shape is fixed in M4-01, the A/B attribution for NFR-03
+ *      is fixed with it: the "recall on / off" axis has to exist before anyone can
+ *      compare recall's contribution to character consistency.
+ *   2. The switch defaults to `off`, so existing behaviour is unchanged in every
+ *      respect: with no recall the context is identical to today's, and the M4
+ *      tests are unaffected.
  *
- * 为什么与交付记忆分开：
- *   - 交付记忆是**证据**（她说过什么），必须过 FR-02 准入、走 `MemoryCommitPort`。
- *   - 人设事实是**规范**（她是谁），来自角色设定集，不存在「听众有没有听到」，
- *     因此**不过准入、不进 `confirmedHistory`、不声称「她说过」**。
- *   两者可以共用检索机制，但数据源必须分离。
+ * Why it is kept separate from delivery memory:
+ *   - Delivery memory is EVIDENCE (what she said). It must pass FR-02 admission and
+ *     travel through `MemoryCommitPort`.
+ *   - Persona facts are a NORM (who she is). They come from the character bible,
+ *     where "did the audience hear it" does not apply, so they do NOT pass
+ *     admission, do NOT enter `confirmedHistory` and never claim "she said this".
+ *   The two may share a retrieval mechanism, but the data sources must stay apart.
  *
- * 硬约束（实现时必须遵守）：
- *   - 与 `standingFacts` 去重：已经每轮常驻的事实不再召回。
- *   - **不另开预算**：召回段与已确认历史共用 `contextLimits.maxCharacters`，
- *     召回越多，历史留下的空间越少。
- *   - 每条召回项必须带 provenance（来自设定集哪一条），使评审可以回溯。
+ * Hard constraints the implementation must obey:
+ *   - Deduplicate against `standingFacts`: a fact already rendered every turn must
+ *     not be recalled again.
+ *   - Do NOT open a second budget: the recall block shares
+ *     `contextLimits.maxCharacters` with confirmed history, so the more is
+ *     recalled, the less room history has. Context assembly enforces that cap, so
+ *     a port returning more than fits will have the excess dropped.
+ *   - Every recalled item must carry provenance (which bible entry it came from)
+ *     so a reviewer can trace it.
  */
 
-/** 召回策略。默认 `off`，便于 A/B 与 NFR-03 归因。 */
+/** Recall policy. Defaults to `off` so A/B and NFR-03 attribution stay possible. */
 export type PersonaRecallPolicy = 'off' | 'keyword'
 
 export const PERSONA_RECALL_POLICY: PersonaRecallPolicy = 'off'
 
 /**
- * 单次召回最多注入的事实条数。
+ * Maximum number of facts a single recall may inject.
  *
- * 与 `MAX_STANDING_FACTS` 同量级：常驻块已经占了预算的一大块，召回块再大就会
- * 挤掉本应支持的近期对话。
+ * The same order of magnitude as `MAX_STANDING_FACTS`: the standing block already
+ * takes a large share of the budget, and a larger recall block would crowd out the
+ * recent conversation it is supposed to support.
  */
 export const MAX_RECALLED_FACTS = 5
 
-/** 一条可召回的人设事实。`id` 必须能在角色设定集中找到，便于防漂移。 */
+/** One recallable persona fact. `id` must resolve inside the character bible. */
 export interface PersonaFact {
-  /** 稳定标识，用于去重与 provenance 渲染。 */
+  /** Stable identifier, used for deduplication and provenance rendering. */
   id: string
-  /** 事实文本，渲染进提示词。 */
+  /** Fact text, rendered into the prompt. */
   text: string
-  /** 触发关键词；本轮消息或近期历史命中即加分。 */
+  /** Trigger keywords; a hit in this turn's message or recent history scores it. */
   keywords: readonly string[]
-  /** 命中这些意图时加分。 */
+  /** Extra score when one of these intents is active. */
   intents?: readonly string[]
 }
 
-/** 召回结果，附带 provenance。 */
+/** A recall result, with provenance. */
 export interface RecalledFact {
   fact: PersonaFact
   score: number
 }
 
-/** 召回输入：只看本轮消息、近期历史与意图，不额外调用模型。 */
+/**
+ * Recall input: the current message, recent history and the intent only. No extra
+ * model call is made.
+ */
 export interface PersonaRecallRequest {
   inputText: string
   recentHistory: readonly string[]
   replyIntent: string
-  /** 已经常驻的事实文本，用于去重。 */
+  /** Fact texts already standing every turn, used for deduplication. */
   standingFacts: readonly string[]
 }
 
 /**
- * 人设事实来源与召回器。
+ * Persona fact source and recall implementation.
  *
- * 实现应为**确定性打分**，不额外调用模型：零延迟、零成本、可复现（NFR-03 人工
- * 评估需要）、离线可测，并避开校园网关的限流。将来若换 LLM/embedding 实现，
- * 接口不变。
+ * The implementation must be DETERMINISTIC scoring, with no extra model call: zero
+ * latency, zero cost, reproducible (NFR-03 human evaluation needs that), testable
+ * offline, and clear of the campus gateway rate limit. If an LLM or embedding
+ * implementation replaces it later, the interface stays the same.
  */
 export interface PersonaRecallPort {
   recall(request: PersonaRecallRequest): readonly RecalledFact[]
 }
 
 /**
- * `off` 策略下的空召回器。
+ * The empty recall implementation used under the `off` policy.
  *
- * 返回空结果而不是抛错：调用方不需要为「召回未启用」写分支，上下文组装保持
- * 单一代码路径。
+ * It returns an empty result rather than throwing, so callers need no branch for
+ * "recall is not enabled" and context assembly keeps a single code path.
  */
 export function createDisabledPersonaRecall(): PersonaRecallPort {
   return {

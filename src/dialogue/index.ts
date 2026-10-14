@@ -1,6 +1,8 @@
-// 按领域导出对话模块的公共接口、实现和策略定义。
+// Public interfaces, implementations and policy definitions of the dialogue
+// module, exported by area.
 export * from './text'
 export * from './segment-id'
+export * from './delivery-key'
 export * from './usage'
 export * from './persona'
 export * from './persona-content'
