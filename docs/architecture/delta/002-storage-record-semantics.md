@@ -39,7 +39,9 @@ Zero imports of the old signatures remain.
 | `src/storage/event-store.ts` | pass `sessionId` to `eventById`; delivery mutation carries `eventSeq`; a failed atomic commit reports the actual cause (`conflict` / `unsupported_payload` / `storage_unavailable`) on both sides; validates the payload (JSON-value contract) before publication; content equality via `canonicalJson` (key order irrelevant, array order significant) |
 | `src/storage/history-query.ts` | takes the backend; filters + sorts by `eventSeq` |
 | `test/support/correct-ports.ts` | session-scoped event identity (reference matches C7) |
-| `test/offline/m6-storage.test.ts` | cross-session, isolation, ordering and batch-atomicity regressions |
+| `test/offline/m6-storage.test.ts` | cross-session, isolation, ordering, batch-atomicity and payload-contract regressions |
+| `docs/architecture/{option-ledger,memory-design}.md` | record the rejected "keep patching the serializer" option (OL-005) and the JSON-payload write rule |
+| `docs/team/REQUIREMENTS.en.md` | INV-04 row: canonical equality + JSON payload contract |
 
 ## FROZEN
 

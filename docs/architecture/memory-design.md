@@ -35,6 +35,10 @@ live authority by M5. Shared document — M5 coordination pending. Date: 2026-10
    `not-delivered` segment keeps its outcome across restart and cannot replay as delivered.
 5. Schema versioning is separate from contract version `0.2`. Back up before migrating; reject
    unsupported schema versions; migrations are idempotent.
+6. An event **payload must be a JSON value** (INV-04): a value JSON cannot represent (undefined,
+   function, symbol, bigint, non-finite number, sparse-array hole, `Date`/`Map`/`Set`, cycle) is
+   rejected with `unsupported_payload` before publication, so the durable store never silently alters
+   it. Accepted content compares canonically: object key order irrelevant, array order significant.
 
 ## Retrieval policy
 
