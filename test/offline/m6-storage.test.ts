@@ -415,6 +415,21 @@ describe('M6 atomic commit failure causes (C-39)', () => {
   })
 })
 
+describe('M6 content equality is key-order insensitive (C-40)', () => {
+  it('treats an event with the same content in a different key order as a duplicate', async () => {
+    const store = createEventStore()
+    await store.append(fixtureRuntimeEvent({ eventId: 'eq-1', seq: 1, payload: { a: 1, b: 2 } }))
+
+    // Same logical content; the payload object lists its keys in another order.
+    const reordered = fixtureRuntimeEvent({ eventId: 'eq-1', seq: 1, payload: { b: 2, a: 1 } })
+    expect((await store.append(reordered)).outcome).toBe('duplicate')
+
+    // A genuinely different payload is still a conflict.
+    const changed = fixtureRuntimeEvent({ eventId: 'eq-1', seq: 1, payload: { a: 1, b: 3 } })
+    expect((await store.append(changed)).outcome).toBe('failed')
+  })
+})
+
 describe('M6 JSONL export (FR-06)', () => {
   it('carries event version attribution', async () => {
     const store = createEventStore()

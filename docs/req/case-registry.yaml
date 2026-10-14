@@ -180,3 +180,10 @@ cases:
     verifier:
       file: test/offline/m6-storage.test.ts
       test: "reports a conflict (not a storage failure) when the supporting event id is reused with changed content"
+
+  - id: C-40
+    status: implemented
+    title: Event content equality is insensitive to object key order
+    verifier:
+      file: test/offline/m6-storage.test.ts
+      test: "treats an event with the same content in a different key order as a duplicate"

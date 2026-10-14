@@ -41,6 +41,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-25 | implemented | `test/offline/m6-storage.test.ts` | confirmed history is ordered by the supporting event sequence |
 | C-38 | implemented | `test/offline/m6-storage.test.ts` | a commit whose later mutation cannot be published leaves no partial state |
 | C-39 | implemented | `test/offline/m6-storage.test.ts` | a conflicting atomic commit reports the conflict cause on both sides |
+| C-40 | implemented | `test/offline/m6-storage.test.ts` | event content equality is insensitive to object key order |
 
 ## Requirement trace
 
@@ -61,7 +62,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-01 | M5 | C-03, C-04 | — |
 | INV-02 | M5 | C-06 | — |
 | INV-03 | M5 | C-07 | — |
-| INV-04 | M6 | C-18, C-23, C-39 | — |
+| INV-04 | M6 | C-18, C-23, C-39, C-40 | — |
 | INV-05 | M6 | C-19, C-38 | — |
 | INV-06 | M6 | C-20 | — |
 | INV-07 | M6 | C-24 | — |

@@ -1,7 +1,7 @@
 # Delta Specification 002 — Storage record semantics
 
 Status: under review (M6). Date: 2026-10-13. ADR: ADR-002. Requirements: FR-06.
-Invariants: INV-04, INV-05, INV-07, INV-08. Cases: C-19, C-23, C-24, C-25, C-38, C-39.
+Invariants: INV-04, INV-05, INV-07, INV-08. Cases: C-19, C-23, C-24, C-25, C-38, C-39, C-40.
 Revision type: ADD-R (PR #9 review; structure passed, contract semantics corrected).
 
 ## OBSOLETED
@@ -27,6 +27,7 @@ Zero imports of the old signatures remain.
 | Atomicity regression (later unpublishable mutation leaves no partial state) | `test/offline/m6-storage.test.ts` | M6 test |
 | Conflict-cause report on both acknowledgements (`conflict` vs `storage_unavailable`) | `src/storage/event-store.ts` | runtime-policy catalog |
 | Conflict-cause regression | `test/offline/m6-storage.test.ts` | M6 test |
+| Canonical content equality (`canonical`, key-order-insensitive) | `src/storage/event-store.ts` | ADR-002 D1 |
 
 ## MODIFIED
 
@@ -34,7 +35,7 @@ Zero imports of the old signatures remain.
 | --- | --- |
 | `src/storage/backend.ts` | contract: `commit` must complete fallible preparation of the whole batch before publishing any mutation (INV-05/D4) |
 | `src/storage/in-memory-backend.ts` | key by `sessionId:eventId`; copy on write/read; `commit` prepares the whole batch, then publishes |
-| `src/storage/event-store.ts` | pass `sessionId` to `eventById`; delivery mutation carries `eventSeq`; a failed atomic commit reports `conflict` (not `storage_unavailable`) on both sides when the cause is a conflict |
+| `src/storage/event-store.ts` | pass `sessionId` to `eventById`; delivery mutation carries `eventSeq`; a failed atomic commit reports `conflict` (not `storage_unavailable`) on both sides when the cause is a conflict; content equality is canonical (key-order-insensitive) |
 | `src/storage/history-query.ts` | takes the backend; filters + sorts by `eventSeq` |
 | `test/support/correct-ports.ts` | session-scoped event identity (reference matches C7) |
 | `test/offline/m6-storage.test.ts` | cross-session, isolation, ordering and batch-atomicity regressions |

@@ -229,6 +229,9 @@ requirements:
       - kind: deterministic
         description: A conflicting atomic commit reports the conflict cause on both the delivery and the event acknowledgement and persists nothing (FR-06; C-17).
         cases: [C-39]
+      - kind: deterministic
+        description: Event content equality is canonical (object key order is irrelevant), so a re-serialised equivalent event is a duplicate rather than a conflict (FR-06).
+        cases: [C-40]
 
   - id: INV-05
     title: A delivery and its supporting event commit atomically

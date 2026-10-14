@@ -38,6 +38,9 @@ import { createInMemoryBackend } from './in-memory-backend'
  * exportJsonl(sessionId)  -> one JSON string per committed event, newline joined,
  *                            matching `readSession` exactly.
  *
+ * Content equality is canonical: object key order is irrelevant, so a
+ * re-serialised equivalent event is a `duplicate`, not a `conflict` (ADR-002 D1).
+ *
  * Persistence seam
  * ----------------
  * All reads and the single atomic write go through an injected `StorageBackend`
@@ -52,8 +55,48 @@ import { createInMemoryBackend } from './in-memory-backend'
  * - Replay reads through `readSession`; it never mutates live state (C-12).
  */
 
+/**
+ * Canonical, key-order-insensitive rendering of a JSON-like value, used to
+ * decide whether two events carry "the same content" (ADR-002 D1). Object keys
+ * are sorted recursively; values JSON would drop (functions, `undefined`,
+ * symbols) or reject (`bigint`, cycles) get a stable marker so two structurally
+ * different events never compare equal by accident.
+ */
+function canonical(value: unknown, seen: WeakSet<object> = new WeakSet()): string {
+  if (value === null) return 'null'
+  switch (typeof value) {
+    case 'bigint':
+      return `bigint:${String(value)}`
+    case 'function':
+      return 'function'
+    case 'symbol':
+      return `symbol:${String(value)}`
+    case 'undefined':
+      return 'undefined'
+    case 'object':
+      break
+    default:
+      return JSON.stringify(value)
+  }
+  const object = value as object
+  if (seen.has(object)) return 'cycle'
+  seen.add(object)
+  let rendered: string
+  if (Array.isArray(object)) {
+    rendered = `[${object.map((item) => canonical(item, seen)).join(',')}]`
+  } else {
+    const entries = Object.keys(object as Record<string, unknown>)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonical((object as Record<string, unknown>)[key], seen)}`)
+    rendered = `{${entries.join(',')}}`
+  }
+  seen.delete(object)
+  return rendered
+}
+
+/** True when two values have the same canonical content (key order irrelevant). */
 function sameContent(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a) === JSON.stringify(b)
+  return canonical(a) === canonical(b)
 }
 
 function toConfirmedDelivery(delivery: {

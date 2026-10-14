@@ -71,3 +71,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Self-review: the catalog promises a `conflict` response; ADR-002 D1"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-storage
+    change: "PR #9 follow-up: canonical (key-order-insensitive) event content equality, so a re-serialised equivalent event is a duplicate not a conflict"
+    requirements: [FR-06]
+    invariants: [INV-04]
+    cases: [C-40]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Self-review: the documented decision is canonical equality; the code used JSON.stringify; ADR-002 D1"
