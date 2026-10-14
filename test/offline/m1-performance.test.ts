@@ -24,7 +24,8 @@ import {
   createTestDeadlineGate,
   createTestReceiptTools,
 } from '../support/m1-kit'
-import type { RendererObservation } from '../../src/performance/mapped-renderer'
+import type { RendererDriver, RendererObservation } from '../../src/performance/mapped-renderer'
+import type { DeadlineGate } from '../../src/performance/browser/types'
 import { createFixedSynthesis, type FixedAudioEntry } from '../../src/performance/fixed-synthesis'
 import { createMappedRenderer } from '../../src/performance/mapped-renderer'
 import { createVirtualClock } from '../support/virtual-clock'
@@ -333,6 +334,52 @@ describe('M1 mapped-renderer adapter', () => {
     const receipt = await kit.renderer.execute(fixturePerformanceCommand(), createCallContext())
     expect(receipt).toMatchObject({ stage: 'failed', reasonCode: 'driver_error' })
     expect(kit.gate.releaseCount()).toBe(1)
+  })
+
+  it('settles failed/driver_error when the driver throws before returning, releasing once', async () => {
+    let dispatchCount = 0
+    const throwingDriver: RendererDriver = {
+      dispatch: (_action, _signal) => {
+        dispatchCount += 1
+        throw new Error('sync driver boom')
+      },
+    }
+    let releaseInvocations = 0
+    const gate: DeadlineGate = {
+      bind: (context) => ({
+        signal: context.signal,
+        release: () => {
+          releaseInvocations += 1
+        },
+      }),
+    }
+    const receipts = createTestReceiptTools()
+    const renderer = createMappedRenderer({
+      snapshot: fixtureCapabilitySnapshot(),
+      bindings: [
+        { actionId: 'neutral', driverAction: 'driver:neutral' },
+        { actionId: 'smile', driverAction: 'driver:smile' },
+      ],
+      driver: throwingDriver,
+      deadlineGate: gate,
+      receipts,
+    })
+    const command = fixturePerformanceCommand()
+    const receipt = await renderer.execute(command, createCallContext())
+    expect(receipt).toMatchObject({
+      stage: 'failed',
+      reasonCode: 'driver_error',
+      modality: 'avatar',
+      source: 'm1-mapped-renderer',
+      outputId: command.outputId,
+      sessionId: command.sessionId,
+      epoch: command.epoch,
+      turnId: command.turnId,
+      segmentId: command.segmentId,
+    })
+    expect(performanceReceiptSchema.safeParse(receipt).success).toBe(true)
+    expect(dispatchCount).toBe(1)
+    expect(releaseInvocations).toBe(1)
   })
 
   it('turns an acceptance-only completion observation into unknown', async () => {
