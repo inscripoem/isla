@@ -1,4 +1,4 @@
-import type { EventStorePort, MemoryProjectionPort } from '../../src/contracts'
+import type { EventStorePort, HistoryQueryPort, MemoryProjectionPort } from '../../src/contracts'
 import { createChecker } from '../support/violations'
 import type { Violation } from '../support/violations'
 import { FIXTURE_SESSION_ID, fixtureCommitDelivery, fixtureRuntimeEvent } from '../support/fixture-data'
@@ -6,6 +6,8 @@ import { FIXTURE_SESSION_ID, fixtureCommitDelivery, fixtureRuntimeEvent } from '
 export interface StorageKit {
   store: EventStorePort
   projection: MemoryProjectionPort
+  /** Confirmed-history port (M4's only M6 consumer). Checked when supplied. */
+  history?: HistoryQueryPort
   setFailNextCommit?: () => void
 }
 
@@ -65,6 +67,53 @@ export async function collectStorageViolations(create: () => StorageKit): Promis
     check('atomic-failure-reported', failed.event.outcome === 'failed', 'a failed atomic write must report failure')
     const after = (await store.readSession(FIXTURE_SESSION_ID)).length
     check('atomic-no-partial-mutation', after === before, 'a failed atomic write must not persist a partial event')
+  }
+
+  // Event identity is session-scoped (INTERFACES C7): the same event id in two
+  // sessions must be stored independently.
+  const otherSessionId = 'session-conformance-other'
+  const otherSessionEvent = fixtureRuntimeEvent({
+    sessionId: otherSessionId,
+    eventId: 'evt-1',
+    seq: 1,
+  })
+  const otherAck = await store.append(otherSessionEvent)
+  check(
+    'append-session-scoped-identity',
+    otherAck.outcome === 'stored',
+    'the same event id in a different session must be stored independently',
+  )
+  const otherEvents = await store.readSession(otherSessionId)
+  check(
+    'read-session-isolated',
+    otherEvents.length === 1 && otherEvents[0]?.eventId === 'evt-1',
+    'each session must read its own events independently',
+  )
+
+  if (kit.history !== undefined) {
+    // A not-delivered record must never appear in confirmed spoken history.
+    const notDelivered = fixtureCommitDelivery({
+      turnId: 'turn-hist',
+      segmentId: 'seg-hist',
+      textHash: 'hash-hist',
+      text: 'unspoken',
+      classification: 'not-delivered',
+    })
+    await store.commitDeliveryWithEvent(
+      notDelivered,
+      fixtureRuntimeEvent({ eventId: 'evt-hist', seq: 100, type: 'delivery.committed' }),
+    )
+    const confirmed = await kit.history.confirmedHistory(FIXTURE_SESSION_ID)
+    check(
+      'history-fully-delivered-only',
+      confirmed.length > 0 && confirmed.every((record) => record.classification === 'fully-delivered'),
+      'confirmed history must include only fully-delivered records',
+    )
+    check(
+      'history-excludes-not-delivered',
+      confirmed.every((record) => record.turnId !== 'turn-hist'),
+      'a not-delivered record must not appear in confirmed history',
+    )
   }
 
   return violations()

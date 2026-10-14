@@ -1,7 +1,106 @@
-# AI-use log for the project record requirement (D1 / G6).
-# English entries for supervised code and prompt changes.
+# AI-use log (D1 / gate G6)
+# A pull request that changes code or prompts must update this file.
+# One entry per supervised change. English only.
 version: 1
 entries:
+  - date: 2026-10-12
+    task: M6-01
+    branch: m6-storage
+    change: "Implement in-memory M6 storage ports (EventStorePort, MemoryProjectionPort, ReplayReaderPort, HistoryQueryPort)"
+    requirements: [FR-06]
+    invariants: [INV-04, INV-05, INV-06]
+    commits: [f6bfae0, 77791d5]
+    agent: opencode/deepseek-v4-flash
+    human_review: "Corrected a production fault-injection API leak; moved failure injection into the test adapter"
+  - date: 2026-10-12
+    task: M6-01
+    branch: m6-storage
+    change: "Replace production fault hooks with an injected StorageBackend (ADR-001); add traceability artifacts"
+    requirements: [FR-06]
+    invariants: [INV-04, INV-05, INV-06]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Directed by the M6 owner after reviewing AGENTS.md and READINESS-KITS"
+  - date: 2026-10-13
+    task: M6-01
+    branch: m6-storage
+    change: "Session-scope event identity (PR #9 review item 1); fixture aligned to C7"
+    requirements: [FR-06]
+    invariants: [INV-04]
+    cases: [C-23]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "M5 review requested session scoping; implemented with ADR-002"
+  - date: 2026-10-13
+    task: M6-01
+    branch: m6-storage
+    change: "Isolate committed records (deep copy on write/read); back the history query by the store (PR #9 review item 2)"
+    requirements: [FR-06]
+    invariants: [INV-07]
+    cases: [C-24]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "M5 review requested an isolation boundary; implemented with ADR-002"
+  - date: 2026-10-13
+    task: M6-01
+    branch: m6-storage
+    change: "Order confirmed history by the supporting event seq (PR #9 review item 3; issue #22 ordering wording)"
+    requirements: [FR-06]
+    invariants: [INV-08]
+    cases: [C-25]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "M5 review required the documented ordering; implemented with ADR-002"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-storage
+    change: "PR #9 follow-up: make StorageBackend.commit atomic across the whole batch (prepare all, then publish); a later unpublishable mutation leaves no partial state"
+    requirements: [FR-06]
+    invariants: [INV-05]
+    cases: [C-38]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "M5 re-review (Medium): preserve atomicity when a later mutation fails; ADR-002 D4"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-storage
+    change: "PR #9 follow-up: report a conflicting atomic commit as `conflict` (not `storage_unavailable`) on both the delivery and the event acknowledgement"
+    requirements: [FR-06]
+    invariants: [INV-04]
+    cases: [C-39]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Self-review: the catalog promises a `conflict` response; ADR-002 D1"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-storage
+    change: "PR #9 follow-up: canonical (key-order-insensitive) event content equality, so a re-serialised equivalent event is a duplicate not a conflict"
+    requirements: [FR-06]
+    invariants: [INV-04]
+    cases: [C-40]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Self-review: the documented decision is canonical equality; the code used JSON.stringify; ADR-002 D1"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-storage
+    change: "PR #9 follow-up: canonical content equality compares non-plain values by content (Date/Map/Set via JSON semantics) and keeps array order significant; hardened tests"
+    requirements: [FR-06]
+    invariants: [INV-04]
+    cases: [C-40, C-41]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Self-review (mock M5): the first canonical implementation flattened Date payloads to `{}`; ADR-002 D1"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-storage
+    change: "PR #9 follow-up: define an event payload contract (JSON values) and reject unsupported payloads with `unsupported_payload` before publication; canonical comparison for accepted values (fixes sparse-array-vs-empty equality)"
+    requirements: [FR-06]
+    invariants: [INV-04]
+    cases: [C-41, C-43, C-44]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "M5 re-review: sparse array conflated with empty array; ADR-002 D1"
   - date: "2026-10-13"
     task: M1-01-A
     branch: feat/m1-01-adapters

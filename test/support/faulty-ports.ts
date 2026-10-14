@@ -1,3 +1,4 @@
+import type { StoredDelivery } from '../../src/storage'
 import type {
   AppendAck,
   AtomicCommitAck,
@@ -8,6 +9,7 @@ import type {
   DialogueEnd,
   DialoguePort,
   EventStorePort,
+  HistoryQueryPort,
   InputAck,
   MemoryProjectionPort,
   PlayerPort,
@@ -304,6 +306,20 @@ export function createFaultyEventStore(): FaultyEventStore {
   }
   record.store = store
   return record
+}
+
+export function createFaultyHistoryQuery(source: {
+  storedDeliveries(): readonly StoredDelivery[]
+}): HistoryQueryPort {
+  return {
+    async confirmedHistory(sessionId) {
+      // Fault: returns every record for the session in insertion order, including partial/not-delivered.
+      return source
+        .storedDeliveries()
+        .map(({ record }) => record)
+        .filter((record) => record.sessionId === sessionId)
+    },
+  }
 }
 
 export function createFaultyMemoryProjection(): MemoryProjectionPort & { appliedCount: () => number } {
