@@ -208,6 +208,20 @@ cases:
     verifier:
       file: test/offline/m6-sqlite-backend.test.ts
       test: "persists the delivery terminal outcome for recovery"
+
+  - id: C-32
+    status: implemented
+    title: Recovery view separates confirmed history from unresolved records
+    verifier:
+      file: test/offline/m6-recovery.test.ts
+      test: "separates confirmed history from unresolved records (in-memory)"
+
+  - id: C-33
+    status: implemented
+    title: Restart restores only confirmed history and keeps the rest unknown
+    verifier:
+      file: test/offline/m6-recovery.test.ts
+      test: "restores only confirmed history after reopen and keeps the rest unknown (no replay)"
   - id: C-38
     status: implemented
     title: A commit whose later mutation cannot be published leaves no partial state

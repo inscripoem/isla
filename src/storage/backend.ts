@@ -42,10 +42,12 @@ export type StorageMutation =
       readonly terminalOutcome: CommitDelivery['terminalOutcome']
     }
 
-/** A committed delivery with the sequence of its supporting event. */
+/** A committed delivery with the sequence and outcome of its supporting event. */
 export interface StoredDelivery {
   readonly record: ConfirmedDelivery
   readonly eventSeq: number
+  /** Terminal outcome persisted for recovery (C-17) — never upgraded later. */
+  readonly terminalOutcome: CommitDelivery['terminalOutcome']
 }
 
 /** Composite delivery identity: sessionId:turnId:segmentId:modality. */

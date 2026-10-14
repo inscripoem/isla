@@ -53,6 +53,7 @@ Every final entry requires metric + threshold + verification. TBD means not read
 | INV-09 | Original segment index and generating persona identity/version remain attached to delivery evidence. FR-06; issue #22. | M5 capture and M6 record conversion | C-46/C-47; preserve original values on Stop/late receipts, reject changed attribution as a conflict, reject an inconsistent classification/outcome pair and contradictory known provenance before mutation, retain legacy unknowns as null. |
 | INV-10 | Storage configuration and schema version are validated before use; an empty override or an unsupported schema version is rejected. FR-06. | M6 storage (`config`, `sqlite/migrations`) | Cases C-26/C-27; fail-fast on empty override; reject unsupported version. |
 | INV-11 | A schema migration is recoverable: back up before apply; migrations and the version bump apply as one transaction. FR-06. | M6 storage (`sqlite/migrations`) | Cases C-27/C-28; a failure rolls back, leaves the prior version intact, and a backup exists. |
+| INV-12 | On restart only confirmed history is restored; unresolved outputs remain unknown and are never replayed. FR-06; C7, C-17. | M6 storage (`recovery-view`) + M5 lifecycle | Cases C-32/C-33; the recovery view separates confirmed from unresolved; no fabricated completion. |
 
 ## Promotion to D1
 

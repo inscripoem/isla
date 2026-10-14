@@ -91,3 +91,10 @@ turns pending recovery; **Stop and local cancellation never wait for a database 
 - **Backend (B2; ADR-004):** `src/storage/sqlite/backend.ts` implements `StorageBackend` over this
   schema — reads build fresh rows (INV-07), `commit` is one transaction (INV-05), `event_seq` orders
   history (INV-08); the full delivery including `terminal_outcome` is persisted for recovery (C-17).
+
+## Recovery (B3; ADR-005)
+
+- On restart, `createRecoveryView` separates `confirmed` (fully-delivered, ordered by supporting event
+  `seq`) from `unresolved` (partial/unknown or not-delivered, with their terminal outcome).
+- **Only confirmed history is restored**; unresolved records remain `unknown` and are **never
+  replayed** (INV-11). M5 owns the lifecycle (new stopped session, blocked turns); M6 owns the data.
