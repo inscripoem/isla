@@ -204,3 +204,84 @@ entries:
       release invocation. The fixture player remains identified. A production
       same-domain expiry-aborting DeadlineGate is a coordinated I1-01 requirement;
       browser increment B and other owners' modules are unchanged by this correction.
+  - date: "2026-10-15"
+    task: M1-01-B
+    branch: feat/m1-01-player
+    member: Pioneer141 (M1)
+    change: >-
+      Implement single-output fixed-audio browser playback, the shared PlayerPort
+      adapter, an HTMLAudioElement driver and browser-safe public exports. Add
+      controlled real-player tests and an isolated localhost demonstration with
+      registered fixed speech assets; preserve increment A and shared contracts.
+    requirements: [FR-04, FR-05, NFR-06]
+    invariants: [INV-01]
+    commits: []
+    agent: opencode/deepseek-flash
+    provider: deepseek
+    model: deepseek-flash
+    opencode_version: 1.18.34
+    launch_flags: [--pure, --agent, build, --variant, xhigh, --auto]
+    sessions:
+      - ses_ec4ddc964ffe3niUxGTrN7EdbC
+      - ses_ec4d021abffetKtAtVh3qgdQW3
+    supervision: >-
+      Codex coordinated genuine native OpenCode execution, captured evidence,
+      independently ran checks and arranged independent AI code review. Application
+      source, tests and demonstration were authored through OpenCode. Codex prepared
+      this metadata. The user's temporary project-only override selects official
+      deepseek/deepseek-flash; historical CityU-model entries remain unchanged.
+    human_review: >-
+      The M1 member approved P001 v02 and interface/test design v04, then instructed
+      execution of the prepared next increment. Human M2 and M5 consumer review:
+      pending; M2 and M5 are the requested functional consumers at publication. Independent AI review:
+      no remaining material findings in the final working-tree version, with 14 file hashes retained privately; it does not constitute consumer approval.
+      Agents do not merge this repository.
+    transcript_record: >-
+      Complete unedited run JSONL and stderr, cumulative native session exports and
+      export stderr are retained privately per execution round. The second genuine
+      session began correction round 2 and was explicitly continued for rounds 3 and 4; failed
+      regressions and correction chronology remain in their original records.
+      All four raw files for every round are saved and audited against the expected official provider/model; all run/export exits are zero. Summaries and annotations
+      do not replace raw originals; private transcripts are excluded from this repository.
+    fixed_assets: >-
+      Two pre-generated Windows System.Speech.Synthesis Microsoft David Desktop
+      en-US WAV assets (rate 0, volume 100) match the fixture dialogue. Registered
+      references, measured frame-derived durations, Blob maps and SHA-256 hashes are
+      checked together. These fixed assets do not establish runtime Kokoro integration.
+    verification:
+      platform: Windows
+      node: 24.14.1
+      pnpm: 12.12.0
+      baseline_m1: "pnpm test:m1: 45 passed on main 3668e4c before implementation."
+      baseline_full_suite: >-
+        pnpm verify: 315 passed, 6 failed and 3 unhandled tsx spawn errors.
+        The six named failures are three import-boundary negative cases and three
+        runtime CLI cases; typecheck and lint passed.
+      regression_sequence: >-
+        Genuine correction rounds retain their actual failing regressions before
+        repair, including deferred cleanup/cancellation and pending-resolver disposal.
+        Round 2 recorded 7 failed/86 passed before repair; round 4 recorded 3 failed/95 passed before repair, then 98 passed. Independent probes exposed the intermediate create/cancel/dispose defects and are preserved.
+      m1: "pnpm test:m1: 98 passed; independently rerun on the final B working-tree version based on 3668e4c"
+      typecheck: "passed"
+      lint: "passed"
+      build: "passed"
+      full_suite: >-
+        pnpm verify: 368 passed, the same six named baseline failures and three tsx ENOENT errors.
+        Typecheck and lint passed; build passed independently. Full verification is not green on Windows.
+      browser: >-
+        Chrome 155 / Windows against final source hashes observed natural completion, Stop, active Dispose and rejection after disposal. Use actual HTMLAudioElement
+        playing/ended events for natural completion and cancelled receipts plus
+        paused/cleared-src/object-URL cleanup observations for Stop. These are media
+        API observations, not physical acoustic output or silence measurements.
+      browser_boundary: >-
+        Final actual browser/index.ts graph passed: 12 source files, no Node/backend/test or unresolved relative imports. The existing shared
+        checker and negative assertions remain unchanged; permanent actual-entry
+        coverage requires M5/M6 coordination.
+      ci: "Pending for the new branch head when this record was written; corresponding CI status is reported in the PR and Issue progress comment"
+    scope: >-
+      Actual local playback controller, PlayerPort wrapper and DOM driver, with
+      controlled dependencies for automated tests and real browser media-API
+      observation in an isolated demo. M2 product wire/bootstrap and M5 authoritative
+      deadline/start-aware delivery-history integration remain pending. Live
+      Kokoro/VTS, acoustic/network timing and complete product acceptance are not
+      established. Issue 2 remains open with unfinished M1-01/M1-02 items unchecked.

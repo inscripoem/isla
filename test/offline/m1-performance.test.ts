@@ -1,6 +1,17 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { CapabilitySnapshot, ClockPort, PerformanceCommand, PreparePerformance } from '../../src/contracts'
-import { NO_OP_ACTION, performanceReceiptSchema } from '../../src/contracts'
+import type {
+  CapabilitySnapshot,
+  ClockPort,
+  PerformanceCommand,
+  PerformanceReceipt,
+  PreparePerformance,
+} from '../../src/contracts'
+import {
+  APPLICATION_CONTRACT_VERSION,
+  NO_OP_ACTION,
+  performanceReceiptMessageSchema,
+  performanceReceiptSchema,
+} from '../../src/contracts'
 import {
   collectPerformanceViolations,
   collectPlayerCancellationViolations,
@@ -15,20 +26,56 @@ import {
   fixturePreparePerformance,
 } from '../support/fixture-data'
 import {
+  M1_ACTUAL_SEGMENT_0_DURATION_MS,
+  M1_ACTUAL_SEGMENT_0_REF,
+  M1_ACTUAL_SEGMENT_1_DURATION_MS,
+  M1_ACTUAL_SEGMENT_1_REF,
+  M1_ACTUAL_WAV_EXPECTED,
+  M1_FIXTURE_DURATION_MS,
+  M1_FIXTURE_FORMAT,
   M1_FIXTURE_SEGMENT_0_REF,
   M1_FIXTURE_SEGMENT_1_REF,
+  createActualCompletingPlayerKit,
+  createActualHoldingPlayerKit,
+  createActualPlayerKit,
+  createControlledMediaDriver,
+  createControlledResolver,
+  createExpiringDeadlineGate,
+  createM1ActualAssetEntries,
+  createM1ActualBlobMap,
   createM1FixtureEntries,
   createM1FixtureMappedRenderer,
   createM1FixtureSynthesisKit,
+  createM1NoOpReactionPort,
   createRecordingRendererDriver,
+  createRegistryResolver,
   createTestDeadlineGate,
   createTestReceiptTools,
+  parseM1Wav,
+  readM1ActualWavAssets,
+  sha256Hex,
 } from '../support/m1-kit'
 import type { RendererDriver, RendererObservation } from '../../src/performance/mapped-renderer'
 import type { DeadlineGate } from '../../src/performance/browser/types'
+import { PlayerDispatchError } from '../../src/performance/browser/types'
 import { createFixedSynthesis, type FixedAudioEntry } from '../../src/performance/fixed-synthesis'
 import { createMappedRenderer } from '../../src/performance/mapped-renderer'
+import { createPlaybackController } from '../../src/performance/browser/player'
+import { createPlayerPort } from '../../src/performance/browser/player-port'
+import { createFixtureRunner } from '../support/runner-factories'
 import { createVirtualClock } from '../support/virtual-clock'
+
+/** Deterministically drain queued microtasks without wall-clock waits. */
+async function microtasks(rounds = 8): Promise<void> {
+  for (let round = 0; round < rounds; round += 1) await Promise.resolve()
+}
+
+/** Terminal performance facts, excluding non-terminal admission/start stages. */
+function terminalFacts(receipts: readonly PerformanceReceipt[]): PerformanceReceipt[] {
+  return receipts.filter(
+    (receipt) => receipt.stage === 'completed' || receipt.stage === 'cancelled' || receipt.stage === 'failed',
+  )
+}
 
 describe('M1 performance conformance', () => {
   it('accepts the correct fixture kit', async () => {
@@ -802,5 +849,1194 @@ describe('M1 actual adapters through the shared collector', () => {
     expect(secondReceipt).toMatchObject({ outputId: 'out-second', source: 'm1-mapped-renderer' })
     expect(second.renderer.capabilities().rendererId).toBe('renderer-alt')
     expect(performanceReceiptSchema.safeParse(secondReceipt).success).toBe(true)
+  })
+})
+
+describe('M1 actual browser player through the shared collectors (T01)', () => {
+  it('accepts the real synthesis, mapped renderer and browser player kit', async () => {
+    const { synthesis } = createM1FixtureSynthesisKit()
+    const { renderer, driver } = createM1FixtureMappedRenderer()
+    driver.setAuto({ stage: 'accepted', reasonCode: 'fixture-ok', localTimeMs: null })
+    const kit = createActualCompletingPlayerKit()
+    const violations = await collectPerformanceViolations(() => ({
+      synthesis,
+      renderer,
+      player: kit.player,
+    }))
+    expect(violations).toEqual([])
+  })
+
+  it('accepts actual cancellation evidence from the holding player', async () => {
+    const kit = createActualHoldingPlayerKit()
+    const violations = await collectPlayerCancellationViolations(() => kit.player)
+    expect(violations).toEqual([])
+  })
+})
+
+describe('M1 increment B fixed audio catalog (T02)', () => {
+  it('prepares the measured catalog with exact identities and no media effects', async () => {
+    const synthesis = createFixedSynthesis({ entries: createM1ActualAssetEntries(), clock: createVirtualClock(0) })
+    const resolver = createControlledResolver()
+    const media = createControlledMediaDriver()
+    const prepared = await synthesis.prepare(fixturePreparePerformance(), createCallContext())
+    expect(prepared).toEqual({
+      ok: true,
+      requestId: 'prepare-req-1',
+      sessionId: FIXTURE_SESSION_ID,
+      epoch: 1,
+      turnId: 'turn-fixture-1',
+      segmentId: 'segment-fixture-0',
+      audioRef: M1_ACTUAL_SEGMENT_0_REF,
+      format: 'audio/wav',
+      durationMs: M1_ACTUAL_SEGMENT_0_DURATION_MS,
+      timing: { startMs: 0, endMs: M1_ACTUAL_SEGMENT_0_DURATION_MS },
+    })
+    expect(M1_ACTUAL_SEGMENT_0_DURATION_MS).not.toBe(M1_FIXTURE_DURATION_MS)
+    expect(resolver.calls()).toEqual([])
+    expect(media.createCount()).toBe(0)
+  })
+
+  it('uses the measured segment-1 duration and the exact registered blob refs', async () => {
+    const entries = createM1ActualAssetEntries()
+    const blobs = createM1ActualBlobMap()
+    expect(entries[1]?.durationMs).toBe(M1_ACTUAL_SEGMENT_1_DURATION_MS)
+    expect(new Set(blobs.keys())).toEqual(new Set(entries.map((entry) => entry.audioRef)))
+    const synthesis = createFixedSynthesis({ entries, clock: createVirtualClock(0) })
+    const prepared = await synthesis.prepare(
+      fixturePreparePerformance({ text: 'It was loud and fun.', segmentId: 'segment-fixture-1' }),
+      createCallContext(),
+    )
+    expect(prepared).toMatchObject({
+      ok: true,
+      audioRef: 'audio://fixture/segment-1',
+      durationMs: M1_ACTUAL_SEGMENT_1_DURATION_MS,
+    })
+  })
+
+  it('composes the actual Blob map from the copied WAV bytes with verified header, frames and hashes', () => {
+    const assets = readM1ActualWavAssets()
+    expect(assets.map((asset) => asset.ref)).toEqual([
+      M1_ACTUAL_SEGMENT_0_REF,
+      M1_ACTUAL_SEGMENT_1_REF,
+    ])
+    const blobs = createM1ActualBlobMap()
+    assets.forEach((asset, index) => {
+      const expected = M1_ACTUAL_WAV_EXPECTED[index]
+      expect(expected).toBeDefined()
+      if (expected === undefined) return
+      expect(asset.file).toBe(expected.file)
+      expect(asset.bytes.byteLength).toBe(expected.sizeBytes)
+      expect(sha256Hex(asset.bytes)).toBe(expected.sha256)
+      const info = parseM1Wav(asset.bytes)
+      expect(info).toMatchObject({
+        channels: expected.channels,
+        sampleRateHz: expected.sampleRateHz,
+        bitsPerSample: expected.bitsPerSample,
+        frameCount: expected.frameCount,
+      })
+      const blob = blobs.get(asset.ref)
+      expect(blob).toBeInstanceOf(Blob)
+      expect(blob?.size).toBe(expected.sizeBytes)
+      expect(blob?.type).toBe(M1_FIXTURE_FORMAT)
+    })
+    // Frame-derived durations equal the measured catalog metadata.
+    expect(parseM1Wav(assets[0]?.bytes as Uint8Array).durationMs).toBeCloseTo(
+      M1_ACTUAL_SEGMENT_0_DURATION_MS,
+      6,
+    )
+    expect(parseM1Wav(assets[1]?.bytes as Uint8Array).durationMs).toBeCloseTo(
+      M1_ACTUAL_SEGMENT_1_DURATION_MS,
+      6,
+    )
+    const entries = createM1ActualAssetEntries()
+    expect(new Set(blobs.keys())).toEqual(new Set(entries.map((entry) => entry.audioRef)))
+  })
+
+  it('isolates the measured catalog from caller mutation', async () => {
+    const entries = createM1ActualAssetEntries()
+    const synthesis = createFixedSynthesis({ entries, clock: createVirtualClock(0) })
+    ;(entries[0] as { text: string }).text = 'mutated'
+    const prepared = await synthesis.prepare(fixturePreparePerformance(), createCallContext())
+    expect(prepared.ok).toBe(true)
+  })
+
+  it('resolves only exact registered refs and releases leases idempotently', async () => {
+    const resolver = createRegistryResolver(createM1ActualBlobMap())
+    await expect(
+      resolver.resolve('audio://fixture/not-registered', createCallContext().signal),
+    ).rejects.toThrow()
+    expect(resolver.unknownRefs()).toEqual(['audio://fixture/not-registered'])
+
+    await resolver.resolve(M1_ACTUAL_SEGMENT_0_REF, createCallContext().signal)
+    const lease = resolver.leases()[0]
+    expect(lease?.blob).toBeInstanceOf(Blob)
+    lease?.release()
+    lease?.release()
+    expect(lease?.releaseCount()).toBe(1)
+  })
+})
+
+describe('M1 actual player lifecycle observations (T03)', () => {
+  it('reports accepted, one actual started and one completed, then idle', async () => {
+    const kit = createActualPlayerKit()
+    const command = fixturePerformanceCommand()
+    const context = createCallContext()
+    const execution = kit.controller.execute(command, { signal: context.signal })
+    expect(kit.controller.status()).toMatchObject({
+      idle: false,
+      activeOutputId: command.outputId,
+      lastStage: 'accepted',
+    })
+    let settled = false
+    void execution.then(() => {
+      settled = true
+    })
+
+    expect(kit.resolver.calls()).toHaveLength(1)
+    kit.resolver.resolveNext()
+    await microtasks()
+    const handle = kit.media.current()
+    expect(handle).not.toBeNull()
+    expect(handle?.loadCount()).toBe(1)
+    expect(handle?.playCount()).toBe(1)
+    expect(settled).toBe(false)
+    expect(kit.controller.status().lastStage).toBe('accepted')
+
+    handle?.emitPlaying()
+    handle?.emitPlaying()
+    expect(kit.controller.status().lastStage).toBe('started')
+    handle?.emitEnded()
+
+    const receipt = await execution
+    expect(receipt).toMatchObject({
+      stage: 'completed',
+      modality: 'audio',
+      source: 'm1-player',
+      outputId: command.outputId,
+      reasonCode: null,
+    })
+    await microtasks()
+    expect(kit.observed.map((r) => r.stage)).toEqual(['accepted', 'started', 'completed'])
+    expect(kit.observed[1]?.receiptId).not.toBe(kit.observed[0]?.receiptId)
+    expect(kit.controller.status().idle).toBe(true)
+    expect(handle?.detached()).toBe(true)
+    expect(kit.resolver.leases()[0]?.releaseCount()).toBe(1)
+  })
+})
+
+describe('M1 actual player bootstrap configuration validation (T03)', () => {
+  it('rejects an empty or nonstring session before any effect', () => {
+    for (const sessionId of ['', 0, null, undefined]) {
+      const resolver = createControlledResolver()
+      const media = createControlledMediaDriver()
+      expect(() =>
+        createPlaybackController({
+          sessionId: sessionId as unknown as string,
+          initialEpoch: 1,
+          resolver,
+          media,
+          receipts: createTestReceiptTools('bad-session'),
+          onReceipt: () => {},
+          reportFault: () => {},
+        }),
+      ).toThrow()
+      expect(resolver.calls()).toEqual([])
+      expect(media.createCount()).toBe(0)
+    }
+  })
+
+  it('rejects nonfinite, fractional and negative initial epochs before any effect', () => {
+    const invalidEpochs = [
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      -1,
+      1.5,
+      '1',
+    ]
+    for (const initialEpoch of invalidEpochs) {
+      const resolver = createControlledResolver()
+      const media = createControlledMediaDriver()
+      expect(() =>
+        createPlaybackController({
+          sessionId: FIXTURE_SESSION_ID,
+          initialEpoch: initialEpoch as unknown as number,
+          resolver,
+          media,
+          receipts: createTestReceiptTools('bad-epoch'),
+          onReceipt: () => {},
+          reportFault: () => {},
+        }),
+      ).toThrow()
+      expect(resolver.calls()).toEqual([])
+      expect(media.createCount()).toBe(0)
+    }
+  })
+
+  it('accepts a nonempty session and a nonnegative integer epoch', () => {
+    const kit = createActualPlayerKit({ initialEpoch: 0 })
+    expect(kit.controller.status()).toMatchObject({ idle: true, lastStage: null })
+  })
+})
+
+describe('M1 actual player failure paths (T04)', () => {
+  it('fails when the resolver rejects and never creates media', async () => {
+    const resolver = createControlledResolver()
+    resolver.setAutoReject(new Error('missing resource'))
+    const kit = createActualPlayerKit({ resolver })
+    const receipt = await kit.player.execute(fixturePerformanceCommand(), createCallContext())
+    expect(receipt).toMatchObject({ stage: 'failed', reasonCode: 'resolver_failed' })
+    expect(kit.media.createCount()).toBe(0)
+  })
+
+  it('fails when load throws and releases the lease after detaching', async () => {
+    const kit = createActualPlayerKit({ media: createControlledMediaDriver({ loadThrows: true }) })
+    const execution = kit.controller.execute(fixturePerformanceCommand(), {
+      signal: createCallContext().signal,
+    })
+    kit.resolver.resolveNext()
+    await microtasks()
+    const receipt = await execution
+    expect(receipt).toMatchObject({ stage: 'failed', reasonCode: 'load_failed' })
+    expect(kit.media.current()?.detachCount()).toBe(1)
+    expect(kit.resolver.leases()[0]?.releaseCount()).toBe(1)
+  })
+
+  it('fails when play rejects', async () => {
+    const kit = createActualPlayerKit({ media: createControlledMediaDriver({ playRejects: true }) })
+    const execution = kit.controller.execute(fixturePerformanceCommand(), {
+      signal: createCallContext().signal,
+    })
+    kit.resolver.resolveNext()
+    await microtasks()
+    await expect(execution).resolves.toMatchObject({ stage: 'failed', reasonCode: 'play_failed' })
+  })
+
+  it('fails on a media error event', async () => {
+    const kit = createActualPlayerKit()
+    const execution = kit.controller.execute(fixturePerformanceCommand(), {
+      signal: createCallContext().signal,
+    })
+    kit.resolver.resolveNext()
+    await microtasks()
+    kit.media.current()?.emitError('decode_failed')
+    await expect(execution).resolves.toMatchObject({ stage: 'failed', reasonCode: 'decode_failed' })
+  })
+
+  it('fails with start_unobserved when ended arrives before any start', async () => {
+    const kit = createActualPlayerKit()
+    const execution = kit.controller.execute(fixturePerformanceCommand(), {
+      signal: createCallContext().signal,
+    })
+    kit.resolver.resolveNext()
+    await microtasks()
+    kit.media.current()?.emitEnded()
+    await expect(execution).resolves.toMatchObject({ stage: 'failed', reasonCode: 'start_unobserved' })
+  })
+
+  it('quarantines on detach failure and refuses the next output', async () => {
+    const media = createControlledMediaDriver({ detachResult: false, autoEvents: true })
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const kit = createActualPlayerKit({ media, resolver })
+    const completed = await kit.player.execute(
+      fixturePerformanceCommand({ outputId: 'quarantine-1' }),
+      createCallContext(),
+    )
+    expect(completed).toMatchObject({ stage: 'completed' })
+    expect(kit.faults.length).toBeGreaterThan(0)
+    expect(kit.controller.status().idle).toBe(false)
+    await expect(
+      kit.player.execute(fixturePerformanceCommand({ outputId: 'quarantine-2' }), createCallContext()),
+    ).rejects.toMatchObject({ code: 'busy' })
+  })
+
+  it('reports failed/cleanup_failed when an active cancel cannot detach', async () => {
+    const kit = createActualPlayerKit({ media: createControlledMediaDriver({ detachResult: false }) })
+    const execution = kit.controller.execute(
+      fixturePerformanceCommand({ outputId: 'cancel-quarantine' }),
+      { signal: createCallContext().signal },
+    )
+    kit.resolver.resolveNext()
+    await microtasks()
+    const cancelled = await kit.controller.cancel({ requestId: 'c-q', revokedEpoch: 1, newEpoch: 2 })
+    expect(cancelled).toMatchObject({ stage: 'failed', reasonCode: 'cleanup_failed' })
+    await expect(execution).resolves.toBe(cancelled)
+    expect(kit.controller.status().idle).toBe(false)
+    kit.controller.dispose()
+  })
+})
+
+describe('M1 actual player quarantine dispose retry (T04, T05)', () => {
+  const quarantineKit = (): ReturnType<typeof createActualPlayerKit> => {
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const media = createControlledMediaDriver({ detachResult: false, autoEvents: true })
+    return createActualPlayerKit({ media, resolver })
+  }
+
+  it('releases the retained lease once when a dispose retry detaches', async () => {
+    const kit = quarantineKit()
+    const completed = await kit.player.execute(
+      fixturePerformanceCommand({ outputId: 'q-retry-1' }),
+      createCallContext(),
+    )
+    expect(completed).toMatchObject({ stage: 'completed' })
+    expect(kit.controller.status().idle).toBe(false)
+    const lease = kit.resolver.leases()[0]
+    expect(lease?.releaseCount()).toBe(0)
+
+    kit.media.setDetachResult(true)
+    kit.controller.dispose()
+    expect(lease?.releaseCount()).toBe(1)
+    expect(kit.controller.status().idle).toBe(true)
+
+    kit.controller.dispose()
+    expect(lease?.releaseCount()).toBe(1)
+  })
+
+  it('retains idle false and disables admission when a dispose retry still cannot detach', async () => {
+    const kit = quarantineKit()
+    await kit.player.execute(fixturePerformanceCommand({ outputId: 'q-retry-2' }), createCallContext())
+    expect(kit.controller.status().idle).toBe(false)
+    const lease = kit.resolver.leases()[0]
+
+    kit.controller.dispose()
+    expect(kit.controller.status().idle).toBe(false)
+    expect(lease?.releaseCount()).toBe(0)
+    await expect(
+      kit.player.execute(fixturePerformanceCommand({ outputId: 'q-retry-3' }), createCallContext()),
+    ).rejects.toMatchObject({ code: 'unavailable' })
+  })
+
+  it('disposes while the resolver is pending without throwing and settles once', async () => {
+    const kit = createActualPlayerKit()
+    const command = fixturePerformanceCommand()
+    const execution = kit.controller.execute(command, { signal: createCallContext().signal })
+    expect(kit.resolver.pendingCount()).toBe(1)
+
+    expect(() => kit.controller.dispose()).not.toThrow()
+    const receipt = await execution
+    expect(receipt).toMatchObject({ stage: 'cancelled', outputId: command.outputId })
+    expect(kit.controller.status().idle).toBe(true)
+    expect(kit.media.createCount()).toBe(0)
+    await expect(
+      kit.controller.execute(fixturePerformanceCommand({ outputId: 'after-dispose' }), {
+        signal: createCallContext().signal,
+      }),
+    ).rejects.toMatchObject({ code: 'unavailable' })
+  })
+})
+
+describe('M1 actual player cancellation, deadline and epoch (T05)', () => {
+  it('cancels while resolving and releases a late lease without creating media', async () => {
+    const kit = createActualPlayerKit()
+    const command = fixturePerformanceCommand()
+    const execution = kit.controller.execute(command, { signal: createCallContext().signal })
+    const cancelled = await kit.controller.cancel({ requestId: 'c-resolve', revokedEpoch: 1, newEpoch: 2 })
+    expect(cancelled).toMatchObject({
+      stage: 'cancelled',
+      epoch: 1,
+      outputId: command.outputId,
+      source: 'm1-player',
+    })
+    await expect(execution).resolves.toBe(cancelled)
+    kit.resolver.resolveNext()
+    await microtasks()
+    expect(kit.resolver.leases()[0]?.releaseCount()).toBe(1)
+    expect(kit.media.createCount()).toBe(0)
+    expect(kit.controller.status().idle).toBe(true)
+  })
+
+  it('cancels while play is fulfilled but not started, detaching and releasing', async () => {
+    const kit = createActualPlayerKit()
+    const execution = kit.controller.execute(fixturePerformanceCommand(), {
+      signal: createCallContext().signal,
+    })
+    kit.resolver.resolveNext()
+    await microtasks()
+    const handle = kit.media.current()
+    expect(handle?.playCount()).toBe(1)
+    const cancelled = await kit.controller.cancel({ requestId: 'c-play', revokedEpoch: 1, newEpoch: 2 })
+    expect(cancelled).toMatchObject({ stage: 'cancelled' })
+    await expect(execution).resolves.toBe(cancelled)
+    expect(handle?.detached()).toBe(true)
+    expect(kit.resolver.leases()[0]?.releaseCount()).toBe(1)
+  })
+
+  it('cancels after a real start while ended is held', async () => {
+    const kit = createActualPlayerKit({
+      media: createControlledMediaDriver({ autoEvents: true, holdEndedFrom: 0 }),
+    })
+    const execution = kit.controller.execute(fixturePerformanceCommand(), {
+      signal: createCallContext().signal,
+    })
+    kit.resolver.resolveNext()
+    await microtasks()
+    expect(kit.controller.status().lastStage).toBe('started')
+    const cancelled = await kit.controller.cancel({ requestId: 'c-started', revokedEpoch: 1, newEpoch: 2 })
+    expect(cancelled).toMatchObject({ stage: 'cancelled' })
+    await expect(execution).resolves.toBe(cancelled)
+    expect(kit.observed.map((r) => r.stage)).toEqual(['accepted', 'started', 'cancelled'])
+  })
+
+  it('aborts active playback through the expiring virtual deadline gate', async () => {
+    const gate = createExpiringDeadlineGate()
+    const kit = createActualPlayerKit({ gate })
+    const execution = kit.player.execute(fixturePerformanceCommand(), createCallContext(1000))
+    expect(gate.bindCount()).toBe(1)
+    gate.advance(1000)
+    await expect(execution).resolves.toMatchObject({ stage: 'cancelled' })
+    expect(gate.releaseCount()).toBe(1)
+  })
+
+  it('returns null for an idle cancel and then rejects the revoked command as stale', async () => {
+    const kit = createActualPlayerKit()
+    const idle = await kit.controller.cancel({ requestId: 'c-idle', revokedEpoch: 1, newEpoch: 2 })
+    expect(idle).toBeNull()
+    await expect(
+      kit.controller.execute(fixturePerformanceCommand(), { signal: createCallContext().signal }),
+    ).rejects.toMatchObject({ code: 'stale' })
+  })
+
+  it('forwards a cancel through an already-expired call context', async () => {
+    const kit = createActualPlayerKit()
+    const execution = kit.controller.execute(fixturePerformanceCommand(), {
+      signal: createCallContext().signal,
+    })
+    const expired = createCallContext()
+    expired.abort()
+    const cancelled = await kit.player.cancel(
+      { requestId: 'c-expired', revokedEpoch: 1, newEpoch: 2 },
+      expired,
+    )
+    expect(cancelled).toMatchObject({ stage: 'cancelled' })
+    await expect(execution).resolves.toBe(cancelled)
+  })
+})
+
+describe('M1 actual player terminal races and observer isolation (T06)', () => {
+  it('keeps the first terminal fact across orchestrated race attempts', async () => {
+    const kit = createActualPlayerKit()
+    const execution = kit.controller.execute(fixturePerformanceCommand(), {
+      signal: createCallContext().signal,
+    })
+    kit.resolver.resolveNext()
+    await microtasks()
+    const handle = kit.media.current()
+    handle?.emitPlaying()
+    handle?.emitEnded()
+    handle?.emitEnded()
+    handle?.emitError('late_error')
+    const receipt = await execution
+    expect(receipt.stage).toBe('completed')
+    await microtasks()
+    expect(kit.observed.map((r) => r.stage)).toEqual(['accepted', 'started', 'completed'])
+    expect(kit.resolver.leases()[0]?.releaseCount()).toBe(1)
+  })
+
+  it('ignores a late resolver lease after cancellation without creating media', async () => {
+    const kit = createActualPlayerKit()
+    const execution = kit.controller.execute(fixturePerformanceCommand(), {
+      signal: createCallContext().signal,
+    })
+    await kit.controller.cancel({ requestId: 'late', revokedEpoch: 1, newEpoch: 2 })
+    kit.resolver.resolveNext()
+    await microtasks()
+    await expect(execution).resolves.toMatchObject({ stage: 'cancelled' })
+    expect(kit.media.createCount()).toBe(0)
+  })
+
+  it('keeps the cancelled terminal across a controlled pending play promise fulfilled late', async () => {
+    const resolver = createControlledResolver()
+    const media = createControlledMediaDriver({ holdPlay: true })
+    const kit = createActualPlayerKit({ resolver, media })
+    const execution = kit.controller.execute(fixturePerformanceCommand(), {
+      signal: createCallContext().signal,
+    })
+    kit.resolver.resolveNext()
+    await microtasks()
+    const handle = kit.media.current()
+    expect(handle?.playCount()).toBe(1)
+    expect(handle?.playSettled()).toBe(false)
+
+    const cancelled = await kit.controller.cancel({ requestId: 'c-hold', revokedEpoch: 1, newEpoch: 2 })
+    expect(cancelled).toMatchObject({ stage: 'cancelled' })
+    await expect(execution).resolves.toBe(cancelled)
+
+    handle?.resolvePlay()
+    await microtasks()
+    expect(handle?.playSettled()).toBe(true)
+    expect(kit.observed.map((r) => r.stage)).toEqual(['accepted', 'cancelled'])
+    await expect(execution).resolves.toBe(cancelled)
+    expect(terminalFacts(kit.observed)).toHaveLength(1)
+  })
+
+  it('ignores a late rejection of a controlled pending play promise after cancel', async () => {
+    const resolver = createControlledResolver()
+    const media = createControlledMediaDriver({ holdPlay: true })
+    const kit = createActualPlayerKit({ resolver, media })
+    const execution = kit.controller.execute(fixturePerformanceCommand(), {
+      signal: createCallContext().signal,
+    })
+    kit.resolver.resolveNext()
+    await microtasks()
+    const handle = kit.media.current()
+
+    const cancelled = await kit.controller.cancel({
+      requestId: 'c-hold-reject',
+      revokedEpoch: 1,
+      newEpoch: 2,
+    })
+    handle?.rejectPlay(new Error('late play rejection'))
+    await microtasks()
+    await expect(execution).resolves.toBe(cancelled)
+    expect(kit.observed.map((r) => r.stage)).toEqual(['accepted', 'cancelled'])
+    expect(kit.faults).toEqual([])
+  })
+
+  it('keeps a single terminal across meaningful ended/error/cancel order permutations', async () => {
+    const permute = async (
+      order: Array<'playing' | 'ended' | 'error' | 'cancel'>,
+    ): Promise<PerformanceReceipt['stage']> => {
+      const kit = createActualPlayerKit()
+      const execution = kit.controller.execute(fixturePerformanceCommand(), {
+        signal: createCallContext().signal,
+      })
+      kit.resolver.resolveNext()
+      await microtasks()
+      const handle = kit.media.current()
+      for (const step of order) {
+        if (step === 'playing') handle?.emitPlaying()
+        else if (step === 'ended') handle?.emitEnded()
+        else if (step === 'error') handle?.emitError('race_error')
+        else await kit.controller.cancel({ requestId: 'c-race', revokedEpoch: 1, newEpoch: 2 })
+      }
+      const receipt = await execution
+      const after = await execution
+      await microtasks()
+      expect(after).toBe(receipt)
+      expect(terminalFacts(kit.observed)).toHaveLength(1)
+      expect(kit.observed.at(-1)?.stage).toBe(receipt.stage)
+      return receipt.stage
+    }
+
+    expect(await permute(['playing', 'ended', 'error'])).toBe('completed')
+    expect(await permute(['playing', 'error', 'ended'])).toBe('failed')
+    expect(await permute(['playing', 'cancel', 'ended'])).toBe('cancelled')
+    expect(await permute(['playing', 'ended', 'cancel'])).toBe('completed')
+  })
+
+  it('isolates observer faults from playback facts', async () => {
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const media = createControlledMediaDriver({ autoEvents: true })
+    const faults: unknown[] = []
+    const receipts: PerformanceReceipt[] = []
+    const controller = createPlaybackController({
+      sessionId: FIXTURE_SESSION_ID,
+      initialEpoch: 1,
+      resolver,
+      media,
+      receipts: createTestReceiptTools('obs'),
+      onReceipt: (receipt) => {
+        receipts.push(receipt)
+        throw new Error('observer boom')
+      },
+      reportFault: (error) => {
+        faults.push(error)
+      },
+    })
+    const first = await controller.execute(fixturePerformanceCommand({ outputId: 'obs-1' }), {
+      signal: createCallContext().signal,
+    })
+    const second = await controller.execute(
+      fixturePerformanceCommand({ outputId: 'obs-2', segmentId: 'segment-2' }),
+      { signal: createCallContext().signal },
+    )
+    expect(first.stage).toBe('completed')
+    expect(second.stage).toBe('completed')
+    await microtasks()
+    expect(receipts.length).toBeGreaterThanOrEqual(6)
+    expect(faults.length).toBeGreaterThanOrEqual(6)
+    expect(controller.status().idle).toBe(true)
+  })
+
+  it('tolerates a reentrant observer cancel without restarting work', async () => {
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const media = createControlledMediaDriver({ autoEvents: true })
+    const receipts: PerformanceReceipt[] = []
+    let reentered = false
+    let controller: ReturnType<typeof createPlaybackController>
+    controller = createPlaybackController({
+      sessionId: FIXTURE_SESSION_ID,
+      initialEpoch: 1,
+      resolver,
+      media,
+      receipts: createTestReceiptTools('reentrant'),
+      onReceipt: (receipt) => {
+        receipts.push(receipt)
+        if (receipt.stage === 'accepted' && !reentered) {
+          reentered = true
+          void controller.cancel({ requestId: 'reentrant', revokedEpoch: 1, newEpoch: 2 })
+        }
+      },
+      reportFault: () => {},
+    })
+    const execution = controller.execute(fixturePerformanceCommand(), {
+      signal: createCallContext().signal,
+    })
+    const receipt = await execution
+    expect(['cancelled', 'completed', 'failed']).toContain(receipt.stage)
+    expect(controller.status().idle).toBe(true)
+    expect(media.createCount()).toBeLessThanOrEqual(1)
+  })
+})
+
+describe('M1 actual player synchronous dependency reentry (T06)', () => {
+  const resolver = (): ReturnType<typeof createControlledResolver> => {
+    const controlled = createControlledResolver()
+    controlled.setAutoResolve()
+    return controlled
+  }
+
+  it('releases a subscription returned after a synchronous terminal in subscribe, never loading or playing', async () => {
+    const media = createControlledMediaDriver({
+      emitOnSubscribe: { type: 'error', reasonCode: 'sync_subscribe_error' },
+    })
+    const kit = createActualPlayerKit({ media, resolver: resolver() })
+    const receipt = await kit.controller.execute(fixturePerformanceCommand(), {
+      signal: createCallContext().signal,
+    })
+    await microtasks()
+    const handle = kit.media.current()
+    expect(receipt).toMatchObject({ stage: 'failed', reasonCode: 'sync_subscribe_error' })
+    expect(handle?.subscribeCount()).toBe(1)
+    expect(handle?.unsubscribeCount()).toBe(1)
+    expect(handle?.loadCount()).toBe(0)
+    expect(handle?.playCount()).toBe(0)
+    expect(handle?.detachCount()).toBe(1)
+    expect(kit.resolver.leases()[0]?.releaseCount()).toBe(1)
+    expect(terminalFacts(kit.observed)).toHaveLength(1)
+    expect(kit.controller.status().idle).toBe(true)
+  })
+
+  it('settles cancelled when the owner aborts during subscribe, never loading or playing', async () => {
+    const context = createCallContext()
+    const media = createControlledMediaDriver({ onSubscribe: () => context.abort() })
+    const kit = createActualPlayerKit({ media, resolver: resolver() })
+    const receipt = await kit.controller.execute(fixturePerformanceCommand(), { signal: context.signal })
+    await microtasks()
+    const handle = kit.media.current()
+    expect(receipt).toMatchObject({ stage: 'cancelled' })
+    expect(handle?.subscribeCount()).toBe(1)
+    expect(handle?.unsubscribeCount()).toBe(1)
+    expect(handle?.loadCount()).toBe(0)
+    expect(handle?.playCount()).toBe(0)
+    expect(handle?.detachCount()).toBe(1)
+    expect(kit.resolver.leases()[0]?.releaseCount()).toBe(1)
+    expect(terminalFacts(kit.observed)).toHaveLength(1)
+    expect(kit.controller.status().idle).toBe(true)
+  })
+
+  it('ignores a synchronous terminal during load and never plays', async () => {
+    const media = createControlledMediaDriver({
+      emitOnLoad: { type: 'error', reasonCode: 'sync_load_error' },
+    })
+    const kit = createActualPlayerKit({ media, resolver: resolver() })
+    const receipt = await kit.controller.execute(fixturePerformanceCommand(), {
+      signal: createCallContext().signal,
+    })
+    await microtasks()
+    const handle = kit.media.current()
+    expect(receipt).toMatchObject({ stage: 'failed', reasonCode: 'sync_load_error' })
+    expect(handle?.subscribeCount()).toBe(1)
+    expect(handle?.unsubscribeCount()).toBe(1)
+    expect(handle?.loadCount()).toBe(1)
+    expect(handle?.playCount()).toBe(0)
+    expect(handle?.detachCount()).toBe(1)
+    expect(kit.resolver.leases()[0]?.releaseCount()).toBe(1)
+    expect(terminalFacts(kit.observed)).toHaveLength(1)
+    expect(kit.controller.status().idle).toBe(true)
+  })
+
+  it('settles cancelled when the owner aborts during load and never plays', async () => {
+    const context = createCallContext()
+    const media = createControlledMediaDriver({ onLoad: () => context.abort() })
+    const kit = createActualPlayerKit({ media, resolver: resolver() })
+    const receipt = await kit.controller.execute(fixturePerformanceCommand(), { signal: context.signal })
+    await microtasks()
+    const handle = kit.media.current()
+    expect(receipt).toMatchObject({ stage: 'cancelled' })
+    expect(handle?.loadCount()).toBe(1)
+    expect(handle?.playCount()).toBe(0)
+    expect(handle?.unsubscribeCount()).toBe(1)
+    expect(handle?.detachCount()).toBe(1)
+    expect(kit.resolver.leases()[0]?.releaseCount()).toBe(1)
+    expect(terminalFacts(kit.observed)).toHaveLength(1)
+    expect(kit.controller.status().idle).toBe(true)
+  })
+
+  it('quarantines a handle returned after a synchronous create abort when detach fails', async () => {
+    const context = createCallContext()
+    const controlledResolver = resolver()
+    const media = createControlledMediaDriver({
+      detachResult: false,
+      onCreate: () => context.abort(),
+    })
+    const kit = createActualPlayerKit({ media, resolver: controlledResolver })
+    const command = fixturePerformanceCommand()
+    const receipt = await kit.controller.execute(command, { signal: context.signal })
+    await microtasks()
+    const handle = kit.media.current()
+
+    // A synchronous abort during create, with a live handle that cannot detach,
+    // must quarantine: not a successful cancellation.
+    expect(receipt).toMatchObject({ stage: 'failed', reasonCode: 'cleanup_failed' })
+    expect(handle?.subscribeCount()).toBe(0)
+    expect(handle?.loadCount()).toBe(0)
+    expect(handle?.playCount()).toBe(0)
+    expect(handle?.detachCount()).toBe(1)
+    expect(kit.resolver.leases()[0]?.releaseCount()).toBe(0)
+    expect(kit.controller.status()).toMatchObject({ idle: false, activeOutputId: command.outputId })
+    expect(
+      kit.faults.map((fault) => (fault instanceof Error ? fault.message : String(fault))),
+    ).toContain('m1-player: media detach failed')
+
+    await expect(
+      kit.controller.execute(fixturePerformanceCommand({ outputId: 'create-abort-next' }), {
+        signal: createCallContext().signal,
+      }),
+    ).rejects.toMatchObject({ code: 'busy' })
+
+    // A successful dispose retry releases the retained lease once and goes idle.
+    media.setDetachResult(true)
+    kit.controller.dispose()
+    expect(kit.resolver.leases()[0]?.releaseCount()).toBe(1)
+    expect(kit.controller.status().idle).toBe(true)
+  })
+
+  it('settles cancelled and releases once when a synchronous create abort can detach', async () => {
+    const context = createCallContext()
+    const controlledResolver = resolver()
+    const media = createControlledMediaDriver({ onCreate: () => context.abort() })
+    const kit = createActualPlayerKit({ media, resolver: controlledResolver })
+    const receipt = await kit.controller.execute(fixturePerformanceCommand(), { signal: context.signal })
+    await microtasks()
+    const handle = kit.media.current()
+    expect(receipt).toMatchObject({ stage: 'cancelled' })
+    expect(handle?.subscribeCount()).toBe(0)
+    expect(handle?.loadCount()).toBe(0)
+    expect(handle?.playCount()).toBe(0)
+    expect(handle?.detachCount()).toBe(1)
+    expect(kit.resolver.leases()[0]?.releaseCount()).toBe(1)
+    expect(kit.controller.status().idle).toBe(true)
+    expect(kit.faults).toEqual([])
+  })
+
+  it('defers an authoritative cancel raised inside a create boundary until the handle is registered', async () => {
+    const context = createCallContext()
+    const controlledResolver = resolver()
+    const media = createControlledMediaDriver({ detachResult: false })
+    const observed: PerformanceReceipt[] = []
+    let controller: ReturnType<typeof createPlaybackController>
+    let cancelPromise: Promise<PerformanceReceipt | null> | null = null
+    controller = createPlaybackController({
+      sessionId: FIXTURE_SESSION_ID,
+      initialEpoch: 1,
+      resolver: controlledResolver,
+      media,
+      receipts: createTestReceiptTools('sync-cancel'),
+      onReceipt: (receipt) => observed.push(receipt),
+      reportFault: () => {},
+    })
+    media.setOnCreate(() => {
+      context.abort()
+      cancelPromise = controller.cancel({ requestId: 'c-sync', revokedEpoch: 1, newEpoch: 2 })
+    })
+    const command = fixturePerformanceCommand()
+    const execution = controller.execute(command, { signal: context.signal })
+    const receipt = await execution
+    const cancelled = await cancelPromise
+    await microtasks()
+
+    expect(cancelPromise).not.toBeNull()
+    expect(receipt).toMatchObject({ stage: 'failed', reasonCode: 'cleanup_failed' })
+    expect(cancelled).toBe(receipt)
+    expect(controller.status()).toMatchObject({ idle: false, activeOutputId: command.outputId })
+    expect(media.current()?.subscribeCount()).toBe(0)
+    expect(media.current()?.loadCount()).toBe(0)
+    expect(media.current()?.playCount()).toBe(0)
+    expect(media.current()?.detachCount()).toBe(1)
+    expect(controlledResolver.leases()[0]?.releaseCount()).toBe(0)
+    expect(terminalFacts(observed)).toHaveLength(1)
+
+    media.setDetachResult(true)
+    controller.dispose()
+    expect(controlledResolver.leases()[0]?.releaseCount()).toBe(1)
+    expect(controller.status().idle).toBe(true)
+  })
+
+  it('defers a dispose raised inside a create boundary until the handle is registered', async () => {
+    const context = createCallContext()
+    const controlledResolver = resolver()
+    const media = createControlledMediaDriver({ detachResult: false })
+    let controller: ReturnType<typeof createPlaybackController>
+    let disposeError: unknown = null
+    controller = createPlaybackController({
+      sessionId: FIXTURE_SESSION_ID,
+      initialEpoch: 1,
+      resolver: controlledResolver,
+      media,
+      receipts: createTestReceiptTools('sync-dispose'),
+      onReceipt: () => {},
+      reportFault: () => {},
+    })
+    media.setOnCreate(() => {
+      context.abort()
+      try {
+        controller.dispose()
+      } catch (error) {
+        disposeError = error
+      }
+    })
+    const receipt = await controller.execute(fixturePerformanceCommand(), { signal: context.signal })
+    await microtasks()
+
+    expect(disposeError).toBeNull()
+    expect(receipt).toMatchObject({ stage: 'failed', reasonCode: 'cleanup_failed' })
+    expect(controller.status().idle).toBe(false)
+    expect(media.current()?.loadCount()).toBe(0)
+    expect(media.current()?.playCount()).toBe(0)
+    expect(controlledResolver.leases()[0]?.releaseCount()).toBe(0)
+
+    media.setDetachResult(true)
+    controller.dispose()
+    expect(controlledResolver.leases()[0]?.releaseCount()).toBe(1)
+    expect(controller.status().idle).toBe(true)
+  })
+})
+
+describe('M1 actual player records and epoch lifetime (T07)', () => {
+  it('completes 20 sequential outputs, deduplicates the first id and rejects conflicts', async () => {
+    const kit = createActualCompletingPlayerKit(1)
+    for (let index = 1; index <= 20; index += 1) {
+      const receipt = await kit.player.execute(
+        fixturePerformanceCommand({ outputId: `out-${index}`, segmentId: `segment-${index}` }),
+        createCallContext(),
+      )
+      expect(receipt).toMatchObject({ stage: 'completed', outputId: `out-${index}`, epoch: 1 })
+    }
+    const completed = kit.observed.filter((r) => r.stage === 'completed')
+    expect(completed).toHaveLength(20)
+
+    const mediaCalls = kit.media.createCount()
+    const receiptCount = kit.observed.length
+    const retry = await kit.player.execute(
+      fixturePerformanceCommand({ outputId: 'out-1', segmentId: 'segment-1' }),
+      createCallContext(),
+    )
+    expect(retry.receiptId).toBe(completed.find((r) => r.outputId === 'out-1')?.receiptId)
+    expect(kit.media.createCount()).toBe(mediaCalls)
+    expect(kit.observed.length).toBe(receiptCount)
+
+    await expect(
+      kit.player.execute(
+        fixturePerformanceCommand({ outputId: 'out-1', segmentId: 'changed' }),
+        createCallContext(),
+      ),
+    ).rejects.toMatchObject({ code: 'conflict' })
+
+    const advanced = await kit.player.execute(
+      fixturePerformanceCommand({ outputId: 'out-21', segmentId: 'segment-21', epoch: 2 }),
+      createCallContext(),
+    )
+    expect(advanced).toMatchObject({ stage: 'completed', epoch: 2 })
+    await expect(
+      kit.player.execute(
+        fixturePerformanceCommand({ outputId: 'out-1', segmentId: 'segment-1', epoch: 1 }),
+        createCallContext(),
+      ),
+    ).rejects.toMatchObject({ code: 'stale' })
+  })
+
+  it('adopts an identical active command, rejects busy ids and stale cancels', async () => {
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const media = createControlledMediaDriver({ autoEvents: true, holdEndedFrom: 0 })
+    const kit = createActualPlayerKit({ resolver, media })
+    const active = fixturePerformanceCommand({ outputId: 'hold-1', segmentId: 'seg-hold' })
+    const first = kit.controller.execute(active, { signal: createCallContext().signal })
+    const adopted = kit.controller.execute(
+      fixturePerformanceCommand({ outputId: 'hold-1', segmentId: 'seg-hold' }),
+      { signal: createCallContext().signal },
+    )
+    expect(adopted).toBe(first)
+    await expect(
+      kit.controller.execute(fixturePerformanceCommand({ outputId: 'hold-2' }), {
+        signal: createCallContext().signal,
+      }),
+    ).rejects.toMatchObject({ code: 'busy' })
+    await expect(
+      kit.controller.execute(
+        fixturePerformanceCommand({ outputId: 'hold-1', segmentId: 'changed' }),
+        { signal: createCallContext().signal },
+      ),
+    ).rejects.toMatchObject({ code: 'conflict' })
+
+    await kit.controller.cancel({ requestId: 'c-advance', revokedEpoch: 1, newEpoch: 2 })
+    const higher = kit.controller.execute(
+      fixturePerformanceCommand({ outputId: 'hold-3', segmentId: 'seg-3', epoch: 2 }),
+      { signal: createCallContext().signal },
+    )
+    await expect(
+      kit.controller.cancel({ requestId: 'c-stale', revokedEpoch: 1, newEpoch: 2 }),
+    ).rejects.toMatchObject({ code: 'stale_cancel' })
+    expect(kit.controller.status().idle).toBe(false)
+    const settled = await kit.controller.cancel({ requestId: 'c-ok', revokedEpoch: 2, newEpoch: 3 })
+    expect(settled).toMatchObject({ stage: 'cancelled' })
+    await expect(higher).resolves.toBe(settled)
+  })
+
+  it('releases the duplicate binding immediately and the owner binding on settle', async () => {
+    const kit = createActualPlayerKit()
+    const command = fixturePerformanceCommand()
+    const first = kit.player.execute(command, createCallContext())
+    const second = kit.player.execute(fixturePerformanceCommand(), createCallContext())
+    expect(second).toBe(first)
+    expect(kit.gate.bindCount()).toBe(2)
+    expect(kit.gate.releaseCount()).toBe(1)
+    await kit.player.cancel({ requestId: 'c', revokedEpoch: 1, newEpoch: 2 }, createCallContext())
+    await microtasks()
+    expect(kit.gate.releaseCount()).toBe(2)
+  })
+})
+
+describe('M1 player-port ownership identity (T07)', () => {
+  it('survives a same-id conflict rejection and releases a later identical retry binding at once', async () => {
+    const kit = createActualPlayerKit()
+    const command = fixturePerformanceCommand()
+    const first = kit.player.execute(command, createCallContext())
+    expect(kit.gate.bindCount()).toBe(1)
+    expect(kit.gate.releaseCount()).toBe(0)
+
+    await expect(
+      kit.player.execute(
+        fixturePerformanceCommand({ outputId: command.outputId, segmentId: 'changed' }),
+        createCallContext(),
+      ),
+    ).rejects.toMatchObject({ code: 'conflict' })
+    // The conflict's own binding is released; the original owner is untouched.
+    expect(kit.gate.bindCount()).toBe(2)
+    expect(kit.gate.releaseCount()).toBe(1)
+
+    const retry = kit.player.execute(fixturePerformanceCommand(), createCallContext())
+    expect(retry).toBe(first)
+    expect(kit.gate.bindCount()).toBe(3)
+    // The retry does not own the operation, so its binding is released at once
+    // while the original owner stays alive until terminal.
+    expect(kit.gate.releaseCount()).toBe(2)
+
+    const cancelled = await kit.player.cancel(
+      { requestId: 'c-owner', revokedEpoch: 1, newEpoch: 2 },
+      createCallContext(),
+    )
+    await microtasks()
+    expect(cancelled).toMatchObject({ stage: 'cancelled', outputId: command.outputId })
+    expect(kit.gate.releaseCount()).toBe(3)
+  })
+
+  it('ignores an already-aborted duplicate context and preserves the original cancellation owner', async () => {
+    const kit = createActualHoldingPlayerKit()
+    const command = fixturePerformanceCommand()
+    const first = kit.player.execute(command, createCallContext())
+
+    const expired = createCallContext()
+    expired.abort()
+    const duplicate = kit.player.execute(fixturePerformanceCommand(), expired)
+    expect(duplicate).toBe(first)
+    expect(kit.controller.status()).toMatchObject({ idle: false, activeOutputId: command.outputId })
+
+    const cancelled = await kit.player.cancel(
+      { requestId: 'c-dup', revokedEpoch: 1, newEpoch: 2 },
+      createCallContext(),
+    )
+    expect(cancelled).toMatchObject({ stage: 'cancelled', outputId: command.outputId })
+    await expect(first).resolves.toBe(cancelled)
+    expect(kit.controller.status().idle).toBe(true)
+  })
+})
+
+describe('M1 actual player receipt ownership and no-op composition (T09, T10)', () => {
+  it('emits one correlated schema-valid receipt per fact and never resends results', async () => {
+    const kit = createActualCompletingPlayerKit(1)
+    const command = fixturePerformanceCommand()
+    const receipt = await kit.player.execute(command, createCallContext())
+    await microtasks()
+    for (const observed of kit.observed) {
+      expect(performanceReceiptSchema.safeParse(observed).success).toBe(true)
+      expect(observed.outputId).toBe(command.outputId)
+      expect(observed.sessionId).toBe(command.sessionId)
+      expect(observed.modality).toBe('audio')
+      expect(observed.source).toBe('m1-player')
+      expect(observed.chunkIds).toBeNull()
+    }
+    const ids = new Set(kit.observed.map((r) => r.receiptId))
+    expect(ids.size).toBe(kit.observed.length)
+    const terminalFacts = kit.observed.filter((r) => r.stage === 'completed')
+    expect(terminalFacts).toHaveLength(1)
+    expect(terminalFacts[0]?.receiptId).toBe(receipt.receiptId)
+
+    const before = kit.observed.length
+    await expect(
+      kit.player.execute(
+        fixturePerformanceCommand({ outputId: command.outputId, segmentId: 'changed' }),
+        createCallContext(),
+      ),
+    ).rejects.toBeInstanceOf(PlayerDispatchError)
+    expect(kit.observed.length).toBe(before)
+  })
+
+  it('T10: a single observer sender forwards each fact once over the receipt contract', async () => {
+    const messages: Array<{ receiptId: string; stage: string }> = []
+    const raw: unknown[] = []
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const media = createControlledMediaDriver({ autoEvents: true })
+    const controller = createPlaybackController({
+      sessionId: FIXTURE_SESSION_ID,
+      initialEpoch: 1,
+      resolver,
+      media,
+      receipts: createTestReceiptTools('t10-sender'),
+      onReceipt: (receipt) => {
+        const message = performanceReceiptMessageSchema.parse({
+          protocolVersion: APPLICATION_CONTRACT_VERSION,
+          messageId: `wire-${raw.length + 1}`,
+          sessionId: receipt.sessionId,
+          epoch: receipt.epoch,
+          kind: 'performance.receipt',
+          payload: receipt,
+        })
+        raw.push(message)
+        messages.push({ receiptId: message.payload.receiptId, stage: message.payload.stage })
+      },
+      reportFault: () => {},
+    })
+    const command = fixturePerformanceCommand()
+    const receipt = await controller.execute(command, { signal: createCallContext().signal })
+    await microtasks()
+    expect(messages.map((message) => message.stage)).toEqual(['accepted', 'started', 'completed'])
+    // The execute return value is the already-sent terminal fact, not a resend.
+    expect(messages.filter((message) => message.stage === 'completed')).toHaveLength(1)
+    expect(messages.at(-1)?.receiptId).toBe(receipt.receiptId)
+
+    const before = messages.length
+    await expect(
+      controller.execute(fixturePerformanceCommand({ outputId: command.outputId, segmentId: 'changed' }), {
+        signal: createCallContext().signal,
+      }),
+    ).rejects.toMatchObject({ code: 'conflict' })
+    await microtasks()
+    // Admission rejection creates no fabricated performance receipt.
+    expect(messages).toHaveLength(before)
+  })
+
+  it('T10: a same-process diagnostic observer returns terminal evidence without re-sending it', async () => {
+    const kit = createActualCompletingPlayerKit(1)
+    const terminal = await kit.player.execute(fixturePerformanceCommand(), createCallContext())
+    await microtasks()
+    expect(terminal).toMatchObject({ stage: 'completed' })
+    expect(kit.observed.map((r) => r.stage)).toEqual(['accepted', 'started', 'completed'])
+    expect(kit.observed.filter((r) => r.receiptId === terminal.receiptId)).toHaveLength(1)
+  })
+
+  it('T09: a no-op reaction makes zero RendererPort.execute calls while audio completes', async () => {
+    const kit = createActualCompletingPlayerKit(1)
+    const counting = correct.createCountingRenderer(correct.createFixtureRendererPort())
+    const runner = createFixtureRunner({
+      player: kit.player,
+      renderer: counting,
+      reaction: createM1NoOpReactionPort(),
+      segmentCount: 1,
+    })
+    await runner.resume()
+    await runner.accept('no-op reaction')
+    const outcome = await runner.runTurn()
+    expect(counting.calls()).toBe(0)
+    expect(outcome.deliveries).toHaveLength(1)
+    expect(outcome.deliveries[0]?.classification).toBe('fully-delivered')
+  })
+})
+
+describe('M1 actual adapter substitution and Stop composition (T11, T12)', () => {
+  it('T11: substitutes two configured fixed catalogs through the shared port', async () => {
+    const baseline = createFixedSynthesis({ entries: createM1FixtureEntries(), clock: createVirtualClock(0) })
+    const measured = createFixedSynthesis({ entries: createM1ActualAssetEntries(), clock: createVirtualClock(0) })
+    const first = await baseline.prepare(fixturePreparePerformance(), createCallContext())
+    const second = await measured.prepare(fixturePreparePerformance(), createCallContext())
+    expect(first.ok && first.durationMs).toBe(1200)
+    expect(second.ok && second.durationMs).toBe(M1_ACTUAL_SEGMENT_0_DURATION_MS)
+  })
+
+  it('T12: completes output 0, starts output 1, then applies Stop at that output gate', async () => {
+    const synthesis = createFixedSynthesis({
+      entries: createM1ActualAssetEntries(),
+      clock: createVirtualClock(0),
+    })
+    const resolver = createRegistryResolver(createM1ActualBlobMap())
+    const media = createControlledMediaDriver({ autoEvents: true, holdEndedFrom: 1 })
+    const observed: PerformanceReceipt[] = []
+    const controller = createPlaybackController({
+      sessionId: FIXTURE_SESSION_ID,
+      initialEpoch: 1,
+      resolver,
+      media,
+      receipts: createTestReceiptTools('t12'),
+      onReceipt: (receipt) => {
+        observed.push(receipt)
+      },
+      reportFault: () => {},
+    })
+    const player = createPlayerPort({ controller, deadlineGate: createExpiringDeadlineGate() })
+    const rendererKit = createM1FixtureMappedRenderer()
+    rendererKit.driver.setAuto({ stage: 'accepted', reasonCode: 'ok', localTimeMs: null })
+    const runner = createFixtureRunner({
+      synthesis,
+      player,
+      renderer: rendererKit.renderer,
+      segmentCount: 2,
+    })
+    let firstOutputId = ''
+    let secondOutputId = ''
+    runner.hooks.onPlaybackStart = async (index, outputId) => {
+      if (index === 0) {
+        firstOutputId = outputId
+      }
+      if (index === 1) {
+        secondOutputId = outputId
+        await media.startedGate(1)
+        await runner.stop()
+      }
+    }
+    await runner.resume()
+    await runner.accept('What did you say about the concert?')
+    await runner.runTurn()
+    await microtasks()
+
+    expect(media.createCount()).toBe(2)
+    const completed = observed.filter((r) => r.stage === 'completed')
+    expect(completed).toHaveLength(1)
+    expect(completed[0]?.outputId).toBe(firstOutputId)
+    expect(observed.some((r) => r.stage === 'started' && r.outputId === secondOutputId)).toBe(true)
+    expect(observed.some((r) => r.stage === 'cancelled' && r.outputId === secondOutputId)).toBe(true)
+    expect(completed.some((r) => r.outputId === secondOutputId)).toBe(false)
+    expect(media.handles()[1]?.detached()).toBe(true)
+
+    const deliveries = runner.deliveries()
+    expect(deliveries).toHaveLength(2)
+    expect(deliveries[0]?.classification).toBe('fully-delivered')
+    expect(deliveries[1]?.classification).toBe('partial-unknown')
   })
 })
