@@ -22,6 +22,7 @@ ever violated (a concrete action, not "fix the bug").
 | INV-11 | A schema migration is recoverable (backup before apply; transactional rollback) | FR-06 | `src/storage/sqlite/migrations.ts` | C-27, C-28 → `m6-sqlite.test.ts` | Restore from the pre-migration backup; prior version left intact (see ADR-003) |
 | INV-12 | On restart, only confirmed history is restored; unresolved outputs remain unknown and are never replayed | FR-06; C7, C-17 | `src/storage/recovery-view.ts` + M5 lifecycle | C-32, C-33 → `m6-recovery.test.ts` (recovery view; restart) | No replay; an unresolved segment is never quoted as spoken (see ADR-005) |
 | INV-13 | The traceability chain is machine-checked; a broken link fails the gate | FR-06 | `src/evaluation/trace-fitness.ts` | C-34, C-35 → `trace-fitness.test.ts` | A broken link (unregistered invariant, unknown case, missing component/ADR, missing fallback) fails the trace gate (see ADR-006) |
+| INV-14 | A code or prompt change must update the AI-use log | Gate G6 | `src/evaluation/ai-use-log-gate.ts` | C-36 → `ai-use-log-gate.test.ts` | A code/prompt change without a log update fails gate G6 (see ADR-006) |
 
 Related existing invariants (owned elsewhere): INV-01, INV-02, INV-03 in `docs/team/REQUIREMENTS.en.md`
 and `docs/req/requirements.yaml`.

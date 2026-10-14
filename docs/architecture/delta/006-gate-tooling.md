@@ -13,13 +13,18 @@ None.
 | --- | --- | --- |
 | Markdown table parser (`parseTables`, `columnIndex`) | `src/evaluation/markdown.ts` | `trace-fitness.ts` |
 | Traceability fitness functions (`collectTraceViolations`, `nodeTraceFs`) | `src/evaluation/trace-fitness.ts` | CI gate; `test:trace` |
-| B3 tests + `test:trace` script | `test/offline/trace-fitness.test.ts`, `package.json` | — |
+| Traceability tests + `test:trace` script | `test/offline/trace-fitness.test.ts`, `package.json` | — |
+| AI-use-log gate (`collectAiUseLogViolations`) | `src/evaluation/ai-use-log-gate.ts` | CI gate G6; `gate:ai-use-log` |
+| G6 tests | `test/offline/ai-use-log-gate.test.ts` | — |
+| Named blocking CI gates | `.github/workflows/ci.yml` | — |
 
 ## MODIFIED
 
 | Item | Change |
 | --- | --- |
-| `docs/architecture/invariants.md` | **register completed**: added INV-01..03 (M5) and INV-11 rows (a gap the tool found) |
+| `docs/architecture/invariants.md` | **register completed**: added INV-01..03 (M5), INV-11 and INV-12/13 rows (gaps the tool found) |
+| `README.md` | documents the blocking-gate design (D7) |
+| `docs/architecture/adr/006-gate-tooling.md` | D2 updated with the exact CI gate steps |
 
 ## FROZEN
 

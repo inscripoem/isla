@@ -32,7 +32,25 @@ pnpm test
 pnpm build
 ```
 
-Tests run locally without model services and exercise HTTP/WebSocket success, rejection and lifecycle behavior. The build produces the browser bundle; the runtime runs through `tsx`. The initial CI workflow repeats these checks. The [initial scaffold CI passed](https://github.com/inscripoem/isla/actions/runs/37954077638) at commit c717f77. Main requires an approved PR; only a human may merge it. Live provider tests and the full course gates remain pending; that run does not validate subsequent changes.
+Tests run locally without model services and exercise HTTP/WebSocket success, rejection and lifecycle behavior. The build produces the browser bundle; the runtime runs through `tsx`. The [initial scaffold CI passed](https://github.com/inscripoem/isla/actions/runs/37954077638) at commit c717f77. Main requires an approved PR; only a human may merge it.
+
+## Blocking gates (D7)
+
+The CI pipeline implements the six blocking gates plus the traceability fitness function; the design is recorded in [ADR-006](docs/architecture/adr/006-gate-tooling.md).
+
+| Gate | Enforced by |
+| --- | --- |
+| G1 — tests approved before implementation | a pull-request review gate (the `tests-approved` label); not a CI step |
+| G2 — static analysis + boundary | `pnpm typecheck && pnpm lint`; `pnpm test:readiness` (import/permission boundaries) |
+| G3 — requirements schema | `pnpm test:readiness` (registry validation) |
+| G4 — semantic evaluation | scaffolded; reports **not run** without an evaluation set + provider access |
+| G5 — regression | `pnpm test` (all offline suites) |
+| G6 — AI-use log | `pnpm gate:ai-use-log` over the pull-request diff |
+| traceability | `pnpm test:trace` (INV-12: the chain is machine-checked) |
+
+**Branch protection** — requiring passing CI to merge, with human review on safety-critical paths — is
+a repository setting applied by a human maintainer; this workflow does not assert it. Gaps are reported
+honestly: live providers, browser audio and semantic quality thresholds are not proven by these checks.
 
 ## Team development
 

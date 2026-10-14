@@ -525,3 +525,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Caught real register gaps (INV-01..03, INV-11); ADR-006"
+  - date: 2026-10-14
+    task: R3
+    branch: m6-r3-gates
+    change: "R3 commit 2: named blocking CI gates (G2/G3/G5/G6 + trace) and the G6 AI-use-log gate (sub-issue #17)"
+    requirements: [FR-06]
+    invariants: [INV-13]
+    cases: [C-36]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Wired the gates into ci.yml; README documents the gate design; ADR-006 D2"
