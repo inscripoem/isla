@@ -250,6 +250,13 @@ cases:
       file: test/offline/m6-storage.test.ts
       test: "keeps array order significant"
 
+  - id: C-42
+    status: implemented
+    title: The SQLite backend rolls back the whole batch when a later mutation fails
+    verifier:
+      file: test/offline/m6-sqlite-backend.test.ts
+      test: "rolls back the whole batch when a later mutation fails"
+
   - id: C-43
     status: implemented
     title: An event whose payload is not a JSON value is rejected before publication

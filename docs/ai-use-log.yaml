@@ -445,3 +445,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Owner-approved B3 plan; ADR-005; M6 data, M5 lifecycle"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-sqlite
+    change: "B2 follow-up: document and regression-test SQLite batch atomicity (one transaction + rollback on a later mutation failure) per the PR #9 review's 'equivalent rollback'"
+    requirements: [FR-06]
+    invariants: [INV-05]
+    cases: [C-42]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Self-review: the in-memory C-38 does not cover SQLite; ADR-004 D1"

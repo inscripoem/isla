@@ -13,6 +13,7 @@ import {
   createHistoryQuery,
   createMemoryProjection,
   type StorageBackend,
+  type StorageMutation,
 } from '../../src/storage'
 import {
   createSqliteBackend,
@@ -159,5 +160,31 @@ describe('M6 SQLite persistence and isolation (C-30/C-31)', () => {
     ])
     expect(await store2.exportJsonl('session-alpha')).not.toContain('session-beta')
     db2.close()
+  })
+})
+
+describe('M6 SQLite batch atomicity (C-42)', () => {
+  it('rolls back the whole batch when a later mutation fails', () => {
+    const config = tempConfig()
+    const db = openMigrated(config)
+    const backend = createSqliteBackend(db)
+
+    const first: StorageMutation = {
+      kind: 'event',
+      event: fixtureRuntimeEvent({ eventId: 'tx-1', seq: 1 }),
+    }
+    // Same event identity in the same session -> PRIMARY KEY violation on the
+    // second insert, i.e. a failure *after* the first mutation was applied.
+    const second: StorageMutation = {
+      kind: 'event',
+      event: fixtureRuntimeEvent({ eventId: 'tx-1', seq: 2 }),
+    }
+
+    expect(() => backend.commit([first, second])).toThrow()
+    // The whole batch rolled back: no partial state in any index.
+    expect(backend.sessionEvents(FIXTURE_SESSION_ID)).toHaveLength(0)
+    expect(backend.sequenceOwner(FIXTURE_SESSION_ID, 1)).toBeUndefined()
+    expect(backend.sequenceOwner(FIXTURE_SESSION_ID, 2)).toBeUndefined()
+    db.close()
   })
 })
