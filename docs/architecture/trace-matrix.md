@@ -25,6 +25,7 @@ Every requirement maps to its enforcing component, interface, test/evidence and 
 | FR-06 | In-memory and SQLite backends agree end-to-end (committed state, export, history, payload rejection) | `src/storage/sqlite/backend.ts` + `in-memory-backend.ts` | `StorageBackend` | C-45 | `m6-sqlite-backend.test.ts` (cross-backend integration) | — | ADR-004 | in review |
 | INV-12 | Restart restores only confirmed history; unresolved stays unknown, no replay | `src/storage/recovery-view.ts` | `RecoveryView` (M6 helper) | C-32, C-33 | `m6-recovery.test.ts` | — | ADR-005 | in review |
 | INV-13 | The traceability chain is machine-checked; a broken link fails the gate | `src/evaluation/trace-fitness.ts` | `collectTraceViolations` | C-34, C-35 | `trace-fitness.test.ts` | — | ADR-006 | in review |
+| INV-14 | A code/prompt change updates the AI-use log (gate G6) | `src/evaluation/ai-use-log-gate.ts` | `collectAiUseLogViolations` | C-36 | `ai-use-log-gate.test.ts` | — | ADR-006 | in review |
 
 Other requirements (FR-01..FR-05, NFR-01..NFR-06) remain governed by `docs/req/trace.en.md` and are
 pending their owners' rows here.
