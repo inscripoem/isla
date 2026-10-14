@@ -1,6 +1,6 @@
 # Delta Specification 006 — Governance gate tooling
 
-Status: under review (M6). Date: 2026-10-14. ADR: ADR-006. Invariants: INV-12. Cases: C-34, C-35.
+Status: under review (M6). Date: 2026-10-14. ADR: ADR-006. Invariants: INV-12. Cases: C-34, C-35, C-37.
 Revision type: ADD.
 
 ## OBSOLETED
@@ -25,10 +25,12 @@ None.
 
 | Item | Change |
 | --- | --- |
-| `docs/architecture/invariants.md` | **register completed**: added INV-01..03 (M5), INV-11 and INV-12/13 rows (gaps the tool found) |
+| `docs/architecture/invariants.md` | **register completed**: added INV-01..03 (M5), INV-11 and INV-12/13 rows (gaps the tool found); added an explicit **Owner** column (M5/M6) |
+| `docs/architecture/trace-matrix.md` | added an explicit **Owner** column so shared rows stay classifiable |
+| `docs/req/{requirements.yaml,case-registry.yaml,trace.en.md}` | INV-12 acceptance + case **C-37** (owner indicators required) |
 | `README.md` | documents the blocking-gate design (D7) |
 | `docs/architecture/adr/006-gate-tooling.md` | D2 updated with the exact CI gate steps; D3 (governance documents) added |
-| `src/evaluation/trace-fitness.ts` | frozen check also validates that frozen paths exist |
+| `src/evaluation/trace-fitness.ts` | frozen check also validates that frozen paths exist; governed tables now require an Owner column |
 
 ## FROZEN
 

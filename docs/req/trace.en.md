@@ -50,6 +50,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-34 | implemented | `test/offline/trace-fitness.test.ts` | traceability fitness functions accept a valid repository |
 | C-35 | implemented | `test/offline/trace-fitness.test.ts` | traceability fitness functions reject a broken chain |
 | C-36 | implemented | `test/offline/ai-use-log-gate.test.ts` | gate G6 requires the AI-use log for code/prompt changes |
+| C-37 | implemented | `test/offline/trace-fitness.test.ts` | shared governed tables require an explicit owner per row |
 
 | C-38 | implemented | `test/offline/m6-storage.test.ts` | a commit whose later mutation cannot be published leaves no partial state |
 | C-39 | implemented | `test/offline/m6-storage.test.ts` | a conflicting atomic commit reports the conflict cause on both sides |
@@ -92,7 +93,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-10 | M6 | C-26, C-27 | — |
 | INV-11 | M6 | C-27, C-28, C-48 | — |
 | INV-12 | M6 | C-32, C-33 | — |
-| INV-13 | M6 | C-34, C-35 | — |
+| INV-13 | M6 | C-34, C-35, C-37 | — |
 | INV-14 | M6 | C-36 | — |
 
 ## Approval record

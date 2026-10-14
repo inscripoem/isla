@@ -33,3 +33,13 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
 - Findings: the fitness functions caught a real register gap (INV-12 unregistered) — fixed; G6 gate
   behaves correctly (exit 1 on violation, 0 when the log is updated).
 - Result: ADR-006, Delta-006, INV-12/13, cases C-34/35/36.
+
+## M6 self-review — owner indicators on shared tables (on `m6-r3-gates`)
+
+- Date: 2026-10-14 · Reviewer: M6 (self) · Verdict: **OK for handoff**
+- Trigger: cross-branch validation under review. Finding (**Medium**): the shared governed tables
+  (`invariants.md`, `trace-matrix.md`) carried rows from several roles but **no owner indicator**, so
+  classification during merge was manual.
+- Fix: explicit **`Owner`** column on both tables; the trace fitness function now rejects a governed
+  table without an Owner column or an empty owner per row; case **C-37**; INV-12 acceptance extended.
+- Result: ADR-006 (D1 check 8), Delta-006, INV-12 + C-37. Verified: `test:trace` 9, `verify` 302.
