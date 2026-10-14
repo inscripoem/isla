@@ -461,9 +461,19 @@ export function createFixtureMemoryCommit(): MemoryCommitPort {
   }
 }
 
+/** A committed delivery with the sequence of its supporting event. */
+export interface FixtureStoredDelivery {
+  record: ConfirmedDelivery
+  eventSeq: number
+}
+
 export interface FixtureEventStore extends EventStorePort {
+  /** Detached inspection view of the committed events. */
   readonly events: RuntimeEvent[]
+  /** Detached inspection view of the committed delivery records. */
   readonly deliveries: ConfirmedDelivery[]
+  /** Detached committed deliveries with their supporting-event sequence. */
+  storedDeliveries(): FixtureStoredDelivery[]
   failNextAppend: boolean
   failNextCommit: boolean
   /** Test hooks to hold an acknowledgement for responsiveness checks. */
@@ -480,16 +490,29 @@ function sameContent(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b)
 }
 
+/** Structural copy so committed records never share state with callers. */
+function cloneRecord<T>(value: T): T {
+  return structuredClone(value)
+}
+
 function deliveryKey(delivery: Pick<ConfirmedDelivery, 'sessionId' | 'turnId' | 'segmentId' | 'modality'>): string {
   return `${delivery.sessionId}:${delivery.turnId}:${delivery.segmentId}:${delivery.modality}`
 }
 
 export function createFixtureEventStore(): FixtureEventStore {
-  const events: RuntimeEvent[] = []
-  const deliveries: ConfirmedDelivery[] = []
+  const committedEvents: RuntimeEvent[] = []
+  // One explicit representation: each committed delivery keeps its supporting
+  // event sequence, so history never has to invent ordering metadata.
+  const stored: FixtureStoredDelivery[] = []
   const store: FixtureEventStore = {
-    events,
-    deliveries,
+    get events() {
+      return committedEvents.map(cloneRecord)
+    },
+    get deliveries() {
+      return stored.map(({ record }) => cloneRecord(record))
+    },
+    storedDeliveries: () =>
+      stored.map(({ record, eventSeq }) => ({ record: cloneRecord(record), eventSeq })),
     failNextAppend: false,
     failNextCommit: false,
     async append(event): Promise<AppendAck> {
@@ -503,18 +526,31 @@ export function createFixtureEventStore(): FixtureEventStore {
         store.failNextAppend = false
         ack = { outcome: 'failed', eventId: event.eventId, seq: event.seq, reasonCode: 'storage_unavailable', message: 'fixture append failure' }
       } else {
-        const sameId = events.find(
-          (stored) => stored.sessionId === event.sessionId && stored.eventId === event.eventId,
+        const sameId = committedEvents.find(
+          (committed) => committed.sessionId === event.sessionId && committed.eventId === event.eventId,
         )
         if (sameId !== undefined) {
           ack = sameContent(sameId, event)
             ? { outcome: 'duplicate', eventId: event.eventId, seq: event.seq }
             : { outcome: 'failed', eventId: event.eventId, seq: event.seq, reasonCode: 'conflict', message: 'reused event id with different content' }
-        } else if (events.some((stored) => stored.sessionId === event.sessionId && stored.seq === event.seq)) {
+        } else if (committedEvents.some((committed) => committed.sessionId === event.sessionId && committed.seq === event.seq)) {
           ack = { outcome: 'failed', eventId: event.eventId, seq: event.seq, reasonCode: 'conflict', message: 'duplicate sequence number in session' }
         } else {
-          events.push(event)
-          ack = { outcome: 'stored', eventId: event.eventId, seq: event.seq }
+          // Fallible preparation precedes publication: copy the event before it
+          // is appended, so a copy failure is an ordinary preparation failure
+          // reported as a failed acknowledgement with no partial state.
+          let prepared: RuntimeEvent | undefined
+          try {
+            prepared = cloneRecord(event)
+          } catch {
+            prepared = undefined
+          }
+          if (prepared === undefined) {
+            ack = { outcome: 'failed', eventId: event.eventId, seq: event.seq, reasonCode: 'storage_unavailable', message: 'fixture append preparation failure' }
+          } else {
+            committedEvents.push(prepared)
+            ack = { outcome: 'stored', eventId: event.eventId, seq: event.seq }
+          }
         }
       }
       if (store.mutateAppendAck !== undefined) {
@@ -539,19 +575,20 @@ export function createFixtureEventStore(): FixtureEventStore {
         store.failNextCommit = false
         atomic = failure
       } else {
-        const sameId = events.find(
-          (stored) => stored.sessionId === event.sessionId && stored.eventId === event.eventId,
+        const sameId = committedEvents.find(
+          (committed) => committed.sessionId === event.sessionId && committed.eventId === event.eventId,
         )
         if (sameId !== undefined && !sameContent(sameId, event)) {
           atomic = failure
-        } else if (events.some((stored) => stored.sessionId === event.sessionId && stored.seq === event.seq && stored.eventId !== event.eventId)) {
+        } else if (committedEvents.some((committed) => committed.sessionId === event.sessionId && committed.seq === event.seq && committed.eventId !== event.eventId)) {
           atomic = { ...failure, event: { outcome: 'failed', eventId: event.eventId, seq: event.seq, reasonCode: 'conflict', message: 'duplicate sequence number in session' } }
         } else {
           const key = deliveryKey(delivery)
-          const existing = deliveries.find((record) => deliveryKey(record) === key)
+          const existing = stored.find((entry) => deliveryKey(entry.record) === key)?.record
           let deliveryAck: DeliveryCommitAck
+          let nextRecord: ConfirmedDelivery | undefined
           if (existing === undefined) {
-            deliveries.push({
+            nextRecord = {
               sessionId: delivery.sessionId,
               turnId: delivery.turnId,
               segmentId: delivery.segmentId,
@@ -561,9 +598,19 @@ export function createFixtureEventStore(): FixtureEventStore {
               receiptId: delivery.receiptId,
               classification: delivery.classification,
               modality: delivery.modality,
-            })
+              segmentIndex: delivery.segmentIndex,
+              personaProfileId: delivery.personaProfileId,
+              personaProfileVersion: delivery.personaProfileVersion,
+            }
             deliveryAck = deliveryCommitAckSchema.parse({ status: 'applied', effectiveClassification: delivery.classification, recordId: key })
-          } else if (existing.textHash !== delivery.textHash) {
+          } else if (
+            existing.textHash !== delivery.textHash ||
+            // Attribution is immutable identity: a changed index or persona
+            // conflicts rather than silently duplicating or overwriting.
+            existing.segmentIndex !== delivery.segmentIndex ||
+            existing.personaProfileId !== delivery.personaProfileId ||
+            existing.personaProfileVersion !== delivery.personaProfileVersion
+          ) {
             deliveryAck = deliveryCommitAckSchema.parse({
               status: 'conflict',
               recordedClassification: existing.classification,
@@ -580,8 +627,26 @@ export function createFixtureEventStore(): FixtureEventStore {
               conflictRecordId: `${key}:conflict`,
             })
           }
-          if (sameId === undefined) events.push(event)
-          atomic = { delivery: deliveryAck, event: sameId !== undefined ? { outcome: 'duplicate', eventId: event.eventId, seq: event.seq } : { outcome: 'stored', eventId: event.eventId, seq: event.seq } }
+          // Prepare every fallible copy (the supporting event and any new
+          // delivery record) before publishing either. A copy failure is an
+          // ordinary preparation failure: a failed acknowledgement with no
+          // partial event, delivery or history state.
+          let preparedEvent: RuntimeEvent | undefined
+          let preparedRecord: ConfirmedDelivery | undefined
+          let publishable = true
+          try {
+            if (sameId === undefined) preparedEvent = cloneRecord(event)
+            if (nextRecord !== undefined) preparedRecord = cloneRecord(nextRecord)
+          } catch {
+            publishable = false
+          }
+          if (!publishable) {
+            atomic = failure
+          } else {
+            if (preparedRecord !== undefined) stored.push({ record: preparedRecord, eventSeq: event.seq })
+            if (preparedEvent !== undefined) committedEvents.push(preparedEvent)
+            atomic = { delivery: deliveryAck, event: sameId !== undefined ? { outcome: 'duplicate', eventId: event.eventId, seq: event.seq } : { outcome: 'stored', eventId: event.eventId, seq: event.seq } }
+          }
         }
       }
       if (store.mutateCommitAck !== undefined) {
@@ -592,10 +657,13 @@ export function createFixtureEventStore(): FixtureEventStore {
       return atomic
     },
     async readSession(sessionId): Promise<RuntimeEvent[]> {
-      return events.filter((event) => event.sessionId === sessionId).sort((a, b) => a.seq - b.seq)
+      return committedEvents
+        .filter((event) => event.sessionId === sessionId)
+        .sort((a, b) => a.seq - b.seq)
+        .map(cloneRecord)
     },
     async exportJsonl(sessionId): Promise<string> {
-      return events
+      return committedEvents
         .filter((event) => event.sessionId === sessionId)
         .sort((a, b) => a.seq - b.seq)
         .map((event) => JSON.stringify(event))
@@ -630,21 +698,29 @@ export function createFixtureReplayReader(store: {
 }): ReplayReaderPort {
   return {
     async load(sessionId) {
-      return { sessionId, events: await store.readSession(sessionId) }
+      // Detached from live state: replay may be inspected or mutated freely.
+      return { sessionId, events: (await store.readSession(sessionId)).map(cloneRecord) }
     },
   }
 }
 
-export function createFixtureHistoryQuery(store: {
-  readonly deliveries: ConfirmedDelivery[]
-}): HistoryQueryPort {
+export interface FixtureHistorySource {
+  storedDeliveries(): readonly FixtureStoredDelivery[]
+}
+
+export function createFixtureHistoryQuery(store: FixtureHistorySource): HistoryQueryPort {
   return {
     async confirmedHistory(sessionId): Promise<ConfirmedDelivery[]> {
-      // Only confirmed spoken records are returned as fully-delivered history.
-      return store.deliveries.filter(
-        (delivery) =>
-          delivery.sessionId === sessionId && delivery.classification === 'fully-delivered',
-      )
+      // Read live each call, keep only confirmed spoken records, order by the
+      // supporting-event sequence and detach the returned records.
+      return store
+        .storedDeliveries()
+        .filter(
+          ({ record }) =>
+            record.sessionId === sessionId && record.classification === 'fully-delivered',
+        )
+        .sort((a, b) => a.eventSeq - b.eventSeq)
+        .map(({ record }) => cloneRecord(record))
     },
   }
 }

@@ -13,10 +13,14 @@ import type { StoredDelivery } from './backend'
  *
  * Ordering (INV-08)
  * -----------------
- * Records are returned ordered by their supporting event's `seq` ascending;
- * within a turn, segments keep their emission order. This matches the retrieval
- * policy in `docs/architecture/memory-design.md` and the wording agreed with
- * M4/M5 (issue #22). It must not depend on insertion order.
+ * This single-session read returns records ordered by their supporting event's
+ * `seq` ascending, independent of insertion order. That is the read order only:
+ * it does not itself establish within-turn emission order. A consumer that
+ * reconstructs a turn groups records by `(sessionId, turnId)` and orders them by
+ * the explicit `segmentIndex`, never by identifier spelling or receipt/event
+ * arrival. Unknown indices remain unknown. This matches the retrieval policy in
+ * `docs/architecture/memory-design.md` and the wording agreed with M4/M5
+ * (issue #22).
  *
  * Isolation (INV-07)
  * ------------------

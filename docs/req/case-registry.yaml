@@ -208,3 +208,17 @@ cases:
     verifier:
       file: test/offline/m6-storage.test.ts
       test: "does not treat a sparse array payload as an empty array"
+
+  - id: C-45
+    status: implemented
+    title: Original M5 delivery attribution across normal, Stop and late-receipt paths
+    verifier:
+      file: test/offline/m5-attribution.test.ts
+      test: "M5 delivery attribution capture"
+
+  - id: C-46
+    status: implemented
+    title: M6 attribution validation, legacy unknowns, ordering and conflict preservation
+    verifier:
+      file: test/offline/m5-attribution.test.ts
+      test: "M6 delivery attribution persistence"

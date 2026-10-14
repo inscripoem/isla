@@ -1,6 +1,6 @@
 # Interface and handoff baseline v0.2
 
-Revision: 2026-10-10.5. Status: under review. Shared schemas and offline fixtures exist; the M5-01 production coordinator is under review, while peer modules and application transport integration remain pending. This is an evolvable baseline coordinated by M5 with affected producers and consumers.
+Revision: 2026-10-15.1. Status: under review. Shared schemas, the M5 coordinator, M1 fixed synthesis/mapped rendering/browser playback and M6 in-memory storage exist. This revision adds delivery attribution and ordering metadata; affected-owner review and full application integration remain pending. This is an evolvable baseline coordinated by M5 with affected producers and consumers.
 
 ## Executable contract map
 
@@ -54,13 +54,27 @@ Receipts identify output, session, epoch, turn, segment, modality and observed s
 
 Deduplicate identical evidence; reject unregistered/mismatched receipts. Record contradictory terminal claims without overwriting confirmed facts. Unknown means missing knowledge and may be resolved by concrete evidence; it cannot authorize more playback.
 
-Only confirmed completed audio enters fully-delivered spoken history. A stopped/failed segment that had started remains partial-unknown: do not quote its entire text as spoken. Earlier completed segments remain valid. Word-level delivery is outside v0.2. C6 updates are idempotent and tied to immutable text and supporting output/receipt evidence.
+Only confirmed completed audio enters fully-delivered spoken history. A stopped/failed segment that had started remains partial-unknown: do not quote its entire text as spoken. Earlier completed segments remain valid. Word-level delivery is outside v0.2. C6 updates are idempotent and tied to immutable text, captured attribution and supporting output/receipt evidence.
+
+Storage-contract revision `2026-10-14.1` adds three required fields to both `CommitDelivery` and `ConfirmedDelivery`:
+
+| Field | Source | Legacy unknown |
+| --- | --- | --- |
+| `segmentIndex` | Original `DialogueSegment.index`; never parse `segmentId` | `null` |
+| `personaProfileId` | Original `DialogueRequest.characterProfileId` | `null` |
+| `personaProfileVersion` | Original `DialogueRequest.characterProfileVersion` | `null` |
+
+M5 captures profile values before passing the request to M4 and retains index/attribution with registered output. Normal completion, cancellation and late receipts use those original values. The supporting delivery event stores separate `versions.personaProfileId` and `versions.personaProfileVersion` keys. Identity and version are not concatenated into a value that consumers must parse.
+
+New M5 deliveries carry known values. Missing fields fail strict schema validation; a future M6 migration/read boundary must explicitly normalize genuinely unknown legacy values to null. It must never infer an index from an identifier or assign the current persona to old output. Reusing `(sessionId, turnId, segmentId, modality)` with a changed index, profile identity or version returns a delivery conflict and preserves the original history record. Existing classification and event acknowledgement rules remain unchanged.
 
 ## C7: persistence, projection and replay
 
-M6 owns SQLite infrastructure, migrations and storage/history APIs; M4 owns memory semantics; M5 retains live authority. Commit delivery and its supporting event atomically before acknowledging persistence. Do not publish a different event with the same seq or commit spoken memory before persistence succeeds.
+M6 owns SQLite infrastructure, migrations and storage/history APIs; M4 owns memory semantics; M5 retains live authority. M5 constructs the supporting event and calls M6 `commitDeliveryWithEvent(delivery, event)` directly; only after a successful atomic acknowledgement does it call M4 memory admission. Commit delivery and its supporting event atomically before acknowledging persistence. Do not publish a different event with the same seq or commit spoken memory before persistence succeeds.
 
 Event/delivery/sequence uniqueness is session-scoped. Identity reuse with changed content conflicts. Projections track applied seq and cannot claim current history across a gap. JSONL exports derive from committed records and must agree with them.
+
+`confirmedHistory(sessionId)` returns one session in supporting-event `seq` ascending order, independent of insertion order. Reconstructing a turn uses its explicit `segmentIndex` values; identifier spelling and receipt arrival order do not establish emission order. Preserve `(sessionId, turnId)` when grouping records, and do not compare session-local sequence values globally. Unknown indices remain unknown. Multi-session selection and production reconstruction remain later #22 work.
 
 Storage failure makes evidence incomplete and blocks new turns. Stop and local cancellation remain independent of pending storage calls. Replay is an isolated read view and cannot invoke live providers/rendering.
 
@@ -112,8 +126,8 @@ The [case registry](../req/case-registry.yaml) records current tests and pending
 
 Handoff includes task/requirement IDs, exact imports/variants, actual commands, positive/negative results, cancellation/failure behavior and remaining gaps. The consuming owner verifies the same contract revision; [role kits](READINESS-KITS.en.md) link replacement examples.
 
-Before changing an interface, trace consumers and update implementations, examples and tests together. Strict decoders need coordinated rollout even for optional fields. Breaking changes need a version/migration decision; this baseline is not permanently frozen.
+Before changing an interface, trace consumers and update implementations, examples and tests together. Application protocol `0.2` and diagnostic protocol `1` are unchanged; the internal storage revision above must be coordinated across producers, consumers and strict decoders, including draft SQLite adapters. Strict decoders need coordinated rollout even for optional fields. Breaking changes need a version/migration decision; this baseline is not permanently frozen.
 
 ## M5-01 implementation handoff
 
-The [M5-01 handoff](HANDOFF-M5-01.en.md) documents the implemented coordinator, local configuration, event records and requested I1-01 reviews. Shared C1–C7 schemas and port signatures remain unchanged. Application protocol 0.2 remains separate from diagnostic protocol 1. M1/M2/M3/M4/M6 retain their existing ownership; integrating their real modules is the next team checkpoint.
+The [M5-01 handoff](HANDOFF-M5-01.en.md) documents the implemented coordinator, local configuration, event records and requested I1-01 reviews. The M5-01 increment originally kept C1–C7 unchanged. This Step A revision extends the C6/C7 storage record shapes as documented above; port call signatures remain unchanged. Application protocol 0.2 remains separate from diagnostic protocol 1. M1/M2/M3/M4/M6 retain their existing ownership; integrating their real modules is the next team checkpoint.

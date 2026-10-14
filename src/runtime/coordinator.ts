@@ -167,6 +167,11 @@ interface OutputRegistration {
   epoch: number
   turnId: string
   segmentId: string
+  /** Original segment index captured at dispatch; never parsed from segmentId. */
+  segmentIndex: number
+  /** Generating persona captured from the original dialogue request. */
+  personaProfileId: string
+  personaProfileVersion: string
   modality: string
   outputId: string
   text: string
@@ -615,7 +620,9 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
       outputId: extra.outputId ?? null,
       type,
       sourceModule: extra.sourceModule ?? 'M5',
-      versions: null,
+      // Honor an explicitly supplied version map (for example the delivery's
+      // captured persona identity); never fabricate versions when none exist.
+      versions: extra.versions ?? null,
       payload: extra.payload ?? {},
     })
   }
@@ -1374,6 +1381,11 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
       terminalOutcome:
         fact.stage === 'completed' ? 'completed' : fact.stage === 'cancelled' ? 'cancelled' : 'failed',
       modality: 'audio',
+      // Immutable attribution captured at dispatch, so a late receipt or Stop
+      // finalizes the historical record with its original index and persona.
+      segmentIndex: registration.segmentIndex,
+      personaProfileId: registration.personaProfileId,
+      personaProfileVersion: registration.personaProfileVersion,
     }
     const deliveryEvent = makeEvent('delivery.committed', {
       epoch: registration.epoch,
@@ -1381,6 +1393,10 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
       segmentId: registration.segmentId,
       outputId,
       sourceModule: 'M6',
+      versions: {
+        personaProfileId: registration.personaProfileId,
+        personaProfileVersion: registration.personaProfileVersion,
+      },
       payload: { classification },
     })
     return commitDeliveryUnit(delivery, deliveryEvent).then(
@@ -1397,6 +1413,7 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
     turnId: string,
     startedEpoch: number,
     signal: AbortSignal,
+    personaIdentity: { profileId: string; profileVersion: string },
   ): Promise<SegmentDispatchResult> {
     const synthesisDeadline = { atMs: deps.clock.nowMs() + timings.synthesisMs }
     if (!freshAt(startedEpoch, synthesisDeadline, signal)) return 'revoked'
@@ -1556,6 +1573,9 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
       epoch: startedEpoch,
       turnId,
       segmentId: segment.segmentId,
+      segmentIndex: segment.index,
+      personaProfileId: personaIdentity.profileId,
+      personaProfileVersion: personaIdentity.profileVersion,
       modality: 'audio',
       outputId: command.outputId,
       text: segment.text,
@@ -1872,6 +1892,12 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
         confirmedEventRefs: [],
         contextLimits: { maxTurns: profile.maxTurns, maxCharacters: profile.maxCharacters },
       })
+      // Capture the generating persona immediately, before the mutable request
+      // object is handed to M4, so peer mutation cannot change what is recorded.
+      const personaIdentity = {
+        profileId: dialogueRequest.characterProfileId,
+        profileVersion: dialogueRequest.characterProfileVersion,
+      }
       let cycleFailed = false
       let sinkOpen = true
       let segmentChain: Promise<void> = Promise.resolve()
@@ -1930,7 +1956,7 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
             segmentId: segment.segmentId,
             payload: { segment },
           })
-          const result = await dispatchSegment(segment, turnId, startedEpoch, cycleSignal)
+          const result = await dispatchSegment(segment, turnId, startedEpoch, cycleSignal, personaIdentity)
           if (result === 'failed') cycleFailed = true
           turnDeliveries.push(...deliveries.slice(before))
         }

@@ -8,7 +8,18 @@ import {
   nullableString,
 } from './primitives'
 
-/** C6 — CommitDelivery (M5 -> M4). */
+/**
+ * C6 — CommitDelivery (M5 -> M4).
+ *
+ * Internal storage-contract revision 2026-10-14.1 adds explicit delivery
+ * attribution: the original segment index and the identity and version of the
+ * persona that generated the output. The index is captured from the original
+ * segment; the persona identity and version are captured from the original
+ * dialogue request. Both are persisted with the delivery; a genuine legacy
+ * unknown is an explicit `null`, never a fabricated index or the current
+ * persona. The application contract version stays `0.2`; the strict decoders
+ * roll out together with their constructors.
+ */
 
 export const commitDeliverySchema = z.strictObject({
   sessionId: nonEmptyString,
@@ -22,6 +33,11 @@ export const commitDeliverySchema = z.strictObject({
   classification: deliveryClassificationSchema,
   terminalOutcome: z.enum(['completed', 'cancelled', 'failed', 'unknown']),
   modality: modalitySchema,
+  /** Original `DialogueSegment.index`; never parsed from `segmentId`. */
+  segmentIndex: counter.nullable(),
+  /** Generating persona identity, paired with its version below. */
+  personaProfileId: nonEmptyString.nullable(),
+  personaProfileVersion: nonEmptyString.nullable(),
 })
 export type CommitDelivery = z.infer<typeof commitDeliverySchema>
 
@@ -84,6 +100,10 @@ export const confirmedDeliverySchema = z.strictObject({
   receiptId: nullableString,
   classification: deliveryClassificationSchema,
   modality: modalitySchema,
+  /** Attribution captured with the delivery (see `commitDeliverySchema`). */
+  segmentIndex: counter.nullable(),
+  personaProfileId: nonEmptyString.nullable(),
+  personaProfileVersion: nonEmptyString.nullable(),
 })
 export type ConfirmedDelivery = z.infer<typeof confirmedDeliverySchema>
 

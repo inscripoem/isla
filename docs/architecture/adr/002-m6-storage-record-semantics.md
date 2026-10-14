@@ -89,6 +89,20 @@ code guaranteed.
 6. **Record** — this ADR + trace rows + INV-04/05/07/08 + C-19/23/24/25/38.
 7. **Evaluate** — 3-tier verify (structural → regression → behavioral).
 
+## Step A amendment — original delivery attribution (2026-10-15, under review)
+
+Issue #22 extends the delivery write and confirmed-history shapes with required nullable
+`segmentIndex`, `personaProfileId` and `personaProfileVersion` fields. M5 captures known values from
+the original segment and dialogue request; M6 preserves them on conversion and read. Changed
+attribution or index on an existing delivery identity returns a delivery conflict and preserves the
+original record. Existing event acknowledgement and classification rules are unchanged.
+
+D3 continues to order a single session by supporting-event sequence. Consumers reconstruct a turn
+using its explicit segment indices, without parsing identifiers or comparing sequence values across
+sessions. SQLite migration must explicitly retain unknown legacy values as null; migration and
+multi-session reconstruction are separate work. The earlier frozen-contract decision above describes
+the PR9 increment; this coordinated record-shape update is an explicit later revision.
+
 ## Re-open triggers
 
 - A backend cannot express `(sessionId, eventId)` identity or ordering (e.g. SQLite index limits).

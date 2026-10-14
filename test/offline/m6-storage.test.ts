@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { collectStorageViolations } from '../conformance/storage.conformance'
+import {
+  collectAtomicFailureViolations,
+  collectStorageViolations,
+} from '../conformance/storage.conformance'
+import type { StorageKit } from '../conformance/storage.conformance'
+import { runtimeEventSchema } from '../../src/contracts'
+import type { RuntimeEvent } from '../../src/contracts'
+import * as correct from '../support/correct-ports'
 import * as faulty from '../support/faulty-ports'
-import { FIXTURE_SESSION_ID, fixtureCommitDelivery, fixtureRuntimeEvent } from '../support/fixture-data'
+import {
+  FIXTURE_SESSION_ID,
+  fixtureCommitDelivery,
+  fixtureRuntimeEvent,
+} from '../support/fixture-data'
 import {
   canonicalJson,
   createEventStore,
@@ -37,18 +48,59 @@ function createFailingBackend(): { backend: StorageBackend; failNextCommit: () =
   }
 }
 
+const uncopyableEvent = (overrides: Partial<RuntimeEvent> = {}): RuntimeEvent =>
+  fixtureRuntimeEvent({
+    eventId: 'evt-uncopyable',
+    seq: 50,
+    type: 'delivery.committed',
+    payload: { uncopyable: () => 1 },
+    ...overrides,
+  })
+
+function inspectionOf(store: correct.FixtureEventStore) {
+  return {
+    events: () => store.events,
+    deliveries: () => store.deliveries,
+    storedDeliveries: () => store.storedDeliveries(),
+  }
+}
+
+/** Fixture kit for the conformance suite; one port can be swapped per focused test. */
+function correctKit(options: { store?: correct.FixtureEventStore } = {}): StorageKit {
+  const store = options.store ?? correct.createFixtureEventStore()
+  return {
+    store,
+    projection: correct.createFixtureMemoryProjection(),
+    history: correct.createFixtureHistoryQuery(store),
+    replay: correct.createFixtureReplayReader(store),
+    inspection: inspectionOf(store),
+    setFailNextCommit: () => {
+      store.failNextCommit = true
+    },
+  }
+}
+
+/** Kit backed by the real M6 in-memory store through its persistence seam. */
+function actualM6Kit(): StorageKit {
+  const { backend, failNextCommit } = createFailingBackend()
+  const store = createEventStore(backend)
+  return {
+    store,
+    projection: createMemoryProjection(),
+    history: createHistoryQuery(backend),
+    replay: createReplayReader(store),
+    setFailNextCommit: failNextCommit,
+  }
+}
+
 describe('M6 storage conformance', () => {
-  it('accepts the M6 event store and projection', async () => {
-    const violations = await collectStorageViolations(() => {
-      const { backend, failNextCommit } = createFailingBackend()
-      const store = createEventStore(backend)
-      return {
-        store,
-        projection: createMemoryProjection(),
-        history: createHistoryQuery(backend),
-        setFailNextCommit: failNextCommit,
-      }
-    })
+  it('accepts the real M6 in-memory store, projection, history and replay', async () => {
+    const violations = await collectStorageViolations(() => actualM6Kit())
+    expect(violations).toEqual([])
+  })
+
+  it('accepts the correct store, projection, history, replay and detached views', async () => {
+    const violations = await collectStorageViolations(() => correctKit())
     expect(violations).toEqual([])
   })
 
@@ -58,9 +110,8 @@ describe('M6 storage conformance', () => {
       return {
         store: store.store,
         projection: faulty.createFaultyMemoryProjection(),
-        history: faulty.createFaultyHistoryQuery({
-          storedDeliveries: () => store.deliveries.map((record) => ({ record, eventSeq: 0 })),
-        }),
+        history: faulty.createFaultyHistoryQuery(store),
+        replay: faulty.createFaultyReplayReader(store.store),
         setFailNextCommit: () => {
           store.failNextCommit = true
         },
@@ -73,6 +124,318 @@ describe('M6 storage conformance', () => {
     expect(codes).toContain('atomic-failure-reported')
     expect(codes).toContain('projection-no-gap-claim')
     expect(codes).toContain('history-fully-delivered-only')
+  })
+
+  it('detects session-blind, mutable and unordered storage faults', async () => {
+    const violations = await collectStorageViolations(() => faulty.createFaultySharedStorageKit())
+    const codes = violations.map((violation) => violation.code)
+    for (const code of [
+      'append-session-independent',
+      'read-session-independent',
+      'export-session-independent',
+      'commit-session-independent',
+      'append-input-detached',
+      'commit-event-input-detached',
+      'read-result-detached',
+      'replay-result-detached',
+      'commit-input-detached',
+      'history-result-detached',
+      'history-ordered-by-event-seq',
+      'history-dedup',
+      'history-excludes-unconfirmed',
+      'history-session-independent',
+    ]) {
+      expect(codes).toContain(code)
+    }
+  })
+
+  it('detects a non-live confirmed-history snapshot', async () => {
+    const violations = await collectStorageViolations(() =>
+      faulty.createFaultySharedStorageKit({ snapshotHistory: true }),
+    )
+    expect(violations.map((violation) => violation.code)).toContain('history-live')
+  })
+})
+
+describe('M6 focused negative adapters', () => {
+  it('detects an empty replay archive', async () => {
+    const violations = await collectStorageViolations(() => {
+      const kit = correctKit()
+      return { ...kit, replay: faulty.createEmptyReplayReader() }
+    })
+    expect(violations.map((violation) => violation.code)).toContain('replay-contains-committed')
+  })
+
+  it('detects a JSONL export with the wrong session content', async () => {
+    const violations = await collectStorageViolations(() => {
+      const store = correct.createFixtureEventStore()
+      const kit = correctKit({ store })
+      return { ...kit, store: faulty.createWrongExportEventStore(store, 'session-elsewhere') }
+    })
+    const codes = violations.map((violation) => violation.code)
+    expect(codes).toContain('export-session-independent')
+    expect(codes).toContain('export-read-consistent')
+  })
+
+  it('detects insertion-ordered confirmed history', async () => {
+    const violations = await collectStorageViolations(() => {
+      const store = correct.createFixtureEventStore()
+      const kit = correctKit({ store })
+      return { ...kit, history: faulty.createInsertionOrderedHistoryQuery(store) }
+    })
+    expect(violations.map((violation) => violation.code)).toContain('history-ordered-by-event-seq')
+  })
+})
+
+describe('M6 storage focused follow-up', () => {
+  it('scopes event identity, reads and JSONL exports by session', async () => {
+    const store = correct.createFixtureEventStore()
+    const shared = { eventId: 'evt-shared', seq: 1 }
+    const alpha = 'session-alpha'
+    const beta = 'session-beta'
+
+    expect((await store.append(fixtureRuntimeEvent({ ...shared, sessionId: alpha }))).outcome).toBe('stored')
+    expect((await store.append(fixtureRuntimeEvent({ ...shared, sessionId: beta }))).outcome).toBe('stored')
+
+    const readAlpha = await store.readSession(alpha)
+    const readBeta = await store.readSession(beta)
+    expect(readAlpha.map((event) => event.sessionId)).toEqual([alpha])
+    expect(readBeta.map((event) => event.sessionId)).toEqual([beta])
+    expect(await store.exportJsonl(alpha)).not.toContain(beta)
+    expect(await store.exportJsonl(beta)).not.toContain(alpha)
+  })
+
+  it('detaches nested payloads of appended, atomic, read and replayed events', async () => {
+    const store = correct.createFixtureEventStore()
+    const input = fixtureRuntimeEvent({
+      eventId: 'evt-detach',
+      seq: 1,
+      payload: { nested: { value: 'original' } },
+    })
+    await store.append(input)
+    ;(input.payload as { nested: { value: string } }).nested.value = 'mutated-input'
+
+    const atomicEvent = fixtureRuntimeEvent({
+      eventId: 'evt-atomic',
+      seq: 2,
+      type: 'delivery.committed',
+      payload: { nested: { value: 'original-atomic' } },
+    })
+    await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({ turnId: 'turn-atomic', segmentId: 'seg-atomic', textHash: 'hash-atomic', text: 'atomic-spoken' }),
+      atomicEvent,
+    )
+    ;(atomicEvent.payload as { nested: { value: string } }).nested.value = 'mutated-atomic'
+
+    const read = (await store.readSession(FIXTURE_SESSION_ID)).find((event) => event.eventId === 'evt-detach')!
+    ;(read.payload as { nested: { value: string } }).nested.value = 'mutated-read'
+
+    const archive = await correct.createFixtureReplayReader(store).load(FIXTURE_SESSION_ID)
+    ;(archive.events[0]!.payload as { nested: { value: string } }).nested.value = 'mutated-replay'
+
+    const committed = await store.readSession(FIXTURE_SESSION_ID)
+    expect((committed.find((event) => event.eventId === 'evt-detach')!.payload as { nested: { value: string } }).nested.value).toBe('original')
+    expect((committed.find((event) => event.eventId === 'evt-atomic')!.payload as { nested: { value: string } }).nested.value).toBe('original-atomic')
+    expect(await store.exportJsonl(FIXTURE_SESSION_ID)).not.toContain('mutated')
+  })
+
+  it('keeps inspection views detached from committed arrays and records', async () => {
+    const store = correct.createFixtureEventStore()
+    await store.append(fixtureRuntimeEvent({ eventId: 'evt-view', seq: 1 }))
+
+    const eventsView = store.events
+    const eventCount = eventsView.length
+    eventsView[0]!.type = 'mutated-view'
+    eventsView.push(fixtureRuntimeEvent({ eventId: 'evt-view-injected', seq: 99 }))
+    expect(store.events.length).toBe(eventCount)
+    expect((await store.readSession(FIXTURE_SESSION_ID)).every((event) => event.type !== 'mutated-view')).toBe(true)
+
+    await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({ turnId: 'turn-view', segmentId: 'seg-view', textHash: 'hash-view', text: 'view-spoken' }),
+      fixtureRuntimeEvent({ eventId: 'evt-view-commit', seq: 2, type: 'delivery.committed' }),
+    )
+    const deliveriesView = store.deliveries
+    deliveriesView[0]!.text = 'mutated-view-delivery'
+    expect(store.deliveries.every((delivery) => delivery.text !== 'mutated-view-delivery')).toBe(true)
+
+    const storedView = store.storedDeliveries()
+    storedView[0]!.record.text = 'mutated-stored'
+    storedView[0]!.eventSeq = -1
+    expect(store.storedDeliveries()).toEqual([
+      expect.objectContaining({ eventSeq: 2, record: expect.objectContaining({ text: 'view-spoken' }) }),
+    ])
+  })
+
+  it('returns live confirmed history ordered by supporting-event seq without duplicates', async () => {
+    const store = correct.createFixtureEventStore()
+    const history = correct.createFixtureHistoryQuery(store)
+    const commit = (turnId: string, eventId: string, seq: number, overrides = {}) =>
+      store.commitDeliveryWithEvent(
+        fixtureCommitDelivery({ turnId, segmentId: `${turnId}-seg`, textHash: `hash-${turnId}`, text: `${turnId}-text`, ...overrides }),
+        fixtureRuntimeEvent({ eventId, seq, type: 'delivery.committed' }),
+      )
+
+    await commit('late', 'evt-late', 5)
+    await commit('early', 'evt-early', 2)
+    expect((await history.confirmedHistory(FIXTURE_SESSION_ID)).map((record) => record.turnId)).toEqual(['early', 'late'])
+
+    const first = await commit('dup', 'evt-dup-1', 6)
+    const second = await commit('dup', 'evt-dup-2', 7)
+    expect(first.delivery.status).toBe('applied')
+    expect(second.delivery.status).toBe('duplicate')
+
+    await commit('unspoken', 'evt-unspoken', 8, { classification: 'not-delivered', terminalOutcome: 'failed' })
+    const confirmed = await history.confirmedHistory(FIXTURE_SESSION_ID)
+    expect(confirmed.map((record) => record.turnId)).toEqual(['early', 'late', 'dup'])
+    expect(confirmed.filter((record) => record.turnId === 'dup')).toHaveLength(1)
+    expect(confirmed.every((record) => record.classification === 'fully-delivered')).toBe(true)
+
+    const before = confirmed.length
+    await commit('live', 'evt-live', 9)
+    expect((await history.confirmedHistory(FIXTURE_SESSION_ID))).toHaveLength(before + 1)
+  })
+})
+
+describe('M6 atomic preparation failure regression', () => {
+  it('reports a failed acknowledgement and publishes nothing when a batch cannot prepare', async () => {
+    const store = correct.createFixtureEventStore()
+    const history = correct.createFixtureHistoryQuery(store)
+    await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({
+        turnId: 'turn-preserved',
+        segmentId: 'seg-preserved',
+        textHash: 'hash-preserved',
+        text: 'preserved-spoken',
+      }),
+      fixtureRuntimeEvent({ eventId: 'evt-preserved', seq: 10, type: 'delivery.committed' }),
+    )
+
+    const eventsBefore = await store.readSession(FIXTURE_SESSION_ID)
+    const deliveriesBefore = store.deliveries
+    const historyBefore = await history.confirmedHistory(FIXTURE_SESSION_ID)
+    const exportBefore = await store.exportJsonl(FIXTURE_SESSION_ID)
+    expect(historyBefore.some((record) => record.turnId === 'turn-preserved')).toBe(true)
+
+    // The reproduction input is schema-valid; only its function payload cannot
+    // be structurally copied. The invariant under test is that a batch which
+    // cannot fully commit leaves no partial state behind.
+    const failedEvent = uncopyableEvent()
+    expect(runtimeEventSchema.safeParse(failedEvent).success).toBe(true)
+
+    const failed = await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({
+        turnId: 'turn-failed',
+        segmentId: 'seg-failed',
+        textHash: 'hash-failed',
+        text: 'failed-spoken',
+      }),
+      failedEvent,
+    )
+
+    expect(failed.delivery.status).toBe('failed')
+    expect(failed.event.outcome).toBe('failed')
+    expect(await store.readSession(FIXTURE_SESSION_ID)).toEqual(eventsBefore)
+    expect(store.deliveries).toEqual(deliveriesBefore)
+    expect(await history.confirmedHistory(FIXTURE_SESSION_ID)).toEqual(historyBefore)
+    expect(await store.exportJsonl(FIXTURE_SESSION_ID)).toBe(exportBefore)
+  })
+
+  it('applies a later valid retry with the same identity and sequence without orphaning or duplicating', async () => {
+    const store = correct.createFixtureEventStore()
+    const history = correct.createFixtureHistoryQuery(store)
+    const delivery = fixtureCommitDelivery({
+      turnId: 'turn-retry',
+      segmentId: 'seg-retry',
+      textHash: 'hash-retry',
+      text: 'retry-spoken',
+    })
+    const identity = { eventId: 'evt-retry', seq: 60, type: 'delivery.committed' } as const
+
+    const failed = await store.commitDeliveryWithEvent(delivery, uncopyableEvent(identity))
+    expect(failed.delivery.status).toBe('failed')
+    expect(failed.event.outcome).toBe('failed')
+
+    const applied = await store.commitDeliveryWithEvent(delivery, fixtureRuntimeEvent(identity))
+    expect(applied.delivery.status).toBe('applied')
+    expect(applied.event.outcome).toBe('stored')
+    expect((await store.readSession(FIXTURE_SESSION_ID)).filter((event) => event.eventId === 'evt-retry')).toHaveLength(1)
+    expect((await history.confirmedHistory(FIXTURE_SESSION_ID)).filter((record) => record.turnId === 'turn-retry')).toHaveLength(1)
+  })
+
+  it('reports an append preparation failure without publishing or throwing', async () => {
+    const store = correct.createFixtureEventStore()
+    const before = await store.readSession(FIXTURE_SESSION_ID)
+    const ack = await store.append(uncopyableEvent())
+    expect(ack.outcome).toBe('failed')
+    expect(await store.readSession(FIXTURE_SESSION_ID)).toEqual(before)
+  })
+
+  it('keeps explicit throw controls throwing before publication', async () => {
+    const store = correct.createFixtureEventStore()
+    store.throwNextAppend = true
+    await expect(store.append(fixtureRuntimeEvent())).rejects.toThrow('fixture append throw')
+    expect(await store.readSession(FIXTURE_SESSION_ID)).toEqual([])
+
+    store.throwNextCommit = true
+    await expect(
+      store.commitDeliveryWithEvent(
+        fixtureCommitDelivery(),
+        fixtureRuntimeEvent({ eventId: 'evt-throw', seq: 2, type: 'delivery.committed' }),
+      ),
+    ).rejects.toThrow('fixture commit throw')
+    expect(await store.readSession(FIXTURE_SESSION_ID)).toEqual([])
+    expect(store.deliveries).toEqual([])
+  })
+
+  it('still applies acknowledgement mutators to a preparation-failure ack', async () => {
+    const store = correct.createFixtureEventStore()
+    store.mutateCommitAck = (ack) => ({ ...ack, event: { ...ack.event, message: 'mutated-commit-prep' } })
+    const failed = await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery(),
+      uncopyableEvent({ eventId: 'evt-mutate', seq: 70 }),
+    )
+    expect(failed.event.outcome).toBe('failed')
+    expect(failed.event).toMatchObject({ message: 'mutated-commit-prep' })
+
+    store.mutateAppendAck = (ack) => ({ ...ack, message: 'mutated-append-prep' })
+    const ack = await store.append(uncopyableEvent({ eventId: 'evt-mutate-append', seq: 71 }))
+    expect(ack).toMatchObject({ outcome: 'failed', message: 'mutated-append-prep' })
+  })
+
+  it('contains a partial-publish adapter even with live inspection arrays', async () => {
+    const kit = faulty.createThrowAfterDeliveryEventStore()
+    const violations = await collectAtomicFailureViolations({
+      store: kit.store,
+      history: faulty.createFaultyHistoryQuery(kit),
+      // Deliberately live views: the probe must snapshot baselines itself, so a
+      // faulty adapter cannot rewrite the expected pre-failure state.
+      inspection: {
+        events: () => kit.events,
+        deliveries: () => kit.deliveries,
+        storedDeliveries: () => kit.storedDeliveries(),
+      },
+    })
+    const codes = violations.map((violation) => violation.code)
+    expect(codes).toContain('atomic-failure-no-partial-history')
+    expect(codes).toContain('atomic-failure-no-partial-delivery')
+    expect(codes).toContain('atomic-retry-no-orphan')
+  })
+
+  it('reports an accepted commit as a failure not induced', async () => {
+    const store = faulty.createFaultyEventStore()
+    const violations = await collectAtomicFailureViolations({ store: store.store })
+    expect(violations.map((violation) => violation.code)).toContain('atomic-failure-not-induced')
+  })
+
+  it('accepts a clean failure that throws before publishing anything', async () => {
+    const store = correct.createFixtureEventStore()
+    const violations = await collectAtomicFailureViolations({
+      store,
+      induceFailure: () => {
+        store.throwNextCommit = true
+      },
+    })
+    expect(violations).toEqual([])
   })
 })
 
@@ -631,6 +994,106 @@ describe('M6 storage integration (through the ports)', () => {
     // The projection advances one event at a time and refuses a gap.
     expect((await projection.apply(events[0]!)).appliedSeq).toBe(1)
     expect((await projection.apply(events[2]!)).appliedSeq).toBe(1)
+  })
+})
+
+describe('M6 delivery attribution and ordering (Step A)', () => {
+  it('persists segment index and persona attribution and returns them in confirmed history', async () => {
+    const backend = createInMemoryBackend()
+    const store = createEventStore(backend)
+    const history = createHistoryQuery(backend)
+    await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({ turnId: 't-attr', segmentId: 's-attr', textHash: 'h-attr', text: 'attributed', segmentIndex: 1, personaProfileId: 'persona-x', personaProfileVersion: '9' }),
+      fixtureRuntimeEvent({ eventId: 'evt-attr', seq: 1, type: 'delivery.committed' }),
+    )
+    const [record] = await history.confirmedHistory(FIXTURE_SESSION_ID)
+    expect(record?.segmentIndex).toBe(1)
+    expect(record?.personaProfileId).toBe('persona-x')
+    expect(record?.personaProfileVersion).toBe('9')
+  })
+
+  it('conflicts a reused delivery identity with a changed segment index or persona and keeps the original history', async () => {
+    const backend = createInMemoryBackend()
+    const store = createEventStore(backend)
+    const history = createHistoryQuery(backend)
+    const base = fixtureCommitDelivery({ turnId: 't-conflict', segmentId: 's-conflict', textHash: 'h-conflict', text: 'original', segmentIndex: 0, personaProfileId: 'persona-base', personaProfileVersion: '1' })
+    const first = await store.commitDeliveryWithEvent(
+      base,
+      fixtureRuntimeEvent({ eventId: 'evt-c1', seq: 1, type: 'delivery.committed' }),
+    )
+    expect(first.delivery.status).toBe('applied')
+
+    const changedIndex = await store.commitDeliveryWithEvent(
+      { ...base, segmentIndex: 1 },
+      fixtureRuntimeEvent({ eventId: 'evt-c2', seq: 2, type: 'delivery.committed' }),
+    )
+    expect(changedIndex.delivery.status).toBe('conflict')
+
+    const changedPersona = await store.commitDeliveryWithEvent(
+      { ...base, personaProfileId: 'persona-other' },
+      fixtureRuntimeEvent({ eventId: 'evt-c3', seq: 3, type: 'delivery.committed' }),
+    )
+    expect(changedPersona.delivery.status).toBe('conflict')
+
+    const changedVersion = await store.commitDeliveryWithEvent(
+      { ...base, personaProfileVersion: '2' },
+      fixtureRuntimeEvent({ eventId: 'evt-c4', seq: 4, type: 'delivery.committed' }),
+    )
+    expect(changedVersion.delivery.status).toBe('conflict')
+
+    // The identical delivery is still an idempotent duplicate, not a rewrite.
+    const duplicate = await store.commitDeliveryWithEvent(
+      base,
+      fixtureRuntimeEvent({ eventId: 'evt-c5', seq: 5, type: 'delivery.committed' }),
+    )
+    expect(duplicate.delivery.status).toBe('duplicate')
+
+    const confirmed = (await history.confirmedHistory(FIXTURE_SESSION_ID)).filter((record) => record.turnId === 't-conflict')
+    expect(confirmed).toHaveLength(1)
+    expect(confirmed[0]?.segmentIndex).toBe(0)
+    expect(confirmed[0]?.personaProfileId).toBe('persona-base')
+    expect(confirmed[0]?.personaProfileVersion).toBe('1')
+  })
+
+  it('round-trips explicit legacy null attribution without substituting the current persona', async () => {
+    const backend = createInMemoryBackend()
+    const store = createEventStore(backend)
+    const history = createHistoryQuery(backend)
+    await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({ turnId: 't-legacy', segmentId: 's-legacy', textHash: 'h-legacy', text: 'legacy', segmentIndex: null, personaProfileId: null, personaProfileVersion: null }),
+      fixtureRuntimeEvent({ eventId: 'evt-legacy', seq: 1, type: 'delivery.committed' }),
+    )
+    const [first] = await history.confirmedHistory(FIXTURE_SESSION_ID)
+    expect(first?.segmentIndex).toBeNull()
+    expect(first?.personaProfileId).toBeNull()
+    expect(first?.personaProfileVersion).toBeNull()
+    // A later query must not backfill the current persona or a fabricated index.
+    const [second] = await history.confirmedHistory(FIXTURE_SESSION_ID)
+    expect(second?.segmentIndex).toBeNull()
+    expect(second?.personaProfileId).toBeNull()
+    expect(second?.personaProfileVersion).toBeNull()
+  })
+
+  it('keeps history ordered by supporting-event seq and enables turn reconstruction by explicit segment index', async () => {
+    const backend = createInMemoryBackend()
+    const store = createEventStore(backend)
+    const history = createHistoryQuery(backend)
+    const commit = (segmentId: string, segmentIndex: number, eventId: string, seq: number) =>
+      store.commitDeliveryWithEvent(
+        fixtureCommitDelivery({ turnId: 'turn-recon', segmentId, textHash: `hash-${segmentId}`, text: `text-${segmentId}`, segmentIndex }),
+        fixtureRuntimeEvent({ eventId, seq, type: 'delivery.committed' }),
+      )
+    // Reverse-looking identifiers must not change emitted order: ordering follows
+    // the supporting-event sequence, and a turn is reconstructed by segmentIndex.
+    await commit('segment-9', 1, 'evt-recon-1', 2)
+    await commit('segment-1', 0, 'evt-recon-2', 3)
+
+    const confirmed = await history.confirmedHistory(FIXTURE_SESSION_ID)
+    expect(confirmed.map((record) => record.segmentId)).toEqual(['segment-9', 'segment-1'])
+    const reconstructed = [...confirmed]
+      .filter((record) => record.turnId === 'turn-recon')
+      .sort((a, b) => (a.segmentIndex ?? 0) - (b.segmentIndex ?? 0))
+    expect(reconstructed.map((record) => record.segmentId)).toEqual(['segment-1', 'segment-9'])
   })
 })
 

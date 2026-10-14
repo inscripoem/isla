@@ -11,6 +11,7 @@ Start an agent from the repository root with a short request such as "I am M3. S
 | [Interfaces and handoff](INTERFACES.en.md) | C1–C7 contracts, existing acceptance-case IDs and integration responsibilities |
 | [M5-01 handoff](HANDOFF-M5-01.en.md) | Production coordinator, actual verification, configuration and per-owner I1-01 requests |
 | [M4-01 handoff](HANDOFF-M4-01.en.md) | Production dialogue/persona/memory module, actual verification, configuration and per-owner I1-01 requests |
+| [M5 Step A handoff](HANDOFF-M5-CONTRACT-A.en.md) | Delivery attribution, explicit segment indices, reconciled shared-storage tests and M4/M6 rollout review |
 | [Readiness kits](READINESS-KITS.en.md) | Per-role commands, ports to implement, fixture replacement instructions and version-change coordination |
 | [Readiness review](READINESS-REVIEW.en.md) | Supervisory review of the approved contract and test design |
 | [Requirements registry](../req/requirements.yaml) | Machine-readable requirements with JSON schema, PRD and trace record under `docs/req/` |

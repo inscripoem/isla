@@ -190,7 +190,7 @@ export function createContractRunner(
       outputId: extra.outputId ?? null,
       type,
       sourceModule: extra.sourceModule ?? 'M5',
-      versions: null,
+      versions: extra.versions ?? null,
       payload: extra.payload ?? {},
     })
   }
@@ -452,6 +452,7 @@ export function createContractRunner(
     startedEpoch: number,
     deadline: { atMs: number },
     context: CallContext,
+    personaIdentity: { profileId: string; profileVersion: string },
   ): Promise<void> {
     if (!fresh(startedEpoch, deadline, context)) return
     // A prior segment that left the output unknown or pending must not allow a
@@ -582,6 +583,9 @@ export function createContractRunner(
       terminalOutcome:
         finalStage === 'completed' ? 'completed' : finalStage === 'cancelled' ? 'cancelled' : 'failed',
       modality: 'audio',
+      segmentIndex: segment.index,
+      personaProfileId: personaIdentity.profileId,
+      personaProfileVersion: personaIdentity.profileVersion,
     }
     // Persist the delivery and its supporting event once, atomically, before
     // committing spoken memory.
@@ -590,6 +594,10 @@ export function createContractRunner(
       segmentId: segment.segmentId,
       outputId: command.outputId,
       sourceModule: 'M6',
+      versions: {
+        personaProfileId: personaIdentity.profileId,
+        personaProfileVersion: personaIdentity.profileVersion,
+      },
       payload: { classification },
     })
     const atomic = await deps.store.commitDeliveryWithEvent(delivery, deliveryEvent)
@@ -730,14 +738,15 @@ export function createContractRunner(
       snapshotRevision += 1
       await persist('turn.started', { turnId, payload: { replyIntent: plan.replyIntent } })
       const turnDeliveries: CommitDelivery[] = []
+      const personaIdentity = { profileId: 'character-fixture', profileVersion: '1' }
       const dialogueRequest = dialogueRequestSchema.parse({
         requestId: nextId('dialogue'),
         sessionId,
         epoch: startedEpoch,
         turnId,
         selectedInput: { eventId: chosen.eventId, text: chosen.text },
-        characterProfileId: 'character-fixture',
-        characterProfileVersion: '1',
+        characterProfileId: personaIdentity.profileId,
+        characterProfileVersion: personaIdentity.profileVersion,
         responsePlan: {
           selectionRequestId: selectionRequest.requestId,
           selectedEventId: chosen.eventId,
@@ -752,7 +761,7 @@ export function createContractRunner(
         segment: async (segment) => {
           if (!fresh(startedEpoch, deadline, context)) return
           const before = deliveries.length
-          await dispatchSegment(segment, turnId, index, startedEpoch, deadline, context)
+          await dispatchSegment(segment, turnId, index, startedEpoch, deadline, context, personaIdentity)
           turnDeliveries.push(...deliveries.slice(before))
           if (hooks.afterSegmentDispatch !== undefined) await hooks.afterSegmentDispatch(index)
           index += 1

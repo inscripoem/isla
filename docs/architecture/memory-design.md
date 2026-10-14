@@ -1,7 +1,7 @@
 # Memory / state design
 
 Status: under review. M6 contributes the persistence portion; memory semantics are owned by M4 and
-live authority by M5. Shared document — M5 coordination pending. Date: 2026-10-12.
+live authority by M5. Step A record-shape coordination is under review. Updated: 2026-10-15.
 
 ## Scope and ownership
 
@@ -13,13 +13,15 @@ live authority by M5. Shared document — M5 coordination pending. Date: 2026-10
 
 ## What state survives
 
+The table describes the persistence target. Current main supplies an in-memory backend; Step A does not implement SQLite migration or restart recovery.
+
 | State | Survives restart? | Store | Notes |
 | --- | --- | --- | --- |
 | Committed events (`RuntimeEvent`) | Yes | `event-store` / SQLite `events` | Append-only; `seq` strictly increasing |
 | Delivery outcomes (`CommitDelivery`) | Yes | SQLite `deliveries` | Full record incl. `terminalOutcome` (see below) |
 | Confirmed spoken history | Yes | `deliveries` (`fully-delivered` only) | Returned by `HistoryQueryPort` |
 | Memory projection position | Yes | `appliedSeq` | Advances one event at a time; never across a gap |
-| Persona attribution | Yes | `deliveries.persona_version` | Per-turn `profileId@version` |
+| Persona attribution and segment order | Planned for SQLite; present in memory | `personaProfileId`, `personaProfileVersion`, `segmentIndex` | Captured from the original request/segment; M6 must map each field explicitly in its SQLite adapter, retaining legacy unknowns as null |
 | Active turn / pending outputs | No (by design) | — | Restart begins stopped; unresolved outputs stay `unknown` |
 | Raw audio | Separate local files | DB reference only | Never inside event payloads |
 | Credentials / tokens | Never persisted | — | Excluded from events and JSONL |
@@ -29,7 +31,7 @@ live authority by M5. Shared document — M5 coordination pending. Date: 2026-10
 1. Events are **append-only**; identity and `seq` are unique (INV-04). Reuse with changed content is
    rejected, never overwritten.
 2. A delivery and its supporting event commit **atomically** (INV-05): both or neither.
-3. Delivery commit is **idempotent**: identical re-commit returns `duplicate`; changed `textHash`
+3. Delivery commit is **idempotent**: identical re-commit returns `duplicate`; changed `textHash`, `segmentIndex`, `personaProfileId` or `personaProfileVersion`
    returns `conflict` (key = `sessionId:turnId:segmentId:modality`).
 4. The full `CommitDelivery` is persisted, including `terminalOutcome`, so a `partial-unknown` /
    `not-delivered` segment keeps its outcome across restart and cannot replay as delivered.
@@ -46,6 +48,7 @@ live authority by M5. Shared document — M5 coordination pending. Date: 2026-10
 - `confirmedHistory(sessionId)` → only `fully-delivered` records, ordered by the supporting event
   `seq` ascending (enforced by INV-08 / case C-25; each delivery retains its supporting `event_seq`),
   independent of insertion order; partial/unknown and generated-only text excluded.
+- Turn reconstruction uses explicit `segmentIndex` within `(sessionId, turnId)`; it does not reorder the single-session history port or infer ordering from identifier spelling. Unknown indices remain unknown.
 - Replay (`ReplayReaderPort.load`) is an **isolated read model**: it never mutates live state and
   never calls a live provider/renderer (C-12).
 

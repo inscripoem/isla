@@ -1,6 +1,6 @@
 # Isla — Candidate Requirements
 
-Revision: 2026-10-10.2 · Status: under review
+Revision: 2026-10-15.1 · Status: under review
 
 Team requirements under review; English engineering requirements may be promoted to formal D1 after acceptance. This Markdown table does not replace the required YAML/schema. These are proposed acceptance obligations, not implemented capabilities or an approved D1 registry. Stable IDs are retained from the archived candidate draft; FR-01 now explicitly includes reply intent, FR-02 includes dialogue generation, and NFR-06 covers the selected adapter boundaries.
 
@@ -50,6 +50,7 @@ Every final entry requires metric + threshold + verification. TBD means not read
 | INV-06 | A memory projection never advances across a gap and is idempotent. FR-06; C-12. | M6 storage (`memory-projection`) | Conformance `projection-no-gap-claim` and case C-20; do not advance `appliedSeq`. |
 | INV-07 | Committed event and delivery records are isolated from caller mutation. FR-06. | M6 storage (`in-memory-backend` deep-copies on write and read) | Case C-24; mutating an input or a returned record cannot change committed state or JSONL output. |
 | INV-08 | Confirmed history is ordered by the supporting event sequence (ascending). FR-06; issue #22. | M6 storage (`history-query` over `StoredDelivery.eventSeq`) | Case C-25; `confirmedHistory` returns seq order independent of insertion order. |
+| INV-09 | Original segment index and generating persona identity/version remain attached to delivery evidence. FR-06; issue #22. | M5 capture and M6 record conversion | C-45/C-46; preserve original values on Stop/late receipts, reject changed attribution as a conflict, retain legacy unknowns as null. |
 
 ## Promotion to D1
 
