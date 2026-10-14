@@ -1,5 +1,5 @@
 import { APPLICATION_CONTRACT_VERSION } from '../../contracts'
-import type { ConfirmedDelivery, RuntimeEvent } from '../../contracts'
+import type { CommitDelivery, ConfirmedDelivery, RuntimeEvent } from '../../contracts'
 import type { StoredDelivery } from '../backend'
 
 /**
@@ -90,5 +90,6 @@ export function rowToDelivery(row: DeliveryRow): StoredDelivery {
       modality: row.modality as ConfirmedDelivery['modality'],
     },
     eventSeq: row.event_seq,
+    terminalOutcome: row.terminal_outcome as CommitDelivery['terminalOutcome'],
   }
 }

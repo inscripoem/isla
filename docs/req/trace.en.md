@@ -45,6 +45,8 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-29 | implemented | `test/offline/m6-sqlite-backend.test.ts` | SQLite backend passes the storage conformance suite |
 | C-30 | implemented | `test/offline/m6-sqlite-backend.test.ts` | SQLite persistence survives reopen with isolation and order |
 | C-31 | implemented | `test/offline/m6-sqlite-backend.test.ts` | SQLite persists the delivery terminal outcome for recovery |
+| C-32 | implemented | `test/offline/m6-recovery.test.ts` | recovery view separates confirmed history from unresolved records |
+| C-33 | implemented | `test/offline/m6-recovery.test.ts` | restart restores only confirmed history and keeps the rest unknown |
 | C-38 | implemented | `test/offline/m6-storage.test.ts` | a commit whose later mutation cannot be published leaves no partial state |
 | C-39 | implemented | `test/offline/m6-storage.test.ts` | a conflicting atomic commit reports the conflict cause on both sides |
 | C-40 | implemented | `test/offline/m6-storage.test.ts` | event content equality is insensitive to object key order |
@@ -63,7 +65,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | FR-03 | M1 | C-06, C-11 | — |
 | FR-04 | M1 | C-01, C-04, C-10 | — |
 | FR-05 | M5 | C-03, C-04 | C-08 |
-| FR-06 | M6 | C-12, C-17, C-21, C-22, C-29, C-30, C-31, C-46, C-47 | — |
+| FR-06 | M6 | C-12, C-17, C-21, C-22, C-29, C-30, C-31, C-32, C-33, C-46, C-47 | — |
 | NFR-01 | M5 | — | metric baseline |
 | NFR-02 | M5 | C-10, C-17 | C-05, C-09, recovery duration |
 | NFR-03 | M3 | — | C-16, human rubric |
@@ -81,6 +83,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-09 | M5 | C-46, C-47 | M4/SQLite consumer rollout |
 | INV-10 | M6 | C-26, C-27 | — |
 | INV-11 | M6 | C-27, C-28 | — |
+| INV-12 | M6 | C-32, C-33 | — |
 
 ## Approval record
 

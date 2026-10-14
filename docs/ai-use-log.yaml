@@ -435,3 +435,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Reproduces the in-memory store contract durably; ADR-004"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-sqlite
+    change: "B3 restart/recovery: recovery view (confirmed vs unresolved), terminal-outcome read-back (sub-issue #12)"
+    requirements: [FR-06]
+    invariants: [INV-11]
+    cases: [C-32, C-33]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Owner-approved B3 plan; ADR-005; M6 data, M5 lifecycle"
