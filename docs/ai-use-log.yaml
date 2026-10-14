@@ -101,3 +101,106 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "M5 re-review: sparse array conflated with empty array; ADR-002 D1"
+  - date: "2026-10-13"
+    task: M1-01-A
+    branch: feat/m1-01-adapters
+    member: Pioneer141 (M1)
+    change: >-
+      Implement fixed-audio metadata preparation and mapped renderer adapters,
+      browser-safe shared type declarations, adapter documentation and real-adapter
+      regression tests. Preserve the four original fixture tests and shared contracts.
+    requirements: [FR-03, FR-04, NFR-06]
+    invariants: [INV-02]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: cityu
+    model: CS5351/DeepSeek-V4-Flash
+    opencode_version: 1.18.34
+    launch_flags: [--pure, --agent, build, --variant, xhigh]
+    sessions:
+      - ses_ecb9098ceffeZ18cTiNm64LYzZ
+      - ses_ecb7c2977ffeoamK3oUTKO1Pam
+    supervision: >-
+      Codex coordinated the genuine OpenCode sessions and independent AI review.
+      Review corrections addressed command snapshots, malformed driver observations,
+      capability and no-op validation, controlled audio references, request validation,
+      deadline checks and test-oracle accuracy. Codex prepared this publication record;
+      application source and tests were authored through OpenCode.
+    human_review: >-
+      The M1 member approved the v04 design scope, implementation start and publication.
+      Human M5 consumer review is pending; independent AI review is not that approval.
+    transcript_record: >-
+      Complete, unedited exports and run logs are retained privately by M1, including
+      the context-window error, fresh repair session and final LF-only correction.
+      Original transcripts and private evidence are not included in this public repository.
+    verification:
+      platform: Windows
+      node: 24.14.1
+      pnpm: 12.12.0
+      m1: "pnpm test:m1: 44 passed after final LF normalization."
+      typecheck: passed
+      lint: passed
+      build: passed
+      full_suite: >-
+        pnpm verify: 291 passed, 6 failed and 3 unhandled tsx spawn errors.
+        The six failures match the pre-implementation Windows baseline:
+        three import-boundary negative cases and three runtime CLI cases.
+        Full verification is not green on this Windows environment.
+    scope: >-
+      Actual fixed synthesis and mapped renderer, with controlled test dependencies
+      and the existing fixture player. Browser playback, real Stop/history integration,
+      live Kokoro/VTS, durable recovery and complete product acceptance remain pending.
+  - date: "2026-10-14"
+    task: M1-01-A-review-fix
+    branch: feat/m1-01-adapters
+    member: Pioneer141 (M1)
+    change: >-
+      Address M5 review 5515116186 on PR 24: convert a synchronously throwing
+      renderer driver into one correlated failed/driver_error receipt and add a
+      focused regression. Preserve the existing asynchronous rejection and abort paths.
+    requirements: [FR-03, NFR-06]
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: cityu
+    model: CS5351/DeepSeek-V4-Flash
+    opencode_version: 1.18.34
+    launch_flags: [--pure, --agent, build, --variant, xhigh, --auto]
+    sessions:
+      - ses_ec66a3e37ffetzJ7iXW2tXOmZM
+    supervision: >-
+      Codex coordinated the genuine OpenCode session, independently ran verification
+      and arranged an independent AI code review. OpenCode authored both application
+      changes. Codex appended this factual AI-use metadata; the source correction
+      and regression were not manually authored by Codex.
+    human_review: >-
+      M5 requested changes on the original PR head for this synchronous-exception
+      path. The M1 member explicitly authorized the correction, full transcript
+      preservation, commit/push and M5 re-review. Consumer re-review remains pending;
+      independent AI review is not that approval. No merge is authorized.
+    transcript_record: >-
+      The complete original native OpenCode export, raw run events and both stderr
+      files are retained privately. All assistant messages identify the expected
+      CityU model. The authentic sequence records the added regression failing
+      before production repair, followed by a passing run. No original transcript
+      was sanitized, reordered or replaced by a summary.
+    verification:
+      platform: Windows
+      node: 24.14.1
+      pnpm: 12.12.0
+      regression_before_repair: "pnpm test:m1: 1 failed, 44 passed."
+      m1: "pnpm test:m1: 45 passed after repair; independently rerun."
+      typecheck: passed
+      lint: passed
+      build: passed
+      full_suite: >-
+        pnpm verify: 292 passed, 6 failed and 3 unhandled tsx spawn errors.
+        The six failure names match this correction's fresh Windows baseline
+        (291 passed, 6 failed, 3 errors): three import-boundary negative cases and
+        three runtime CLI cases. Full verification is not green on Windows.
+    scope: >-
+      Synchronous renderer-driver failure receipts and one regression only;
+      preserve original command identity, one dispatch and exactly one binding
+      release invocation. The fixture player remains identified. A production
+      same-domain expiry-aborting DeadlineGate is a coordinated I1-01 requirement;
+      browser increment B and other owners' modules are unchanged by this correction.
