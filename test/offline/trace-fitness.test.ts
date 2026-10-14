@@ -67,4 +67,11 @@ describe('traceability fitness functions reject defects (C-35)', () => {
     const mutated = base.read(path).replace(/^\| INV-11 \|.*$/m, '')
     expect(codes(base, { [path]: mutated })).toContain('invariant-unregistered')
   })
+
+  it('flags a modified frozen path', () => {
+    const found = collectTraceViolations(nodeTraceFs(ROOT), {
+      changedFiles: ['src/contracts/app/ports.ts'],
+    }).map((violation) => violation.code)
+    expect(found).toContain('frozen-modified')
+  })
 })

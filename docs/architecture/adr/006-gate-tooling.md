@@ -36,6 +36,12 @@ inside `pnpm test`, but are not named gates; G1/G4/G6 are absent). The course di
   and reports **not run** without an evaluation set + provider access (team-gated).
 - The README documents the gate design (D7); branch protection remains a human/remote setting.
 
+### D3 — Governance documents
+- `docs/architecture/frozen.yaml` — the frozen-path manifest (fail-closed: a change requires an ADR
+  and human review; the trace fitness function raises `frozen-modified` / `frozen-path-missing`).
+- `.github/PULL_REQUEST_TEMPLATE.md` — the `INTERFACES` §7 handoff checklist plus the gate checklist.
+- `docs/review-memo.md`, `docs/debt-register.md`, `docs/bug-diary.md` — the D4 QA records.
+
 ## Alternatives considered
 
 1. **Ad hoc document review** — rejected (not machine-checked; drifts silently).
