@@ -243,6 +243,13 @@ cases:
       file: test/offline/ai-use-log-gate.test.ts
       test: "requires the log when a code file changes"
 
+  - id: C-37
+    status: implemented
+    title: Shared governed tables require an explicit owner per row
+    verifier:
+      file: test/offline/trace-fitness.test.ts
+      test: "flags an invariant table without an Owner column"
+
   - id: C-38
     status: implemented
     title: A commit whose later mutation cannot be published leaves no partial state
