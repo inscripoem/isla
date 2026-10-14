@@ -415,3 +415,13 @@ entries:
       DeadlineGate remain owner integration; VTS is later M1-02 work. Live Kokoro,
       acoustic output/timing and full product acceptance are not established.
       Issue 2 remains open with unfinished M1-01/M1-02 items unchecked.
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-sqlite
+    change: "B1 SQLite foundation: config, database handle and versioned migration runner (sub-issue #10)"
+    requirements: [FR-06]
+    invariants: [INV-09, INV-10]
+    cases: [C-26, C-27]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Started after PR #9; ADR-003; branch m6-sqlite off m6-storage pending merge"

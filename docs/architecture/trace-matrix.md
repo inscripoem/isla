@@ -17,6 +17,8 @@ Every requirement maps to its enforcing component, interface, test/evidence and 
 | INV-07 | Committed records are isolated from caller mutation | `src/storage/in-memory-backend.ts` | `StorageBackend` | C-24 | `m6-storage.test.ts` (isolation tests) | — | ADR-002 | in review |
 | INV-08 | Confirmed history is ordered by the supporting event seq | `src/storage/history-query.ts` | `HistoryQueryPort` | C-25 | `m6-storage.test.ts` (ordering test) | — | ADR-002 | in review |
 | INV-09 / FR-06 | Original index/persona survive delivery and history reads | `coordinator.ts`, `storage.ts`, `event-store.ts` | C6/C7 | C-46, C-47 | `m5-attribution.test.ts` (production M5 + in-memory M6) | delivery conflict acknowledgement | ADR-002 Step A amendment | under review |
+| INV-10 | Storage configuration and schema version are validated before use | `src/storage/config.ts`, `src/storage/sqlite/migrations.ts` | `StorageConfig` / migrations | C-26, C-27 | `m6-sqlite.test.ts` (config + migrations) | — | ADR-003 | in review |
+| INV-11 | A schema migration is recoverable (backup before apply; rollback) | `src/storage/sqlite/migrations.ts` | migrations | C-27, C-28 | `m6-sqlite.test.ts` (backup + rollback) | — | ADR-003 | in review |
 
 Other requirements (FR-01..FR-05, NFR-01..NFR-06) remain governed by `docs/req/trace.en.md` and are
 pending their owners' rows here.

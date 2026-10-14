@@ -167,6 +167,27 @@ cases:
       file: test/offline/m6-storage.test.ts
       test: "returns supporting-event seq order even when insertion order differs"
 
+  - id: C-26
+    status: implemented
+    title: SQLite storage configuration is validated (fail-fast)
+    verifier:
+      file: test/offline/m6-sqlite.test.ts
+      test: "rejects an empty override (fail-fast, never a silent default)"
+
+  - id: C-27
+    status: implemented
+    title: Schema migrations are versioned, idempotent and recoverable
+    verifier:
+      file: test/offline/m6-sqlite.test.ts
+      test: "backs up an existing database before applying pending migrations"
+
+  - id: C-28
+    status: implemented
+    title: A failed migration rolls back and leaves the prior version intact
+    verifier:
+      file: test/offline/m6-sqlite.test.ts
+      test: "rolls back a failed migration, leaving the prior version intact"
+
   - id: C-38
     status: implemented
     title: A commit whose later mutation cannot be published leaves no partial state
