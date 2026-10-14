@@ -1,7 +1,7 @@
 # ADR-002 — M6 storage record semantics: session-scoped identity, record isolation, history ordering
 
 Status: under review (M6). Shared-architecture coordination with M5 pending.
-Date: 2026-10-13 · Owner: M6 · Requirements: FR-06 · Invariants: INV-04, INV-05, INV-07, INV-08 · Cases: C-19, C-23, C-24, C-25, C-38, C-39, C-40.
+Date: 2026-10-13 · Owner: M6 · Requirements: FR-06 · Invariants: INV-04, INV-05, INV-07, INV-08 · Cases: C-19, C-23, C-24, C-25, C-38, C-39, C-40, C-41.
 Relates to: ADR-001 (persistence seam). Revision type: ADD-R (review feedback; structure intact).
 
 ## Context
@@ -32,9 +32,11 @@ code guaranteed.
 - A conflicting `commitDeliveryWithEvent` (reused event id with changed content, or a reused session
   sequence) reports **`conflict`** — not `storage_unavailable` — on **both** the delivery and the event
   acknowledgement, matching the runtime-policy catalog. Verified by `C-39`.
-- "Same content" is **canonical**: object key order is irrelevant, so a re-serialised equivalent event
-  is a `duplicate`, not a `conflict`. Verified by `C-40`.
-- Enabled by `INV-04`; verified by `C-23`, `C-39` and `C-40`.
+- "Same content" is **canonical**: object key order is irrelevant, array order is significant, and
+  non-plain values (for example a `Date`) are compared by their content — so a re-serialised
+  equivalent event is a `duplicate`, not a `conflict`, while a real change still conflicts. Verified
+  by `C-40` and `C-41`.
+- Enabled by `INV-04`; verified by `C-23`, `C-39`, `C-40` and `C-41`.
 - **Alternatives:** global `eventId` (rejected — violates C7; collides across sessions); a single
   generic `storage_unavailable` reason for every failed atomic commit (rejected — erases the cause and
   contradicts the catalog's `conflict` response).

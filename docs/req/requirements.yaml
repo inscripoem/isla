@@ -232,6 +232,9 @@ requirements:
       - kind: deterministic
         description: Event content equality is canonical (object key order is irrelevant), so a re-serialised equivalent event is a duplicate rather than a conflict (FR-06).
         cases: [C-40]
+      - kind: deterministic
+        description: Event content equality compares non-plain values (for example a Date) by their content and keeps array order significant (FR-06).
+        cases: [C-41]
 
   - id: INV-05
     title: A delivery and its supporting event commit atomically

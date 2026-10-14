@@ -55,12 +55,23 @@ import { createInMemoryBackend } from './in-memory-backend'
  * - Replay reads through `readSession`; it never mutates live state (C-12).
  */
 
+/** A plain record (object literal) or an object with no prototype. */
+function isPlainObject(value: object): boolean {
+  const prototype = Object.getPrototypeOf(value)
+  return prototype === Object.prototype || prototype === null
+}
+
 /**
  * Canonical, key-order-insensitive rendering of a JSON-like value, used to
- * decide whether two events carry "the same content" (ADR-002 D1). Object keys
- * are sorted recursively; values JSON would drop (functions, `undefined`,
- * symbols) or reject (`bigint`, cycles) get a stable marker so two structurally
- * different events never compare equal by accident.
+ * decide whether two events carry "the same content" (ADR-002 D1).
+ *
+ * Plain objects and arrays are rendered recursively with object keys sorted, so
+ * key order never affects equality; array order does. Everything else keeps
+ * JSON semantics and is then re-canonicalised, so a value with its own
+ * serialisation (notably `Date#toJSON`) is not flattened to an empty object.
+ * Values JSON would drop (functions, `undefined`, symbols) or reject (`bigint`,
+ * cycles) get a stable marker, so two structurally different events never
+ * compare equal by accident.
  */
 function canonical(value: unknown, seen: WeakSet<object> = new WeakSet()): string {
   if (value === null) return 'null'
@@ -81,17 +92,35 @@ function canonical(value: unknown, seen: WeakSet<object> = new WeakSet()): strin
   const object = value as object
   if (seen.has(object)) return 'cycle'
   seen.add(object)
-  let rendered: string
-  if (Array.isArray(object)) {
-    rendered = `[${object.map((item) => canonical(item, seen)).join(',')}]`
-  } else {
-    const entries = Object.keys(object as Record<string, unknown>)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${canonical((object as Record<string, unknown>)[key], seen)}`)
-    rendered = `{${entries.join(',')}}`
+  try {
+    if (Array.isArray(object)) {
+      return `[${object.map((item) => canonical(item, seen)).join(',')}]`
+    }
+    if (isPlainObject(object)) {
+      const record = object as Record<string, unknown>
+      const entries = Object.keys(record)
+        .sort()
+        .map((key) => `${JSON.stringify(key)}:${canonical(record[key], seen)}`)
+      return `{${entries.join(',')}}`
+    }
+    return serialiseOpaque(object)
+  } finally {
+    seen.delete(object)
   }
-  seen.delete(object)
-  return rendered
+}
+
+/**
+ * Render a non-plain object (Date, Map, Set, class instance, ...) through JSON,
+ * then canonicalise the result so key order inside its JSON projection is still
+ * irrelevant. A value JSON cannot represent (e.g. a cycle) gets a marker.
+ */
+function serialiseOpaque(value: object): string {
+  try {
+    const json = JSON.stringify(value)
+    return json === undefined ? 'undefined' : canonical(JSON.parse(json))
+  } catch {
+    return 'unserialisable'
+  }
 }
 
 /** True when two values have the same canonical content (key order irrelevant). */

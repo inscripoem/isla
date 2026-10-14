@@ -338,6 +338,10 @@ describe('M6 storage invariants', () => {
     // No partial state in any view: no event and no confirmed-history record.
     expect(await store.readSession(FIXTURE_SESSION_ID)).toHaveLength(0)
     expect(await history.confirmedHistory(FIXTURE_SESSION_ID)).toHaveLength(0)
+    // No residue: the failed batch left the backend usable and the sequence free.
+    const retry = await store.append(fixtureRuntimeEvent({ eventId: 'inv05-retry', seq: 1 }))
+    expect(retry.outcome).toBe('stored')
+    expect(await store.readSession(FIXTURE_SESSION_ID)).toHaveLength(1)
   })
 
   it('INV-05: the backend publishes a batch only when every mutation is prepared', () => {
@@ -359,6 +363,9 @@ describe('M6 storage invariants', () => {
     expect(() => backend.commit([good, bad])).toThrow()
     expect(backend.sessionEvents(FIXTURE_SESSION_ID)).toHaveLength(0)
     expect(backend.sequenceOwner(FIXTURE_SESSION_ID, 1)).toBeUndefined()
+    // Nothing leaked: a later valid commit still works.
+    backend.commit([good])
+    expect(backend.sessionEvents(FIXTURE_SESSION_ID)).toHaveLength(1)
   })
 
   it('INV-06: the memory projection does not advance across a gap and is idempotent', async () => {
@@ -390,8 +397,12 @@ describe('M6 atomic commit failure causes (C-39)', () => {
     if (ack.delivery.status === 'failed') expect(ack.delivery.reasonCode).toBe('conflict')
     expect(ack.event.outcome).toBe('failed')
     if (ack.event.outcome === 'failed') expect(ack.event.reasonCode).toBe('conflict')
-    // A conflicting commit persists nothing.
+    // A conflicting commit persists nothing and preserves the existing event.
     expect(await history.confirmedHistory(FIXTURE_SESSION_ID)).toHaveLength(0)
+    const session = await store.readSession(FIXTURE_SESSION_ID)
+    expect(session).toHaveLength(1)
+    expect(session[0]?.eventId).toBe('cause-1')
+    expect(session[0]?.type).toBe('input.accepted')
   })
 
   it('reports a conflict on both sides when the supporting event reuses a session sequence', async () => {
@@ -415,18 +426,78 @@ describe('M6 atomic commit failure causes (C-39)', () => {
   })
 })
 
-describe('M6 content equality is key-order insensitive (C-40)', () => {
+describe('M6 content equality is key-order insensitive (C-40, C-41)', () => {
   it('treats an event with the same content in a different key order as a duplicate', async () => {
     const store = createEventStore()
-    await store.append(fixtureRuntimeEvent({ eventId: 'eq-1', seq: 1, payload: { a: 1, b: 2 } }))
+    await store.append(
+      fixtureRuntimeEvent({ eventId: 'eq-1', seq: 1, payload: { a: 1, b: { x: 1, y: 2 } } }),
+    )
 
-    // Same logical content; the payload object lists its keys in another order.
-    const reordered = fixtureRuntimeEvent({ eventId: 'eq-1', seq: 1, payload: { b: 2, a: 1 } })
+    // Same logical content; payload keys (including nested) written in another order.
+    const reordered = fixtureRuntimeEvent({
+      eventId: 'eq-1',
+      seq: 1,
+      payload: { b: { y: 2, x: 1 }, a: 1 },
+    })
     expect((await store.append(reordered)).outcome).toBe('duplicate')
 
-    // A genuinely different payload is still a conflict.
-    const changed = fixtureRuntimeEvent({ eventId: 'eq-1', seq: 1, payload: { a: 1, b: 3 } })
+    // A genuinely different (nested) payload is still a conflict.
+    const changed = fixtureRuntimeEvent({
+      eventId: 'eq-1',
+      seq: 1,
+      payload: { a: 1, b: { x: 1, y: 3 } },
+    })
     expect((await store.append(changed)).outcome).toBe('failed')
+  })
+
+  it('keeps array order significant and compares non-plain values by content', async () => {
+    const store = createEventStore()
+    await store.append(
+      fixtureRuntimeEvent({
+        eventId: 'eq-2',
+        seq: 1,
+        payload: { at: new Date(0), tags: ['a', 'b'] },
+      }),
+    )
+
+    // Different key order, same array order, same Date -> duplicate.
+    expect(
+      (
+        await store.append(
+          fixtureRuntimeEvent({
+            eventId: 'eq-2',
+            seq: 1,
+            payload: { tags: ['a', 'b'], at: new Date(0) },
+          }),
+        )
+      ).outcome,
+    ).toBe('duplicate')
+
+    // Array order is significant -> conflict.
+    expect(
+      (
+        await store.append(
+          fixtureRuntimeEvent({
+            eventId: 'eq-2',
+            seq: 1,
+            payload: { at: new Date(0), tags: ['b', 'a'] },
+          }),
+        )
+      ).outcome,
+    ).toBe('failed')
+
+    // A different Date must be a conflict, not treated as an empty object.
+    expect(
+      (
+        await store.append(
+          fixtureRuntimeEvent({
+            eventId: 'eq-2',
+            seq: 1,
+            payload: { at: new Date(1), tags: ['a', 'b'] },
+          }),
+        )
+      ).outcome,
+    ).toBe('failed')
   })
 })
 

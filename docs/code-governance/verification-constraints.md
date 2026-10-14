@@ -24,7 +24,7 @@ The rules the verification agent applies and the QA records the team maintains.
 
 | Invariant / requirement | Case | Test that would fail if violated |
 | --- | --- | --- |
-| INV-04 (session-scoped identity/sequence uniqueness) | C-18, C-23, C-39, C-40 | `m6-storage.test.ts`; conformance `append-duplicate`, `append-changed-content`, `append-seq-unique`, `append-session-scoped-identity`; conflicting commit reports `conflict` on both sides; canonical (key-order-insensitive) content equality |
+| INV-04 (session-scoped identity/sequence uniqueness) | C-18, C-23, C-39, C-40, C-41 | `m6-storage.test.ts`; conformance `append-duplicate`, `append-changed-content`, `append-seq-unique`, `append-session-scoped-identity`; conflicting commit reports `conflict` on both sides; canonical content equality (key order irrelevant, array order significant, non-plain values by content) |
 | INV-05 (atomic delivery + event) | C-19, C-38 | `m6-storage.test.ts::INV-05` (failed commit persists nothing; a later unpublishable mutation leaves no partial state); conformance `atomic-failure-reported`, `atomic-no-partial-mutation` |
 | INV-06 (projection no gap / idempotent) | C-20 | `m6-storage.test.ts::INV-06`; conformance `projection-no-gap-claim`, `projection-idempotent` |
 | INV-07 (record isolation) | C-24 | `m6-storage.test.ts` (isolation tests) |

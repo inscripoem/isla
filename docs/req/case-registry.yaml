@@ -187,3 +187,10 @@ cases:
     verifier:
       file: test/offline/m6-storage.test.ts
       test: "treats an event with the same content in a different key order as a duplicate"
+
+  - id: C-41
+    status: implemented
+    title: Event content equality compares non-plain values by content and keeps array order significant
+    verifier:
+      file: test/offline/m6-storage.test.ts
+      test: "keeps array order significant and compares non-plain values by content"
