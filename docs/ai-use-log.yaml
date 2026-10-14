@@ -418,6 +418,16 @@ entries:
   - date: 2026-10-14
     task: M6-01
     branch: m6-sqlite
+    change: "Cross-backend integration: in-memory and SQLite agree end-to-end (state, export, history, payload rejection) (C-45)"
+    requirements: [FR-06]
+    invariants: [INV-04, INV-07]
+    cases: [C-45]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Integration validation requested after the payload-contract fix; ADR-004"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-sqlite
     change: "B1 SQLite foundation: config, database handle and versioned migration runner (sub-issue #10)"
     requirements: [FR-06]
     invariants: [INV-09, INV-10]

@@ -25,6 +25,9 @@ observable behaviour — and its invariants — stay identical to the in-memory 
 - The delivery mutation carries `terminalOutcome`, so it is persisted for recovery (C-17) — the
   in-memory slice drops it, which is acceptable only because it is ephemeral.
 - Verified by C-29 (conformance suite runs over SQLite) and C-30 (data survives reopen).
+- **Cross-backend agreement (C-45).** The in-memory and SQLite backends are exercised with the same
+  mixed scenario end-to-end; committed state, JSONL export and confirmed history agree, and
+  unsupported payloads are rejected identically by both.
 
 ### D2 — `deliveryByKey` takes the composite parts
 - `deliveryByKey(sessionId, turnId, segmentId, modality)` instead of a single string key, so the SQL

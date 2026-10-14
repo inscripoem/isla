@@ -19,6 +19,7 @@ Zero callers of the single-argument form remain.
 | row codecs (`eventToRow`, `rowToEvent`, `rowToDelivery`, `EventRow`, `DeliveryRow`) | `src/storage/sqlite/codec.ts` | `sqlite/backend.ts` |
 | B2 tests | `test/offline/m6-sqlite-backend.test.ts` | `test:m6` |
 | Batch-atomic rollback regression (C-42) | `test/offline/m6-sqlite-backend.test.ts` | `test:m6` |
+| Cross-backend agreement regression (C-45) | `test/offline/m6-sqlite-backend.test.ts` | `test:m6` |
 
 ## MODIFIED
 
