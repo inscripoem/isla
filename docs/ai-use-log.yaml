@@ -515,3 +515,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Awaiting review in #42; M4 drops its local copy of the same migration once this lands on main."
+  - date: 2026-10-14
+    task: R3
+    branch: m6-r3-gates
+    change: "R3 commit 1: traceability fitness functions (chain checks) over the artifacts (sub-issue #17)"
+    requirements: [FR-06]
+    invariants: [INV-12]
+    cases: [C-34, C-35]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Caught real register gaps (INV-01..03, INV-11); ADR-006"
