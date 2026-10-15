@@ -1,6 +1,6 @@
 # Interface and handoff baseline v0.2
 
-Revision: 2026-10-15.1. Status: under review. Shared schemas, the M5 coordinator, M1 fixed synthesis/mapped rendering/browser playback and M6 in-memory storage exist. This revision adds delivery attribution and ordering metadata; affected-owner review and full application integration remain pending. This is an evolvable baseline coordinated by M5 with affected producers and consumers.
+Revision: 2026-10-16.2. Status: under review. Shared schemas, the M5 coordinator, M1 fixed synthesis/mapped rendering/browser playback and M6 in-memory storage exist. The baseline includes delivery attribution and ordering metadata; this local revision adds correlated physical status for the PR36 repair; affected-owner review and full application integration remain pending. This is an evolvable baseline coordinated by M5 with affected producers and consumers.
 
 ## Executable contract map
 
@@ -155,4 +155,4 @@ The [M5-01 handoff](HANDOFF-M5-01.en.md) documents the implemented coordinator, 
 
 ## Local I1 transport integration
 
-The approved, uncommitted I1 increment adds browser-safe transport schemas in `src/contracts/app/transport.ts` for performer attachment, explicit operator bootstrap and offer/ready/grant playback permission. Existing C1–C7 business payloads remain unchanged. The [I1 application handoff](HANDOFF-I1-APPLICATION.en.md) is the concrete local integration reference for M2/M5; consumer review remains pending. The standard diagnostic protocol is separate.
+The approved, uncommitted I1 increment adds browser-safe transport schemas in `src/contracts/app/transport.ts` for performer attachment, explicit operator bootstrap and offer/ready/grant playback permission. The bounded M1-finding repair adds an additive `performance.status` client kind (the M1 `PlayerStatus` correlated to its output) so the server can separate a delivery fact from physical occupancy; it does not change the C1–C7 business payloads. Because strict decoders reject the unknown kind rather than ignoring it, producers and consumers must roll out the new kind together. The [I1 application handoff](HANDOFF-I1-APPLICATION.en.md) is the concrete local integration reference for M2/M5; consumer review remains pending. The standard diagnostic protocol is separate.

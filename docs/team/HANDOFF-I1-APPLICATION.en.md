@@ -1,6 +1,13 @@
 # I1 application transport handoff (protocol 0.2)
 
-Status: under review · 2026-10-15 · Owner: M5 (runtime) · Consumer: M2 (console)
+Status: under review · 2026-10-16 · Owner: M5 (runtime) · Consumer: M2 (console)
+
+PR36 (`08ff362`) published this I1 slice for review; M1 raised three consumer
+findings and the PR is published with changes requested. M5 locally implemented
+the bounded repair described under [Physical status, send
+provenance and cached terminals](#physical-status-send-provenance-and-cached-terminals).
+Publication of the repair, owner acceptance and the final human merge remain
+open. M2/M3 implementation ownership is unchanged.
 
 This note describes the browser-facing transport the first interactive loop
 uses so M2 can connect the product console without reverse-engineering the
@@ -127,6 +134,59 @@ rejected rather than forwarded as valid evidence.
  "source":"m1-player"}}
 ```
 
+## Physical status, send provenance and cached terminals
+
+A `performance.receipt` proves the observed delivery fact; it does not prove
+that local media was released. The real M1 controller can report a truthful
+`completed` after a natural end while its failed detach retains quarantined
+media and `status().idle` stays false, and it reports `failed/cleanup_failed`
+after a Stop whose detach failed. The bridge therefore keeps the delivery fact
+and physical occupancy as separate evidence:
+
+- The browser reports its own M1 `PlayerStatus` (`status()`) as a new
+  `performance.status` client message carrying `{ outputId, status }` and the
+  output's envelope `sessionId`/`epoch`. The bridge trusts a report only for the
+  output it most recently granted under that exact epoch and the *current*
+  connection generation. A status before any grant, a wrong-epoch or
+  wrong-identity report, a retained-terminal report from a superseded
+  connection, a post-rebind report about an old output, an `idle: true` with a
+  named active output, or a non-idle report naming a different active output is
+  rejected. A delivery terminal never manufactures idle, and a missing status
+  never manufactures idle, so physical admission stays blocked.
+- Physical uncertainty survives disconnect/rebind. The last grant and its
+  verified report are retained across `detach`; the application advances the
+  connection generation before detaching, so a new connection cannot attest the
+  old one's cleanup and a completed/failed output with failed cleanup (or with
+  no report) stays non-idle instead of silently becoming idle once no operation
+  is unsettled. A genuinely clean release (last report idle) is preserved as
+  resolved, so a verified clean disconnect still allows fresh work.
+- The transport `send` returns `sent`, `unsent` or `ambiguous`. `unsent` is a
+  proven no-dispatch (a closed socket or a rejected send buffer); `ambiguous`
+  covers a synchronous socket-layer throw that may follow a partial queue. The
+  bridge grants only after a non-`unsent` send; a provably-unsent grant settles
+  not-dispatched and immediately releases its binding, while an ambiguous grant
+  stays conservatively granted. The offer path treats a provably-unsent send as
+  `performer_unavailable` and never settles on an ambiguous one.
+- The demo state machine reports the physical status ahead of each receipt and
+  reconciles a cached terminal returned by the M1 controller for an identical
+  retry after the machine's 64-entry retirement boundary (the M1 controller
+  itself keeps current-epoch records with no count quota). It publishes that
+  terminal through the same single receipt path, guarded to the captured pending
+  admission so an ordinary execution still publishes exactly once. A terminal
+  whose local cleanup failed keeps the pending entry and local admission closed
+  over the retained media.
+
+`performance.status` is an additive protocol-0.2 client kind. A strict decoder
+that predates it rejects it rather than ignoring it, so producers and consumers
+must be upgraded together; this handoff documents the coordinated change for
+M2 and M3.
+
+A physical status moves the bridge's own admission only. `Resume` additionally
+requires the coordinator's committed output evidence: a Stop leaves
+`outputConfirmation` pending, so a later standalone idle status does not by
+itself restore `Resume`. That conservative recovery is documented here rather
+than replaced with an invented confirmation.
+
 ## Lifecycle rules relevant to M2
 
 - Startup is stopped; no replay and no automatic resume. Reconnect receives a
@@ -142,6 +202,21 @@ rejected rather than forwarded as valid evidence.
 - The console must keep C1–C7 client imports browser-safe; `/app` messages are
   JSON control only; audio stays out of control JSON.
 
+## Client identity across page/realm lifetimes
+
+A browser reload re-evaluates the client module in a fresh JS realm, so a
+module-scoped identity sequence restarts. Default client identities are
+therefore unique across page and realm lifetimes: the shared performer machine
+combines a per-module-evaluation realm nonce with its sequence, and its receipt
+id generator defaults to the same realm-unique source. A reloaded page can no
+longer reuse message or receipt identities that a retained server session still
+remembers, which would otherwise make its receipts conflict and prevent a
+commit. The default uses `crypto.randomUUID`/`getRandomValues` where available
+and a time/random fallback otherwise. Tests keep deterministic identity
+injection through the optional `receipts` (and `now`) options; the single
+receipt publication path is unchanged. M2 must adopt this behaviour together
+with the browser-safe extraction; production code must not import `test/`.
+
 ## Client state machine
 
 The browser-side protocol behaviour lives in one browser-safe module,
@@ -152,9 +227,13 @@ without replacing abort ownership, computes the conservative expiry, cleans a
 completed operation, and detaches all pending work on socket close/error/unload.
 Epoch reconciliation is monotonic: stale offers, grants, acknowledgements,
 snapshots and cancels cannot revive older work. Completed-output identities are
-retained in a bounded set. The demo displays the last observed server
-confirmation separately from the local media stage; it does not imply a fresh
-server confirmation after every media event.
+retained in a bounded set. Each receipt is preceded by a correlated
+`performance.status` report of the controller's own `status()`, so the server
+can separate the delivery fact from physical occupancy; a cached terminal
+returned for an identical retry after the bounded set retires an entry is
+reconciled through the same single publication path. The demo displays the last
+observed server confirmation separately from the local media stage; it does not
+imply a fresh server confirmation after every media event.
 
 M2 should adopt this behaviour through an owner-reviewed extraction into a
 browser-safe production module; production code must not import `test/`. The
@@ -176,24 +255,72 @@ independently passed 634 tests in 30 files, typecheck, lint and build on
 are preserved. The earlier 582/30 result belongs to the candidate on `7297da4`.
 The current rebuild required no I1 source adaptation; main and I1 process records
 were merged without rewriting historical entries.
+
+The bounded M1-finding repair on PR36 (`08ff362`) was implemented and verified
+locally on 2026-10-16: it added the correlated `performance.status` client kind,
+the tri-state transport send, the physical-versus-delivery admission split and
+the machine's cached-terminal reconciliation. Chronology, stated plainly: the
+implementation came first; the three findings were then demonstrated red by
+temporarily reintroducing each defective behavior, then restored green. That is
+not the same as reproducing each fault before fixing it.
+
+An independent review then requested a bounded follow-up, also implemented
+locally on 2026-10-16: physical uncertainty is preserved across
+disconnect/rebind (with a verified clean-disconnect path retained); the physical
+status is rejected when contradictory, pre-grant, stale-generation or
+identity-mismatched (closing the retained-terminal generation bypass); the
+tri-state send is exercised through Stop and expiry with no retained binding or
+dispatch; actual natural completion with a failed detach preserves completed
+history while blocking fresh media; a failed cached/local cleanup never reopens
+local admission; and `execute` fulfillment is tied to the captured pending
+admission. The two most important new regressions were also shown red against
+the pre-follow-up behavior.
+
+A browser regression then reported a bounded reconnect defect: after a page
+reload against a retained server session the reloaded client reused message and
+receipt identities, so its receipts conflicted and the second turn never
+committed. M5 fixed client identity generation across page/realm lifetimes with
+a per-module-evaluation realm nonce and a realm-unique default receipt source,
+keeping deterministic injection for tests. The fresh-realm identity unit
+regression and the actual application reconnect regression (`i1-reconnect-identity.test.ts`)
+were both shown red without the nonce and green with it; no server identity or
+dedup check was weakened and no M2 code was touched.
+
+After the final code, the focused suites pass and `pnpm verify` passed 653 tests
+in 31 files, typecheck, lint and build (all prior quarantine/unsent/cached-terminal
+repairs retained). This is local evidence only: PR36 remains published with
+changes requested, no commit, push or review write was performed, and the repair
+is unpublished. OpenCode authored the repair and ran the automated checks;
+the supervisor independently repeated verification and the browser checks below.
 Real loopback tests cover two turns, delivery attribution,
 Stop before grant/during resolution/during playback, Resume, delayed and
 duplicate messages, authorization, reconnect, storage failure, input bounds and
 shutdown while selection/dialogue/offer/playback are held. Browser dependency
 checks include the actual demo entry.
 
-An independent Orca browser run on this refreshed candidate observed two completed turns (two segments each),
-cancellation after playback started, and a new completed turn after Resume
-(epoch 1 → 2 → 3). Closing the runtime during another started output closed the
-socket and cancelled local playback, without automatic reconnect or replay. The
-displayed server lifecycle/confirmation then remained the last observed values,
-not a fresh server confirmation; socket closure and local cancellation were shown separately.
-These browser observations supplement controlled-media tests; they do not prove
-physical sound or silence. The demo services and review page were closed after
-verification. The rebuild used an SSH fetch and a new detached native worktree. No staging,
-commits, pushes or GitHub writes were performed.
+The supervisor independently reran pnpm verify: 653 tests / 31 files, typecheck,
+lint and build passed. The final Orca browser run observed two completed turns
+(two segments each), a fresh-page reload against the retained server followed by
+another completed turn with distinct receipt identities, cancellation after
+playback started, and another completed two-segment turn after Resume
+(epoch 1 → 2 → 3). A separate clean run closed the runtime immediately after a
+started receipt; the browser observed socket closure and local cancellation.
+Its displayed server lifecycle/confirmation remained the last observed values,
+not a fresh server confirmation. No automatic reconnect or replay occurred.
 
-M2 reviews the shared transport and integrates the product console. M3 supplies
+Earlier attempts included an automation timeout, failed media receipts without
+a captured cause, and a shutdown sent after playback had already ended. They
+are retained as inconclusive or mistimed attempts, not passed cancellation
+checks. The original 2026-10-15 browser record belongs to the published baseline.
+The final checks above use fixed WAV assets and media events, not acoustic
+measurements, live providers or SQLite recovery. The supervisor closed the
+review page and demo services after verification. No staging, commits, pushes
+or GitHub writes were performed for this repair.
+
+M2 reviews the shared transport and integrates the product console, including
+the additive `performance.status` kind and reload-safe identities. The tri-state
+send result belongs to the server transport implementation. M3 supplies
 its compatible implementation; M4 retains merged PR30 adoption and supplies
-a live text provider and its separate follow-up guards. M6 supplies SQLite and recovery evidence. Replace one
+a live text provider and its separate follow-up guards. M6 supplies SQLite and recovery evidence. M2 and M3
+remain separate owners; this repair does not implement their modules. Replace one
 module at a time and rerun the same scenarios. Full I1 acceptance remains open.

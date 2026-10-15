@@ -54,11 +54,12 @@ function createResolver(): AudioResolver {
   }
 }
 
-let counter = 0
 const socket = new WebSocket(
   `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/app`,
 )
 
+// Identities come from the shared machine's realm-unique default so a page
+// reload never reuses message/receipt ids the retained server session knows.
 const machine: PerformerMachine = createPerformerMachine({
   transport: {
     send: (raw) => {
@@ -67,10 +68,6 @@ const machine: PerformerMachine = createPerformerMachine({
   },
   media: createDomMediaDriver(),
   resolver: createResolver(),
-  receipts: {
-    newReceiptId: () => `receipt-${(counter += 1)}`,
-    localNowMs: () => Math.round(performance.now()),
-  },
   hooks: {
     onEvent: (message) => {
       const payload = (message as { payload?: Record<string, unknown> }).payload

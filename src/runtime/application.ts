@@ -14,7 +14,7 @@ import {
   sessionAttachAckMessageSchema,
 } from '../contracts'
 import type { RuntimeComposition } from './composition'
-import type { PerformerBridgeMessage } from './performance-bridge'
+import type { PerformerBridgeMessage, TransportSendResult } from './performance-bridge'
 
 /**
  * M5 application endpoint. It owns the browser-facing transport boundary:
@@ -197,17 +197,21 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
     return canonical !== null && allowedOrigins.has(canonical)
   }
 
-  const safeSend = (conn: ConnectionState, payload: unknown): boolean => {
-    if (conn.ws.readyState !== WebSocket.OPEN) return false
+  const safeSend = (conn: ConnectionState, payload: unknown): TransportSendResult => {
+    if (conn.ws.readyState !== WebSocket.OPEN) return 'unsent'
     if (conn.ws.bufferedAmount > maxSendBufferBytes) {
       conn.ws.close(1013, 'send buffer limit exceeded')
-      return false
+      return 'unsent'
     }
     try {
       conn.ws.send(JSON.stringify(payload))
-      return true
+      return 'sent'
     } catch {
-      return false
+      // A synchronous throw from the socket layer can happen after bytes were
+      // queued, so the transport cannot prove the frame was unsent. Report the
+      // attempt as ambiguous; a closed socket or rejected buffer is proven
+      // unsent above.
+      return 'ambiguous'
     }
   }
 
@@ -239,10 +243,10 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
     authenticated: true,
   })
 
-  const sendToPerformer = (message: PerformerBridgeMessage): boolean => {
-    if (performerId === null) return false
+  const sendToPerformer = (message: PerformerBridgeMessage): TransportSendResult => {
+    if (performerId === null) return 'unsent'
     const conn = connections.get(performerId)
-    if (conn === undefined) return false
+    if (conn === undefined) return 'unsent'
     return safeSend(conn, message)
   }
 
@@ -454,6 +458,18 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
             return
           }
           composition.bridge.handleReady(message)
+          return
+        }
+        case 'performance.status': {
+          if (!conn.performer || performerId !== conn.id) {
+            sendError(conn, 'unauthorized', 'physical status requires the bound performer connection', message.messageId)
+            return
+          }
+          if (message.sessionId !== composition.sessionId) {
+            sendError(conn, 'unauthorized', 'status envelope session does not match this runtime', message.messageId)
+            return
+          }
+          composition.bridge.handlePhysicalStatus(message)
           return
         }
         case 'session.attach': {

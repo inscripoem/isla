@@ -5,7 +5,11 @@ import {
   nonEmptyString,
   type ErrorCode,
 } from './primitives'
-import { performanceCommandSchema, type PerformanceCommand } from './pipeline'
+import {
+  performanceCommandSchema,
+  playerStatusSchema,
+  type PerformanceCommand,
+} from './pipeline'
 import {
   controlResumeMessageSchema,
   controlStopMessageSchema,
@@ -148,6 +152,29 @@ export const performanceReadyMessageSchema = z.strictObject({
 })
 export type PerformanceReadyMessage = z.infer<typeof performanceReadyMessageSchema>
 
+/**
+ * Physical-status report from the bound performer for one output.
+ *
+ * A delivery receipt proves the observed delivery fact; it does not by itself
+ * prove that local media was released. The performer reports its own
+ * `PlayerStatus` (the existing M1 `status()` interface) so the server can
+ * separate the delivery fact from physical occupancy. The `outputId` and the
+ * envelope `epoch`/`sessionId` correlate the report to the dispatch it
+ * describes; a report whose identity or connection generation does not match
+ * is not trusted. This is an additive protocol-0.2 client kind: an older strict
+ * decoder that does not know it will reject it rather than ignore it, so
+ * producers and consumers must be upgraded together.
+ */
+export const performanceStatusMessageSchema = z.strictObject({
+  ...envelopeBase,
+  kind: z.literal('performance.status'),
+  payload: z.strictObject({
+    outputId: nonEmptyString,
+    status: playerStatusSchema,
+  }),
+})
+export type PerformanceStatusMessage = z.infer<typeof performanceStatusMessageSchema>
+
 /** Envelope for an offer; the command already carries its own identity. */
 export function performanceOffer(
   command: PerformanceCommand,
@@ -191,6 +218,7 @@ export const applicationClientMessageSchema = z.discriminatedUnion('kind', [
   controlResumeMessageSchema,
   performanceReceiptMessageSchema,
   performanceReadyMessageSchema,
+  performanceStatusMessageSchema,
   sessionAttachMessageSchema,
   operatorBootstrapMessageSchema,
 ])

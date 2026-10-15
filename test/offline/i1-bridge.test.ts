@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { createDeadlineGate } from '../../src/runtime/deadline'
+import type { RuntimeDeadlineGate } from '../../src/runtime/deadline'
 import { createPerformanceBridge } from '../../src/runtime/performance-bridge'
-import type { PerformerTransport } from '../../src/runtime/performance-bridge'
-import type { PerformanceCommand, PerformanceReadyMessage, PlayerMessage } from '../../src/contracts'
+import type { PerformerTransport, TransportSendResult } from '../../src/runtime/performance-bridge'
+import type { CallContext } from '../../src/contracts'
+import type {
+  PerformanceCommand,
+  PerformanceReadyMessage,
+  PerformanceStatusMessage,
+  PlayerMessage,
+  PlayerStatus,
+} from '../../src/contracts'
 import {
   FIXTURE_SESSION_ID,
   fixturePerformanceCommand,
@@ -16,7 +24,38 @@ import { createVirtualClock } from '../support/virtual-clock'
  * idempotent cancellation, full-fingerprint retention and the tri-state
  * delivery routing. Virtual clock and captured transport; no real media.
  */
-function setup(sendResult = true): {
+/** A production-like deadline gate that counts outstanding bindings. */
+function createCountingGate(clock: ReturnType<typeof createVirtualClock>): {
+  gate: RuntimeDeadlineGate
+  activeBindings: () => number
+} {
+  const inner = createDeadlineGate(clock)
+  let active = 0
+  return {
+    gate: {
+      bind(context: CallContext) {
+        const binding = inner.bind(context)
+        active += 1
+        let released = false
+        return {
+          signal: binding.signal,
+          release() {
+            if (released) return
+            released = true
+            active -= 1
+            binding.release()
+          },
+        }
+      },
+      dispose: () => inner.dispose(),
+    },
+    activeBindings: () => active,
+  }
+}
+
+function setup(
+  sendFor?: (message: unknown) => TransportSendResult,
+): {
   clock: ReturnType<typeof createVirtualClock>
   bridge: ReturnType<typeof createPerformanceBridge>
   sent: Array<{ kind: string; payload: unknown }>
@@ -24,9 +63,11 @@ function setup(sendResult = true): {
   bumpGeneration: () => void
   context: (atMs?: number) => { signal: AbortSignal; deadline: { atMs: number } }
   abortLastController: () => void
+  activeBindings: () => number
 } {
   const clock = createVirtualClock(0)
-  const gate = createDeadlineGate(clock)
+  const counting = createCountingGate(clock)
+  const gate = counting.gate
   let generation = 1
   const sent: Array<{ kind: string; payload: unknown }> = []
   const evidence: PlayerMessage[] = []
@@ -34,7 +75,7 @@ function setup(sendResult = true): {
   const transport: PerformerTransport = {
     send(message) {
       sent.push(message as unknown as { kind: string; payload: unknown })
-      return sendResult
+      return sendFor === undefined ? 'sent' : sendFor(message)
     },
     async handleEvidence(message) {
       evidence.push(message)
@@ -58,6 +99,7 @@ function setup(sendResult = true): {
       return { signal: controller.signal, deadline: { atMs } }
     },
     abortLastController: () => controllers[controllers.length - 1]?.abort(),
+    activeBindings: () => counting.activeBindings(),
   }
 }
 
@@ -97,6 +139,29 @@ function receiptMessage(
   }
 }
 
+function idleStatus(): PlayerStatus {
+  return { idle: true, activeOutputId: null, lastStage: 'completed' }
+}
+
+function busyStatus(activeOutputId: string, lastStage: PlayerStatus['lastStage'] = 'completed'): PlayerStatus {
+  return { idle: false, activeOutputId, lastStage }
+}
+
+function statusMessage(
+  cmd: PerformanceCommand,
+  status: PlayerStatus,
+  overrides: { epoch?: number; outputId?: string } = {},
+): PerformanceStatusMessage {
+  return {
+    protocolVersion: '0.2',
+    messageId: 'status-1',
+    sessionId: cmd.sessionId,
+    epoch: overrides.epoch ?? cmd.epoch,
+    kind: 'performance.status',
+    payload: { outputId: overrides.outputId ?? cmd.outputId, status },
+  }
+}
+
 describe('performance bridge delayed-execution protocol', () => {
   it('offers without playback, grants after ready, and settles on a terminal receipt', async () => {
     const { bridge, sent, context } = setup()
@@ -106,9 +171,222 @@ describe('performance bridge delayed-execution protocol', () => {
     expect(sent.some((message) => message.kind === 'performance.grant')).toBe(false)
     bridge.handleReady(ready(cmd))
     expect(sent.some((message) => message.kind === 'performance.grant')).toBe(true)
+    // The performer reports a clean physical release separately from the receipt.
+    expect(bridge.handlePhysicalStatus(statusMessage(cmd, idleStatus()))).toBe(true)
     expect(await bridge.deliver(receiptMessage(cmd, { stage: 'completed' }))).toBe('consumed')
     await expect(execution).resolves.toMatchObject({ stage: 'completed' })
     expect(bridge.player.status().idle).toBe(true)
+  })
+
+  it('keeps the completed delivery fact while failed detach blocks physical admission', async () => {
+    const { bridge, context } = setup()
+    const cmd = command({ outputId: 'output-quarantine' })
+    const execution = bridge.player.execute(cmd, context())
+    bridge.handleReady(ready(cmd))
+    // Natural completion with a failed detach: the M1 status is non-idle but the
+    // delivery fact is the true `completed`.
+    expect(bridge.handlePhysicalStatus(statusMessage(cmd, busyStatus(cmd.outputId)))).toBe(true)
+    expect(await bridge.deliver(receiptMessage(cmd, { stage: 'completed' }))).toBe('consumed')
+    await expect(execution).resolves.toMatchObject({ stage: 'completed' })
+    expect(bridge.player.status()).toMatchObject({ idle: false })
+
+    // A duplicate still returns the retained completed fact, never re-offered.
+    await expect(bridge.player.execute(cmd, context())).resolves.toMatchObject({ stage: 'completed' })
+    // A new output is blocked while physical occupancy is unproven-idle.
+    await expect(
+      bridge.player.execute(command({ outputId: 'output-next' }), context()),
+    ).resolves.toMatchObject({ stage: 'unknown', reasonCode: 'unresolved_blocks_admission' })
+
+    // A later correlated idle status (for example after a dispose retry) clears
+    // physical occupancy without rewriting the delivery fact.
+    expect(bridge.handlePhysicalStatus(statusMessage(cmd, idleStatus()))).toBe(true)
+    expect(bridge.player.status().idle).toBe(true)
+  })
+
+  it('retains a Stop-detach failure terminal and blocks physical admission', async () => {
+    const { bridge, context } = setup()
+    const cmd = command({ outputId: 'output-stop-quarantine' })
+    bridge.player.execute(cmd, context())
+    bridge.handleReady(ready(cmd))
+    expect(await bridge.deliver(receiptMessage(cmd, { stage: 'started' }))).toBe('forward')
+    const cancel = bridge.player.cancel(
+      { requestId: 'c-stop', revokedEpoch: cmd.epoch, newEpoch: cmd.epoch + 1 },
+      context(),
+    )
+    expect(
+      await bridge.deliver(receiptMessage(cmd, { stage: 'failed', reasonCode: 'cleanup_failed' })),
+    ).toBe('consumed')
+    await expect(cancel).resolves.toMatchObject({ stage: 'failed', reasonCode: 'cleanup_failed' })
+    // The physical report is non-idle while the failed detach retains media; the
+    // delivery fact stays the truthful cleanup failure.
+    expect(bridge.handlePhysicalStatus(statusMessage(cmd, busyStatus(cmd.outputId, 'failed')))).toBe(true)
+    expect(bridge.player.status()).toMatchObject({ idle: false })
+    await expect(bridge.player.execute(cmd, context())).resolves.toMatchObject({
+      stage: 'failed',
+      reasonCode: 'cleanup_failed',
+    })
+  })
+
+  it('does not manufacture idle from a missing physical status', async () => {
+    const { bridge, context } = setup()
+    const cmd = command({ outputId: 'output-no-status' })
+    bridge.player.execute(cmd, context())
+    bridge.handleReady(ready(cmd))
+    expect(await bridge.deliver(receiptMessage(cmd, { stage: 'completed' }))).toBe('consumed')
+    // No physical status was reported, so physical occupancy is unproven.
+    expect(bridge.player.status()).toMatchObject({ idle: false })
+  })
+
+  it('settles a provably-unsent grant as not-dispatched without retaining a binding', async () => {
+    const { bridge, sent, context, activeBindings } = setup((message) =>
+      (message as { kind?: string }).kind === 'performance.grant' ? 'unsent' : 'sent',
+    )
+    const cmd = command({ outputId: 'output-unsent' })
+    const offer = bridge.player.execute(cmd, context())
+    expect(activeBindings()).toBe(1)
+    bridge.handleReady(ready(cmd))
+    await expect(offer).resolves.toMatchObject({ stage: 'unknown', reasonCode: 'grant_unsent' })
+    // The proven-unsent grant released its binding and dispatched nothing.
+    expect(activeBindings()).toBe(0)
+    expect(sent.filter((message) => message.kind === 'performance.grant')).toHaveLength(1)
+    expect(bridge.player.status().idle).toBe(true)
+    // A later Stop finds no retained waiter and does not wedge.
+    await expect(
+      bridge.player.cancel({ requestId: 'c', revokedEpoch: cmd.epoch, newEpoch: cmd.epoch + 1 }, context()),
+    ).resolves.toBeNull()
+    // A fresh output is admitted: the unsent grant left no physical occupancy.
+    const offersBefore = sent.filter((message) => message.kind === 'performance.offer').length
+    bridge.player.execute(command({ outputId: 'output-after' }), context())
+    expect(sent.filter((message) => message.kind === 'performance.offer').length).toBe(offersBefore + 1)
+    expect(activeBindings()).toBe(1)
+  })
+
+  it('settles a provably-unsent grant as not-dispatched on expiry without a retained binding', async () => {
+    const { bridge, clock, context, activeBindings } = setup((message) =>
+      (message as { kind?: string }).kind === 'performance.grant' ? 'unsent' : 'sent',
+    )
+    const cmd = command({ outputId: 'output-unsent-expiry' })
+    const offer = bridge.player.execute(cmd, context(30_000))
+    bridge.handleReady(ready(cmd))
+    expect(activeBindings()).toBe(0)
+    clock.set(40_000)
+    await expect(offer).resolves.toMatchObject({ stage: 'unknown', reasonCode: 'grant_unsent' })
+    expect(bridge.player.status().idle).toBe(true)
+  })
+
+  it('rejects a contradictory, premature or mismatched physical status', async () => {
+    const { bridge, bumpGeneration, context } = setup()
+    const cmd = command({ outputId: 'output-status-guards' })
+
+    // A status before any grant is not evidence.
+    expect(bridge.handlePhysicalStatus(statusMessage(cmd, idleStatus()))).toBe(false)
+
+    bridge.player.execute(cmd, context())
+    expect(bridge.handlePhysicalStatus(statusMessage(cmd, idleStatus()))).toBe(false)
+    bridge.handleReady(ready(cmd))
+
+    // idle:true with a named active output is contradictory.
+    expect(
+      bridge.handlePhysicalStatus(
+        statusMessage(cmd, { idle: true, activeOutputId: cmd.outputId, lastStage: 'completed' }),
+      ),
+    ).toBe(false)
+    // A non-idle report naming a different active output contradicts the grant.
+    expect(
+      bridge.handlePhysicalStatus(
+        statusMessage(cmd, { idle: false, activeOutputId: 'other', lastStage: 'completed' }),
+      ),
+    ).toBe(false)
+    // A retained terminal does not let a superseded generation attest cleanup.
+    expect(await bridge.deliver(receiptMessage(cmd, { stage: 'completed' }))).toBe('consumed')
+    bumpGeneration()
+    expect(bridge.handlePhysicalStatus(statusMessage(cmd, idleStatus()))).toBe(false)
+    expect(bridge.player.status()).toMatchObject({ idle: false })
+  })
+
+  it('preserves failed-detach uncertainty across disconnect and rebind', async () => {
+    const { bridge, bumpGeneration, context } = setup()
+    const cmd = command({ outputId: 'output-detach-failed' })
+    bridge.player.execute(cmd, context())
+    bridge.handleReady(ready(cmd))
+    expect(bridge.handlePhysicalStatus(statusMessage(cmd, busyStatus(cmd.outputId)))).toBe(true)
+    expect(await bridge.deliver(receiptMessage(cmd, { stage: 'completed' }))).toBe('consumed')
+
+    // The application advances the connection generation before detaching.
+    bumpGeneration()
+    bridge.detach('performer_disconnected')
+    expect(bridge.player.status()).toMatchObject({ idle: false })
+    // A new connection cannot attest the old one's cleanup, and fresh media is
+    // still blocked.
+    expect(bridge.handlePhysicalStatus(statusMessage(cmd, idleStatus()))).toBe(false)
+    await expect(
+      bridge.player.execute(command({ outputId: 'output-new' }), context()),
+    ).resolves.toMatchObject({ stage: 'unknown', reasonCode: 'unresolved_blocks_admission' })
+    expect(bridge.player.status()).toMatchObject({ idle: false })
+  })
+
+  it('preserves missing-status uncertainty across disconnect and rebind', async () => {
+    const { bridge, bumpGeneration, context } = setup()
+    const cmd = command({ outputId: 'output-detach-nostatus' })
+    bridge.player.execute(cmd, context())
+    bridge.handleReady(ready(cmd))
+    expect(await bridge.deliver(receiptMessage(cmd, { stage: 'completed' }))).toBe('consumed')
+
+    bumpGeneration()
+    bridge.detach('performer_disconnected')
+    expect(bridge.player.status()).toMatchObject({ idle: false })
+    await expect(
+      bridge.player.execute(command({ outputId: 'output-new' }), context()),
+    ).resolves.toMatchObject({ stage: 'unknown', reasonCode: 'unresolved_blocks_admission' })
+  })
+
+  it('preserves a genuinely clean disconnect as resolved', async () => {
+    const { bridge, sent, bumpGeneration, context } = setup()
+    const cmd = command({ outputId: 'output-detach-clean' })
+    bridge.player.execute(cmd, context())
+    bridge.handleReady(ready(cmd))
+    expect(bridge.handlePhysicalStatus(statusMessage(cmd, idleStatus()))).toBe(true)
+    expect(await bridge.deliver(receiptMessage(cmd, { stage: 'completed' }))).toBe('consumed')
+
+    bumpGeneration()
+    bridge.detach('performer_disconnected')
+    expect(bridge.player.status().idle).toBe(true)
+    // A fresh output is admitted after the verified clean release.
+    const offersBefore = sent.filter((message) => message.kind === 'performance.offer').length
+    bridge.player.execute(command({ outputId: 'output-clean-next' }), context())
+    expect(sent.filter((message) => message.kind === 'performance.offer').length).toBe(offersBefore + 1)
+  })
+
+  it('stays conservative for an ambiguous grant until correlated status', async () => {
+    const { bridge, sent, context } = setup((message) =>
+      (message as { kind?: string }).kind === 'performance.grant' ? 'ambiguous' : 'sent',
+    )
+    const cmd = command({ outputId: 'output-ambiguous' })
+    bridge.player.execute(cmd, context())
+    bridge.handleReady(ready(cmd))
+    expect(sent.some((message) => message.kind === 'performance.grant')).toBe(true)
+    // Delivery is uncertain: the operation is conservatively granted and can
+    // never manufacture idle.
+    expect(bridge.player.status()).toMatchObject({ idle: false })
+    expect(await bridge.deliver(receiptMessage(cmd, { stage: 'completed' }))).toBe('consumed')
+    expect(bridge.player.status()).toMatchObject({ idle: false })
+    expect(bridge.handlePhysicalStatus(statusMessage(cmd, idleStatus()))).toBe(true)
+    expect(bridge.player.status().idle).toBe(true)
+  })
+
+  it('ignores a stale-generation or mismatched physical status', async () => {
+    const { bridge, bumpGeneration, context } = setup()
+    const cmd = command({ outputId: 'output-status-id' })
+    bridge.player.execute(cmd, context())
+    bridge.handleReady(ready(cmd))
+    // Wrong epoch and wrong output identity are both untrusted.
+    expect(bridge.handlePhysicalStatus(statusMessage(cmd, idleStatus(), { epoch: cmd.epoch + 1 }))).toBe(false)
+    expect(bridge.handlePhysicalStatus(statusMessage(cmd, idleStatus(), { outputId: 'other-output' }))).toBe(false)
+    expect(bridge.player.status().idle).toBe(false)
+    // A superseded connection generation makes the report stale.
+    bumpGeneration()
+    expect(bridge.handlePhysicalStatus(statusMessage(cmd, idleStatus()))).toBe(false)
+    expect(bridge.player.status().idle).toBe(false)
   })
 
   it('settles a superseded connection as not-dispatched and idle', async () => {
@@ -134,7 +412,7 @@ describe('performance bridge delayed-execution protocol', () => {
   })
 
   it('never grants when no performer is attached', async () => {
-    const { bridge, context } = setup(false)
+    const { bridge, context } = setup(() => 'unsent')
     await expect(bridge.player.execute(command(), context())).resolves.toMatchObject({
       stage: 'unknown',
       reasonCode: 'performer_unavailable',

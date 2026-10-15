@@ -13,9 +13,11 @@ import type {
 import {
   performanceGrant,
   performanceOffer,
+  playerStatusSchema,
   type PerformanceGrantMessage,
   type PerformanceOfferMessage,
   type PerformanceReadyMessage,
+  type PerformanceStatusMessage,
 } from '../contracts'
 import type { DeadlineBinding } from '../performance/browser/types'
 import type { RuntimeDeadlineGate } from './deadline'
@@ -53,8 +55,19 @@ export type PerformerBridgeMessage =
   | PerformanceOfferMessage
   | PerformanceGrantMessage
 
+/**
+ * Result of one transport send, distinguishing what the transport can prove.
+ *
+ * `sent` means the frame was handed to the socket. `unsent` means the transport
+ * proved no dispatch (for example a closed socket or a rejected send buffer) so
+ * no playback can have happened. `ambiguous` means the attempt failed without
+ * proving whether the payload was buffered or partially written; the caller must
+ * stay conservative rather than assume it was unsent.
+ */
+export type TransportSendResult = 'sent' | 'unsent' | 'ambiguous'
+
 export interface PerformerTransport {
-  send(message: PerformerBridgeMessage): boolean
+  send(message: PerformerBridgeMessage): TransportSendResult
   handleEvidence(message: PlayerMessage): Promise<void>
   makeMessageId(): string
   generation(): number
@@ -66,6 +79,12 @@ export interface PerformanceBridge {
   readonly player: PlayerPort
   bindTransport(transport: PerformerTransport): void
   handleReady(message: PerformanceReadyMessage): boolean
+  /**
+   * Accepts a correlated physical-status report from the bound performer. It is
+   * separate from a delivery receipt: a receipt records the delivery fact while
+   * this records whether local media is still physically occupied.
+   */
+  handlePhysicalStatus(message: PerformanceStatusMessage): boolean
   deliver(message: PlayerMessage): Promise<DeliveryOutcome>
   detach(reason: string): void
   dispose(): void
@@ -123,6 +142,15 @@ export function createPerformanceBridge(options: {
   let unresolvedOutputId: string | null = null
   let lastStage: ReceiptStage | null = null
 
+  /**
+   * The most recent dispatch this bridge authorized on the current connection
+   * generation. A delivery terminal alone does not prove the media was
+   * released, so physical admission stays blocked until a correlated physical
+   * status for this grant reports idle.
+   */
+  let latestGranted: { outputId: string; epoch: number; generation: number } | null = null
+  const physicalReports = new Map<string, { generation: number; epoch: number; status: PlayerStatus }>()
+
   const makeReceipt = (
     command: PerformanceCommand,
     stage: ReceiptStage,
@@ -159,6 +187,28 @@ export function createPerformanceBridge(options: {
       if (oldest === undefined) break
       terminalFacts.delete(oldest)
     }
+    while (physicalReports.size > MAX_TRACKED_OUTPUTS) {
+      const oldest = physicalReports.keys().next().value
+      if (oldest === undefined) break
+      physicalReports.delete(oldest)
+    }
+  }
+
+  /**
+   * The trusted physical status for the most recent grant, or null when none is
+   * proven. The report must belong to the grant's own connection generation and
+   * match its identity/epoch. It is intentionally NOT invalidated by a later
+   * connection generation: after a disconnect/rebind the last verified state is
+   * preserved, so a clean release stays resolved while an unproven or occupied
+   * state keeps physical uncertainty instead of silently manufacturing idle.
+   */
+  const trustedPhysicalStatus = (): PlayerStatus | null => {
+    if (latestGranted === null) return null
+    const report = physicalReports.get(latestGranted.outputId)
+    if (report === undefined) return null
+    if (report.generation !== latestGranted.generation) return null
+    if (report.epoch !== latestGranted.epoch) return null
+    return report.status
   }
 
   const settle = (operation: Operation, receipt: PerformanceReceipt, unresolved: boolean): void => {
@@ -219,6 +269,15 @@ export function createPerformanceBridge(options: {
       if (unsettledOperation() !== undefined) {
         return Promise.resolve(makeReceipt(command, 'unknown', 'concurrent_dispatch'))
       }
+      // Physical admission: a delivery terminal does not prove the previous
+      // media was released. Block while the most recent grant has no trusted
+      // idle status (a missing status can never manufacture idle).
+      if (latestGranted !== null) {
+        const physical = trustedPhysicalStatus()
+        if (physical === null || !physical.idle) {
+          return Promise.resolve(makeReceipt(command, 'unknown', 'unresolved_blocks_admission'))
+        }
+      }
 
       const storedCommand = structuredClone(command)
       const binding = options.gate.bind(context)
@@ -256,7 +315,11 @@ export function createPerformanceBridge(options: {
         return operation.promise
       }
       const sent = transport.send(performanceOffer(storedCommand, transport.makeMessageId()))
-      if (!sent) settle(operation, makeReceipt(storedCommand, 'unknown', 'performer_unavailable'), false)
+      if (sent === 'unsent') {
+        // Provably no dispatch: the offer cannot have been seen, so there is no
+        // playback to reconcile and no physical occupancy.
+        settle(operation, makeReceipt(storedCommand, 'unknown', 'performer_unavailable'), false)
+      }
       return operation.promise
     },
 
@@ -321,6 +384,21 @@ export function createPerformanceBridge(options: {
       if (unsettled !== undefined) {
         return { idle: false, activeOutputId: unsettled.command.outputId, lastStage }
       }
+      // The delivery fact and the physical status are separate evidence. Only a
+      // trusted, correlated physical status may clear physical occupancy; a
+      // delivery terminal or a missing status never manufactures idle.
+      const physical = trustedPhysicalStatus()
+      if (physical !== null) {
+        if (physical.idle) return { idle: true, activeOutputId: null, lastStage }
+        return {
+          idle: false,
+          activeOutputId: physical.activeOutputId ?? latestGranted?.outputId ?? null,
+          lastStage: physical.lastStage ?? lastStage,
+        }
+      }
+      if (latestGranted !== null) {
+        return { idle: false, activeOutputId: latestGranted.outputId, lastStage }
+      }
       return { idle: true, activeOutputId: null, lastStage }
     },
   }
@@ -357,8 +435,59 @@ export function createPerformanceBridge(options: {
         settle(operation, makeReceipt(command, 'unknown', 'expired_before_grant'), false)
         return true
       }
+      const grantOutcome = transport.send(performanceGrant(command, remainingMs, transport.makeMessageId()))
+      if (grantOutcome === 'unsent') {
+        // The grant provably never reached the performer, so no playback can
+        // have started: release the binding and settle as not-dispatched rather
+        // than wedging Stop/Resume on a grant that was never delivered.
+        settle(operation, makeReceipt(command, 'unknown', 'grant_unsent'), false)
+        return true
+      }
+      // 'sent' and 'ambiguous' both authorize the operation. An ambiguous send
+      // could not prove the grant was unsent, so it is conservatively treated as
+      // possibly granted and stays physical-occupancy blocked until correlated
+      // status evidence arrives.
       operation.phase = 'granted'
-      transport.send(performanceGrant(command, remainingMs, transport.makeMessageId()))
+      latestGranted = {
+        outputId: command.outputId,
+        epoch: command.epoch,
+        generation: transport.generation(),
+      }
+      return true
+    },
+
+    handlePhysicalStatus(message: PerformanceStatusMessage): boolean {
+      if (disposed || transport === null) return false
+      if (message.sessionId !== options.sessionId) return false
+      const parsed = playerStatusSchema.safeParse(message.payload.status)
+      if (!parsed.success) return false
+      const status = parsed.data
+      // A contradictory claim of idle with a named active output is not usable
+      // evidence, matching the coordinator's defensive status read.
+      if (status.idle && status.activeOutputId !== null) return false
+      const outputId = message.payload.outputId
+      const epoch = message.epoch
+      const generation = transport.generation()
+      // Full correlation: only a report for the output this bridge most recently
+      // granted under this exact epoch and the *current* connection generation
+      // is trusted. A status before any grant, a wrong-epoch/identity report, a
+      // retained-terminal report from a superseded connection and any
+      // post-rebind report about an old output are rejected rather than allowed
+      // to manufacture idle.
+      if (
+        latestGranted === null ||
+        latestGranted.outputId !== outputId ||
+        latestGranted.epoch !== epoch ||
+        latestGranted.generation !== generation
+      ) {
+        return false
+      }
+      // A non-idle report that names a different active output contradicts the
+      // grant it claims to describe.
+      if (!status.idle && status.activeOutputId !== null && status.activeOutputId !== outputId) {
+        return false
+      }
+      physicalReports.set(outputId, { generation, epoch, status })
       return true
     },
 
@@ -448,6 +577,13 @@ export function createPerformanceBridge(options: {
           waiter.resolve(receipt)
         }
       }
+      // Physical uncertainty survives the disconnect. The last grant and its
+      // verified report are retained so that a completed/failed output with a
+      // failed cleanup (or no report at all) stays non-idle after detach/rebind
+      // instead of silently becoming idle once no operation is unsettled. A
+      // genuinely clean disconnect (last report idle) is preserved as resolved.
+      // A new connection cannot attest the old one's cleanup: its generation
+      // differs, so `handlePhysicalStatus` rejects a report for the old output.
       lastStage = 'unknown'
     },
 
@@ -468,6 +604,8 @@ export function createPerformanceBridge(options: {
       cancelWaiters.clear()
       operations.clear()
       terminalFacts.clear()
+      physicalReports.clear()
+      latestGranted = null
       unresolvedOutputId = null
       lastStage = 'unknown'
     },

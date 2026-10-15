@@ -76,7 +76,10 @@ function cancelMessage(command: PerformanceCommand): unknown {
   }
 }
 
-function setup(startNow: number): {
+function setup(
+  startNow: number,
+  options: { media?: ReturnType<typeof createControlledMediaDriver> } = {},
+): {
   sent: Array<Record<string, unknown>>
   media: ReturnType<typeof createControlledMediaDriver>
   machine: ReturnType<typeof createPerformerMachine>
@@ -85,7 +88,7 @@ function setup(startNow: number): {
 } {
   let browserNow = startNow
   const sent: Array<Record<string, unknown>> = []
-  const media = createControlledMediaDriver({ autoEvents: true })
+  const media = options.media ?? createControlledMediaDriver({ autoEvents: true })
   const resolver = createControlledResolver()
   resolver.setAutoResolve()
   const transport: PerformerTransport = {
@@ -185,6 +188,81 @@ function attachAck(epoch: number): unknown {
 function settle(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0))
 }
+
+function countReceipts(
+  sent: Array<Record<string, unknown>>,
+  outputId: string,
+  stage: string,
+): number {
+  return sent.filter((message) => {
+    if (message.kind !== 'performance.receipt') return false
+    const payload = message.payload as { outputId?: string; stage?: string }
+    return payload.outputId === outputId && payload.stage === stage
+  }).length
+}
+
+describe('performer machine terminal publication', () => {
+  it('publishes an ordinary terminal exactly once', async () => {
+    const { sent, machine } = setup(5_000)
+    const cmd = command({ outputId: 'once-1' })
+    machine.handleMessage(offerMessage(cmd))
+    machine.handleMessage(grantMessage(cmd, 1_000))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(countReceipts(sent, 'once-1', 'completed')).toBe(1)
+  })
+
+  it('reconciles a cached terminal after the 64-entry retirement boundary and frees admission', async () => {
+    const { sent, media, machine } = setup(5_000)
+    const firstId = 'retire-0'
+    for (let index = 0; index < 65; index += 1) {
+      const cmd = command({ outputId: `retire-${index}` })
+      machine.handleMessage(offerMessage(cmd))
+      machine.handleMessage(grantMessage(cmd, 1_000))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+    expect(media.createCount()).toBe(65)
+    expect(countReceipts(sent, firstId, 'completed')).toBe(1)
+
+    // Retry the retired output: the M1 controller still retains the
+    // current-epoch terminal and returns it without an observer callback.
+    const retry = command({ outputId: firstId })
+    machine.handleMessage(offerMessage(retry))
+    machine.handleMessage(grantMessage(retry, 1_000))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(countReceipts(sent, firstId, 'completed')).toBe(2)
+    // The cached terminal did not create media, and admission was released.
+    expect(media.createCount()).toBe(65)
+
+    const fresh = command({ outputId: 'fresh-after-retire' })
+    machine.handleMessage(offerMessage(fresh))
+    machine.handleMessage(grantMessage(fresh, 1_000))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(media.createCount()).toBe(66)
+  })
+
+  it('does not reopen local admission when a terminal cleanup failed', async () => {
+    const media = createControlledMediaDriver({ autoEvents: true, detachResult: false })
+    const { sent, machine } = setup(5_000, { media })
+    const first = command({ outputId: 'cleanup-failed-1' })
+    machine.handleMessage(offerMessage(first))
+    machine.handleMessage(grantMessage(first, 1_000))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    // The delivery fact is the truthful natural `completed` and is published
+    // exactly once, but the failed detach retains quarantined media.
+    expect(countReceipts(sent, 'cleanup-failed-1', 'completed')).toBe(1)
+    expect(media.current()?.detached()).toBe(false)
+
+    // Admission stays closed: no ready is sent for a fresh offer and no media is
+    // created while the controller remains physically occupied.
+    const next = command({ outputId: 'cleanup-failed-next' })
+    const readyBefore = sent.filter((message) => message.kind === 'performance.ready').length
+    machine.handleMessage(offerMessage(next))
+    machine.handleMessage(grantMessage(next, 1_000))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(sent.filter((message) => message.kind === 'performance.ready').length).toBe(readyBefore)
+    expect(media.createCount()).toBe(1)
+  })
+})
 
 describe('performer machine conservative expiry', () => {
   it('applies the server remaining lifetime to its own request start', async () => {

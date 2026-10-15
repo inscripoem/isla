@@ -3,6 +3,49 @@
 # One entry per supervised change. English only.
 version: 1
 entries:
+  - date: "2026-10-16"
+    task: I1-01-PR36-consumer-repair
+    change: >-
+      Separate delivery facts from physical cleanup, preserve quarantine across
+      reconnect, distinguish known-unsent from ambiguous grants, reconcile cached
+      terminals once, and prevent client identity reuse across page reloads.
+    requirements: [FR-04, FR-05, FR-06]
+    invariants: [INV-15]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 1.19.0
+    launch_flags: [--pure, --agent, build, --variant, xhigh]
+    sessions: [ses_ebf7ec899ffegvCkI8v4kA9c1F]
+    supervision: >-
+      OpenCode authored code/tests in three supervised rounds. Codex reviewed
+      callers, repeated verification, ran browser checks, maintained paired
+      documentation and prepared unsent review drafts. Implementation preceded
+      temporary defect reintroduction for the first three regression proofs;
+      the page-reload defect was independently observed before its repair.
+    human_review: >-
+      Captain approved local repair and verification. The repair remains
+      unpublished and under review; PR36 at 08ff362 has changes requested.
+      No commit, push, GitHub message/review or merge was performed.
+    transcript_record: >-
+      Complete native loopback session and message API bodies are retained
+      privately with hashes (220 messages). Native CLI export/event captures
+      were output-limited and are marked partial; original messages are unchanged.
+    verification:
+      base: 08ff362299992e5d20a28a0305ab9acf8b21b5b5
+      independent: "653 passed / 31 files; typecheck, lint and build passed."
+      opencode: "653 passed / 31 files; typecheck, lint and build passed."
+      browser: >-
+        Two completed two-segment turns; fresh-page reload and another completed
+        turn with distinct identities; Stop after started; Resume then a full
+        turn; runtime closure after started and local cancellation. Fixed WAV
+        media-API observations only. Earlier inconclusive/mistimed attempts are
+        retained separately and not counted as successful checks.
+    scope: >-
+      Coordinated performance.status rollout is required. M2/M3 retain module
+      ownership. Live dialogue/TTS/VTS, acoustic measurement, SQLite restart and
+      full I1 acceptance remain open. PR34 was reviewed separately at 93846ab.
   - date: "2026-10-15"
     task: I1-01-main-rebuild-review
     change: >-

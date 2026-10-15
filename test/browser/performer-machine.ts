@@ -71,16 +71,58 @@ interface PendingOffer {
   requestStartMs: number
   abort: AbortController | null
   timer: ReturnType<typeof setTimeout> | null
+  /** Set once a terminal receipt for this admission has been published. */
+  terminalPublished: boolean
 }
 
 const MAX_PENDING = 16
 let machineSequence = 0
 
+/**
+ * A per-realm identity nonce, generated once per module evaluation. A
+ * module-scoped counter alone restarts whenever the module is re-evaluated in a
+ * fresh JS realm (for example a browser page reload), which would let a new
+ * client reuse message and receipt identities that a retained server session
+ * still remembers (its input/receipt dedup). Combining this nonce with the
+ * per-module sequence keeps default client identities unique across page and
+ * realm lifetimes. Tests that need deterministic identities inject `receipts`
+ * and `now` instead of relying on this.
+ */
+const REALM_NONCE = createRealmNonce()
+
+function createRealmNonce(): string {
+  const cryptoLike = (
+    globalThis as {
+      crypto?: {
+        randomUUID?: () => string
+        getRandomValues?: (array: Uint8Array) => Uint8Array
+      }
+    }
+  ).crypto
+  try {
+    if (typeof cryptoLike?.randomUUID === 'function') {
+      return cryptoLike.randomUUID().replace(/-/g, '').slice(0, 12)
+    }
+    if (typeof cryptoLike?.getRandomValues === 'function') {
+      const bytes = new Uint8Array(6)
+      cryptoLike.getRandomValues(bytes)
+      return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+    }
+  } catch {
+    // Fall through to the time/random nonce below.
+  }
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
+}
+
 export function createPerformerMachine(options: {
   transport: PerformerTransport
   media: MediaDriver
   resolver: AudioResolver
-  receipts: ReceiptTools
+  /**
+   * Deterministic receipt id/clock tools. Defaults to realm-unique, machine-owned
+   * identities so a fresh page/realm never reuses retained server identities.
+   */
+  receipts?: ReceiptTools
   now?: () => number
   /** Test hook: awaited before `ready` is sent, to model delayed readiness. */
   beforeReady?: (command: PerformanceCommand) => Promise<void> | void
@@ -88,9 +130,16 @@ export function createPerformerMachine(options: {
 }): PerformerMachine {
   const now = options.now ?? (() => globalThis.performance.now())
   const hooks = options.hooks ?? {}
-  const instancePrefix = `m${(machineSequence += 1)}`
+  const instancePrefix = `m${REALM_NONCE}-${(machineSequence += 1)}`
   let counter = 0
   const nextId = (prefix: string): string => `${instancePrefix}-${prefix}-${(counter += 1)}`
+  const receipts: ReceiptTools =
+    options.receipts ?? {
+      // One identity source: the same realm-unique generator serves message ids
+      // and receipt ids, so a receipt never collides across page lifetimes.
+      newReceiptId: () => nextId('rcpt'),
+      localNowMs: () => Math.round(now()),
+    }
 
   let sessionId = ''
   let epoch = 0
@@ -154,25 +203,8 @@ export function createPerformerMachine(options: {
         initialEpoch: 0,
         resolver: options.resolver,
         media: options.media,
-        receipts: options.receipts,
-        onReceipt: (receipt) => {
-          lastStage = receipt.stage
-          if (receipt.stage === 'completed' || receipt.stage === 'cancelled' || receipt.stage === 'failed') {
-            clearPending(receipt.outputId)
-          }
-          options.transport.send(
-            JSON.stringify({
-              protocolVersion: '0.2',
-              messageId: nextId('receipt'),
-              sessionId: receipt.sessionId,
-              epoch: receipt.epoch,
-              kind: 'performance.receipt',
-              payload: receipt,
-            }),
-          )
-          hooks.onReceipt?.(receipt)
-          notify()
-        },
+        receipts,
+        onReceipt: (receipt) => publishReceipt(receipt),
         reportFault: (error) => {
           lastError = error instanceof Error ? error.message : String(error)
           notify()
@@ -191,6 +223,65 @@ export function createPerformerMachine(options: {
     pending.delete(outputId)
     rememberOutput(outputId)
     if (activeOutputId === outputId) activeOutputId = null
+  }
+
+  /**
+   * Reports the controller's own `PlayerStatus` (the M1 `status()` interface)
+   * for an output, ahead of its receipt. The delivery fact and physical
+   * occupancy travel separately so the server never treats a delivery terminal
+   * as proof that local media was released.
+   */
+  const publishPhysicalStatus = (receipt: PerformanceReceipt): void => {
+    const status = controller?.status()
+    if (status === undefined) return
+    options.transport.send(
+      JSON.stringify({
+        protocolVersion: '0.2',
+        messageId: nextId('status'),
+        sessionId: receipt.sessionId,
+        epoch: receipt.epoch,
+        kind: 'performance.status',
+        payload: { outputId: receipt.outputId, status },
+      }),
+    )
+  }
+
+  /**
+   * The single receipt publication path. The physical status is reported first,
+   * then a terminal releases the pending entry, then the receipt envelope and
+   * the owner hooks are published. `onGrant` reconciles a cached terminal the M1
+   * controller returns without an observer callback through this same path, so
+   * an output's terminal is published exactly once.
+   *
+   * A terminal whose local cleanup failed leaves the M1 controller non-idle
+   * (quarantined media), so the pending entry is retained and local admission
+   * stays closed rather than reopening over retained physical media.
+   */
+  const publishReceipt = (receipt: PerformanceReceipt): void => {
+    lastStage = receipt.stage
+    publishPhysicalStatus(receipt)
+    const terminal =
+      receipt.stage === 'completed' || receipt.stage === 'cancelled' || receipt.stage === 'failed'
+    if (terminal) {
+      const entry = pending.get(receipt.outputId)
+      if (entry !== undefined) entry.terminalPublished = true
+      // Only release admission when the M1 controller is actually idle. A
+      // cleanup failure retains quarantined media, so the pending entry stays
+      // and local admission remains closed.
+      if (controller?.status().idle !== false) clearPending(receipt.outputId)
+    }
+    options.transport.send(
+      JSON.stringify({
+        protocolVersion: '0.2',
+        messageId: nextId('receipt'),
+        sessionId: receipt.sessionId,
+        epoch: receipt.epoch,
+        kind: 'performance.receipt',
+        payload: receipt,
+      }),
+    )
+    hooks.onReceipt?.(receipt)
+    notify()
   }
 
   const expireOffer = (entry: PendingOffer, reason: string): void => {
@@ -255,6 +346,7 @@ export function createPerformerMachine(options: {
       requestStartMs: now(),
       abort: null,
       timer: null,
+      terminalPublished: false,
     })
     activeOutputId = command.outputId
     lastStage = 'offered'
@@ -326,12 +418,25 @@ export function createPerformerMachine(options: {
     const timer = entry.timer as { unref?: () => void }
     timer.unref?.()
     const command = entry.command
-    void ensureController()
-      .execute(command, { signal: abort.signal })
-      .catch((error: unknown) => {
+    const execution = ensureController().execute(command, { signal: abort.signal })
+    void execution.then(
+      (receipt) => {
+        // The M1 controller retains a current-epoch terminal with NO count
+        // quota and returns it for an identical retry without emitting an
+        // observer callback, while this machine and the server bridge retire
+        // their own records at 64. Reconcile such a cached terminal through the
+        // single publication path, but only for the exact admission captured
+        // here: if the observer already published it (entry cleared) or a later
+        // admission replaced the entry, this fulfillment must not publish. This
+        // frees admission after a retirement-boundary retry without duplicating
+        // an ordinary terminal publication.
+        if (pending.get(receipt.outputId) === entry && !entry.terminalPublished) publishReceipt(receipt)
+      },
+      (error: unknown) => {
         lastError = error instanceof Error ? error.message : String(error)
         notify()
-      })
+      },
+    )
   }
 
   const onCancel = (message: { payload: { requestId: string; revokedEpoch: number; newEpoch: number } }): void => {

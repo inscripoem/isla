@@ -109,6 +109,83 @@ describe('I1 application loop over loopback', () => {
     expect(await harness.confirmedHistory()).toHaveLength(0)
   })
 
+  it('refuses Resume while a Stop-detach failure retains physical media', async () => {
+    const media = createControlledMediaDriver({ autoEvents: true, detachResult: false })
+    media.holdEndedFrom(0)
+    const harness = await makeHarness({ media })
+    await boot(harness)
+
+    await harness.client.input('held quarantine')
+    await until(
+      () => harness.client.receipts().some((receipt) => receipt.stage === 'started'),
+      (started) => started,
+    )
+    const stop = await harness.client.stop()
+    expect((stop.payload as { status: string }).status).toBe('applied')
+
+    // The browser reports its own non-idle M1 status separately from the
+    // failed/cleanup_failed delivery fact, so the bridge never manufactures
+    // idle after the terminal.
+    await until(
+      () =>
+        harness.client.receipts().some(
+          (receipt) => receipt.stage === 'failed' && receipt.reasonCode === 'cleanup_failed',
+        ),
+      (failed) => failed,
+    )
+    await until(
+      () => harness.composition.bridge.player.status().idle,
+      (idle) => idle === false,
+    )
+    expect(harness.composition.bridge.player.status()).toMatchObject({ idle: false })
+    // Stop leaves the coordinator's confirmation pending: a standalone physical
+    // status clears occupancy but does not itself restore Resume, because the
+    // coordinator still requires committed output evidence. This is the
+    // documented conservative recovery, not an invented confirmation.
+    await until(
+      async () => (await harness.composition.coordinator.endpoint.snapshot()).outputConfirmation,
+      (confirmation) => confirmation === 'pending',
+    )
+    const resume = await harness.client.resume()
+    const payload = resume.payload as { status: string; reasonCode: string | null }
+    expect(payload.status).toBe('refused')
+    expect(payload.reasonCode).not.toBe('unauthorized')
+  })
+
+  it('preserves completed history but blocks fresh media after a failed natural cleanup', async () => {
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const media = createControlledMediaDriver({ autoEvents: true, detachResult: false })
+    const harness = await makeHarness({ resolver, media })
+    await boot(harness)
+
+    await harness.client.input('natural quarantine')
+    await until(
+      async () => (await harness.confirmedHistory()).length,
+      (count) => count >= 1,
+    )
+    // The true delivery fact is `completed` and is committed as history even
+    // though the detach failed.
+    const history = await harness.confirmedHistory()
+    expect(history).toHaveLength(1)
+    expect(history[0]?.classification).toBe('fully-delivered')
+    // The M1 controller retains the quarantined media and lease.
+    expect(media.current()?.detached()).toBe(false)
+    expect(resolver.leases()[0]?.releaseCount()).toBe(0)
+
+    // Fresh media is blocked: the bridge reports non-idle, so the next turn's
+    // execute never becomes a grant.
+    await until(
+      () => harness.composition.bridge.player.status().idle,
+      (idle) => idle === false,
+    )
+    const grantsBefore = harness.client.messages().filter((message) => message.kind === 'performance.grant').length
+    await harness.client.input('fresh turn must not play')
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(harness.client.messages().filter((message) => message.kind === 'performance.grant').length).toBe(grantsBefore)
+    expect(media.createCount()).toBe(1)
+  })
+
   it('resumes after Stop and completes a fresh turn', async () => {
     const harness = await makeHarness()
     await boot(harness)

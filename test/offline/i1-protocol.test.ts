@@ -6,6 +6,7 @@ import {
   performanceGrantMessageSchema,
   performanceOfferMessageSchema,
   performanceReadyMessageSchema,
+  performanceStatusMessageSchema,
   requestError,
 } from '../../src/contracts'
 import { fixturePerformanceCommand } from '../support/fixture-data'
@@ -44,6 +45,38 @@ describe('I1 application transport extension', () => {
     }
     expect(applicationClientMessageSchema.safeParse(grant).success).toBe(false)
     expect(applicationServerMessageSchema.safeParse(grant).success).toBe(true)
+  })
+
+  it('accepts a correlated physical status on the client union only', () => {
+    const status = {
+      protocolVersion: '0.2',
+      messageId: 'status-1',
+      sessionId: command.sessionId,
+      epoch: command.epoch,
+      kind: 'performance.status',
+      payload: {
+        outputId: command.outputId,
+        status: { idle: true, activeOutputId: null, lastStage: 'completed' },
+      },
+    }
+    expect(performanceStatusMessageSchema.safeParse(status).success).toBe(true)
+    expect(applicationClientMessageSchema.safeParse(status).success).toBe(true)
+    expect(parseApplicationClientMessage(status).ok).toBe(true)
+    // Strict payload: an unknown field and a malformed status are rejected.
+    expect(
+      performanceStatusMessageSchema.safeParse({
+        ...status,
+        payload: { ...status.payload, extra: true },
+      }).success,
+    ).toBe(false)
+    expect(
+      performanceStatusMessageSchema.safeParse({
+        ...status,
+        payload: { outputId: command.outputId, status: { idle: 'yes', activeOutputId: null, lastStage: null } },
+      }).success,
+    ).toBe(false)
+    // It is a client kind, never a server kind.
+    expect(applicationServerMessageSchema.safeParse(status).success).toBe(false)
   })
 
   it('validates offer and grant payloads strictly', () => {

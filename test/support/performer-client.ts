@@ -21,7 +21,8 @@ export interface PerformerClientOptions {
   sessionId: string
   resolver: AudioResolver
   media: MediaDriver
-  receipts: ReceiptTools
+  /** Deterministic receipt tools for tests; omitted to use the machine default. */
+  receipts?: ReceiptTools
   now?: () => number
   beforeReady?: (command: PerformanceCommand) => Promise<void> | void
 }
@@ -66,7 +67,7 @@ export function createPerformerClient(options: PerformerClientOptions): Performe
     },
     media: options.media,
     resolver: options.resolver,
-    receipts: options.receipts,
+    ...(options.receipts !== undefined ? { receipts: options.receipts } : {}),
     ...(options.now !== undefined ? { now: options.now } : {}),
     ...(options.beforeReady !== undefined ? { beforeReady: options.beforeReady } : {}),
     hooks: {
