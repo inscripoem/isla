@@ -285,3 +285,86 @@ entries:
       deadline/start-aware delivery-history integration remain pending. Live
       Kokoro/VTS, acoustic/network timing and complete product acceptance are not
       established. Issue 2 remains open with unfinished M1-01/M1-02 items unchecked.
+  - date: "2026-10-15"
+    task: M1-02-A
+    branch: feat/m1-02-kokoro-adapter
+    member: Pioneer141 (M1)
+    change: >-
+      Implement a Node-side Kokoro-compatible synthesis adapter, controlled audio
+      resource registry, raw-provider private types and mono IEEE-float32 WAV
+      encoding. Extend the existing M1 helper/tests and English adapter README;
+      retain the existing SynthesisPort, AudioResolver/lease and shared contracts.
+    requirements: [FR-04, FR-05, NFR-06]
+    invariants: [INV-01]
+    commits: []
+    agent: opencode/deepseek-flash
+    provider: deepseek
+    model: deepseek-flash
+    opencode_version: 1.18.34
+    launch_flags: [--pure, --agent, build, --variant, xhigh, --auto]
+    sessions:
+      - ses_ec188136fffedk1uDb56PmaqGW
+      - "ses_ec17dfb54ffen1RPK9LMqILJMo"
+    supervision: >-
+      Codex coordinated genuine native OpenCode execution and full evidence capture,
+      independently ran verification and arranged separate synthesis and resource
+      AI reviews. OpenCode authored application source, helpers, tests and README;
+      Codex prepared this factual metadata. The user's temporary project-only
+      override continues to select official deepseek/deepseek-flash. Historical
+      CityU-model and other members' entries remain unchanged.
+    human_review: >-
+      The M1 member explicitly confirmed P002 v01 and authorized increment A
+      implementation through OpenCode/official DeepSeek, complete transcripts,
+      tested/reviewed commit and push, a PR and Issue 2 progress synchronization.
+      Human M5 consumer review: pending; M5 is the designated consumer for this PR. Independent
+      synthesis/resource AI review: no remaining material findings in the final A version; all seven source/test/doc hashes bound privately; this
+      is separate from human consumer approval. Agents do not merge this repository.
+    transcript_record: >-
+      Complete unedited run events and stderr plus native session exports and export
+      stderr are retained privately per round. The first native run and export
+      succeeded; recovery of a supervisor capture-path error is documented separately,
+      with original outputs preserved. The correction uses a fresh bounded session
+      with the same official provider/model, explicitly continued for the last repair. All three rounds have four byte-preserved raw originals each and pass the expected-provider/model archive audit; round 3 explicitly continues the second session. Raw records and actual failure/correction chronology remain intact;
+      private transcript text is excluded from this repository.
+    verification:
+      platform: Windows
+      node: 24.14.1
+      pnpm: 12.12.0
+      baseline_m1: "pnpm test:m1: 98 passed on main b316080 before implementation."
+      baseline_full_suite: >-
+        pnpm verify: 368 passed, 6 failed and 3 unhandled tsx spawn errors.
+        The six named baseline failures are three import-boundary negative cases
+        and three runtime CLI cases; typecheck and lint passed.
+      integration_base: >-
+        Main advanced to a28d76f through M4 PR 23 during development. A fast-forward
+        refresh preserved all seven owned source hashes. Final verification was
+        rerun against that base; the larger full-suite count includes upstream M4 tests.
+      development_sequence: >-
+        Initial application implementation preceded its tests. Independent review
+        then reproduced synthesis and resource boundary defects. The genuine correction recorded 14 failed/134 passed before production-behavior repair; a final continuation recorded 1 failed/149 passed before the final publication fix, then 150 passed. Intermediate failures remain in the originals. This entry does not
+        recast the initial implementation as test-first.
+      m1: "pnpm test:m1: 150 passed; independently rerun after updating the integration base to a28d76f"
+      typecheck: "passed"
+      lint: "passed"
+      build: "passed"
+      full_suite: >-
+        pnpm verify on the integrated final version: 475 passed, the same six named baseline failures and three tsx ENOENT errors.
+        Typecheck/lint passed; build passed independently. Full verification is not green on this Windows environment.
+      synthesis_review: "7 independent synthesis probes passed; final source hashes bound, no material findings remain"
+      resources_review: "34 independent resource/WAV scenarios passed; final source hashes bound, no material findings remain"
+      boundaries: >-
+        The A diff leaves shared contracts, browser subtree/public entry, dependency manifests and lockfile unchanged against its integration base. Provider code stays
+        outside browser/; C5 output carries plain correlation and metadata while
+        raw samples, Blob leases and provider objects remain local.
+      ci: "Pending for the new branch head when this record was written; corresponding results are reported in the PR and Issue progress comment"
+    scope: >-
+      Actual synthesis adapter and resource registry verified with controlled raw
+      provider, clock and deadline dependencies. Logical abort/expiry must suppress
+      late publication while physical generation occupancy remains until the
+      original provider Promise settles; this does not establish cancellation of
+      CPU inference. The concrete Kokoro SDK, dependencies/model installation,
+      tokenizer-based no-truncation guard, real inference and browser decoding are
+      increment B work. Resource HTTP serving, root composition and the production
+      DeadlineGate remain owner integration; VTS is later M1-02 work. Live Kokoro,
+      acoustic output/timing and full product acceptance are not established.
+      Issue 2 remains open with unfinished M1-01/M1-02 items unchecked.
