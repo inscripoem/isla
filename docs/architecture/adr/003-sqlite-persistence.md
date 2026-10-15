@@ -1,7 +1,7 @@
 # ADR-003 — SQLite persistence and schema migrations
 
 Status: under review (M6). Shared-architecture coordination with M5 pending.
-Date: 2026-10-14 · Owner: M6 · Requirements: FR-06 · Invariants: INV-09, INV-10 · Cases: C-26, C-27.
+Date: 2026-10-14 · Owner: M6 · Requirements: FR-06 · Invariants: INV-10, INV-11 · Cases: C-26, C-27.
 Relates to: ADR-001 (persistence seam), ADR-002 (record semantics). Revision type: ADD (new capability).
 
 ## Context
@@ -22,6 +22,9 @@ contract version (`0.2`) and the diagnostic protocol version (1).
 
 ### D2 — `schema_version` table + migration runner
 - A single-row `schema_version` table, separate from contract/protocol versions.
+- **Migration 2 (#22 attribution).** Adds `segment_index`, `persona_profile_id` and
+  `persona_profile_version` to `deliveries`; genuine legacy unknowns stay `NULL` (never inferred). The
+  migration is guarded by a `PRAGMA table_info` introspection so it is safe to re-run.
 - `migrate`: reject an **unsupported (newer)** version; **back up** an existing database before
   applying pending migrations; apply each migration in a transaction with **rollback** on failure;
   **idempotent** when already current.

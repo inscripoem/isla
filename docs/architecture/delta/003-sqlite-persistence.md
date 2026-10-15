@@ -22,6 +22,9 @@ None. This change adds a new capability; it does not remove prior behaviour.
 | Item | Change |
 | --- | --- |
 | `package.json` | `test:m6` now also runs `m6-sqlite.test.ts` |
+| `src/storage/sqlite/migrations.ts` | migration 2: add `segment_index`, `persona_profile_id`, `persona_profile_version` to `deliveries` (legacy `NULL`; re-runnable) |
+| `src/storage/sqlite/codec.ts`, `backend.ts` | map the three attribution fields on insert and read |
+| `docs/architecture/{invariants,trace-matrix}.md`, `docs/req/{requirements,trace.en}.yaml`/`.md`, `docs/team/REQUIREMENTS.en.md` | M6 invariants renumbered `INV-09..13 -> INV-10..14` (M5 keeps `INV-09`) |
 
 ## FROZEN
 

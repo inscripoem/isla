@@ -342,7 +342,7 @@ requirements:
         description: An existing database is backed up before pending migrations and each migration is transactional, so a failure leaves the prior version intact (FR-06).
         cases: [C-27, C-28]
 
-  - id: INV-11
+  - id: INV-12
     title: Restart restores only confirmed history and never replays unresolved output
     category: invariant
     priority: must
