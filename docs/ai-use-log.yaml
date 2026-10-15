@@ -428,6 +428,16 @@ entries:
   - date: 2026-10-15
     task: M6-01
     branch: m6-sqlite
+    change: "append validates the complete RuntimeEvent before mutation (symmetric with the delivery boundary); residue-free rejection + corrected retry; C-49"
+    requirements: [FR-06]
+    invariants: [INV-04]
+    cases: [C-49]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "M5 agreed (append symmetry); owner-approved"
+  - date: 2026-10-15
+    task: M6-01
+    branch: m6-sqlite
     change: "SQLite carries #22 delivery attribution: migration 2 adds segment_index/persona_profile_id/persona_profile_version (legacy NULL, re-runnable) + codec/insert mapping; M6 invariants renumbered INV-10..14"
     requirements: [FR-06]
     invariants: [INV-10, INV-11, INV-12]

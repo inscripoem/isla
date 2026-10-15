@@ -291,3 +291,10 @@ cases:
     verifier:
       file: test/offline/m5-attribution.test.ts
       test: "M5 delivery attribution capture (C-47)"
+
+  - id: C-49
+    status: implemented
+    title: An event is validated against the schema before append mutates storage
+    verifier:
+      file: test/offline/m6-storage.test.ts
+      test: "rejects a malformed event before mutation and lets a corrected retry apply"
