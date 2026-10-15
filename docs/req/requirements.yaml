@@ -344,6 +344,9 @@ requirements:
       - kind: deterministic
         description: An existing database is backed up before pending migrations and each migration is transactional, so a failure leaves the prior version intact (FR-06).
         cases: [C-27, C-28]
+      - kind: deterministic
+        description: The v2 migration preserves genuinely unknown legacy attribution as NULL and drops the legacy persona_version column only when it holds no data; contradictory classification/outcome rows and non-NULL legacy persona values are refused with the database preserved (FR-06).
+        cases: [C-48]
 
   - id: INV-12
     title: Restart restores only confirmed history and never replays unresolved output

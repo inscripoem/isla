@@ -31,7 +31,7 @@ The rules the verification agent applies and the QA records the team maintains.
 | INV-08 (history ordering) | C-25, C-29 | `m6-storage.test.ts` (ordering test); conformance `history-ordered` → over **both** backends |
 | INV-09 (delivery attribution and consistent evidence) | C-46, C-47 | `m5-attribution.test.ts` (capture, persistence and reconstruction ordering); conformance `delivery-invalid-combination:*`, `delivery-invalid-event:*`, `delivery-correlation:*`, `delivery-provenance:*`; negative adapters `createCombinationNormalizingEventStore`, `createProvenanceIgnoringEventStore` |
 | INV-10 (config + schema version validated) | C-26, C-27 | `m6-sqlite.test.ts` (config + migrations) |
-| INV-11 (migration recoverable) | C-27, C-28 | `m6-sqlite.test.ts` (backup before apply; rollback on failure) |
+| INV-11 (migration recoverable) | C-27, C-28, C-48 | `m6-sqlite.test.ts` (backup before apply; rollback on failure; legacy attribution migrated/refused) |
 | FR-06 (SQLite conformance) | C-29 | `m6-sqlite-backend.test.ts` (conformance suite over SQLite) |
 | FR-06 (SQLite persistence/reopen) | C-30 | `m6-sqlite-backend.test.ts` (reopen + isolation) |
 | FR-06 (delivery terminal outcome persisted) | C-31 | `m6-sqlite-backend.test.ts` (terminal outcome for recovery) |

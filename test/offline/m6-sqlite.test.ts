@@ -3,7 +3,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  BUILT_IN_MIGRATIONS,
   LATEST_SCHEMA_VERSION,
+  createSqliteBackend,
   migrate,
   openDatabase,
   readSchemaVersion,
@@ -129,5 +131,93 @@ describe('M6 SQLite migrations (C-27)', () => {
   it('rejects a path that is a directory', () => {
     const dir = tempDir()
     expect(() => openDatabase(dir)).toThrow(/directory/)
+  })
+})
+
+describe('M6 SQLite legacy attribution migration (C-48)', () => {
+  function openLegacyV1(config: { dbPath: string; backupDir: string }) {
+    const db = openDatabase(config.dbPath)
+    migrate(
+      db,
+      { dbPath: config.dbPath, backupDir: config.backupDir },
+      BUILT_IN_MIGRATIONS.filter((migration) => migration.version === 1),
+    )
+    return db
+  }
+
+  function insertLegacyDelivery(
+    db: ReturnType<typeof openDatabase>,
+    classification: string,
+    outcome: string,
+    personaVersion: string | null,
+  ): void {
+    db.prepare(
+      `INSERT INTO deliveries
+         (session_id, turn_id, segment_id, modality, text_hash, text, output_id, receipt_id,
+          classification, terminal_outcome, persona_version, event_seq)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      's1',
+      't1',
+      'seg1',
+      'audio',
+      'h1',
+      'spoken',
+      null,
+      null,
+      classification,
+      outcome,
+      personaVersion,
+      1,
+    )
+  }
+
+  it('preserves legacy NULL attribution across the v2 migration, and drops the legacy column', () => {
+    const dir = tempDir()
+    const config = configIn(dir)
+    const db = openLegacyV1(config)
+    insertLegacyDelivery(db, 'fully-delivered', 'completed', null)
+
+    const result = migrate(db, { dbPath: config.dbPath, backupDir: config.backupDir })
+    expect(result.to).toBe(LATEST_SCHEMA_VERSION)
+    db.close()
+
+    const reopened = openDatabase(config.dbPath)
+    const stored = createSqliteBackend(reopened).storedDeliveries()
+    expect(stored).toHaveLength(1)
+    expect(stored[0]!.record.segmentIndex).toBeNull()
+    expect(stored[0]!.record.personaProfileId).toBeNull()
+    expect(stored[0]!.record.personaProfileVersion).toBeNull()
+    const columns = (
+      reopened.prepare('PRAGMA table_info(deliveries)').all() as { name: string }[]
+    ).map((column) => column.name)
+    expect(columns).not.toContain('persona_version')
+    reopened.close()
+  })
+
+  it('refuses a contradictory classification/outcome row and preserves the database', () => {
+    const dir = tempDir()
+    const config = configIn(dir)
+    const db = openLegacyV1(config)
+    insertLegacyDelivery(db, 'fully-delivered', 'cancelled', null)
+
+    expect(() => migrate(db, { dbPath: config.dbPath, backupDir: config.backupDir })).toThrow(
+      /contradict/,
+    )
+    expect(readSchemaVersion(db)).toBe(1)
+    db.close()
+  })
+
+  it('refuses to drop persona_version when a legacy value is non-NULL', () => {
+    const dir = tempDir()
+    const config = configIn(dir)
+    const db = openLegacyV1(config)
+    insertLegacyDelivery(db, 'fully-delivered', 'completed', 'legacy-persona@1')
+
+    expect(() => migrate(db, { dbPath: config.dbPath, backupDir: config.backupDir })).toThrow(
+      /persona_version/,
+    )
+    expect(readSchemaVersion(db)).toBe(1)
+    db.close()
   })
 })

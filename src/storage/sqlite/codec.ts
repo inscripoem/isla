@@ -72,7 +72,6 @@ export interface DeliveryRow {
   receipt_id: string | null
   classification: string
   terminal_outcome: string
-  persona_version: string | null
   event_seq: number
   /** #22 attribution; NULL for legacy rows (never inferred). */
   segment_index: number | null
