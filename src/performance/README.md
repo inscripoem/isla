@@ -213,6 +213,16 @@ small scripted Worker-like transport to exercise the host's real control logic
 deterministically without a subprocess or the SDK; the real bootstrap and real
 CPU timing are exercised only by the explicit live entrypoints.
 
+Initialization exposes **no internal timeout or cancellation API**:
+`createKokoroWorkerProvider` awaits the worker's own `ready` or `exit` and adds
+no timer of its own, so a hung worker initialization can remain pending
+indefinitely. A caller deadline bounds only the caller's logical wait; it neither
+settles, cancels nor replaces the initialization. An owner that stops waiting
+must still retain and observe the original initialization Promise and `close`
+any handle it eventually yields, awaiting the real worker exit before
+constructing a replacement. No `Promise.race` shortcut safely abandons that
+resource ownership or grants replacement permission.
+
 ### Audio resource registry (M1-02 increment A)
 
 `createAudioResourceRegistry({ clock, byteBudget, retentionMs, newRef? })` is a

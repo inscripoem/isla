@@ -22,17 +22,18 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import type { KokoroProvider, KokoroProviderInput, KokoroRawAudio } from './kokoro-types'
 import {
-  DEFAULT_MAX_TOKENS,
   createGuardedTokenizer,
   type KokoroCallableTokenizer,
 } from './kokoro-guard'
 
 /**
  * The verified fixed-model token ceiling for the pinned 512-context Kokoro
- * model. A trusted configuration must not be able to raise it, so a deliberate
- * lower limit is allowed but a larger one is rejected before any load.
+ * model. This is an independent literal, not an alias of the guard's default, so
+ * a future change to that default cannot silently raise the ceiling a trusted
+ * configuration was validated against. A deliberate lower limit is allowed but
+ * a larger one is rejected before any load.
  */
-export const VERIFIED_MODEL_MAX_TOKENS = DEFAULT_MAX_TOKENS
+export const VERIFIED_MODEL_MAX_TOKENS = 512
 
 /**
  * A plain bundled Node voice basename such as `af_heart`: lowercase letters, a

@@ -1316,3 +1316,81 @@ entries:
       contract, product root/HTTP path, production packaging, VTS or
       acoustic/full-product acceptance change. Issue2 stays Open with unfinished
       tasks unchecked.
+  - date: 2026-10-16
+    task: M1-02-M4-worker-follow-up
+    branch: feat/m1-02-kokoro-live
+    member: Pioneer141 (M1)
+    change: Address M4 feedback on the independent verified token ceiling,
+      worker-side dispose draining, idempotent fatal termination requests,
+      owned-buffer transfer and initialization ownership; verify the actual
+      worker entry with native MessageChannel and safe test teardown.
+    requirements: [FR-04, FR-05, NFR-06]
+    invariants: [INV-01]
+    commits: []
+    agent: opencode/deepseek-flash
+    provider: deepseek
+    model: deepseek-flash
+    opencode_version: 1.18.34
+    launch_flags: [--pure, --agent, build, --variant, xhigh, --auto]
+    sessions: [ses_ebf3fb1d7ffeebLsZh69u6Yopn]
+    supervision: Codex scoped and captured genuine native OpenCode, ran direct
+      checks and the existing local-only real worker smoke, and arranged two
+      independent AI reviews. OpenCode authored all application/test changes;
+      Codex prepared factual public metadata and performed authorized Git work.
+    human_review: The user explicitly authorized the M4 follow-up, full raw
+      transcripts, checks, commits/pushes, PR updates, Issue2 synchronization and
+      M5/M6 review requests. Consumer acceptance remains pending; agents never
+      merge, enable auto-merge or enqueue.
+    transcript_record: Worker changes and test repair used one genuine official
+      DeepSeek session, two rounds, eight raw originals and two model/session
+      audits. The separately logged ownership portion used another session,
+      two rounds and eight originals; the complete current follow-up therefore
+      has two sessions, four rounds and sixteen raw originals, all preserved
+      privately unabridged. Earlier development history is unchanged.
+    development_sequence: Round02 implemented before the first green run, then
+      temporarily restored old host/worker behavior to demonstrate two and
+      three failing regressions before restoring the fixes. This was
+      retrospective verification, not test-first. Independent review then
+      reproduced a test-teardown race. Round02b added a safe failing regression
+      against that old cleanup, observed one failure, fixed sequencing and
+      obtained five passing entry tests. Failed optional tool calls remain in
+      the original transcript.
+    verification:
+      platform: Windows
+      node: 24.14.1
+      starting_head: 93846abcc1f9ad7a20c7568c89f133c58a807184
+      ownership_dependency: b70843c85970f5259a33e339ca21890953b48656
+      ordinary_merge: a9ca369c767e7542429c85c82589c1d4d3203dcf
+      baseline_m1: 192 passed; 204 after the ownership update was merged.
+      m1: 211 passed across two explicit offline test files.
+      typecheck: passed
+      lint: passed
+      build: passed
+      full_suite: 536 passed, the same six named baseline failures and three
+        tsx ENOENT errors, versus the fresh B baseline 517/6/3. Local Windows
+        full verification remains non-green; corresponding CI is separate.
+      independent_review: Production lifecycle review passed 22 targeted tests.
+        Entry tests passed 5/5, strict TypeScript passed, and a newly regenerated
+        probe against the final harness passed after the teardown repair.
+        Production hashes are unchanged by the test-only repair.
+      real_worker_smoke: Existing local-only pinned-q8 smoke exited0 with all
+        gates passed. Real 512 inference produced 631800 mono samples at 24 kHz;
+        513 was refused. Zero-model-call evidence is API-only; actual worker
+        counters are null. Logical cancellation retained physical occupancy,
+        settlement allowed reuse and registry bytes returned to 0. Close waited
+        for actual exit. The short WAV remains byte-identical to the prior
+        browser fixture. No setup/download command or new browser/acoustic
+        acceptance was claimed.
+      ci: Pending for the new follow-up commit at record creation; exact-head
+        results are reported in the PR and Issue progress comment.
+    scope: Native transport tests exercise the actual worker entry with a
+      controlled inference substitute; the local-only smoke separately runs
+      real weights. The verified ceiling remains 512, with lower configured
+      limits supported. Disposal closes admission and drains actual generation;
+      fatal error requests termination once but pending state settles only on
+      observed exit. Only an owned copy is transferred. Caller init deadlines
+      do not cancel initialization or permit unobserved replacement. C5 and
+      dependencies/lock/pnpm policy are unchanged; package.json only adds the
+      explicit entry test to test:m1. PR34 still depends on PR33. Production
+      M5/M2 integration, live VTS, PR36 fixes and full product/course acceptance
+      remain separate. Issue2 stays open with unfinished tasks unchecked.
