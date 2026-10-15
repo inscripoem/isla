@@ -1,6 +1,6 @@
 # Isla development instructions
 
-Revision: 2026-10-10.4. Address the user as Captain. Use formal English for repository documents, code comments and UI. Chinese understanding copies, historical drafts and private evidence remain outside the checkout. Never submit coursework.
+Revision: 2026-10-15.1. Address the user as Captain. Use formal English for repository documents, code comments and UI. Chinese understanding copies, historical drafts and private evidence remain outside the checkout. Never submit coursework.
 
 ## Start from a role
 
@@ -26,6 +26,8 @@ When a member says "I am M3; start my first task" or names another M1–M6 role,
 Shared C1–C7 contracts, role fixtures and offline composition already exist. READINESS-PLAN and READINESS-REVIEW record the completed preparation increment, not instructions to repeat it. The former preparation-only exclusion of product modules does not prevent a member from explicitly authorizing their planned task, including playback, scheduling or SQLite. This document itself does not authorize business implementation, live service calls or another role's work.
 
 Preserve PLAN's confirmed responsibilities and ratings. M5 coordinates shared contracts, entry points, manifests and lockfiles; affected producers and consumers review interface changes. Trace callers before changing APIs; update implementations, tests and documents together. Interfaces may evolve. Do not silently weaken assertions or overwrite another owner's work. Keep diagnostic protocol 1 separate from application contracts 0.2.
+
+**Stable identifiers.** Case, invariant and requirement IDs are global, stable and never reused. When you add a row to a shared register (`docs/req/requirements.yaml`, `docs/req/case-registry.yaml`, `docs/architecture/invariants.md`), take the ID from the convention in [structural-constraints](docs/code-governance/structural-constraints.md) §3 — do not invent one and do not take "the next number"; make the row's `Owner` agree with the ID. Renumbering an already-published ID needs a recorded delta and M5 coordination.
 
 ## Tools and boundaries
 
