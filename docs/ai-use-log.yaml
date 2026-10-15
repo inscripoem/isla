@@ -1246,3 +1246,73 @@ entries:
       fixture, not a product voice/language choice. VTS C/D, acoustic quality
       and full product I1/I2 acceptance remain open. Issue2 stays Open and
       unfinished tasks unchecked.
+  - date: 2026-10-15
+    task: M1-02-B-CI-script-policy-and-verification-docs
+    branch: feat/m1-02-kokoro-live
+    member: Pioneer141 (M1)
+    change: Declare three exact dependency build scripts explicitly disabled so pnpm
+      strict frozen installation has no undecided scripts; correct the README
+      historical live-verification status using actual recorded results.
+    requirements:
+      - NFR-06
+    commits: []
+    agent: opencode/deepseek-flash
+    provider: deepseek
+    model: deepseek-flash
+    opencode_version: 1.18.34
+    launch_flags:
+      - --pure
+      - --agent
+      - build
+      - --variant
+      - xhigh
+      - --auto
+    sessions:
+      - ses_ec09bf832ffeNr1gX4UcpM63M9
+    supervision: Genuine OpenCode continued the existing official DeepSeek session
+      for rounds09/10 and authored only the workspace script-policy delta and
+      English README correction. Codex diagnosed the real CI installation
+      failure, checked official pnpm semantics, independently reviewed the exact
+      delta and prepared factual metadata. Previous entries are unchanged.
+    human_review: Existing user M1 publication/Issue authorization applies; M5/M6
+      human review of dependency policy and production packaging remains
+      pending. No build scripts were newly approved and agents do not merge.
+    transcript_record: Two additional actual rounds in the existing worker session,
+      each native run/export exit0 with four raw originals and central archive
+      audit. The complete B record now comprises five actual sessions, fourteen
+      rounds and56 private raw originals. The earlier twelve-round snapshot,
+      both initial CI failures and all stopped/length-limited runs remain
+      preserved.
+    verification:
+      initial_ci: Both c695010 push and pull_request runs failed at pnpm install
+        --frozen-lockfile with ERR_PNPM_IGNORED_BUILDS for
+        onnxruntime-node1.21.0, protobufjs7.6.6 and sharp0.34.5; no test step
+        ran in those failed workflows.
+      policy: Exact-version allowBuilds false for those three packages; esbuild true,
+        strict defaults, store path, manifest/lock and all executable
+        application/test code unchanged. No blanket script approval or workflow
+        bypass.
+      policy_source: https://pnpm.io/settings/build#allowbuilds
+      local_checks: Round09 cached pnpm install --frozen-lockfile,192 M1 tests,
+        typecheck, lint and build passed. This local cached install is not a
+        clean Linux-install claim; new head-matched CI results are reported in
+        PR34/Issue2.
+      documentation_only: Round10 corrected the stale no-live-run bullet to the
+        observed standalone CPU/browser evidence. Only README changed in that
+        continuation; no tests, model or browser were rerun for the factual
+        documentation delta.
+      evidence_reuse: All executable source, test, manifest and lock hashes remain
+        identical to the final worker/browser/offline checks. Prior192
+        M1,517/same6Windows failures/3tsx errors,512/513 CPU/API checks, fair
+        timer comparison and46 browser checks retain their exact scope and
+        tested source bindings.
+      independent_review: Exact three false matchers and factual README delta
+        independently reviewed; source/dependency code unchanged. M5/M6 approval
+        remains separate.
+      ci: Pending for the correction commit at record creation; both initial failed
+        workflows remain in history.
+    scope: Project-local dependency script denial and factual English documentation
+      only. No new script execution permission, dependency version, shared
+      contract, product root/HTTP path, production packaging, VTS or
+      acoustic/full-product acceptance change. Issue2 stays Open with unfinished
+      tasks unchecked.
