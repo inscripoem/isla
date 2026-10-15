@@ -18,7 +18,7 @@ network receipt transport and product history integration remain later work.
 | Module | Port | Behaviour |
 | --- | --- | --- |
 | [`fixed-synthesis.ts`](fixed-synthesis.ts) | `SynthesisPort` | An exact, unambiguous lookup over a fixed audio catalog. |
-| [`kokoro-synthesis.ts`](kokoro-synthesis.ts) | `SynthesisPort` | Injected raw-audio provider adapter registering generated WAV resources. |
+| [`kokoro-synthesis.ts`](kokoro-synthesis.ts) | `SynthesisPort` + private `whenIdle()` | Injected raw-audio provider adapter registering generated WAV resources. |
 | [`audio-resources.ts`](audio-resources.ts) | `AudioResolver` | Controlled opaque `audio://` registry with leases, retirement and a byte budget. |
 | [`mapped-renderer.ts`](mapped-renderer.ts) | `RendererPort` | Maps verified capability actions to low-level driver commands. |
 | [`browser/index.ts`](browser/index.ts) | — | Browser-safe public entry for M2 (types + player + DOM driver). |
@@ -97,6 +97,71 @@ Tokenizer-length and SDK truncation guards are **not** implemented or validated
 by this adapter; the injected provider must refuse an over-long input with
 `input_too_long` before inference. Concrete `kokoro-js` loading, dependency/model
 installation and a real-SDK smoke test are increment B work.
+
+#### Composition and provider ownership
+
+The factory returns a long-lived `KokoroSynthesis` (a `SynthesisPort` plus the
+private `whenIdle()` observation), and the surrounding composition owns the
+lifetime of both the provider and that adapter. The supported shape is
+**one provider plus one retained adapter**, initialized once and reused across
+turns and Stop/logical cancellation. Do **not** build a new adapter per turn, and
+do **not** share one provider across several adapters: the in-flight generation
+slot is local to one adapter instance, so two adapters over the same provider do
+not exclude each other and could start overlapping physical work. Multiple
+adapters would require a separately designed shared exclusion, which this module
+does not provide. The adapter reports `busy` only for a second concurrent call on
+the *same* adapter instance.
+
+A logical owner abort or expiry settles the returned `PreparedAudio` promptly,
+but that result is **not** evidence the physical provider generation stopped. The
+retained adapter stays `busy` for new work until the provider's original
+`generate` Promise settles; a late fulfillment publishes no reference and a late
+rejection is consumed. The retained adapter therefore exposes one private,
+composition-only observation: `whenIdle()`.
+
+`createKokoroSynthesis` returns a `KokoroSynthesis`, which is the unchanged
+`SynthesisPort` plus `whenIdle(): Promise<void>`. `whenIdle()` resolves when the
+generation that is active **at call time** physically settles — its original
+provider Promise fulfills or rejects — and resolves promptly when the adapter is
+idle. It never rejects with the generation's failure, and each generation owns an
+independent observation, so an earlier settlement never releases a later wait and
+a distinct later generation gets its own pending observation. The observation is
+reserved synchronously with the generation slot, so a provider that calls
+`whenIdle()` synchronously inside `generate` observes its own generation. A
+synchronous provider throw releases that generation's reserved observation — it
+settles rather than leaking — and clears the busy slot.
+
+`whenIdle()` is deliberately not a global mutex, queue, cancellation API or
+general lifecycle framework. It does not lock admission to the adapter, does not
+cancel or shorten provider inference, and does not prove that a registry resource
+or playback handle was cleaned up. The owner must **first stop admission to the
+old adapter**, then `await synthesis.whenIdle()`, and only then replace it; a
+premature replacement is still the caller's responsibility. There is no automatic
+guard against constructing a replacement, and this observation is not a
+substitute for the registry/playback cleanup the owner performs separately.
+
+```ts
+// One provider and one retained adapter for the whole composition lifetime.
+const provider: KokoroProvider = /* concrete kokoro-js facade, increment B */
+const synthesis: KokoroSynthesis = createKokoroSynthesis({
+  provider,
+  profiles,
+  registry,
+  clock,
+  deadlineGate,
+})
+
+// Reuse `synthesis` for every turn and across Stop. Before replacing it, stop
+// admission on the old adapter and await its physical-settlement observation:
+await synthesis.whenIdle()
+// Only now has the provider's original generation settled; construct the
+// replacement (or retry) under the owner's own exclusion policy.
+```
+
+No production composition exists in this checkout yet; installing it and
+accepting its ownership is M5 work. The offline tests in this module exercise the
+real adapter over a controlled provider and verify the caller's compliant
+sequence — they are not evidence that a production root is integrated.
 
 ### Audio resource registry (M1-02 increment A)
 

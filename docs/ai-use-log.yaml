@@ -415,3 +415,139 @@ entries:
       DeadlineGate remain owner integration; VTS is later M1-02 work. Live Kokoro,
       acoustic output/timing and full product acceptance are not established.
       Issue 2 remains open with unfinished M1-01/M1-02 items unchecked.
+  - date: 2026-10-15
+    task: M1-02-provider-ownership
+    branch: fix/m1-02-provider-ownership
+    member: Pioneer141 (M1)
+    change: Clarify that the synthesis busy flag belongs to one adapter instance.
+      Document one retained adapter per provider across logical cancellation and
+      caller-owned replacement only after physical settlement; add three
+      actual-adapter lifecycle regressions.
+    requirements:
+      - FR-04
+      - FR-05
+      - NFR-06
+    invariants:
+      - INV-01
+    commits: []
+    agent: opencode/deepseek-flash
+    provider: deepseek
+    model: deepseek-flash
+    opencode_version: 1.18.34
+    launch_flags:
+      - --pure
+      - --agent
+      - build
+      - --variant
+      - xhigh
+      - --auto
+    sessions:
+      - ses_ec0cd5c61ffe1683Nll0jnLQSx
+    supervision: Codex coordinated genuine native OpenCode, independently ran
+      verification and arranged a separate AI review. OpenCode authored
+      comments, README, helper and tests; Codex prepared this factual metadata.
+      Historical entries remain unchanged.
+    human_review: The user authorized latest-main update, the M5 Issue 2 ownership
+      follow-up through OpenCode/official DeepSeek and full transcripts, then
+      P002 B after checks. Existing M1 publication and Issue synchronization
+      instructions apply. M5 consumer review of this follow-up will be
+      requested; independent AI review is separate. Agents never merge.
+    transcript_record: One actual official DeepSeek session, two rounds; round02
+      explicitly continues round01 for a test-label correction. Each run and
+      native export exited0; eight raw events/stderr/export/export-stderr
+      originals are preserved privately byte-for-byte and both
+      expected-provider/model/session audits passed. Separate annotations retain
+      actual sequence; raw transcripts are excluded from this repository.
+    verification:
+      platform: Windows
+      node: 24.14.1
+      pnpm: 12.12.0
+      base: c250e12e5062b16191db103e43af46d177549cac
+      baseline_m1: 150 passed on freshly updated main.
+      baseline_full_suite: 475 passed, six named Windows baseline failures and three
+        tsx ENOENT errors; typecheck/lint passed.
+      development_sequence: This is an ownership documentation and coverage
+        clarification; no production behavior was changed or failing-first
+        repair claimed. Three lifecycle regressions passed. Round02 only
+        corrects their K05 matrix label to K03 ownership.
+      m1: 153 passed; independently rerun after the final label correction.
+      typecheck: passed
+      lint: passed
+      build: passed
+      full_suite: 478 passed, the same six named baseline failures and three tsx
+        ENOENT errors. Windows full verify remains non-green. This full check
+        preceded only the round02 test-label correction; no
+        assertions/production logic changed and role checks passed afterward.
+      independent_review: PASS; three targeted lifecycle tests passed, original150
+        assertions preserved, final five source hashes bound. Label-only final
+        change independently verified.
+      ci: Pending at record creation; head-matched results are reported in the
+        PR/Issue.
+    scope: Controlled-provider tests verify actual single-adapter reuse through
+      logical cancellation and the caller-compliant sequence for replacement
+      after physical settlement. No cross-instance global exclusion, scheduler
+      or automatic replacement guard is added. M5 consuming production
+      composition acceptance remains pending. Real SDK/model, tokenizer guard
+      and CPU/browser evidence are separate P002 B work; no
+      live/acoustic/full-product acceptance is claimed. Issue2 remains open with
+      unfinished tasks unchecked.
+  - date: 2026-10-16
+    task: M1-02-M4-ownership-follow-up
+    branch: fix/m1-02-provider-ownership
+    member: Pioneer141 (M1)
+    change: Expose an adapter-local physical-settlement observation for safe
+      caller-owned replacement, including synchronous provider reentrancy; add
+      actual-adapter observation and unsupported shared-provider regressions.
+    requirements: [FR-04, FR-05, NFR-06]
+    invariants: [INV-01]
+    commits: []
+    agent: opencode/deepseek-flash
+    provider: deepseek
+    model: deepseek-flash
+    opencode_version: 1.18.34
+    launch_flags: [--pure, --agent, build, --variant, xhigh, --auto]
+    sessions: [ses_ebf49cfb3ffef7eWMfkw4MH5bC]
+    supervision: Codex scoped the human-authorized M4 follow-up, captured genuine
+      native OpenCode output, ran direct-process checks and arranged independent
+      AI review. OpenCode authored application code, tests and module docs;
+      Codex prepared this factual metadata. Human consumer review is separate.
+    human_review: The user explicitly authorized these fixes, full transcripts,
+      testing, commit/push, PR updates, Issue2 synchronization and M5/M6 review
+      requests. M5 ownership consumption remains pending. Agents never merge.
+    transcript_record: One genuine official DeepSeek session with two rounds;
+      each run/export exited0, all eight raw events/stderr/export/export-stderr
+      originals are archived privately byte-for-byte and both expected-model
+      audits passed. Round01 changed source before adding nine passing tests.
+      Independent probes then found a synchronous reentrancy defect. Round01b
+      added three tests first, observed two failed and one control passed,
+      fixed reservation timing and obtained twelve passing observation tests.
+      Raw history and separate annotations are retained, not reconstructed.
+    verification:
+      platform: Windows
+      starting_head: f7a0d3e5ceeb255438f415cee20969c9dfb6b34a
+      baseline_m1: 153 passed
+      m1: 165 passed by direct-process supervisor verification
+      typecheck: passed
+      lint: passed
+      build: passed
+      full_suite: 490 passed, the same six named baseline failures and three
+        tsx ENOENT errors, compared with 478/6/3 at the fresh baseline.
+        Local Windows full verification is not green.
+      independent_review: The original reentrancy probes now pass3/3, and
+        all12 observation tests pass independently; exact five source hashes
+        are bound. M4's maxInFlight nit was already satisfied by all three
+        original ownership tests and is not claimed as new coverage.
+      shell_capture: OpenCode PowerShell redirection reported some successful
+        native checks as exit1 due to stderr wrapping. These raw tool results
+        are preserved; the supervisor's direct executable capture confirms
+        role/type/lint/build outcomes without that redirection artifact.
+      ci: Pending for the follow-up commit at record creation; head-matched
+        results are reported separately in the PR and Issue progress comment.
+    scope: whenIdle observes the physical generation active at call time,
+      including synchronous provider callbacks, and never rejects with its
+      failure. The owner must stop old-adapter admission before awaiting it.
+      This adds no global exclusion, cancellation, registry/playback cleanup or
+      production composition. The two-adapter test characterizes an unsupported
+      hazard rather than supporting that shape. C5 is unchanged. Real SDK,
+      acoustic and whole-product/course acceptance are separate. Issue2 stays
+      open with unfinished tasks unchecked.
