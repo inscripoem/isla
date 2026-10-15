@@ -1125,3 +1125,124 @@ entries:
       hazard rather than supporting that shape. C5 is unchanged. Real SDK,
       acoustic and whole-product/course acceptance are separate. Issue2 stays
       open with unfinished tasks unchecked.
+  - date: 2026-10-15
+    task: M1-02-B-Kokoro-live
+    branch: feat/m1-02-kokoro-live
+    member: Pioneer141 (M1)
+    change: Add a pinned local-only Kokoro CPU provider, synchronous no-truncation
+      guard, one persistent worker with exit-governed physical lifecycle, and
+      explicit real-model/browser smoke entry points.
+    requirements:
+      - FR-03
+      - FR-04
+      - FR-05
+      - NFR-06
+    invariants:
+      - INV-01
+    commits: []
+    agent: opencode/deepseek-flash
+    provider: deepseek
+    model: deepseek-flash
+    opencode_version: 1.18.34
+    launch_flags:
+      - --pure
+      - --agent
+      - build
+      - --variant
+      - xhigh
+      - --auto
+    sessions:
+      - ses_ec0c33f26ffeV1ylf2cc0gb52X
+      - ses_ec0bca700ffe6RO53M9euSP2n4
+      - ses_ec0ac02c0ffeLieZ33wGz3rpWU
+      - ses_ec09bf832ffeNr1gX4UcpM63M9
+      - ses_ec0962eedffeCL8Dys6c9mr897
+    supervision: Genuine native OpenCode authored application source, tests,
+      SDK/lock changes and English READMEs. Codex supervised bounded runs,
+      arranged independent AI review, ran final offline/CPU/browser checks and
+      prepared factual public metadata. No original transcript was rewritten.
+    human_review: The user authorized latest main, the M5 ownership follow-up and
+      P002 B after checks. Existing M1 branch/commit/push/PR and Issue progress
+      instructions apply. M5 reviews provider/worker composition and dependency
+      acceptance; M6 reviews the dependency lock and tooling. AI review is
+      separate from human approval; agents never merge.
+    transcript_record: Five actual official DeepSeek sessions across twelve rounds,
+      forty-eight byte-preserved raw events/run-stderr/export/export-stderr
+      originals and twelve archive audits. Round01 was supervisor-stopped after
+      a protected-name public-SDK read; round02 was stopped at a material review
+      checkpoint. Round06 finished at the reasoning length limit with zero
+      output and no harness implementation; bounded continuations completed it.
+      Nonzero/length results and all failed checks remain in private originals
+      with separate annotations. Archive audits are not implementation
+      acceptance.
+    verification:
+      platform: Windows win32/x64
+      node: 24.14.1
+      pnpm: 12.12.0
+      typescript: 6.0.3
+      base: f7a0d3e5ceeb255438f415cee20969c9dfb6b34a
+      baseline_m1: 153 passed on the tested ownership commit; all original153 test
+        assertions preserved byte-for-byte.
+      development_sequence: "Initial implementation was followed by real red/green
+        repairs: SDK/config regressions7 failed/161 passed then171 passed;
+        worker lifecycle182 pass/1 fail then183; startup independent1 fail then1
+        pass; round08 repository regressions4 failed/185 passed then189 and192
+        passed. Independent fatal transport probes also failed before repair.
+        The first actual worker run exited1 on a cumulative-drift timer
+        statistic; per-callback delay was corrected with raw timestamps retained
+        and the250ms development-smoke threshold unchanged. Final real worker
+        smoke passed. This is not represented as uniformly test-first
+        development."
+      m1: 192 passed
+      typecheck: passed
+      lint: passed
+      build: passed
+      standalone_live_tsc: passed
+      full_suite: 517 passed, the same six named Windows baseline failures and three
+        tsx ENOENT errors; Windows full verify remains non-green. Failure names
+        were compared with fresh main/ownership baselines.
+      sdk: kokoro-js1.2.1, @huggingface/transformers3.5.1, phonemizer1.2.1,
+        onnxruntime-node1.21.0; dependency/lock proposal remains subject to
+        M5/M6 review.
+      model:
+        repo: onnx-community/Kokoro-82M-v1.0-ONNX
+        revision: 1939ad2a8e416c0acfeecc08a694d14ef25f2231
+        dtype: q8
+        bytes: 92361116
+        sha256: fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478
+        voice_fixture: af_heart
+        speed: 1
+      real_cpu: Actual local-only worker cold/warm and512-token weights inference
+        passed;513 was refused. Actual SDK phonemization/tokenization verified
+        full512/513 IDs, a positive model-spy control and zero over-limit model
+        calls in the API-only probe. Worker internal model-call counters remain
+        null.
+      worker_responsiveness:
+        pending_callback_delay_ms: 6.57
+        all_callback_delay_ms: 9.77
+        abort_observed_ms: 14.13
+        scope: Observed local development smoke only, not a production latency SLA or
+          proof of cancelling native inference.
+      logical_physical_lifecycle: One retained actual synthesis adapter remains busy
+        after logical cancellation until the physical worker generation settles;
+        max physical in-flight1, late publication suppressed, registry bytes0,
+        reuse only after settlement, owner close awaited actual worker exit.
+      browser: "Actual Chrome155 media-API run: all46 checks passed on the
+        same350444-byte/3650ms generated WAV; actual playing/ended and trusted
+        Stop observed, two object URLs revoked and two leases released, DOM
+        paused/src cleared/currentTime reset. Playback muted; no acoustic
+        claim."
+      independent_review: Final worker/timing and SDK/guard/resources AI reviews
+        passed with source hashes bound; no unresolved material findings.
+        Browser harness source/build and final actual run recorded separately.
+      ci: Pending for the new branch head at record creation; head-matched results are
+        reported in the PR and Issue.
+    scope: Independent Node CPU provider/development worker and generated-WAV
+      browser harness. Existing ports and browser public entry are unchanged; no
+      production HTTP/root/DeadlineGate/M2 bootstrap or single receipt transport
+      is installed. M5 consuming ownership/composition acceptance and M5/M6
+      dependency/production packaging review remain pending; tsx development
+      runtime is required for this worker bootstrap. English af_heart is a smoke
+      fixture, not a product voice/language choice. VTS C/D, acoustic quality
+      and full product I1/I2 acceptance remain open. Issue2 stays Open and
+      unfinished tasks unchecked.
