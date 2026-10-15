@@ -24,7 +24,7 @@ import type { DatabaseSync } from 'node:sqlite'
  */
 
 /** Highest schema version this build knows how to produce. */
-export const LATEST_SCHEMA_VERSION = 1
+export const LATEST_SCHEMA_VERSION = 2
 
 export interface Migration {
   readonly version: number
@@ -70,6 +70,29 @@ const BUILT_IN_MIGRATIONS: readonly Migration[] = [
           PRIMARY KEY (session_id, turn_id, segment_id, modality)
         )
       `)
+    },
+  },
+  {
+    version: 2,
+    up(database) {
+      // #22 delivery attribution: preserve the original segment index and the
+      // generating persona identity/version. Existing (legacy) rows keep NULL —
+      // values are never inferred from identifiers or the current persona.
+      // The legacy `persona_version` column (migration 1) is retained read-only.
+      // Guarded by an introspection check so the migration is safe to re-run.
+      const columns = new Set(
+        (database.prepare('PRAGMA table_info(deliveries)').all() as { name: string }[]).map(
+          (column) => column.name,
+        ),
+      )
+      const added: readonly (readonly [string, string])[] = [
+        ['segment_index', 'INTEGER'],
+        ['persona_profile_id', 'TEXT'],
+        ['persona_profile_version', 'TEXT'],
+      ]
+      for (const [name, type] of added) {
+        if (!columns.has(name)) database.exec(`ALTER TABLE deliveries ADD COLUMN ${name} ${type}`)
+      }
     },
   },
 ]

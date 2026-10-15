@@ -74,6 +74,10 @@ export interface DeliveryRow {
   terminal_outcome: string
   persona_version: string | null
   event_seq: number
+  /** #22 attribution; NULL for legacy rows (never inferred). */
+  segment_index: number | null
+  persona_profile_id: string | null
+  persona_profile_version: string | null
 }
 
 export function rowToDelivery(row: DeliveryRow): StoredDelivery {
@@ -88,6 +92,9 @@ export function rowToDelivery(row: DeliveryRow): StoredDelivery {
       receiptId: row.receipt_id,
       classification: row.classification as ConfirmedDelivery['classification'],
       modality: row.modality as ConfirmedDelivery['modality'],
+      segmentIndex: row.segment_index,
+      personaProfileId: row.persona_profile_id,
+      personaProfileVersion: row.persona_profile_version,
     },
     eventSeq: row.event_seq,
     terminalOutcome: row.terminal_outcome as CommitDelivery['terminalOutcome'],

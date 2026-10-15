@@ -425,6 +425,16 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Integration validation requested after the payload-contract fix; ADR-004"
+  - date: 2026-10-15
+    task: M6-01
+    branch: m6-sqlite
+    change: "SQLite carries #22 delivery attribution: migration 2 adds segment_index/persona_profile_id/persona_profile_version (legacy NULL, re-runnable) + codec/insert mapping; M6 invariants renumbered INV-10..14"
+    requirements: [FR-06]
+    invariants: [INV-10, INV-11, INV-12]
+    cases: [C-25, C-29]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Owner-approved Phase 1 (base on #30, renumber +1); ADR-002 Step A + ADR-003; M5-Q4/Q5 pending"
   - date: 2026-10-14
     task: M6-01
     branch: m6-sqlite
