@@ -15,35 +15,16 @@ import type { DialogueRequest } from '../contracts'
  *
  * This id is an IDENTITY, not an ordering key. Ordering must not be derived from
  * the spelling of the identifier: `DialogueSegment.index` is the authoritative
- * carrier of position within a turn, and M5 is coordinating carrying that index
- * through output registration, delivery persistence and confirmed-history
- * reconstruction. Until C6/C7 carry it, the read side keeps a clearly marked
- * temporary derivation - see `segmentPositionHint` in ./context.
+ * carrier of position within a turn, and the coordinated C6/C7 contract now
+ * persists it as `segmentIndex` on both `CommitDelivery` and `ConfirmedDelivery`.
+ * The read side (`./context`) orders by that field directly; there is no
+ * identifier-derived position fallback.
  *
  * If the identity rule changes, change only `deriveSegmentId`; every caller
  * builds segment ids through it.
  */
 export function deriveSegmentId(request: DialogueRequest, index: number): string {
   return `${request.sessionId}:${request.turnId}-seg-${index}`
-}
-
-/**
- * Separates the turn part from the position part in a derived segment id.
- * Exported so the read side does not repeat the literal.
- */
-export const SEGMENT_INDEX_MARKER = '-seg-'
-
-/**
- * The position encoded in a derived segment id, or null when the id carries
- * none. A fallback for records that arrived without an explicit index; not
- * authoritative. See `segmentPositionHint` in ./context.
- */
-export function segmentIndexOf(segmentId: string): number | null {
-  const marker = segmentId.lastIndexOf(SEGMENT_INDEX_MARKER)
-  if (marker === -1) return null
-  const suffix = segmentId.slice(marker + SEGMENT_INDEX_MARKER.length)
-  if (!/^\d+$/.test(suffix)) return null
-  return Number(suffix)
 }
 
 export interface FinalizedSegmentRegistry {

@@ -1,11 +1,15 @@
 import type { ConfirmedDelivery, DialogueRequest, HistoryQueryPort, ReplyIntent } from '../contracts'
 import type { CharacterProfile } from './persona'
-import { intentTemplatesFor, personaVersionKey, renderPersonaBlock } from './persona'
+import {
+  intentTemplatesFor,
+  personaKeyFromDelivery,
+  personaVersionKey,
+  renderPersonaBlock,
+} from './persona'
 import type { RecalledFact } from './persona-recall'
 import { MAX_RECALLED_FACTS } from './persona-recall'
-import { deliveryKey, turnKey, utteranceKey } from './delivery-key'
+import { turnKey, utteranceKey } from './delivery-key'
 import type { PersonaRecallPort } from './persona-recall'
-import { segmentIndexOf } from './segment-id'
 import { classifyMemoryBucket, isTruncatedSpeech, modalityRank, trimRank } from './memory-semantics'
 import type { MemoryBucketReason } from './memory-semantics'
 
@@ -69,21 +73,24 @@ export function renderRecallLine(entry: RecalledFact): string {
 /* Assembled view                                                             */
 /* -------------------------------------------------------------------------- */
 
-/** M4's internal view of a stored delivery, including its persona version. */
+/** M4's internal view of a stored delivery, including its persona attribution. */
 export interface MemoryEntry {
   delivery: ConfirmedDelivery
   /**
-   * Persona version that produced the record; null when M4 has no record. Null is
-   * treated as current rather than stale: absence of evidence is not evidence that
-   * the memory is outdated.
+   * Persona attribution of the record, derived only from its persisted
+   * `personaProfileId`/`personaProfileVersion`. Null means the pair is not
+   * completely known; a partial or absent pair stays unknown and is never filled
+   * from process-local state. Null is treated as current rather than stale:
+   * absence of evidence is not evidence that the memory is outdated.
    */
   personaVersion: string | null
 }
 
 /**
- * A versioned sibling of HistoryQueryPort exposing the metadata M4 keeps beside
- * each delivery. Optional as a source, but its ATTRIBUTION side is always
- * consulted when present: given a record, it can say which persona produced it.
+ * A sibling of HistoryQueryPort exposing confirmed records with their persona
+ * attribution. Optional: it is the record source only when no durable history
+ * was supplied. Attribution itself always comes from each record's persisted
+ * fields, so this side cannot fill in a missing persona component.
  */
 export interface MemoryEntrySource {
   memoryEntries(sessionId: string): Promise<readonly MemoryEntry[]>
@@ -193,8 +200,8 @@ export interface AssembleDialogueContextInput {
    */
   history?: HistoryQueryPort
   /**
-   * Versioned attribution and audit side. Supplies `personaVersion` per record,
-   * and is a stand-in source only when no durable source was supplied.
+   * Local record source. Used only when no durable source was supplied; persona
+   * attribution still comes from each record's persisted fields.
    */
   memory?: MemoryEntrySource
   /**
@@ -204,39 +211,28 @@ export interface AssembleDialogueContextInput {
   personaRecall?: PersonaRecallPort
 }
 
-function referenceIdentifiers(record: ConfirmedDelivery): readonly string[] {
-  return [
-    record.turnId,
-    record.segmentId,
-    record.textHash,
-    record.outputId ?? '',
-    record.receiptId ?? '',
-  ].filter((value) => value.length > 0)
-}
-
-function matchesReference(record: ConfirmedDelivery, refs: ReadonlySet<string>): boolean {
-  return referenceIdentifiers(record).some((identifier) => refs.has(identifier))
-}
-
 /**
- * Position of a segment within its turn.
+ * Ordering comparison for segments within one turn.
  *
- * TEMPORARY, and deliberately named a hint. `ConfirmedDelivery` carries no
- * explicit ordinal, so position is recovered from the derived segment id. That
- * makes the spelling of an identifier a de facto carrier of order, which issue
- * #22 ruled out: the authoritative carrier is `DialogueSegment.index`, and M5 is
- * coordinating carrying it through output registration, delivery persistence and
- * confirmed-history reconstruction. When that lands this function must read the
- * index, and the id-derived path must be deleted rather than kept as a fallback.
+ * The authoritative carrier is the persisted `ConfirmedDelivery.segmentIndex`,
+ * originally `DialogueSegment.index`. A known index sorts ascending; an unknown
+ * index (`null`) sorts after every known one, because a legacy record's original
+ * position is genuinely unknown. Ties and unknowns are resolved by the input
+ * order, which is the supporting-event `seq` order the history port returns, so
+ * the comparison is stable and never falls back to the identifier spelling.
  *
- * Two things block the switch, both on the contract side:
- *   - neither `CommitDelivery` nor `ConfirmedDelivery` carries the field, so M4 is
- *     never handed an index it could preserve; and
- *   - `confirmedDeliverySchema` is a strictObject, so an added field would be
- *     stripped by M4's own parse until the schema is extended with it.
+ * The strict-decoder note this replaced was wrong and is now obsolete:
+ * `confirmedDeliverySchema` is a strictObject, so an unknown field would be
+ * REJECTED by M4's own parse, never stripped; and the shared contract now
+ * carries the field, so the read side adopts it directly instead of deriving it.
  */
-function segmentPositionHint(record: ConfirmedDelivery): number {
-  return segmentIndexOf(record.segmentId) ?? 0
+function compareSegmentOrder(left: ConfirmedDelivery, right: ConfirmedDelivery): number {
+  const a = left.segmentIndex
+  const b = right.segmentIndex
+  if (a === null && b === null) return 0
+  if (a === null) return 1
+  if (b === null) return -1
+  return a - b
 }
 
 function turnText(segments: readonly ConfirmedDelivery[]): string {
@@ -257,11 +253,11 @@ export async function assembleDialogueContext(
    * local store never substitutes for it while it is available, because a local
    * view that only holds what this process has seen is not a complete history:
    * choosing it merely because it is non-empty would let one new local delivery
-   * replace ten reconstructed records. The local store is therefore consulted for
-   * ATTRIBUTION only - it can name the persona behind a record, which the durable
-   * record does not carry yet - and it becomes the record source only when no
-   * durable source was supplied at all, which is flagged in `historySource` and
-   * reported as a warning.
+   * replace ten reconstructed records. The local store becomes the record source
+   * only when no durable source was supplied at all, which is flagged in
+   * `historySource` and reported as a warning. Persona attribution is read from
+   * each record's own persisted fields, so the local store is no longer consulted
+   * as an attribution side and cannot fill in a missing persisted component.
    *
    * The two sources are never merged into one list, so a delivery held by both
    * cannot be counted twice.
@@ -271,15 +267,12 @@ export async function assembleDialogueContext(
 
   let raw: readonly MemoryEntry[]
   if (history !== undefined) {
-    const personaByDelivery = new Map<string, string | null>()
-    if (memory !== undefined) {
-      for (const entry of await memory.memoryEntries(request.sessionId)) {
-        personaByDelivery.set(deliveryKey(entry.delivery), entry.personaVersion)
-      }
-    }
     raw = (await history.confirmedHistory(request.sessionId)).map((delivery) => ({
       delivery,
-      personaVersion: personaByDelivery.get(deliveryKey(delivery)) ?? null,
+      // Attribution is read only from the record's persisted persona fields. A
+      // partial or absent pair stays unknown; it is never inferred from local
+      // state.
+      personaVersion: personaKeyFromDelivery(delivery),
     }))
   } else if (memory !== undefined) {
     raw = await memory.memoryEntries(request.sessionId)
@@ -330,12 +323,16 @@ export async function assembleDialogueContext(
     })
   }
 
+  /*
+   * `confirmedEventRefs` names runtime event ids, but a `ConfirmedDelivery`
+   * exposes no event id, so a reference cannot be resolved to a record. It is
+   * therefore never used to reorder the authoritative history: an unresolved
+   * hint must not move durable records. The references are reported through a
+   * warning and otherwise deferred to a later contract that exposes the
+   * delivery-to-event relationship.
+   */
   const refs = new Set(request.confirmedEventRefs)
-  const ordered = [...byUtterance.values()].sort((left, right) => {
-    const leftMatched = matchesReference(left.delivery, refs) ? 0 : 1
-    const rightMatched = matchesReference(right.delivery, refs) ? 0 : 1
-    return leftMatched - rightMatched
-  })
+  const ordered = [...byUtterance.values()]
 
   /*
    * Group by `(sessionId, turnId)`, not by `turnId` alone. The session-scoped turn
@@ -354,12 +351,14 @@ export async function assembleDialogueContext(
   const allTurns: AssembledTurn[] = [...grouped.values()].map((entries) => {
     const first = entries[0]
     if (first === undefined) throw new Error('grouped turn is empty')
-    const segments = [...entries]
+    const segments = entries
+      .map((entry, order) => ({ entry, order }))
       .sort(
         (left, right) =>
-          segmentPositionHint(left.delivery) - segmentPositionHint(right.delivery),
+          compareSegmentOrder(left.entry.delivery, right.entry.delivery) ||
+          left.order - right.order,
       )
-      .map((entry) => entry.delivery)
+      .map(({ entry }) => entry.delivery)
     const text = turnText(segments)
     const turn: AssembledTurn = {
       sessionId: first.delivery.sessionId,
