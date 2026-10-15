@@ -31,14 +31,17 @@ import type {
 } from '../../src/contracts'
 import {
   bootstrapSnapshotSchema,
+  commitDeliverySchema,
   controlAckSchema,
   decisionResultSchema,
   deliveryCommitAckSchema,
+  deliveryEventCorrelationIssue,
   dialogueEndSchema,
   dialogueSegmentSchema,
   inputAckSchema,
   performanceReceiptSchema,
   preparedAudioSchema,
+  runtimeEventSchema,
   selectionResultSchema,
 } from '../../src/contracts'
 import {
@@ -562,6 +565,53 @@ export function createFixtureEventStore(): FixtureEventStore {
     },
     async commitDeliveryWithEvent(delivery, event): Promise<AtomicCommitAck> {
       if (store.beforeCommit !== undefined) await store.beforeCommit()
+      // Mirror the production store: an omitted or malformed required delivery
+      // field is rejected before any mutation, while explicit nulls stay valid.
+      if (!commitDeliverySchema.safeParse(delivery).success) {
+        return {
+          delivery: { status: 'failed', reasonCode: 'invalid_delivery', message: 'fixture invalid delivery' },
+          event: {
+            outcome: 'failed',
+            eventId: event.eventId,
+            seq: event.seq,
+            reasonCode: 'invalid_delivery',
+            message: 'fixture atomic commit rejected an invalid delivery',
+          },
+        }
+      }
+      // Mirror the production store: validate the supporting event before its
+      // fields are read, so an omitted `versions` or a non-string/null version
+      // member is rejected rather than stored or thrown on.
+      if (!runtimeEventSchema.safeParse(event).success) {
+        const message = 'supporting event failed schema validation'
+        return {
+          delivery: { status: 'failed', reasonCode: 'invalid_event', message },
+          event: {
+            outcome: 'failed',
+            eventId: event.eventId,
+            seq: event.seq,
+            reasonCode: 'invalid_event',
+            message,
+          },
+        }
+      }
+      // Mirror the production store: contradictory known provenance or
+      // correlation between the delivery and its supporting event is one paired
+      // failure before any mutation.
+      const correlationIssue = deliveryEventCorrelationIssue(delivery, event)
+      if (correlationIssue !== null) {
+        const message = `delivery and supporting event disagree on ${correlationIssue}`
+        return {
+          delivery: { status: 'failed', reasonCode: 'inconsistent_delivery', message },
+          event: {
+            outcome: 'failed',
+            eventId: event.eventId,
+            seq: event.seq,
+            reasonCode: 'inconsistent_delivery',
+            message,
+          },
+        }
+      }
       if (store.throwNextCommit) {
         store.throwNextCommit = false
         throw new Error('fixture commit throw')

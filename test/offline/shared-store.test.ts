@@ -97,4 +97,26 @@ describe('shared EventStorePort across two M5 coordinators', () => {
     expect(codes).toContain('shared-session-isolated')
     expect(codes).toContain('shared-export-isolated')
   })
+
+  it('detects corrupted attribution even when session isolation holds', async () => {
+    const violations = await collectSharedStoreViolations({
+      createHarness: () => {
+        const base = correct.createFixtureEventStore()
+        const store = faulty.createAttributionDroppingEventStore(base)
+        return {
+          store,
+          history: correct.createFixtureHistoryQuery(base),
+          replay: correct.createFixtureReplayReader(store),
+          failNextDeliveryCommit: () => {
+            base.failNextCommit = true
+          },
+        }
+      },
+    })
+    const codes = violations.map((violation) => violation.code)
+    // Session scoping still holds, so only the attribution comparison against
+    // the originating request/segment can catch the corruption.
+    expect(codes).not.toContain('shared-history-scoped')
+    expect(codes).toContain('shared-history-attribution')
+  })
 })

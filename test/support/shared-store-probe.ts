@@ -1,9 +1,13 @@
 import type {
+  DialoguePort,
+  DialogueRequest,
+  DialogueSegment,
   EventStorePort,
   HistoryQueryPort,
   MemoryCommitPort,
   ReplayReaderPort,
 } from '../../src/contracts'
+import type { SessionProfileConfig } from '../../src/runtime/coordinator'
 import { createChecker } from './violations'
 import type { Violation } from './violations'
 import { createCoordinatorContractRunner } from './coordinator-runner'
@@ -37,6 +41,37 @@ export interface SharedStoreProbeOptions {
   sessionB?: string
   /** Per-coordinator memory commit port; defaults to an isolated fixture per session. */
   createCommit?: () => MemoryCommitPort
+  /**
+   * Per-session persona profiles. The defaults differ so the attribution check
+   * can prove each session's history matches its own originating request rather
+   * than merely agreeing with another (possibly corrupted) copied record.
+   */
+  profileA?: Partial<SessionProfileConfig>
+  profileB?: Partial<SessionProfileConfig>
+}
+
+interface DialogueCapture {
+  requests: DialogueRequest[]
+  segments: DialogueSegment[]
+}
+
+/**
+ * Records the original dialogue request and each emitted segment the M5
+ * coordinator sends, so a probe can compare stored attribution against the
+ * originating request/segment instead of only against another stored copy.
+ */
+function createRecordingDialogue(delegate: DialoguePort, capture: DialogueCapture): DialoguePort {
+  return {
+    generate(request, context, sink) {
+      capture.requests.push({ ...request })
+      return delegate.generate(request, context, {
+        async segment(segment) {
+          capture.segments.push({ ...segment })
+          await sink.segment(segment)
+        },
+      })
+    },
+  }
 }
 
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
@@ -62,13 +97,15 @@ function buildRunner(
   replay: ReplayReaderPort,
   commit: MemoryCommitPort,
   sessionId: string,
+  dialogue: DialoguePort,
+  profile: Partial<SessionProfileConfig>,
 ): ContractRunner {
   return createCoordinatorContractRunner(
     createVirtualClock(),
     {
       selection: correct.createFixtureSelectionPort(),
       reaction: correct.createFixtureReactionPort(),
-      dialogue: correct.createFixtureDialoguePort(),
+      dialogue,
       synthesis: correct.createFixtureSynthesisPort(),
       renderer: correct.createFixtureRendererPort(),
       player: correct.createFixturePlayer(),
@@ -79,7 +116,7 @@ function buildRunner(
       replay,
       authorizer: correct.createFixtureControlAuthorizer(),
     },
-    { sessionId },
+    { sessionId, profile },
   )
 }
 
@@ -91,9 +128,35 @@ export async function collectSharedStoreViolations(
   const sessionA = options.sessionA ?? FIXTURE_SESSION_ID
   const sessionB = options.sessionB ?? 'session-shared-store-b'
   const createCommit = options.createCommit ?? (() => correct.createFixtureMemoryCommit())
+  const profileA = options.profileA ?? {
+    characterProfileId: 'persona-shared-alpha',
+    characterProfileVersion: '1',
+  }
+  const profileB = options.profileB ?? {
+    characterProfileId: 'persona-shared-beta',
+    characterProfileVersion: '2',
+  }
+  const captureA: DialogueCapture = { requests: [], segments: [] }
+  const captureB: DialogueCapture = { requests: [], segments: [] }
 
-  const alpha = buildRunner(store, history, replay, createCommit(), sessionA)
-  const beta = buildRunner(store, history, replay, createCommit(), sessionB)
+  const alpha = buildRunner(
+    store,
+    history,
+    replay,
+    createCommit(),
+    sessionA,
+    createRecordingDialogue(correct.createFixtureDialoguePort(), captureA),
+    profileA,
+  )
+  const beta = buildRunner(
+    store,
+    history,
+    replay,
+    createCommit(),
+    sessionB,
+    createRecordingDialogue(correct.createFixtureDialoguePort(), captureB),
+    profileB,
+  )
 
   await alpha.resume()
   await beta.resume()
@@ -158,6 +221,40 @@ export async function collectSharedStoreViolations(
       historyA[0]?.sessionId === sessionA &&
       historyB[0]?.sessionId === sessionB,
     'confirmed history must be scoped to the requesting session',
+  )
+
+  // Attribution is checked against the originating dialogue request and
+  // segment, not merely against another stored copy: two identically corrupted
+  // records would pass a copy-to-copy comparison but fail this.
+  const requestA = captureA.requests[0]
+  const requestB = captureB.requests[0]
+  check(
+    'shared-attribution-origins-distinct',
+    requestA !== undefined &&
+      requestB !== undefined &&
+      requestA.characterProfileId !== requestB.characterProfileId,
+    'the two sessions must originate from distinct personas for the attribution check to be meaningful',
+  )
+  const attributionMatches = (
+    records: typeof historyA,
+    capture: DialogueCapture,
+    request: DialogueRequest | undefined,
+  ): boolean =>
+    records.length > 0 &&
+    records.every((record) => {
+      const segment = capture.segments.find((candidate) => candidate.segmentId === record.segmentId)
+      return (
+        segment !== undefined &&
+        record.segmentIndex === segment.index &&
+        record.personaProfileId === request?.characterProfileId &&
+        record.personaProfileVersion === request?.characterProfileVersion
+      )
+    })
+  check(
+    'shared-history-attribution',
+    attributionMatches(historyA, captureA, requestA) &&
+      attributionMatches(historyB, captureB, requestB),
+    'confirmed history attribution must match the originating dialogue request and segment',
   )
 
   const archiveA = await replay.load(sessionA)

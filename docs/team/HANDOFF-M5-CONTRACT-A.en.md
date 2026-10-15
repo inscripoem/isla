@@ -1,7 +1,7 @@
 # M5 Step A: delivery attribution and shared storage tests
 
 Revision: 2026-10-15.1 · Status: under review · Publication base: main `b316080` after PR29; initial verification base: `3668e4c`.
-Scope: [issue #22](https://github.com/inscripoem/isla/issues/22), FR-06, INV-09, C-45/C-46.
+Scope: [issue #22](https://github.com/inscripoem/isla/issues/22), FR-06, INV-09, C-46/C-47.
 
 ## Delivered behavior
 
@@ -52,8 +52,32 @@ unknowns as null. Review the strict-schema rollout before adopting this revision
 Port signatures, role ownership, application protocol `0.2` and diagnostic protocol `1` are unchanged.
 
 The publication branch is `feat/m5-delivery-attribution`, based on main after PR29.
-The original Step A checkout and seven-file storage-test worktree remain preserved.
-The publication contains one independent commit; affected M4/M6 consumers should review the
+Original Step A and seven-file storage-test sources are preserved in verified external
+archives; the original PR30 worktree and its local edits remain unchanged.
+This follow-up adds a commit without rewriting existing history; affected M4/M6 consumers should review the
 strict-schema rollout before merge. Source archives and original-file hashes remain outside the
 checkout. Before merge, rollback means withholding this PR; after merge, use a separately reviewed
 revert coordinated with consumers. Do not reset another working tree.
+
+## Contract review follow-up
+
+The isolated follow-up passed 424 tests in 18 files, typecheck, lint and build.
+Shared conformance checks now enforce attribution round-trips, explicit unknowns,
+missing-field rejection, conflict preservation, consistent acknowledgements and
+residue-free retries against the real store and deliberately faulty adapters.
+The atomic boundary validates delivery/outcome combinations and the supporting
+event schema, then cross-checks all known correlation and persona fields.
+
+Half-known persona fields are preserved as raw legacy knowledge; a complete persona
+comparison requires both identity and version. Missing event persona keys or a null
+versions map do not invent attribution. Null/non-string version members are invalid;
+the string "null" remains literal text. Consumers read the delivery fields, while
+contradictory known event provenance rejects the pair before mutation.
+
+Within a turn, orderTurnDeliveries sorts known indices ascending, then unknown
+indices, preserving supporting-event input order for ties. It does not reorder the
+history port. Our M5 attribution case moves to C-47, preserving C-46 and leaving
+M6's draft C-45 unchanged. No further case-ID range is reserved.
+
+This PR remains independent of the local I1/M4/reconstruction candidate; those
+changes require separate consumer review and publication.

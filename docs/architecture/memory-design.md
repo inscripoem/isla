@@ -18,7 +18,7 @@ The table describes the persistence target. Current main supplies an in-memory b
 | State | Survives restart? | Store | Notes |
 | --- | --- | --- | --- |
 | Committed events (`RuntimeEvent`) | Yes | `event-store` / SQLite `events` | Append-only; `seq` strictly increasing |
-| Delivery outcomes (`CommitDelivery`) | Yes | SQLite `deliveries` | Full record incl. `terminalOutcome` (see below) |
+| Delivery outcomes (`CommitDelivery`) | Yes | SQLite `deliveries` | SQLite target; `terminalOutcome` is validated at the write boundary but is not yet part of the in-memory read record (see below) |
 | Confirmed spoken history | Yes | `deliveries` (`fully-delivered` only) | Returned by `HistoryQueryPort` |
 | Memory projection position | Yes | `appliedSeq` | Advances one event at a time; never across a gap |
 | Persona attribution and segment order | Planned for SQLite; present in memory | `personaProfileId`, `personaProfileVersion`, `segmentIndex` | Captured from the original request/segment; M6 must map each field explicitly in its SQLite adapter, retaining legacy unknowns as null |
@@ -33,11 +33,23 @@ The table describes the persistence target. Current main supplies an in-memory b
 2. A delivery and its supporting event commit **atomically** (INV-05): both or neither.
 3. Delivery commit is **idempotent**: identical re-commit returns `duplicate`; changed `textHash`, `segmentIndex`, `personaProfileId` or `personaProfileVersion`
    returns `conflict` (key = `sessionId:turnId:segmentId:modality`).
-4. The full `CommitDelivery` is persisted, including `terminalOutcome`, so a `partial-unknown` /
-   `not-delivered` segment keeps its outcome across restart and cannot replay as delivered.
-5. Schema versioning is separate from contract version `0.2`. Back up before migrating; reject
+4. A delivery write is **internally consistent**: `classification`/`terminalOutcome` must pair
+   validly (`fully-delivered` ↔ `completed`; a `cancelled`/`failed`/`unknown` outcome may be
+   `partial-unknown` or `not-delivered`), and the supporting event's known provenance and
+   `sessionId`/`turnId`/`segmentId`/`outputId` must agree. An inconsistent pair or a known
+   provenance mismatch is rejected as one paired `failed` with nothing persisted; an absent or
+   `null` event component is legacy raw knowledge and is never inferred.
+5. The write boundary validates the full `CommitDelivery` (including its
+   `classification`/`terminalOutcome` pair) and the supporting `RuntimeEvent`,
+   rejecting an inconsistent or malformed pair as one paired `failed` with
+   nothing persisted. The in-memory store persists the confirmed-delivery fields
+   and the supporting event only; the `ConfirmedDelivery` read record omits
+   `terminalOutcome`, and no projection table exists yet, so durable outcome
+   recording for `partial-unknown` / `not-delivered` segments remains an M6
+   SQLite gap rather than an implemented in-memory behavior.
+6. Schema versioning is separate from contract version `0.2`. Back up before migrating; reject
    unsupported schema versions; migrations are idempotent.
-6. An event **payload must be a JSON value** (INV-04): a value JSON cannot represent (undefined,
+7. An event **payload must be a JSON value** (INV-04): a value JSON cannot represent (undefined,
    function, symbol, bigint, non-finite number, sparse-array hole, `Date`/`Map`/`Set`, cycle) is
    rejected with `unsupported_payload` before publication, so the durable store never silently alters
    it. Accepted content compares canonically: object key order irrelevant, array order significant.

@@ -68,13 +68,23 @@ M5 captures profile values before passing the request to M4 and retains index/at
 
 New M5 deliveries carry known values. Missing fields fail strict schema validation; a future M6 migration/read boundary must explicitly normalize genuinely unknown legacy values to null. It must never infer an index from an identifier or assign the current persona to old output. Reusing `(sessionId, turnId, segmentId, modality)` with a changed index, profile identity or version returns a delivery conflict and preserves the original history record. Existing classification and event acknowledgement rules remain unchanged.
 
+A delivery write must be internally consistent. `classification` and `terminalOutcome` form one evidence pair, enforced at the shared write boundary:
+
+| `classification` | allowed `terminalOutcome` |
+| --- | --- |
+| `fully-delivered` | `completed` |
+| `partial-unknown` | `cancelled`, `failed`, `unknown` |
+| `not-delivered` | `cancelled`, `failed`, `unknown` |
+
+`completed` is therefore valid only for `fully-delivered`; `cancelled`, `failed` and `unknown` outcomes may pair with `partial-unknown` or `not-delivered`. An `unknown` outcome is missing knowledge, not evidence that no start was observed, so it does not by itself decide the classification. An inconsistent pair is rejected as one paired `failed` (`invalid_delivery`) before any mutation, with nothing persisted. The supporting event is validated as a `RuntimeEvent` before its fields are read or any mutation: a malformed event (an omitted `versions` key or a null/non-string version member) is rejected as one paired `failed` (`invalid_event`), and no null member is converted into a fabricated unknown. Its known provenance and correlation must then agree with the delivery: `sessionId` always, and any known `turnId`, `segmentId`, `outputId`, `personaProfileId` or `personaProfileVersion`. An absent or `null` component on either side is legacy raw partial knowledge and is never inferred; a known mismatch is rejected as one paired `failed` (`inconsistent_delivery`) before any mutation. The same identity and sequence remain reusable by a corrected retry, and unrelated `versions` entries are preserved. A persona identity/version may be compared only when both sides are known. A consumer rolling out the strict decoders must supply a consistent pair and matching known provenance.
+
 ## C7: persistence, projection and replay
 
 M6 owns SQLite infrastructure, migrations and storage/history APIs; M4 owns memory semantics; M5 retains live authority. M5 constructs the supporting event and calls M6 `commitDeliveryWithEvent(delivery, event)` directly; only after a successful atomic acknowledgement does it call M4 memory admission. Commit delivery and its supporting event atomically before acknowledging persistence. Do not publish a different event with the same seq or commit spoken memory before persistence succeeds.
 
 Event/delivery/sequence uniqueness is session-scoped. Identity reuse with changed content conflicts. Projections track applied seq and cannot claim current history across a gap. JSONL exports derive from committed records and must agree with them.
 
-`confirmedHistory(sessionId)` returns one session in supporting-event `seq` ascending order, independent of insertion order. Reconstructing a turn uses its explicit `segmentIndex` values; identifier spelling and receipt arrival order do not establish emission order. Preserve `(sessionId, turnId)` when grouping records, and do not compare session-local sequence values globally. Unknown indices remain unknown. Multi-session selection and production reconstruction remain later #22 work.
+`confirmedHistory(sessionId)` returns one session in supporting-event `seq` ascending order, independent of insertion order. Reconstructing a turn uses its explicit `segmentIndex` values; identifier spelling and receipt arrival order do not establish emission order. Preserve `(sessionId, turnId)` when grouping records, and do not compare session-local sequence values globally. Within one `(sessionId, turnId)`, M5's reusable `orderTurnDeliveries` places known indices first in ascending order and unknown indices after them; ties and unknowns keep the supporting-event-sequence input order, so an unknown index is never assigned a claimed position. It does not reorder the history port. Multi-session selection and production reconstruction remain later #22 work.
 
 Storage failure makes evidence incomplete and blocks new turns. Stop and local cancellation remain independent of pending storage calls. Replay is an isolated read view and cannot invoke live providers/rendering.
 
