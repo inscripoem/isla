@@ -51,6 +51,9 @@ Every final entry requires metric + threshold + verification. TBD means not read
 | INV-07 | Committed event and delivery records are isolated from caller mutation. FR-06. | M6 storage (`in-memory-backend` deep-copies on write and read) | Case C-24; mutating an input or a returned record cannot change committed state or JSONL output. |
 | INV-08 | Confirmed history is ordered by the supporting event sequence (ascending). FR-06; issue #22. | M6 storage (`history-query` over `StoredDelivery.eventSeq`) | Case C-25; `confirmedHistory` returns seq order independent of insertion order. |
 | INV-09 | Original segment index and generating persona identity/version remain attached to delivery evidence. FR-06; issue #22. | M5 capture and M6 record conversion | C-46/C-47; preserve original values on Stop/late receipts, reject changed attribution as a conflict, reject an inconsistent classification/outcome pair and contradictory known provenance before mutation, retain legacy unknowns as null. |
+| INV-15 | Within one (sessionId, turnId), known segmentIndex values sort ascending before unknowns; ties and unknowns retain input order, with null indices preserved and other sessions/turns excluded. FR-06; issue #25. | M5 reconstruction (`src/runtime/delivery-order.ts`) | C-47 ordering regression; preserve the input history order and never infer an unknown index. INV-08 remains the M6 history-port read order. |
+
+INV-10 through INV-14 are allocated to M6 config, migration, recovery, trace-gate and log-gate work respectively; their implementation and registry adoption remain in the M6 follow-up. C-48 is allocated to the M6 legacy-null migration/reopen case; C-49/C-50 remain unallocated. See the [agreed coordination](https://github.com/inscripoem/isla/issues/25#issuecomment-6188155358).
 
 ## Promotion to D1
 

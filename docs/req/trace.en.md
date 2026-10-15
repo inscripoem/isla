@@ -46,7 +46,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-43 | implemented | `test/offline/m6-storage.test.ts` | an event whose payload is not a JSON value is rejected before publication |
 | C-44 | implemented | `test/offline/m6-storage.test.ts` | a sparse array payload is not conflated with an empty array |
 | C-46 | implemented | `test/offline/m5-attribution.test.ts` | M6 delivery attribution persistence: strict fields, nulls, ordering and conflicts |
-| C-47 | implemented | `test/offline/m5-attribution.test.ts` | M5 delivery attribution capture: normal, request mutation, Stop, late receipt, shared sessions and explicit indices |
+| C-47 | implemented | `test/offline/m5-attribution.test.ts` | M5 delivery attribution capture and reconstruction: normal, request mutation, Stop, late receipt, shared sessions, explicit indices and stable within-turn ordering (INV-15) |
 
 ## Requirement trace
 
@@ -57,7 +57,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | FR-03 | M1 | C-06, C-11 | — |
 | FR-04 | M1 | C-01, C-04, C-10 | — |
 | FR-05 | M5 | C-03, C-04 | C-08 |
-| FR-06 | M6 | C-12, C-17, C-21, C-22, C-46, C-47 | — |
+| FR-06 | M6 | C-12, C-17, C-21, C-22, C-46, C-47 | durable restart/SQLite recovery (M6 #25); lifecycle reconstruction is local evidence only |
 | NFR-01 | M5 | — | metric baseline |
 | NFR-02 | M5 | C-10, C-17 | C-05, C-09, recovery duration |
 | NFR-03 | M3 | — | C-16, human rubric |
@@ -73,6 +73,19 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-07 | M6 | C-24 | — |
 | INV-08 | M6 | C-25 | — |
 | INV-09 | M5 | C-46, C-47 | M4/SQLite consumer rollout |
+| INV-15 | M5 | C-47 (existing turn reconstruction ordering regression) | M4/M6 consumer acceptance |
+
+## Ordering trace correction (2026-10-15)
+
+The [issue #25 coordination](https://github.com/inscripoem/isla/issues/25#issuecomment-6188155358) separates two existing guarantees. The helper header previously cited INV-08 in error; its within-turn rule is now INV-15, owned by M5. INV-08 and C-25 continue to describe M6 supporting-event read order. Runtime behavior and assertions are unchanged. The existing ordering suite now shares the `M5 delivery attribution capture (C-47)` verifier prefix, so the C-47 test-name filter selects both capture and reconstruction checks. No case ID is added.
+
+| Coordinated mapping | Owner / state |
+| --- | --- |
+| M5 helper header: INV-08 → INV-15 | Local correction under review; not a renumbering of the M6 invariant |
+| M6 config / migration / recovery: INV-09 / INV-10 / INV-11 → INV-10 / INV-11 / INV-12 | M6 follow-up; pending adoption |
+| M6 trace gate / log gate: INV-12 / INV-13 → INV-13 / INV-14 | M6 follow-up; pending adoption |
+| C-48 | M6 legacy-null migration/reopen; implemented in draft PR26, adoption pending |
+| C-49 / C-50 / C-51 | C-49/C-50 allocated to M4 guards; C-51 to M6 append validation in #25; registry/code synchronization pending |
 
 ## Approval record
 
@@ -81,7 +94,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | READINESS-PLAN | Approved by the user on 2026-10-10 after a Chinese explanation | AGENTS.md authorization |
 | Contract/test design | Approved by the supervisor after corrections | `docs/team/READINESS-REVIEW.en.md` |
 | First-slice acceptance cases | Reviewed before implementation | READINESS-REVIEW |
-| Step A and relevant unsubmitted storage tests | Implementation and subsequent PR publication approved by the user; PR30 remains open for affected-consumer review | Issue #22; storage revision 2026-10-14.1; [PR30](https://github.com/inscripoem/isla/pull/30), published head `1856c26`. Current follow-up edits are local only; no further publication is authorized. |
+| Step A and relevant unsubmitted storage tests | PR30 human-merged into main dbbbfcb after formal approval | [PR30](https://github.com/inscripoem/isla/pull/30); issue #22 is closed. The separate local I1 increment requires publication approval. |
 | Final numeric quality/performance/cost/retention targets | Not approved | Await a reviewed measured baseline |
 
 ## Honest limitations
@@ -93,3 +106,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 ## M5-01 production increment
 
 The composition and regression suites now run the same assertions against the independent fixture reference and `src/runtime/coordinator.ts`, through the test-only adapter. `test/offline/m5-coordinator.test.ts` adds production-specific deadline, cancellation, receipt, persistence and input-boundary checks. This supplies scoped M5 evidence for the existing requirement/case links; it does not change requirement owners or promote pending product cases. See the [M5-01 handoff](../team/HANDOFF-M5-01.en.md) for actual commands/results and remaining I1-01 reviews. Status: under review.
+
+## Local I1 application increment
+
+The user approved local I1 implementation on 2026-10-15. The application endpoint composes the real M5 coordinator, M1 fixed synthesis/player and M6 in-memory store with real M4 and explicit M3/dialogue-provider substitutes. New I1 tests cover transport, deadline and lifecycle boundaries; the candidate rebuilt on main `dbbbfcb` with merged PR30/PR31 passed 634 tests / 30 files plus typecheck, lint and build, retaining its ten-case M4/M6 consumption suite. Browser turns, Stop/Resume and disconnect cancellation were independently observed again on this candidate. See the [I1 handoff](../team/HANDOFF-I1-APPLICATION.en.md). This is uncommitted work under review, without remote publication. PR30 already moved the M5 attribution case from C-45 to C-47, preserving C-46 and M6's draft C-45; role ownership and full-course acceptance status remain unchanged.

@@ -1,6 +1,6 @@
 # Isla architecture blueprint
 
-Revision: 2026-10-15.1. The team-confirmed allocation is retained. Product requirement/interface acceptance remains under review. Main at `a28d76f` includes the diagnostic foundation, shared contracts, fixture kits, M5 coordinator, M1 fixed synthesis/mapped rendering/browser player, and M6 in-memory storage. PR23 dialogue is merged; PR30 attribution and local M4 contract adoption remain under review; SQLite and governance PR26/PR27 remain drafts. The integrated product loop is still pending.
+Revision: 2026-10-15.2. The team-confirmed allocation is retained. Product requirement/interface acceptance remains under review. Main dbbbfcb includes PR30 delivery attribution/M4 adoption and PR31 injectable synthesis/audio resources. The local I1 transport/demo and INV-15 candidate has been rebuilt on that main and passed 634 tests / 30 files, typecheck, lint and build. SQLite and governance PR26/PR27 remain drafts; full owner integration remains pending.
 
 ## Scope and current behavior
 
@@ -15,7 +15,7 @@ Use one package. All paths below are relative to the repository root. Planned pa
 | M1 | `src/performance/` | Fixed adapters and browser player merged; live services pending | Synthesis, browser playback and avatar adapters; expose the browser player through `src/performance/browser/`, separate from Node-only/provider implementation. |
 | M2 | `src/console/` | Existing | Input, configuration, control and presentation; consume M1's player through its public interface. |
 | M3 | `src/decision/` | Planned | Message selection, reply intent, decision providers and rule reactions; no authoritative output dispatch. |
-| M4 | `src/dialogue/` | PR23 squash-merged; local PR30 compatibility under owner review | Dialogue providers, persona/context assembly and memory semantics; access persistence through M6 interfaces. |
+| M4 | `src/dialogue/` | PR23 squash-merged; PR30 contract adoption under owner review | Dialogue providers, persona/context assembly and memory semantics; access persistence through M6 interfaces. |
 | M5 — CHANG Xuben | `src/runtime/` | Existing | Authoritative lifecycle, request scheduling, validation, cancellation, dispatch and composition. |
 | M6 | `src/storage/`, `src/evaluation/`, `.github/workflows/` | In-memory storage merged; SQLite/governance drafts open | SQLite/migrations, recording/replay, common evaluation tooling and CI. |
 
@@ -31,7 +31,7 @@ Operator Stop, epoch/freshness checks and action capabilities are deterministic 
 
 ## Development and verification
 
-The next milestone is I1-01's offline product loop. The standard CLI and console still provide diagnostics, so the business transport, browser dispatch/receipt bridge and production deadline binding are integration work still to do. Fixed reply/audio substitutes allow this work to proceed while peer modules develop. Complete cross-session history recovery from issue #22 is a subsequent integration concern; its local A/B/C labels do not redefine the project's milestones. M2 owns the product console and M5 owns runtime integration.
+The next milestone is I1-01's offline product loop. The standard CLI and console still provide diagnostics. The approved local increment adds the application endpoint, response scheduler, deadline binding and browser audio bridge; a separate demo composes real M5/M4/M1/M6 in-memory implementations with explicit M3 and fixed dialogue-provider substitutes. The transport extends protocol 0.2 with performer attachment, operator bootstrap and offer/ready/grant exchanges, using browser-safe shared schemas. See the [I1 application handoff](docs/team/HANDOFF-I1-APPLICATION.en.md). This increment is uncommitted and under review; complete owner adoption remains pending. M5 selected-history reconstruction now has a production composition and loopback checks; durable SQLite recovery from issue #22 remains M6 work. The local A/B/C labels do not redefine the project's milestones. M2 owns the product console and M5 owns runtime integration.
 
 The [team plan](docs/team/PLAN.en.md) defines first tasks, dependencies and parallel work; the [interface contract](docs/team/INTERFACES.en.md) defines C1–C7 and acceptance cases. Shared application schemas and port interfaces now live in `src/contracts/app/`, with explicit fixtures, deliberately faulty adapters and reusable conformance suites under `test/`; the [readiness kits](docs/team/READINESS-KITS.en.md) document per-role commands and replacement instructions. These fixtures exercise contract boundaries, not live providers, browser audio or SQLite behavior. Integrate one normal/Stop-aware offline loop before relying on live providers. The [candidate requirements](docs/team/REQUIREMENTS.en.md) are not a substitute for formal YAML/schema or an approved complete D1; the scoped preparation registry is under `docs/req/`.
 

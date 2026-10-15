@@ -1,7 +1,9 @@
 # M5 Step A: delivery attribution and shared storage tests
 
-Revision: 2026-10-15.1 · Status: under review · Publication base: main `b316080` after PR29; initial verification base: `3668e4c`.
-Scope: [issue #22](https://github.com/inscripoem/isla/issues/22), FR-06, INV-09, C-46/C-47.
+Revision: 2026-10-15.3 · PR30 merged into main dbbbfcb; local I1/INV-15 follow-up under review. Initial verification base: 3668e4c.
+Scope: [issue #22](https://github.com/inscripoem/isla/issues/22), FR-06, INV-09/INV-15, C-46/C-47.
+
+The INV-15 header and C-47 trace correction is included in the local I1 candidate on dbbbfcb and awaits publication. Runtime behavior and assertions are unchanged.
 
 ## Delivered behavior
 
@@ -18,7 +20,8 @@ nulls remain null; omitted fields fail strict validation. No migration or automa
 
 `confirmedHistory(sessionId)` remains ordered by the supporting event sequence. Turn reconstruction
 uses explicit segment indices within `(sessionId, turnId)`; this increment supplies and tests the
-metadata, while production archived-session selection/reconstruction remains later work.
+metadata. The separate local I1 increment implements archived-session selection and lifecycle
+reconstruction; see [the reconstruction handoff](HANDOFF-M5-RECONSTRUCTION.en.md).
 
 The seven previously unsubmitted storage-test files are reconciled with main. Existing real M6
 regressions remain in `m6-storage.test.ts`. Shared collectors cover isolation, ordering, failed-batch
@@ -51,12 +54,13 @@ M6 should map all three fields through its SQLite codec/migration and preserve g
 unknowns as null. Review the strict-schema rollout before adopting this revision in draft branches.
 Port signatures, role ownership, application protocol `0.2` and diagnostic protocol `1` are unchanged.
 
-The publication branch is `feat/m5-delivery-attribution`, based on main after PR29.
+PR30 was human-merged into main `dbbbfcb` on 2026-10-15 after formal approval.
+The prior published head `7297da4` remains a historical verification baseline.
 Original Step A and seven-file storage-test sources are preserved in verified external
 archives; the original PR30 worktree and its local edits remain unchanged.
-This follow-up adds a commit without rewriting existing history; affected M4/M6 consumers should review the
-strict-schema rollout before merge. Source archives and original-file hashes remain outside the
-checkout. Before merge, rollback means withholding this PR; after merge, use a separately reviewed
+The rebase and pinned force-with-lease were explicitly authorized by the user; affected M4/M6 consumers should review the
+strict-schema rollout when adopting it in remaining draft branches. Source archives and original-file hashes remain outside the
+checkout. Any rollback of merged behavior requires a separately reviewed
 revert coordinated with consumers. Do not reset another working tree.
 
 ## Contract review follow-up
@@ -74,10 +78,18 @@ versions map do not invent attribution. Null/non-string version members are inva
 the string "null" remains literal text. Consumers read the delivery fields, while
 contradictory known event provenance rejects the pair before mutation.
 
-Within a turn, orderTurnDeliveries sorts known indices ascending, then unknown
+Within a turn, orderTurnDeliveries (INV-15, C-47) sorts known indices ascending, then unknown
 indices, preserving supporting-event input order for ties. It does not reorder the
 history port. Our M5 attribution case moves to C-47, preserving C-46 and leaving
-M6's draft C-45 unchanged. No further case-ID range is reserved.
+M6's draft C-45 unchanged. The existing reconstruction ordering regression now shares
+the C-47 verifier prefix. INV-08 remains M6 supporting-event read order. The
+[latest issue #25 agreement](https://github.com/inscripoem/isla/issues/25#issuecomment-6192331425)
+keeps C-48 with M6 migration, allocates C-49/C-50 to M4 guards and C-51 to M6
+append validation. Registry/code synchronization remains pending; INV-10 through
+INV-14 remain assigned to M6 follow-up work. These allocations do not
+claim that the M6 migration or gate implementations have landed.
 
-This PR remains independent of the local I1/M4/reconstruction candidate; those
-changes require separate consumer review and publication.
+Merged PR30 includes M4 contract adoption and its ten-case real-M6 consumption suite
+(487 tests / 19 files on its prior branch; post-merge main passed 539/19). The local
+I1 transport/reconstruction candidate on dbbbfcb passed 634/30 and requires separate
+consumer review and publication. Issue #22 is closed; remaining recovery stays in #25.

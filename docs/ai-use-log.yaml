@@ -4,6 +4,136 @@
 version: 1
 entries:
   - date: "2026-10-15"
+    task: I1-01-main-rebuild-review
+    change: >-
+      Rebuild the existing I1-only candidate on main dbbbfcb after PR30/PR31 merge;
+      retain all original I1 source/test bodies and PR31 additions, merge existing
+      process records, verify and refresh current team status/publication drafts.
+    requirements: [FR-04, FR-05, FR-06]
+    invariants: [INV-15]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 1.19.0
+    launch_flags: [--pure, --agent, build, --variant, xhigh]
+    sessions: [ses_ec05f6f51ffep3B9Y8AwQCTu8r]
+    supervision: >-
+      Codex restored the existing authored overlay mechanically and merged its
+      inserted log entries without rewriting history. OpenCode independently
+      traced callers, reviewed compatibility and ran verification; no source
+      repair was needed or made. Codex independently ran verification and browser
+      observations, then updated documentation and factual metadata.
+    human_review: >-
+      Captain approved the local main-based rebuild and verification plan.
+      Publication and consumer acceptance remain pending. No agent merge.
+    transcript_record: >-
+      Complete OpenCode loopback session and message API response bodies are
+      retained privately with hashes, 21 messages and actual provider/model/agent
+      metadata. Native export and event-output captures hit the supervisor's
+      approximately 64 KiB output ceiling and are separately marked partial;
+      they are not represented as complete exports. This review did not author
+      new application code. Prior implementation records remain unchanged.
+    verification:
+      base: dbbbfcba203b7e3859fd6ce532ab76aea06e1a8d
+      independent: "634 passed / 30 files; typecheck, lint and build passed."
+      opencode: "634 passed / 30 files; typecheck, lint and build passed."
+      browser: >-
+        Orca media observations: two completed two-segment turns, cancellation
+        after playback started, a completed turn after Resume, and local playback
+        cancellation on socket closure. The first Stop observation script timed
+        out because it indexed a rolling text log; a state-based observation
+        succeeded. No acoustic or real-provider measurement is claimed.
+    scope: >-
+      Local unpublished I1 on main includes PR31 infrastructure but retains fixed
+      synthesis and explicit M3/text substitutes. PR33/34, production console,
+      live provider/resource composition and SQLite durability remain separate.
+  - date: "2026-10-15"
+    task: I1-01-application-and-selected-history
+    change: >-
+      Add the protocol-0.2 application transport, operator bootstrap, serialized
+      controls, deadline-bound performer bridge and fixed-audio browser loop.
+      Integrate real M4 context and delivery memory, validate selected archives,
+      and start a fresh stopped live session without replay. Refresh the I1-only
+      increment onto PR30 7297da4, retaining its ten-case M4/M6 consumption suite.
+    requirements: [FR-04, FR-05, FR-06]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    launch_flags: [--pure, --agent, build, --variant, xhigh]
+    sessions:
+      - ses_ec4038bb0ffesjQNw66p78IhZq
+      - ses_ec2003d46ffeWe5CKFXJjTSatJ
+      - ses_ec16afef4ffeLu6VkoqZgKBhY5
+    supervision: >-
+      OpenCode authored application, test and package-script changes. Codex
+      reviewed and tested the increments, reconciled documentation and prepared
+      publication metadata. The refresh retained 33 source/test files byte for
+      byte; its only new code-related edit restored the dev:loop package script.
+    human_review: >-
+      Captain approved the local implementation and subsequent continuation.
+      Publication and owner acceptance remain pending when this entry is prepared.
+    transcript_record: >-
+      Genuine records are retained privately in i1-integration-20261015,
+      local-completion-20261015 and i1-current-20261015. The original integration
+      has a complete 276-message API export; later native exports contain 289
+      and 29 messages. Failed attempts and review corrections remain preserved.
+      The middle session also handled earlier contract work; listing it does not
+      add that already-published work to this I1 increment.
+    verification:
+      initial_integration: "478 tests / 24 files; typecheck, lint and build passed."
+      selected_history: "572 tests / 29 files; typecheck, lint and build passed."
+      refreshed_candidate: "582 tests / 30 files; typecheck, lint and build passed."
+      browser: >-
+        Observed two completed fixed-audio turns, Stop during playback, a fresh
+        completed turn after Resume and local cancellation on socket closure.
+        Last observed server confirmation remains separate from local media state.
+    scope: >-
+      M3 and the dialogue text provider remain test substitutes; M1 uses fixed
+      speech assets and M6 uses memory storage. Product-console adoption, live
+      providers, acoustic measurements, SQLite durability and complete course
+      acceptance are not established. This candidate does not include PR31.
+  - date: "2026-10-15"
+    task: M5-INV-15-trace-correction
+    change: >-
+      Correct the within-turn helper header from INV-08 to INV-15 and label its
+      existing regression with the C-47 verifier prefix. Synchronize requirement,
+      invariant, trace, interface and handoff records without changing runtime
+      behavior, test bodies, assertions or case identifiers.
+    requirements: [FR-06]
+    invariants: [INV-15]
+    cases: [C-47]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 1.19.0
+    launch_flags: [--pure, --agent, build, --variant, xhigh]
+    sessions: [ses_ec13fa10dffecscTinAWVYYdmC]
+    supervision: >-
+      Codex retained before-file snapshots, reviewed the two exact code/test label
+      substitutions, updated documentation and registries, and independently ran
+      the C-47 filter, attribution/registry tests and full verification. The C-47
+      filter executes six capture tests and one ordering test. Vitest filters are
+      regular expressions; literal parentheses in the full verifier must be escaped.
+    human_review: >-
+      Captain explicitly approved the local implementation plan. Results remain
+      under review; no commit, push, GitHub reply or review was authorized here.
+    transcript_record: >-
+      Genuine OpenCode CLI export and SHA-256 manifest are retained in private
+      evidence m5-ordering-trace-20261015, with original message and model metadata.
+    verification:
+      m5_baseline: "pnpm test:m5: 90 passed before modification."
+      focused: "Attribution and registry suites: 22 passed / 2 files."
+      case_filter: "C-47: 7 passed; 4 C-46 tests intentionally skipped."
+      full_suite: "pnpm verify: 582 passed / 30 files; typecheck, lint and build passed."
+    scope: >-
+      INV-08 stays M6 supporting-event read order. INV-10 through INV-14 and C-48
+      remain coordinated M6 follow-up work, not implemented by this correction.
+      Existing I1 changes are preserved. No new browser, live-provider or SQLite
+      durability evidence is claimed.
+  - date: "2026-10-15"
     task: I1-01-Step-A
     change: >-
       Add original segment index and generating persona identity/version to delivery
