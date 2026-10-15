@@ -78,7 +78,8 @@ export const BUILT_IN_MIGRATIONS: readonly Migration[] = [
       // #22 delivery attribution: preserve the original segment index and the
       // generating persona identity/version. Existing (legacy) rows keep NULL —
       // values are never inferred from identifiers or the current persona.
-      // The legacy `persona_version` column (migration 1) is retained read-only.
+      // The legacy `persona_version` column (migration 1) is removed below once it is
+      // verified to hold no data.
       // Guarded by an introspection check so the migration is safe to re-run.
       const columns = new Set(
         (database.prepare('PRAGMA table_info(deliveries)').all() as { name: string }[]).map(

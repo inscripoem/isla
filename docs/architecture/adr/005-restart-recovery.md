@@ -36,7 +36,8 @@ evidence** that make those decisions correct.
 ## Consequences
 
 - M5/M4 get one tested recovery read; the boundary stays **M5 lifecycle / M6 data**.
-- `persona_version` remains a documented gap until C6 carries it.
+- Persona attribution is carried by the delivery id/version pair (migration 2); no legacy
+  `persona_version` column remains.
 
 ## Design process (ADD)
 
