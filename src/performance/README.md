@@ -504,21 +504,70 @@ exact 512/513 fixtures are checked at runtime rather than assumed.
 `test/live` is excluded from the root typecheck; check the entrypoints explicitly
 with a standalone `tsc --noEmit`. The live entrypoints import the shared
 `test/support` WAV decoder, so a standalone check must follow imports (a bare
-`pnpm exec tsc --noEmit --ignoreConfig ... test/live/kokoro-smoke.ts` works). No
-live setup, download, worker bootstrap or CPU smoke result has been executed or
-captured in this checkout yet.
+`pnpm exec tsc --noEmit --ignoreConfig ... test/live/kokoro-smoke.ts` works). The
+executed local-only setup, worker bootstrap and CPU smoke results are summarized
+under **Standalone verification** below.
+
+### Dependency build-script policy (M1-02 increment B)
+
+The pinned SDK runtime pulls packages with install scripts, so the project's
+`pnpm-workspace.yaml` `allowBuilds` map records every build decision explicitly.
+The existing `esbuild: true` approval is unchanged. The following exact resolved
+versions are explicitly **denied** (`false`) and therefore never run their build
+scripts: `onnxruntime-node@1.21.0`, `protobufjs@7.6.6` and `sharp@0.34.5`. The
+version-qualified matchers are deliberate: a different future version without its
+own entry remains unreviewed and fails a strict install rather than silently
+building.
+
+Ordinary offline CI and `pnpm test:m1` do not use SDK weights; the CPU live smoke
+uses the packaged runtime and the local-only model cache. CUDA, native
+build-from-source, or any production packaging change would need explicit M5/M6
+approval. This dependency/tooling proposal is submitted for their human review;
+it is not a claim that they have approved it.
+
+## Standalone verification (2026-10-15)
+
+The increment B provider, worker host and local-only smoke were executed against
+the pinned local q8 model at revision
+`1939ad2a8e416c0acfeecc08a694d14ef25f2231` (92,361,116-byte
+`model_quantized.onnx`, SHA-256
+`fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478`):
+
+- Worker CPU smoke (default mode): cold 1647.98 ms and warm 1540.77 ms; the
+  accepted 512-token inference produced 631,800 samples at 24 kHz (26,325 ms) and
+  the 513-token input was refused with `input_too_long`.
+- Real phonemizer/tokenizer API probe with no weights: the fixed fixture measured
+  512 and 513 full ids, the accepted 512 path reached the probe model once, and
+  the refused 513 path had a zero model-call delta. This is API-only; the worker
+  has no model spy and its internal model counters are `null`.
+- Same final smoke source, main-thread diagnostic versus worker: maximum
+  individual timer-callback delay 1571.37 ms versus 9.77 ms (106 callbacks while a
+  job was pending, pending maximum 6.57 ms). This is an event-loop observation,
+  not a TTS speedup or an SLA.
+- Logical cancellation kept the physical job pending with a maximum in-flight of
+  one until it actually settled, left zero registry bytes, and awaited the real
+  worker `close`/exit.
+- A real Chrome 155 run of the existing harness consumed the final generated
+  350,444-byte, 3650 ms WAV: 46/46 checks passed with zero console errors,
+  observed `playing`/`ended`/`Stop`, released both object URLs and both leases, and
+  cleared the DOM. This is muted media-API evidence only, not acoustic or full I2
+  proof.
+
+Rerun with the existing entrypoints:
+
+```sh
+# Local-only CPU smoke in the persistent worker (default):
+pnpm exec tsx test/live/kokoro-smoke.ts
+
+# Main-thread diagnostic baseline:
+pnpm exec tsx test/live/kokoro-smoke.ts --main-thread
+```
+
+The browser harness is served from the committed config
+`test/live/kokoro-browser.config.ts` and page `test/live/kokoro-browser.html`.
 
 ## Not yet implemented
 
-- Live execution evidence for the increment B guarded provider, pinned tokenizer
-  facade, worker host and local-only smoke: the source exists as described above,
-  but no real setup/download, worker bootstrap startup, CPU inference or live
-  smoke result has been executed or captured in this checkout. The increment A
-  adapter itself still only forwards a provider refusal with `input_too_long`; the
-  increment B provider's synchronous guard implements that refusal over the real
-  SDK boundary, and the worker host runs that same provider inside one persistent
-  worker. Real worker startup, cold/warm timing and response comparison against
-  the saved main-thread baseline remain supervisor-run live work.
 - Live VTube Studio avatar adapters (M1-02 increments C/D).
 - The authoritative `DeadlineGate` (M5) and the browser receipt transport (M2).
   The registry above is composed and invalidated by M5 later; it grants no
