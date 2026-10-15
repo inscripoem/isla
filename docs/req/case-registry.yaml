@@ -292,6 +292,13 @@ cases:
       file: test/offline/m5-attribution.test.ts
       test: "M5 delivery attribution capture (C-47)"
 
+  - id: C-48
+    status: implemented
+    title: Legacy delivery attribution migrates safely (NULL preserved; unsafe legacy data refused)
+    verifier:
+      file: test/offline/m6-sqlite.test.ts
+      test: "preserves legacy NULL attribution across the v2 migration, and drops the legacy column"
+
   - id: C-49
     status: implemented
     title: An event is validated against the schema before append mutates storage

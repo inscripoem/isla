@@ -25,9 +25,9 @@ export function createSqliteBackend(database: DatabaseSync): StorageBackend {
   const insertDelivery = database.prepare(
     `INSERT INTO deliveries
        (session_id, turn_id, segment_id, modality, text_hash, text, output_id, receipt_id,
-        classification, terminal_outcome, persona_version, event_seq,
+        classification, terminal_outcome, event_seq,
         segment_index, persona_profile_id, persona_profile_version)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
   const selectEventById = database.prepare(
     'SELECT * FROM events WHERE session_id = ? AND event_id = ?',
@@ -72,9 +72,6 @@ export function createSqliteBackend(database: DatabaseSync): StorageBackend {
       delivery.receiptId,
       delivery.classification,
       mutation.terminalOutcome,
-      // Legacy `persona_version` column (migration 1): superseded by the
-      // persona id/version pair below; left NULL rather than inferred.
-      null,
       mutation.eventSeq,
       // #22 attribution, preserved verbatim (NULL stays NULL).
       delivery.segmentIndex,

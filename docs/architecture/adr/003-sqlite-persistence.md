@@ -25,6 +25,9 @@ contract version (`0.2`) and the diagnostic protocol version (1).
 - **Migration 2 (#22 attribution).** Adds `segment_index`, `persona_profile_id` and
   `persona_profile_version` to `deliveries`; genuine legacy unknowns stay `NULL` (never inferred). The
   migration is guarded by a `PRAGMA table_info` introspection so it is safe to re-run.
+  It refuses to migrate when a delivery row contradicts the C6 classification/outcome contract, or
+  when the legacy `persona_version` column holds non-NULL data (the database is preserved and the
+  legacy column is otherwise dropped once verified all-NULL).
 - `migrate`: reject an **unsupported (newer)** version; **back up** an existing database before
   applying pending migrations; apply each migration in a transaction with **rollback** on failure;
   **idempotent** when already current.

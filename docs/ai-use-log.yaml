@@ -428,6 +428,16 @@ entries:
   - date: 2026-10-15
     task: M6-01
     branch: m6-sqlite
+    change: "Migration 2 now refuses contradictory classification/outcome rows and a non-NULL legacy persona_version (preserving the DB), then drops persona_version once verified all-NULL; legacy attr preserved as NULL; C-48 + INV mapping recorded"
+    requirements: [FR-06]
+    invariants: [INV-11]
+    cases: [C-48]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "M5-Q4/Q5 answers; owner-approved"
+  - date: 2026-10-15
+    task: M6-01
+    branch: m6-sqlite
     change: "append validates the complete RuntimeEvent before mutation (symmetric with the delivery boundary); residue-free rejection + corrected retry; C-49"
     requirements: [FR-06]
     invariants: [INV-04]

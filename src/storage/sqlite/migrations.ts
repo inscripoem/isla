@@ -31,7 +31,7 @@ export interface Migration {
   up(database: DatabaseSync): void
 }
 
-const BUILT_IN_MIGRATIONS: readonly Migration[] = [
+export const BUILT_IN_MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
     up(database) {
@@ -92,6 +92,36 @@ const BUILT_IN_MIGRATIONS: readonly Migration[] = [
       ]
       for (const [name, type] of added) {
         if (!columns.has(name)) database.exec(`ALTER TABLE deliveries ADD COLUMN ${name} ${type}`)
+      }
+
+      // Reject contradictory legacy evidence before it can reach confirmedHistory:
+      // `fully-delivered` must be `completed`; other classifications must not be.
+      const contradictory = database
+        .prepare(
+          `SELECT COUNT(*) AS n FROM deliveries
+             WHERE (classification = 'fully-delivered' AND terminal_outcome <> 'completed')
+                OR (classification <> 'fully-delivered' AND terminal_outcome = 'completed')`,
+        )
+        .get() as { n: number }
+      if (contradictory.n > 0) {
+        throw new Error(
+          `refusing migration: ${contradictory.n} delivery row(s) contradict the C6 classification/terminalOutcome contract; the database is preserved — agree a quarantine/archive policy before migrating`,
+        )
+      }
+
+      // Remove the legacy `persona_version` column only when it holds no real data.
+      // A non-NULL value means a persona attribution the contract cannot map; never
+      // infer a pair from it, and preserve the database instead.
+      if (columns.has('persona_version')) {
+        const legacy = database
+          .prepare('SELECT COUNT(*) AS n FROM deliveries WHERE persona_version IS NOT NULL')
+          .get() as { n: number }
+        if (legacy.n > 0) {
+          throw new Error(
+            `refusing to drop deliveries.persona_version: ${legacy.n} non-NULL legacy value(s); the database is preserved — agree a mapping/archive policy (do not infer a persona pair)`,
+          )
+        }
+        database.exec('ALTER TABLE deliveries DROP COLUMN persona_version')
       }
     },
   },
