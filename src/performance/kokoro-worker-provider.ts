@@ -27,8 +27,11 @@
  * - A logical caller abort is owned by the existing `SynthesisPort` adapter and
  *   never settles this physical Promise. Occupancy is freed only by a matching
  *   result or by an actual worker exit. Worker `error` (an uncaught exception)
- *   and worker `exit` are distinct: an error closes admission but keeps the
- *   pending slot until exit, when the original Promise is rejected.
+ *   and worker `exit` are distinct: an error closes admission and requests
+ *   native termination once, like `init_error`/`messageerror`, but keeps the
+ *   pending slot until the observed actual exit, when the original Promise is
+ *   rejected. The error event and the `terminate()` return never settle
+ *   initialization, the current job or `close`.
  * - `close` synchronously stops new admission, drains the current physical job,
  *   asks the worker to dispose its SDK resources, and resolves only after the
  *   actual worker exit. It is idempotent and posts the dispose request once.
@@ -285,10 +288,14 @@ export async function createKokoroWorkerProvider(
   }
 
   const onError = (value: unknown): void => {
-    // An uncaught worker exception closes admission, but occupancy is NOT freed
-    // here: the thread may still be running and final rejection waits for exit.
+    // An uncaught worker exception is a fatal fault: close admission and request
+    // native termination once, exactly like init_error and messageerror. The
+    // pending physical occupancy is NOT freed here and initialization, the
+    // current job or close are never settled from this event or the terminate
+    // return; rejection waits for the observed actual exit.
     fatalError = value instanceof Error ? value : new Error(String(value))
     closed = true
+    requestTermination()
   }
 
   const onMessageError = (value: unknown): void => {
