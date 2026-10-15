@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -102,6 +102,98 @@ describe('M6 SQLite migrations (C-27)', () => {
     expect(result.backedUp).toBe(true)
     expect(existsSync(config.backupDir)).toBe(true)
     expect(readdirSync(config.backupDir).some((name) => name.endsWith('.db'))).toBe(true)
+    db.close()
+  })
+
+  it('backs up a complete, self-contained snapshot while a reader pins the WAL', () => {
+    const dir = tempDir()
+    const config = configIn(dir)
+    const db = openDatabase(config.dbPath)
+    migrate(db, { dbPath: config.dbPath, backupDir: config.backupDir })
+
+    const insertEvent = (eventId: string, seq: number): void => {
+      db.prepare(
+        `INSERT INTO events
+           (session_id, event_id, seq, timestamp_ms, epoch, type, source_module, payload)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run('s1', eventId, seq, seq, 0, 'user-input', 'M5', '{}')
+    }
+
+    insertEvent('e1', 1)
+    // A second connection pins a snapshot taken before the next commit, so a
+    // `wal_checkpoint(TRUNCATE)` cannot flush the newer frame (`busy = 1`).
+    // Copying the `.db` file then yields a truncated — historically malformed —
+    // backup; `VACUUM INTO` must still capture every committed row.
+    const reader = openDatabase(config.dbPath)
+    reader.exec('BEGIN')
+    reader.prepare('SELECT * FROM events').all()
+    insertEvent('e2', 2)
+
+    // Force a pending migration so the pre-migration backup runs.
+    db.prepare('UPDATE schema_version SET version = 0').run()
+    const result = migrate(db, {
+      dbPath: config.dbPath,
+      backupDir: config.backupDir,
+      timestampMs: 123,
+    })
+    expect(result.backedUp).toBe(true)
+    reader.exec('ROLLBACK')
+    reader.close()
+
+    const backupPath = join(config.backupDir, 'isla-v0-123.db')
+    expect(existsSync(backupPath)).toBe(true)
+    const backup = openDatabase(backupPath)
+    // Assert the backup *contents*, not just that a file exists.
+    const ids = (backup.prepare('SELECT event_id FROM events ORDER BY seq').all() as {
+      event_id: string
+    }[]).map((row) => row.event_id)
+    expect(ids).toEqual(['e1', 'e2'])
+    expect(backup.prepare('PRAGMA integrity_check').get()).toEqual({ integrity_check: 'ok' })
+    backup.close()
+    db.close()
+  })
+
+  it('fails closed when the pre-migration backup cannot be produced', () => {
+    const dir = tempDir()
+    const config = configIn(dir)
+    const db = openDatabase(config.dbPath)
+    // v1 creates the `events` table, so the database counts as holding schema.
+    migrate(
+      db,
+      { dbPath: config.dbPath, backupDir: config.backupDir },
+      [
+        {
+          version: 1,
+          up(database) {
+            database.exec('CREATE TABLE IF NOT EXISTS events (session_id TEXT, event_id TEXT)')
+          },
+        },
+      ],
+    )
+    db.prepare('INSERT INTO events (session_id, event_id) VALUES (?, ?)').run('s1', 'e1')
+    // A regular file occupies the backups path, so no snapshot can be written.
+    writeFileSync(config.backupDir, 'occupied')
+
+    expect(() =>
+      migrate(
+        db,
+        { dbPath: config.dbPath, backupDir: config.backupDir, timestampMs: 1 },
+        [
+          { version: 1, up() {} },
+          {
+            version: 2,
+            up(database) {
+              database.exec('CREATE TABLE marker (x)')
+            },
+          },
+        ],
+      ),
+    ).toThrow()
+
+    // No schema change and no version bump: the migration did not run.
+    const marker = db.prepare("SELECT name FROM sqlite_master WHERE name = 'marker'").all()
+    expect(marker).toHaveLength(0)
+    expect(readSchemaVersion(db)).toBe(1)
     db.close()
   })
 
