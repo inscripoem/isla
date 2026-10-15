@@ -92,6 +92,32 @@ import {
 } from '../../src/performance/audio-resources'
 import { createKokoroSynthesis } from '../../src/performance/kokoro-synthesis'
 import { encodeMonoFloat32Wav } from '../../src/performance/wav'
+import {
+  createGuardedTokenizer,
+  type KokoroTokenizerEncoding,
+} from '../../src/performance/kokoro-guard'
+import {
+  createKokoroProvider,
+  createRealKokoroSdkLoader,
+  isSupportedNodeVoiceId,
+  toKokoroRawAudio,
+} from '../../src/performance/kokoro-provider'
+import {
+  createControlledSdk,
+  createControlledTokenizer,
+  createMismatchedEncoding,
+  createMultiBatchEncoding,
+  createRankOneEncoding,
+  createTokenizerEncoding,
+  kokoroSdkTestConfig,
+} from '../support/m1-kokoro-sdk-kit'
+import {
+  createKokoroWorkerProvider,
+  kokoroWorkerBootstrapUrl,
+} from '../../src/performance/kokoro-worker-provider'
+import { isKokoroWorkerRuntime } from '../../src/performance/kokoro-worker'
+import { createControlledWorkerKit } from '../support/m1-kokoro-worker-kit'
+import { measureTimerCallbacks } from '../support/m1-kokoro-timing'
 
 /** Deterministically drain queued microtasks without wall-clock waits. */
 async function microtasks(rounds = 8): Promise<void> {
@@ -3592,5 +3618,890 @@ describe('M1-02 substitution through the unchanged SynthesisPort (R01)', () => {
 
     await microtasks()
     expect(kit.registry.snapshot().usedBytes).toBe(0)
+  })
+})
+
+/* ------------------------------------------------------------------------- *
+ * M1-02 increment B: the real SDK provider assembly, its apply-only
+ * no-truncation guard and the RawAudio field mapping. The SDK itself is
+ * replaced by deterministic small callable/model controls so these tests use
+ * the actual guard, mapping and factory without initializing or downloading a
+ * model. Real-SDK evidence lives in test/live.
+ * ------------------------------------------------------------------------- */
+
+describe('M1-02 increment B SDK provider guard and RawAudio mapping (B01)', () => {
+  it('forwards the complete encoding unchanged while forcing truncation:false without mutation', async () => {
+    const tokenizer = createControlledTokenizer(7)
+    const guarded = createGuardedTokenizer(tokenizer, 512)
+    expect(typeof guarded).toBe('function')
+    // An apply-only Proxy forwards ordinary properties of the real tokenizer.
+    expect((guarded as unknown as { tag: string }).tag).toBe('controlled-tokenizer')
+
+    const originalOptions = { truncation: true, padding: true }
+    const encoding = await guarded('hello world', originalOptions)
+
+    expect(tokenizer.calls()).toHaveLength(1)
+    expect(tokenizer.calls()[0]?.text).toBe('hello world')
+    expect(tokenizer.calls()[0]?.options).toEqual({ truncation: false, padding: true })
+    // The caller's options object and the returned encoding are untouched.
+    expect(originalOptions).toEqual({ truncation: true, padding: true })
+    expect(encoding).toBe(tokenizer.encoding())
+    expect(tokenizer.encoding().input_ids.dims).toEqual([1, 7])
+  })
+
+  it('accepts a full 512-token encoding and refuses 513 before any model call', async () => {
+    const sdk = createControlledSdk()
+    const provider = await createKokoroProvider(kokoroSdkTestConfig(), sdk)
+
+    sdk.tokenizer.setEncoding(createTokenizerEncoding(512))
+    const accepted = await provider.generate({ text: 'boundary', voiceId: 'af_heart', speed: 1 })
+    expect(accepted.sampleRate).toBe(24000)
+    expect(sdk.modelCalls()).toBe(1)
+
+    sdk.tokenizer.setEncoding(createTokenizerEncoding(513))
+    const refusal = await provider
+      .generate({ text: 'boundary', voiceId: 'af_heart', speed: 1 })
+      .catch((error: unknown) => error)
+    expect(refusal).toBeInstanceOf(KokoroProviderError)
+    expect((refusal as KokoroProviderError).code).toBe('input_too_long')
+    // The over-limit encoding is refused before the model is reached.
+    expect(sdk.modelCalls()).toBe(1)
+  })
+
+  it('fails honestly on a malformed tensor with no model call', async () => {
+    const sdk = createControlledSdk()
+    const provider = await createKokoroProvider(kokoroSdkTestConfig(), sdk)
+    const controls = [createMismatchedEncoding(), createMultiBatchEncoding(), createRankOneEncoding()]
+    for (const encoding of controls) {
+      sdk.tokenizer.setEncoding(encoding)
+      const error = await provider
+        .generate({ text: 'malformed', voiceId: 'af_heart', speed: 1 })
+        .catch((thrown: unknown) => thrown)
+      expect(error).toBeInstanceOf(Error)
+      expect(error).not.toBeInstanceOf(KokoroProviderError)
+    }
+    expect(sdk.modelCalls()).toBe(0)
+  })
+
+  it('maps SDK RawAudio.audio/sampling_rate and rejects malformed raw audio honestly', async () => {
+    const sdk = createControlledSdk()
+    const provider = await createKokoroProvider(kokoroSdkTestConfig(), sdk)
+
+    sdk.setRawAudio({ audio: new Float32Array([0.5, -0.25, 0.125]), sampling_rate: 16000 })
+    const raw = await provider.generate({ text: 'hi', voiceId: 'af_heart', speed: 1 })
+    expect(Array.from(raw.samples)).toEqual([0.5, -0.25, 0.125])
+    expect(raw.sampleRate).toBe(16000)
+
+    // Wrong field names (a fake `samples`/`sampleRate`) fail rather than silently map.
+    sdk.setRawAudio({ samples: new Float32Array([0]), sampleRate: 16000 })
+    await expect(provider.generate({ text: 'hi', voiceId: 'af_heart', speed: 1 })).rejects.toThrow()
+
+    // A non-float buffer or non-positive rate is refused too.
+    sdk.setRawAudio({ audio: 'not-a-buffer', sampling_rate: 16000 })
+    await expect(provider.generate({ text: 'hi', voiceId: 'af_heart', speed: 1 })).rejects.toThrow()
+    sdk.setRawAudio({ audio: new Float32Array([0]), sampling_rate: 0 })
+    await expect(provider.generate({ text: 'hi', voiceId: 'af_heart', speed: 1 })).rejects.toThrow()
+  })
+
+  it('validates the configured and requested voice and speed before generation', async () => {
+    const sdk = createControlledSdk({ voices: ['af_heart'] })
+    await expect(
+      createKokoroProvider(kokoroSdkTestConfig({ voiceId: 'not-a-voice' }), sdk),
+    ).rejects.toThrow()
+
+    const provider = await createKokoroProvider(kokoroSdkTestConfig(), sdk)
+    await expect(
+      provider.generate({ text: 'x', voiceId: 'not-a-voice', speed: 1 }),
+    ).rejects.toThrow()
+    await expect(
+      provider.generate({ text: 'x', voiceId: 'af_heart', speed: 0 }),
+    ).rejects.toThrow()
+    expect(sdk.modelCalls()).toBe(0)
+  })
+
+  it('configures the environment once at initialization and never per generation', async () => {
+    const sdk = createControlledSdk()
+    const provider = await createKokoroProvider(kokoroSdkTestConfig(), sdk)
+    expect(sdk.configureCalls()).toBe(1)
+    expect(sdk.configured()?.environment.cacheDir).toBe('test-cache')
+
+    await provider.generate({ text: 'a', voiceId: 'af_heart', speed: 1 })
+    await provider.generate({ text: 'b', voiceId: 'af_heart', speed: 1 })
+    expect(sdk.configureCalls()).toBe(1)
+  })
+
+  it('exposes the real loader handle without importing or initializing the SDK', () => {
+    const loader = createRealKokoroSdkLoader()
+    expect(typeof loader.loadTokenizer).toBe('function')
+    expect(typeof loader.ensureVoice).toBe('function')
+  })
+
+  it('maps a documented RawAudio shape through the pure mapper and rejects non-float samples', () => {
+    const mapped = toKokoroRawAudio({ audio: new Float32Array([1, 2]), sampling_rate: 8000 })
+    expect(mapped.sampleRate).toBe(8000)
+    expect(mapped.samples).toBeInstanceOf(Float32Array)
+    expect(Array.from(mapped.samples)).toEqual([1, 2])
+    expect(() => toKokoroRawAudio({ audio: [1, 2], sampling_rate: 8000 })).toThrow()
+    expect(() => toKokoroRawAudio(null)).toThrow()
+  })
+})
+
+/* ------------------------------------------------------------------------- *
+ * M1-02 increment B regressions requested by independent review: the guard
+ * must preserve the real SDK's synchronous tokenizer boundary, initialization
+ * must not observe caller mutation across awaits, and the fixed-model token
+ * ceiling must not be raisable by configuration.
+ * ------------------------------------------------------------------------- */
+
+describe('M1-02 increment B independent-review regressions (B01)', () => {
+  it('returns the original encoding synchronously and forces truncation:false without mutation', () => {
+    const tokenizer = createControlledTokenizer(7)
+    const guarded = createGuardedTokenizer(tokenizer, 512)
+    const originalOptions = { truncation: true, padding: true }
+
+    const encoding = guarded('hello world', originalOptions)
+
+    expect(encoding).not.toBeInstanceOf(Promise)
+    expect(encoding).toBe(tokenizer.encoding())
+    expect(tokenizer.calls()).toHaveLength(1)
+    expect(tokenizer.calls()[0]?.options).toEqual({ truncation: false, padding: true })
+    expect(originalOptions).toEqual({ truncation: true, padding: true })
+  })
+
+  it('refuses an over-limit encoding synchronously before any model dispatch', () => {
+    const guarded = createGuardedTokenizer(createControlledTokenizer(513), 512)
+    let caught: unknown = null
+    try {
+      guarded('boundary')
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(KokoroProviderError)
+    expect((caught as KokoroProviderError).code).toBe('input_too_long')
+  })
+
+  it('rejects a malformed empty [1,0] encoding instead of dispatching it', () => {
+    const guarded = createGuardedTokenizer(() => createTokenizerEncoding(0), 512)
+    expect(() => guarded('empty')).toThrow()
+  })
+
+  it('exposes a synchronous controlled tokenizer that returns its encoding directly', () => {
+    const tokenizer = createControlledTokenizer(4)
+    const result = tokenizer('synchronous')
+    expect(result).not.toBeInstanceOf(Promise)
+    expect(result).toBe(tokenizer.encoding())
+  })
+
+  it('rejects a configured token ceiling above the verified fixed-model bound before any side effect', async () => {
+    const sdk = createControlledSdk()
+    await expect(createKokoroProvider(kokoroSdkTestConfig({ maxTokens: 1024 }), sdk)).rejects.toThrow()
+    expect(sdk.configureCalls()).toBe(0)
+    expect(sdk.modelCalls()).toBe(0)
+  })
+
+  it('retains validated initialization inputs while configuration awaits', async () => {
+    const sdk = createControlledSdk()
+    const config = kokoroSdkTestConfig()
+    const initial = {
+      modelRoot: config.modelRoot,
+      revision: config.revision,
+      maxTokens: config.maxTokens,
+      environment: { ...config.environment },
+    }
+    let release!: () => void
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    sdk.configureEnvironment = async () => {
+      await barrier
+    }
+    let observed: unknown
+    const original = sdk.loadTokenizer.bind(sdk)
+    sdk.loadTokenizer = async (received) => {
+      observed = {
+        modelRoot: received.modelRoot,
+        revision: received.revision,
+        maxTokens: received.maxTokens,
+        environment: { ...received.environment },
+      }
+      return original(received)
+    }
+    const pending = createKokoroProvider(config, sdk)
+    ;(config as { modelRoot: string }).modelRoot = 'mutated-model'
+    ;(config as { revision: string }).revision = 'mutated-revision'
+    ;(config as { maxTokens: number }).maxTokens = 1024
+    ;(config.environment as { localModelPath: string }).localModelPath = 'mutated-path'
+    ;(config.environment as { cacheDir: string }).cacheDir = 'mutated-cache'
+    release()
+    await pending
+    expect(observed).toEqual(initial)
+  })
+
+  it('does not weaken the validated token ceiling while configuration awaits', async () => {
+    const sdk = createControlledSdk()
+    const config = kokoroSdkTestConfig()
+    let release!: () => void
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    sdk.configureEnvironment = async () => {
+      await barrier
+    }
+    const pending = createKokoroProvider(config, sdk)
+    ;(config as { maxTokens: number }).maxTokens = 1024
+    release()
+    const provider = await pending
+    sdk.tokenizer.setEncoding(createTokenizerEncoding(513))
+    let failureCode: unknown = null
+    let resolved = false
+    try {
+      await provider.generate({ text: 'boundary', voiceId: 'af_heart', speed: 1 })
+      resolved = true
+    } catch (error) {
+      failureCode = (error as { code?: unknown }).code
+    }
+    expect({ resolved, failureCode }).toEqual({ resolved: false, failureCode: 'input_too_long' })
+    expect(sdk.modelCalls()).toBe(0)
+  })
+
+  it('refuses an asynchronous tokenizer result instead of adopting it', () => {
+    const asyncTokenizer = (() =>
+      Promise.resolve(createTokenizerEncoding(4))) as unknown as Parameters<
+      typeof createGuardedTokenizer
+    >[0]
+    const guarded = createGuardedTokenizer(asyncTokenizer, 512)
+    expect(() => guarded('async')).toThrow()
+  })
+
+  it('accepts an int64 BigInt64Array full encoding honestly', () => {
+    const encoding: KokoroTokenizerEncoding = { input_ids: { data: new BigInt64Array(4), dims: [1, 4] } }
+    const guarded = createGuardedTokenizer(() => encoding, 512)
+    expect(guarded('int64')).toBe(encoding)
+  })
+
+  it('rejects a Node voice id that is not a plain bundled basename before any filesystem lookup', () => {
+    expect(isSupportedNodeVoiceId('af_heart')).toBe(true)
+    const invalid = ['../evil', 'af/../heart', 'af\\heart', 'C:/x', 'af heart', '.', '..', '', 'af_heart.bin', 'AF_HEART']
+    for (const voiceId of invalid) {
+      expect(isSupportedNodeVoiceId(voiceId)).toBe(false)
+    }
+    const loader = createRealKokoroSdkLoader()
+    for (const voiceId of ['../evil', 'af/heart', '..', 'af_heart.bin']) {
+      expect(() => loader.ensureVoice(voiceId)).toThrow()
+    }
+  })
+})
+
+/* ------------------------------------------------------------------------- *
+ * M1-02 increment B worker isolation: the persistent single-worker host. The
+ * worker transport is a controlled scripted dependency (no subprocess, no SDK
+ * import or download); real bootstrap/startup and real CPU timing are exercised
+ * only by the explicit live entrypoints.
+ * ------------------------------------------------------------------------- */
+
+describe('M1-02 increment B worker provider host (B02, controlled transport)', () => {
+  async function startWorkerProvider() {
+    const kit = createControlledWorkerKit()
+    const pending = createKokoroWorkerProvider(kokoroSdkTestConfig(), {
+      createWorker: kit.createWorker,
+    })
+    await microtasks()
+    kit.transport.emitReady()
+    const handle = await pending
+    return { kit, handle }
+  }
+
+  it('stays inert on ordinary module import and does not run as a worker', async () => {
+    expect(isKokoroWorkerRuntime()).toBe(false)
+    const module = await import('../../src/performance/kokoro-worker-provider')
+    expect(typeof module.createKokoroWorkerProvider).toBe('function')
+    expect(kokoroWorkerBootstrapUrl().pathname.endsWith('/kokoro-worker-bootstrap.mjs')).toBe(true)
+  })
+
+  it('spawns exactly one worker, forwards the validated config and maps a result', async () => {
+    const { kit, handle } = await startWorkerProvider()
+    expect(kit.createCalls()).toBe(1)
+    expect(kit.lastWorkerData()?.voiceId).toBe('af_heart')
+    expect(kit.lastWorkerData()?.maxTokens).toBe(512)
+
+    const generation = handle.provider.generate({ text: 'hello', voiceId: 'af_heart', speed: 1 })
+    await microtasks()
+    const posts = kit.transport.generatePosts()
+    expect(posts).toHaveLength(1)
+    expect(posts[0]?.input).toEqual({ text: 'hello', voiceId: 'af_heart', speed: 1 })
+
+    kit.transport.emitResult({
+      kind: 'result',
+      jobId: posts[0]!.jobId,
+      ok: true,
+      sampleRate: 24000,
+      samples: new Float32Array([0.5, -0.5]),
+    })
+    const audio = await generation
+    expect(audio.sampleRate).toBe(24000)
+    expect(Array.from(audio.samples)).toEqual([0.5, -0.5])
+
+    const closing = handle.close()
+    await microtasks()
+    expect(kit.transport.disposePosts()).toBe(1)
+    kit.transport.emitExit(0)
+    await closing
+  })
+
+  it('rejects a second concurrent generation as busy with no extra post', async () => {
+    const { kit, handle } = await startWorkerProvider()
+    const first = handle.provider.generate({ text: 'a', voiceId: 'af_heart', speed: 1 })
+    await microtasks()
+    await expect(
+      handle.provider.generate({ text: 'b', voiceId: 'af_heart', speed: 1 }),
+    ).rejects.toThrow(/busy/)
+    expect(kit.transport.generatePosts()).toHaveLength(1)
+
+    kit.transport.emitResult({
+      kind: 'result',
+      jobId: kit.transport.generatePosts()[0]!.jobId,
+      ok: true,
+      sampleRate: 24000,
+      samples: new Float32Array([1]),
+    })
+    await first
+    const closing = handle.close()
+    kit.transport.emitExit(0)
+    await closing
+  })
+
+  it('posts nothing for a malformed request', async () => {
+    const { kit, handle } = await startWorkerProvider()
+    await expect(handle.provider.generate({ text: '', voiceId: 'af_heart', speed: 1 })).rejects.toThrow()
+    await expect(handle.provider.generate({ text: 'x', voiceId: '', speed: 1 })).rejects.toThrow()
+    await expect(handle.provider.generate({ text: 'x', voiceId: 'af_heart', speed: 0 })).rejects.toThrow()
+    expect(kit.transport.generatePosts()).toHaveLength(0)
+    const closing = handle.close()
+    kit.transport.emitExit(0)
+    await closing
+  })
+
+  it('preserves input_too_long and maps other failures honestly', async () => {
+    const { kit, handle } = await startWorkerProvider()
+    const refusal = handle.provider.generate({ text: 'long', voiceId: 'af_heart', speed: 1 })
+    await microtasks()
+    kit.transport.emitResult({
+      kind: 'result',
+      jobId: kit.transport.generatePosts()[0]!.jobId,
+      ok: false,
+      code: 'input_too_long',
+    })
+    const refusalError = await refusal.catch((error: unknown) => error)
+    expect(refusalError).toBeInstanceOf(KokoroProviderError)
+    expect((refusalError as KokoroProviderError).code).toBe('input_too_long')
+
+    const failure = handle.provider.generate({ text: 'oops', voiceId: 'af_heart', speed: 1 })
+    await microtasks()
+    kit.transport.emitResult({
+      kind: 'result',
+      jobId: kit.transport.generatePosts()[1]!.jobId,
+      ok: false,
+      error: 'sdk exploded',
+    })
+    await expect(failure).rejects.toThrow(/sdk exploded/)
+
+    const closing = handle.close()
+    kit.transport.emitExit(0)
+    await closing
+  })
+
+  it('ignores old and duplicate job ids and settles only the matching job', async () => {
+    const { kit, handle } = await startWorkerProvider()
+    const first = handle.provider.generate({ text: 'one', voiceId: 'af_heart', speed: 1 })
+    await microtasks()
+    const job1 = kit.transport.generatePosts()[0]!.jobId
+    kit.transport.emitResult({
+      kind: 'result',
+      jobId: job1,
+      ok: true,
+      sampleRate: 24000,
+      samples: new Float32Array([1]),
+    })
+    await first
+
+    const second = handle.provider.generate({ text: 'two', voiceId: 'af_heart', speed: 1 })
+    await microtasks()
+    const job2 = kit.transport.generatePosts()[1]!.jobId
+    let settled = false
+    second.then(
+      () => {
+        settled = true
+      },
+      () => {
+        settled = true
+      },
+    )
+
+    // An old id from the previous job and an unknown id cannot settle the current job.
+    kit.transport.emitResult({
+      kind: 'result',
+      jobId: job1,
+      ok: true,
+      sampleRate: 24000,
+      samples: new Float32Array([9]),
+    })
+    kit.transport.emitResult({
+      kind: 'result',
+      jobId: job2 + 100,
+      ok: true,
+      sampleRate: 24000,
+      samples: new Float32Array([9]),
+    })
+    await microtasks()
+    expect(settled).toBe(false)
+
+    kit.transport.emitResult({
+      kind: 'result',
+      jobId: job2,
+      ok: true,
+      sampleRate: 24000,
+      samples: new Float32Array([2]),
+    })
+    const audio = await second
+    expect(Array.from(audio.samples)).toEqual([2])
+
+    // A duplicate reply for an already-settled job is ignored without throwing.
+    kit.transport.emitResult({
+      kind: 'result',
+      jobId: job2,
+      ok: true,
+      sampleRate: 24000,
+      samples: new Float32Array([3]),
+    })
+    await microtasks()
+
+    const closing = handle.close()
+    kit.transport.emitExit(0)
+    await closing
+  })
+
+  it('keeps occupancy on a worker error and rejects only on exit (error and exit distinct)', async () => {
+    const { kit, handle } = await startWorkerProvider()
+    const generation = handle.provider.generate({ text: 'a', voiceId: 'af_heart', speed: 1 })
+    await microtasks()
+    let settled = false
+    generation.then(
+      () => {
+        settled = true
+      },
+      () => {
+        settled = true
+      },
+    )
+
+    kit.transport.emitError(new Error('worker boom'))
+    await microtasks()
+    // The error closed admission but did not settle the physical job.
+    expect(settled).toBe(false)
+    await expect(
+      handle.provider.generate({ text: 'b', voiceId: 'af_heart', speed: 1 }),
+    ).rejects.toThrow(/closed/)
+
+    kit.transport.emitExit(1)
+    await expect(generation).rejects.toThrow(/worker boom/)
+    expect(settled).toBe(true)
+  })
+
+  it('rejects initialization and waits for actual exit before reporting failure', async () => {
+    const kit = createControlledWorkerKit()
+    const pending = createKokoroWorkerProvider(kokoroSdkTestConfig(), {
+      createWorker: kit.createWorker,
+    })
+    await microtasks()
+    kit.transport.emitInitError('no voice')
+    await microtasks()
+    expect(kit.transport.terminateCount()).toBe(1)
+    let rejected = false
+    pending.catch(() => {
+      rejected = true
+    })
+    await microtasks()
+    // Still not rejected until the worker actually exits.
+    expect(rejected).toBe(false)
+    kit.transport.emitExit(1)
+    await expect(pending).rejects.toThrow(/initialization failed/)
+  })
+
+  it('does not accept a queued ready after a fatal error until the worker exits', async () => {
+    const kit = createControlledWorkerKit()
+    const pending = createKokoroWorkerProvider(kokoroSdkTestConfig(), {
+      createWorker: kit.createWorker,
+    })
+    let outcome = 'pending'
+    pending.then(
+      () => {
+        outcome = 'resolved'
+      },
+      () => {
+        outcome = 'rejected'
+      },
+    )
+    kit.transport.emitError(new Error('startup failure'))
+    kit.transport.emitReady()
+    await microtasks()
+    // A ready queued behind the fatal error must not resolve initialization.
+    expect(outcome).toBe('pending')
+    kit.transport.emitExit(1)
+    await microtasks()
+    expect(outcome).toBe('rejected')
+  })
+
+  it('does not accept a queued ready after init_error until the worker exits', async () => {
+    const kit = createControlledWorkerKit()
+    const pending = createKokoroWorkerProvider(kokoroSdkTestConfig(), {
+      createWorker: kit.createWorker,
+    })
+    let outcome = 'pending'
+    pending.then(
+      () => {
+        outcome = 'resolved'
+      },
+      () => {
+        outcome = 'rejected'
+      },
+    )
+    await microtasks()
+    kit.transport.emitInitError('no voice')
+    kit.transport.emitReady()
+    await microtasks()
+    expect(outcome).toBe('pending')
+    kit.transport.emitExit(1)
+    await microtasks()
+    expect(outcome).toBe('rejected')
+  })
+
+  it('ignores a matching result after a fatal error and rejects only on exit', async () => {
+    const { kit, handle } = await startWorkerProvider()
+    const generation = handle.provider.generate({ text: 'a', voiceId: 'af_heart', speed: 1 })
+    await microtasks()
+    const jobId = kit.transport.generatePosts()[0]!.jobId
+    let outcome = 'pending'
+    generation.then(
+      () => {
+        outcome = 'resolved'
+      },
+      () => {
+        outcome = 'rejected'
+      },
+    )
+
+    kit.transport.emitError(new Error('fatal worker error'))
+    kit.transport.emitResult({
+      kind: 'result',
+      jobId,
+      ok: true,
+      sampleRate: 24000,
+      samples: new Float32Array([1]),
+    })
+    await microtasks()
+    // A matching result after a fatal error must not fulfil before exit, and a
+    // native error does not request logical termination.
+    expect(outcome).toBe('pending')
+    expect(kit.transport.terminateCount()).toBe(0)
+    await expect(
+      handle.provider.generate({ text: 'b', voiceId: 'af_heart', speed: 1 }),
+    ).rejects.toThrow(/closed/)
+
+    kit.transport.emitExit(1)
+    await microtasks()
+    expect(outcome).toBe('rejected')
+    expect(kit.transport.generatePosts()).toHaveLength(1)
+    expect(kit.transport.disposePosts()).toBe(0)
+  })
+
+  it('ignores a matching result after a messageerror and requests termination once', async () => {
+    const { kit, handle } = await startWorkerProvider()
+    const generation = handle.provider.generate({ text: 'a', voiceId: 'af_heart', speed: 1 })
+    await microtasks()
+    const jobId = kit.transport.generatePosts()[0]!.jobId
+    let outcome = 'pending'
+    generation.then(
+      () => {
+        outcome = 'resolved'
+      },
+      () => {
+        outcome = 'rejected'
+      },
+    )
+
+    kit.transport.emitMessageError(new Error('bad worker message'))
+    kit.transport.emitResult({
+      kind: 'result',
+      jobId,
+      ok: true,
+      sampleRate: 24000,
+      samples: new Float32Array([1]),
+    })
+    await microtasks()
+    expect(outcome).toBe('pending')
+    expect(kit.transport.terminateCount()).toBe(1)
+
+    kit.transport.emitExit(1)
+    await microtasks()
+    expect(outcome).toBe('rejected')
+    expect(kit.transport.generatePosts()).toHaveLength(1)
+  })
+
+  it('requests termination once on messageerror without a result and close waits for exit', async () => {
+    const { kit, handle } = await startWorkerProvider()
+    const generation = handle.provider.generate({ text: 'a', voiceId: 'af_heart', speed: 1 })
+    await microtasks()
+    generation.catch(() => {})
+
+    kit.transport.emitMessageError(new Error('bad worker message'))
+    await microtasks()
+    expect(kit.transport.terminateCount()).toBe(1)
+
+    const closing = handle.close()
+    await microtasks()
+    // Occupancy is preserved; close does not post dispose while a physical job is pending.
+    expect(kit.transport.disposePosts()).toBe(0)
+    let closed = false
+    closing.then(() => {
+      closed = true
+    })
+    await microtasks()
+    expect(closed).toBe(false)
+
+    kit.transport.emitExit(1)
+    await closing
+    expect(closed).toBe(true)
+    await expect(generation).rejects.toThrow(/bad worker message/)
+  })
+
+  it('cleans up an initialization messageerror and rejects only after exit', async () => {
+    const kit = createControlledWorkerKit()
+    const pending = createKokoroWorkerProvider(kokoroSdkTestConfig(), {
+      createWorker: kit.createWorker,
+    })
+    let outcome = 'pending'
+    pending.then(
+      () => {
+        outcome = 'resolved'
+      },
+      () => {
+        outcome = 'rejected'
+      },
+    )
+    await microtasks()
+    kit.transport.emitMessageError(new Error('init messageerror'))
+    await microtasks()
+    expect(kit.transport.terminateCount()).toBe(1)
+    expect(outcome).toBe('pending')
+    kit.transport.emitExit(1)
+    await microtasks()
+    expect(outcome).toBe('rejected')
+  })
+
+  it('drains a pending job before disposing, then resolves close only after exit', async () => {
+    const { kit, handle } = await startWorkerProvider()
+    handle.provider.generate({ text: 'a', voiceId: 'af_heart', speed: 1 }).catch(() => {})
+    await microtasks()
+    const closing = handle.close()
+    await microtasks()
+    // close has not posted dispose while the physical job is still pending.
+    expect(kit.transport.disposePosts()).toBe(0)
+
+    kit.transport.emitResult({
+      kind: 'result',
+      jobId: kit.transport.generatePosts()[0]!.jobId,
+      ok: true,
+      sampleRate: 24000,
+      samples: new Float32Array([1]),
+    })
+    await microtasks()
+    expect(kit.transport.disposePosts()).toBe(1)
+
+    let closed = false
+    closing.then(() => {
+      closed = true
+    })
+    await microtasks()
+    expect(closed).toBe(false)
+    kit.transport.emitExit(0)
+    await closing
+    expect(closed).toBe(true)
+  })
+
+  it('posts dispose once for repeated close and refuses generation during and after close', async () => {
+    const { kit, handle } = await startWorkerProvider()
+    const first = handle.close()
+    const second = handle.close()
+    expect(second).toBe(first)
+    await microtasks()
+    await expect(
+      handle.provider.generate({ text: 'a', voiceId: 'af_heart', speed: 1 }),
+    ).rejects.toThrow(/closed/)
+    kit.transport.emitExit(0)
+    await first
+    expect(kit.transport.disposePosts()).toBe(1)
+    await expect(
+      handle.provider.generate({ text: 'b', voiceId: 'af_heart', speed: 1 }),
+    ).rejects.toThrow(/closed/)
+  })
+})
+
+/* ------------------------------------------------------------------------- *
+ * M1-02 increment B worker cancellation: the real SynthesisPort adapter over
+ * the worker host. The controlled transport holds the physical job so the
+ * adapter's logical abort behavior and late-result suppression can be observed.
+ * ------------------------------------------------------------------------- */
+
+describe('M1-02 increment B worker cancellation through the real adapter (B02, controlled transport)', () => {
+  function buildWorkerSynthesisKit() {
+    const kit = createControlledWorkerKit()
+    const clock = createVirtualClock(0)
+    const gate = createExpiringDeadlineGate(0)
+    const registry = createAudioResourceRegistry({ clock, byteBudget: 1_000_000, retentionMs: 60_000 })
+    return { kit, clock, gate, registry }
+  }
+
+  async function startSynthesis() {
+    const { kit, clock, gate, registry } = buildWorkerSynthesisKit()
+    const pending = createKokoroWorkerProvider(kokoroSdkTestConfig(), {
+      createWorker: kit.createWorker,
+    })
+    await microtasks()
+    kit.transport.emitReady()
+    const handle = await pending
+    const synthesis = createKokoroSynthesis({
+      provider: handle.provider,
+      profiles: [defaultKokoroProfile()],
+      registry,
+      clock,
+      deadlineGate: gate,
+    })
+    return { kit, synthesis, handle, registry }
+  }
+
+  it('stays busy and publishes nothing after a logical abort, then reuses after settlement', async () => {
+    const { kit, synthesis, handle, registry } = await startSynthesis()
+    const context = createCallContext()
+    const preparing = synthesis.prepare(fixturePreparePerformance(), context)
+    await microtasks()
+    expect(kit.transport.generatePosts()).toHaveLength(1)
+    const jobId = kit.transport.generatePosts()[0]!.jobId
+
+    context.abort()
+    const prepared = await preparing
+    expect(prepared.ok).toBe(false)
+    if (prepared.ok) return
+    expect(prepared.reasonCode).toBe('cancelled_or_expired')
+
+    // The physical worker job is still held, so the retained adapter is busy.
+    await expect(
+      synthesis.prepare(fixturePreparePerformance({ requestId: 'busy-check' }), createCallContext()),
+    ).resolves.toMatchObject({ ok: false, reasonCode: 'busy' })
+
+    // A late success cannot publish a reference.
+    kit.transport.emitResult({
+      kind: 'result',
+      jobId,
+      ok: true,
+      sampleRate: 24000,
+      samples: new Float32Array([1, 2, 3]),
+    })
+    await microtasks()
+    expect(registry.snapshot().usedBytes).toBe(0)
+
+    // Physical settlement frees the slot: a new prepare succeeds and registers audio.
+    const retry = synthesis.prepare(fixturePreparePerformance({ requestId: 'retry' }), createCallContext())
+    await microtasks()
+    const retryJob = kit.transport.generatePosts()[1]!.jobId
+    kit.transport.emitResult({
+      kind: 'result',
+      jobId: retryJob,
+      ok: true,
+      sampleRate: 24000,
+      samples: new Float32Array([0.1, 0.2]),
+    })
+    const retried = await retry
+    expect(retried.ok).toBe(true)
+    if (retried.ok) {
+      const lease = await registry.resolve(retried.audioRef, createCallContext().signal)
+      const bytes = new Uint8Array(await lease.blob.arrayBuffer())
+      lease.release()
+      registry.retire(retried.audioRef)
+      const decoded = decodeMonoFloat32Wav(bytes)
+      expect(decoded.sampleRateHz).toBe(24000)
+      expect(decoded.frameCount).toBe(2)
+      expect(decoded.durationMs).toBeCloseTo((2 / 24000) * 1000, 9)
+    }
+
+    const closing = handle.close()
+    kit.transport.emitExit(0)
+    await closing
+  })
+
+  it('settles a late worker refusal without leaving a stale reference', async () => {
+    const { kit, synthesis, handle, registry } = await startSynthesis()
+    const context = createCallContext()
+    const preparing = synthesis.prepare(fixturePreparePerformance(), context)
+    await microtasks()
+    const jobId = kit.transport.generatePosts()[0]!.jobId
+    context.abort()
+    await preparing
+    kit.transport.emitResult({ kind: 'result', jobId, ok: false, code: 'input_too_long' })
+    await microtasks()
+    expect(registry.snapshot().usedBytes).toBe(0)
+    const closing = handle.close()
+    kit.transport.emitExit(0)
+    await closing
+  })
+})
+
+/* ------------------------------------------------------------------------- *
+ * M1-02 increment B worker timer statistic: per-callback delay is distinct from
+ * cumulative cadence drift. This is a pure, SDK-free definition test for the
+ * live smoke's responsiveness metric.
+ * ------------------------------------------------------------------------- */
+
+describe('M1-02 increment B worker timer statistic (B02)', () => {
+  it('separates per-callback delay from cumulative cadence drift', () => {
+    const measurement = measureTimerCallbacks(
+      [
+        { offsetMs: 15, pending: true },
+        { offsetMs: 30, pending: true },
+        { offsetMs: 610, pending: false },
+      ],
+      10,
+    )
+    expect(measurement.callbacks.map((callback) => callback.delayMs)).toEqual([5, 5, 570])
+    expect(measurement.callbacks.map((callback) => callback.cumulativeDriftMs)).toEqual([5, 10, 580])
+    expect(measurement.maxPendingDelayMs).toBe(5)
+    expect(measurement.maxDelayMs).toBe(570)
+    expect(measurement.maxCumulativeDriftMs).toBe(580)
+    expect(measurement.pendingCallbacks).toBe(2)
+  })
+
+  it('treats a healthy but slower cadence as small individual delay and large cumulative drift', () => {
+    const samples = Array.from({ length: 106 }, (_unused, index) => ({
+      offsetMs: (index + 1) * 15,
+      pending: true,
+    }))
+    const measurement = measureTimerCallbacks(samples, 10)
+    // Every individual delay is the constant 5 ms cadence offset, not the
+    // accumulated ~600 ms drift a `count * interval` metric would report.
+    expect(measurement.maxPendingDelayMs).toBe(5)
+    expect(measurement.maxDelayMs).toBe(5)
+    expect(measurement.maxCumulativeDriftMs).toBe(106 * 5)
+    expect(measurement.pendingCallbacks).toBe(106)
+  })
+
+  it('handles an early callback and an empty sample set without negative delays', () => {
+    const early = measureTimerCallbacks([{ offsetMs: 4, pending: true }], 10)
+    expect(early.callbacks[0]?.delayMs).toBe(0)
+    expect(early.callbacks[0]?.cumulativeDriftMs).toBe(-6)
+
+    const empty = measureTimerCallbacks([], 10)
+    expect(empty.callbacks).toEqual([])
+    expect(empty.maxDelayMs).toBe(0)
+    expect(empty.maxPendingDelayMs).toBe(0)
+    expect(empty.pendingCallbacks).toBe(0)
   })
 })

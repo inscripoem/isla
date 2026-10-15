@@ -31,6 +31,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@huggingface/transformers": "3.5.1",
+    "kokoro-js": "1.2.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "ws": "^8.22.0",

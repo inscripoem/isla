@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <title>M1 kokoro generated-WAV browser smoke</title>
+  </head>
+  <body>
+    <main>
+      <h1>M1 kokoro generated-WAV browser smoke</h1>
+      <p>
+        Manual loopback harness for the M1 browser playback path against the current generated
+        kokoro WAV fixture.
+      </p>
+      <ul>
+        <li>Playback is muted; this validates the browser media API path only.</li>
+        <li>It does not prove acoustic speech, silence, loudness or real network timing.</li>
+        <li>It is not full product I2 acceptance.</li>
+      </ul>
+      <button id="run" type="button">Run browser smoke</button>
+      <h2>Result</h2>
+      <pre id="result">{"status":"READY","message":"Click Run to execute the browser smoke."}</pre>
+    </main>
+    <script type="module" src="/kokoro-browser.ts"></script>
+  </body>
+</html>
