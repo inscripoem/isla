@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type {
   CommitDelivery,
+  ConfirmedDelivery,
   DialoguePort,
   DialogueRequest,
   EventStorePort,
@@ -15,6 +16,7 @@ import {
 } from '../../src/contracts'
 import { createRuntimeCoordinator } from '../../src/runtime/coordinator'
 import type { SessionProfileConfig } from '../../src/runtime/coordinator'
+import { orderTurnDeliveries } from '../../src/runtime/delivery-order'
 import { createEventStore, createHistoryQuery, createInMemoryBackend } from '../../src/storage'
 import * as correct from '../support/correct-ports'
 import { createCancelTerminalPlayer, createScriptedReceiptPlayer } from '../support/gated-ports'
@@ -151,7 +153,7 @@ function scriptedDialogue(
   }
 }
 
-describe('M5 delivery attribution capture', () => {
+describe('M5 delivery attribution capture (C-47)', () => {
   it('captures the original index and persona on a normal delivery and its event versions', async () => {
     const backend = createInMemoryBackend()
     const store = createEventStore(backend)
@@ -431,7 +433,7 @@ describe('M5 delivery attribution capture', () => {
   })
 })
 
-describe('M6 delivery attribution persistence', () => {
+describe('M6 delivery attribution persistence (C-46)', () => {
   it('rejects omitted attribution fields and accepts explicit legacy nulls', () => {
     const complete: Record<string, unknown> = { ...fixtureCommitDelivery() }
     for (const field of ['segmentIndex', 'personaProfileId', 'personaProfileVersion'] as const) {
@@ -640,5 +642,53 @@ describe('M6 delivery attribution persistence', () => {
       personaProfileVersion: '1',
       classification: 'fully-delivered',
     })
+  })
+})
+
+describe('M5 turn reconstruction ordering', () => {
+  const record = (
+    overrides: Partial<ConfirmedDelivery> & { segmentId: string; segmentIndex: number | null },
+  ): ConfirmedDelivery =>
+    confirmedDeliverySchema.parse({
+      sessionId: FIXTURE_SESSION_ID,
+      turnId: 'turn-order',
+      textHash: `hash-${overrides.segmentId}`,
+      text: `text-${overrides.segmentId}`,
+      outputId: null,
+      receiptId: null,
+      classification: 'fully-delivered',
+      modality: 'audio',
+      personaProfileId: null,
+      personaProfileVersion: null,
+      ...overrides,
+    })
+
+  it('orders known indices ascending, unknowns last, ties and unknowns in supporting-event order', () => {
+    // Input order is the HistoryQueryPort order (supporting-event seq ascending).
+    // It deliberately disagrees with index order, and unknown indices carry no
+    // original position. Other sessions and turns are excluded.
+    const input: ConfirmedDelivery[] = [
+      record({ segmentId: 'segment-unknown-a', segmentIndex: null }),
+      record({ segmentId: 'segment-two', segmentIndex: 2 }),
+      record({ segmentId: 'segment-unknown-b', segmentIndex: null }),
+      record({ segmentId: 'segment-zero', segmentIndex: 0 }),
+      record({ segmentId: 'segment-two-tie', segmentIndex: 2 }),
+      record({ segmentId: 'other-session', segmentIndex: 1, sessionId: 'session-elsewhere' }),
+      record({ segmentId: 'other-turn', segmentIndex: 1, turnId: 'turn-other' }),
+    ]
+
+    const ordered = orderTurnDeliveries(input, FIXTURE_SESSION_ID, 'turn-order')
+    expect(ordered.map((entry) => entry.segmentId)).toEqual([
+      'segment-zero',
+      'segment-two',
+      'segment-two-tie',
+      'segment-unknown-a',
+      'segment-unknown-b',
+    ])
+    // Unknown indices remain unknown and are never given a claimed position.
+    expect(ordered.slice(-2).every((entry) => entry.segmentIndex === null)).toBe(true)
+    // The helper is pure and does not mutate its input or the read order.
+    expect(input[0]?.segmentId).toBe('segment-unknown-a')
+    expect(input.map((entry) => entry.segmentId)).toContain('other-session')
   })
 })

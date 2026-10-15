@@ -1,5 +1,6 @@
 import type {
   AtomicCommitAck,
+  CommitDelivery,
   ConfirmedDelivery,
   EventStorePort,
   HistoryQueryPort,
@@ -579,6 +580,7 @@ export async function collectStorageViolations(create: () => StorageKit): Promis
       textHash: 'hash-hist',
       text: 'unspoken',
       classification: 'not-delivered',
+      terminalOutcome: 'failed',
     })
     await store.commitDeliveryWithEvent(
       notDelivered,
@@ -594,6 +596,765 @@ export async function collectStorageViolations(create: () => StorageKit): Promis
       'history-excludes-not-delivered',
       confirmed.every((record) => record.turnId !== 'turn-hist'),
       'a not-delivered record must not appear in confirmed history',
+    )
+  }
+
+  // --- Delivery attribution is preserved through writes and history reads ---
+  // Storage revision 2026-10-14.1 makes `segmentIndex`, `personaProfileId` and
+  // `personaProfileVersion` required nullable fields. These shared checks prove
+  // each field independently: the original values round-trip through an actual
+  // write and a read view, explicit legacy nulls stay null, an omitted required
+  // field is rejected with no orphan or partial state and its identity stays
+  // reusable, and a conflicting identity reuse (including explicit-null reuse)
+  // keeps the originally recorded attribution.
+  //
+  // At least one read view is required: a backend that withholds both the
+  // HistoryQueryPort and the inspection view cannot demonstrate attribution at
+  // all, so the absence of a violation must not be read as a full pass. When
+  // there is no read view, only this setup violation is reported; the
+  // view-dependent checks below are skipped rather than also failing.
+  const hasReadView = kit.history !== undefined || kit.inspection !== undefined
+  check(
+    'attribution-read-view-missing',
+    hasReadView,
+    'attribution conformance requires at least one read view: a HistoryQueryPort or an inspection view',
+  )
+
+  const attributionSession = 'session-attribution-conformance'
+
+  // Exact read-view snapshot used before and after each rejected write. The
+  // HistoryQueryPort and the inspection view are independent optional inputs:
+  // a real backend supplies HistoryQueryPort, while the fixture also supplies a
+  // detached inspection view, so both paths are exercised when present.
+  async function attributionSnapshot(): Promise<{
+    events: string
+    export: string
+    history: string | null
+    deliveries: string | null
+  }> {
+    return {
+      events: jsonSnapshot(await store.readSession(attributionSession)),
+      export: await store.exportJsonl(attributionSession),
+      history:
+        kit.history === undefined
+          ? null
+          : jsonSnapshot(await kit.history.confirmedHistory(attributionSession)),
+      deliveries:
+        kit.inspection === undefined ? null : jsonSnapshot(kit.inspection.deliveries()),
+    }
+  }
+
+  // Verifies one turn's attribution through every available read view, so the
+  // restored-retry and conflict-preservation guarantees hold for a history-only,
+  // inspection-only or dual-view kit. A dual-view kit must agree in both views.
+  async function attributionMatchesViews(
+    turnId: string,
+    expected: {
+      segmentIndex: number | null
+      personaProfileId: string | null
+      personaProfileVersion: string | null
+    },
+  ): Promise<boolean> {
+    const results: boolean[] = []
+    if (kit.history !== undefined) {
+      const record = (await kit.history.confirmedHistory(attributionSession)).find(
+        (candidate) => candidate.turnId === turnId,
+      )
+      results.push(
+        record !== undefined &&
+          record.segmentIndex === expected.segmentIndex &&
+          record.personaProfileId === expected.personaProfileId &&
+          record.personaProfileVersion === expected.personaProfileVersion,
+      )
+    }
+    if (kit.inspection !== undefined) {
+      const record = kit.inspection.deliveries().find((candidate) => candidate.turnId === turnId)
+      results.push(
+        record !== undefined &&
+          record.segmentIndex === expected.segmentIndex &&
+          record.personaProfileId === expected.personaProfileId &&
+          record.personaProfileVersion === expected.personaProfileVersion,
+      )
+    }
+    return results.length > 0 && results.every(Boolean)
+  }
+
+  const attributionDelivery = fixtureCommitDelivery({
+    sessionId: attributionSession,
+    turnId: 'turn-attribution',
+    segmentId: 'segment-attribution',
+    textHash: 'hash-attribution',
+    text: 'attribution-spoken',
+    segmentIndex: 3,
+    personaProfileId: 'persona-conformance',
+    personaProfileVersion: 'v7',
+  })
+  const attributionAck = await store.commitDeliveryWithEvent(
+    attributionDelivery,
+    fixtureRuntimeEvent({
+      sessionId: attributionSession,
+      eventId: 'evt-attribution',
+      seq: 1,
+      type: 'delivery.committed',
+    }),
+  )
+  check(
+    'attribution-applied',
+    attributionAck.delivery.status === 'applied' && attributionAck.event.outcome === 'stored',
+    'a delivery carrying attribution must apply atomically',
+  )
+  if (kit.history !== undefined) {
+    const attributed = (await kit.history.confirmedHistory(attributionSession)).find(
+      (record) => record.turnId === 'turn-attribution',
+    )
+    check(
+      'attribution-round-trip',
+      attributed?.segmentIndex === 3 &&
+        attributed?.personaProfileId === 'persona-conformance' &&
+        attributed?.personaProfileVersion === 'v7',
+      'confirmed history must preserve the original segment index and persona attribution',
+    )
+  }
+  if (kit.inspection !== undefined) {
+    const stored = kit.inspection
+      .deliveries()
+      .find((record) => record.turnId === 'turn-attribution')
+    check(
+      'attribution-stored',
+      stored?.segmentIndex === 3 &&
+        stored?.personaProfileId === 'persona-conformance' &&
+        stored?.personaProfileVersion === 'v7',
+      'the stored record must keep the original segment index and persona attribution',
+    )
+  }
+
+  // An explicit legacy null stays null: it is never inferred from the segment
+  // identifier or backfilled from a later persona.
+  await store.commitDeliveryWithEvent(
+    fixtureCommitDelivery({
+      sessionId: attributionSession,
+      turnId: 'turn-null-attribution',
+      // A numeric-looking identifier must not become an index.
+      segmentId: 'segment-7',
+      textHash: 'hash-null-attribution',
+      text: 'null-attribution-spoken',
+      segmentIndex: null,
+      personaProfileId: null,
+      personaProfileVersion: null,
+    }),
+    fixtureRuntimeEvent({
+      sessionId: attributionSession,
+      eventId: 'evt-null-attribution',
+      seq: 2,
+      type: 'delivery.committed',
+    }),
+  )
+  if (kit.history !== undefined) {
+    const legacyNull = (await kit.history.confirmedHistory(attributionSession)).find(
+      (record) => record.turnId === 'turn-null-attribution',
+    )
+    check(
+      'attribution-null-preserved',
+      legacyNull !== undefined &&
+        legacyNull.segmentIndex === null &&
+        legacyNull.personaProfileId === null &&
+        legacyNull.personaProfileVersion === null,
+      'explicit null attribution must be preserved, never inferred or backfilled',
+    )
+  }
+  if (kit.inspection !== undefined) {
+    const legacyNull = kit.inspection
+      .deliveries()
+      .find((record) => record.turnId === 'turn-null-attribution')
+    check(
+      'attribution-null-stored',
+      legacyNull !== undefined &&
+        legacyNull.segmentIndex === null &&
+        legacyNull.personaProfileId === null &&
+        legacyNull.personaProfileVersion === null,
+      'the stored record must keep explicit null attribution',
+    )
+  }
+
+  // A required attribution field that is omitted (rather than an explicit null)
+  // must be rejected at the storage boundary. Each omitted field uses a fresh,
+  // complete delivery identity and supporting-event sequence; the exact read
+  // views must be byte-identical before and after the rejected attempt (so an
+  // orphan record or a partial event cannot hide), and the very same identity
+  // and sequence must then apply once the field is restored.
+  const attributionFields = [
+    'segmentIndex',
+    'personaProfileId',
+    'personaProfileVersion',
+  ] as const
+  for (const [index, field] of attributionFields.entries()) {
+    const turnId = `turn-omitted-${field}`
+    const expectedIndex = 10 + index
+    const expectedPersona = `persona-omitted-${field}`
+    const expectedVersion = `v-omitted-${field}`
+    const delivery = fixtureCommitDelivery({
+      sessionId: attributionSession,
+      turnId,
+      segmentId: `segment-omitted-${field}`,
+      textHash: `hash-omitted-${field}`,
+      text: `omitted-${field}-spoken`,
+      segmentIndex: expectedIndex,
+      personaProfileId: expectedPersona,
+      personaProfileVersion: expectedVersion,
+    })
+    const omitted: Record<string, unknown> = { ...delivery }
+    delete omitted[field]
+    const eventId = `evt-omitted-${field}`
+    const seq = 20 + index
+    const supportingEvent = (): RuntimeEvent =>
+      fixtureRuntimeEvent({ sessionId: attributionSession, eventId, seq, type: 'delivery.committed' })
+
+    const before = await attributionSnapshot()
+    const ack = await store.commitDeliveryWithEvent(
+      omitted as unknown as CommitDelivery,
+      supportingEvent(),
+    )
+    check(
+      `attribution-omitted-rejected:${field}`,
+      ack.delivery.status === 'failed' && ack.event.outcome === 'failed',
+      `a delivery omitting the required ${field} field must be rejected`,
+    )
+    const after = await attributionSnapshot()
+    check(
+      `attribution-omitted-no-partial:${field}`,
+      sameJson(before, after),
+      `a rejected ${field}-omitted delivery must leave events, export, history and stored records unchanged`,
+    )
+
+    const retry = await store.commitDeliveryWithEvent(delivery, supportingEvent())
+    check(
+      `attribution-omitted-retry:${field}`,
+      retry.delivery.status === 'applied' && retry.event.outcome === 'stored',
+      `retrying the rejected ${field} identity with the field restored must apply`,
+    )
+    check(
+      `attribution-omitted-retry-attribution:${field}`,
+      !hasReadView ||
+        (await attributionMatchesViews(turnId, {
+          segmentIndex: expectedIndex,
+          personaProfileId: expectedPersona,
+          personaProfileVersion: expectedVersion,
+        })),
+      `the retried ${field} delivery must carry its restored attribution in every read view`,
+    )
+  }
+
+  // Reusing the delivery identity with any single changed attribution field
+  // conflicts independently, an explicit-null reuse conflicts too, and every
+  // attempt keeps the originally recorded values rather than overwriting them.
+  const conflictAttempts: Array<{ code: string; delivery: CommitDelivery; eventId: string; seq: number }> = [
+    {
+      code: 'attribution-conflict-index',
+      delivery: { ...attributionDelivery, segmentIndex: 4 },
+      eventId: 'evt-attribution-conflict-index',
+      seq: 30,
+    },
+    {
+      code: 'attribution-conflict-persona',
+      delivery: { ...attributionDelivery, personaProfileId: 'persona-other' },
+      eventId: 'evt-attribution-conflict-persona',
+      seq: 31,
+    },
+    {
+      code: 'attribution-conflict-version',
+      delivery: { ...attributionDelivery, personaProfileVersion: 'v8' },
+      eventId: 'evt-attribution-conflict-version',
+      seq: 32,
+    },
+    {
+      code: 'attribution-conflict-null',
+      delivery: {
+        ...attributionDelivery,
+        segmentIndex: null,
+        personaProfileId: null,
+        personaProfileVersion: null,
+      },
+      eventId: 'evt-attribution-conflict-null',
+      seq: 33,
+    },
+  ]
+  let originalPreserved = true
+  for (const attempt of conflictAttempts) {
+    const ack = await store.commitDeliveryWithEvent(
+      attempt.delivery,
+      fixtureRuntimeEvent({
+        sessionId: attributionSession,
+        eventId: attempt.eventId,
+        seq: attempt.seq,
+        type: 'delivery.committed',
+      }),
+    )
+    check(
+      attempt.code,
+      ack.delivery.status === 'conflict',
+      'reusing a delivery identity with changed attribution must conflict',
+    )
+    // Verify the recorded original after each conflicting attempt, not only
+    // once at the end, through whichever read view the kit supplies.
+    if (hasReadView) {
+      const preserved = await attributionMatchesViews('turn-attribution', {
+        segmentIndex: 3,
+        personaProfileId: 'persona-conformance',
+        personaProfileVersion: 'v7',
+      })
+      originalPreserved = originalPreserved && preserved
+    }
+  }
+  check(
+    'attribution-conflict-preserves-original',
+    !hasReadView || originalPreserved,
+    'every conflicting reuse must keep the originally recorded attribution in every read view',
+  )
+
+  // The converse of explicit null: reusing the seeded all-null identity with
+  // known attribution must conflict rather than silently backfill it.
+  const backfillAck = await store.commitDeliveryWithEvent(
+    fixtureCommitDelivery({
+      sessionId: attributionSession,
+      turnId: 'turn-null-attribution',
+      segmentId: 'segment-7',
+      textHash: 'hash-null-attribution',
+      text: 'null-attribution-spoken',
+      segmentIndex: 5,
+      personaProfileId: 'persona-backfill',
+      personaProfileVersion: 'v9',
+    }),
+    fixtureRuntimeEvent({
+      sessionId: attributionSession,
+      eventId: 'evt-null-backfill',
+      seq: 34,
+      type: 'delivery.committed',
+    }),
+  )
+  check(
+    'attribution-null-conflict',
+    backfillAck.delivery.status === 'conflict',
+    'reusing an all-null identity with known attribution must conflict, never silently backfill',
+  )
+  check(
+    'attribution-null-preserved-after-conflict',
+    !hasReadView ||
+      (await attributionMatchesViews('turn-null-attribution', {
+        segmentIndex: null,
+        personaProfileId: null,
+        personaProfileVersion: null,
+      })),
+    'the all-null identity must stay null after a refused backfill in every read view',
+  )
+
+  // --- Delivery boundary: classification/terminalOutcome combinations (C6) ---
+  // The shape schema validates `classification` and `terminalOutcome`
+  // independently; the shared write boundary must reject an inconsistent pair as
+  // one paired failure before any mutation, leave every read view unchanged and
+  // keep the rejected identity and sequence reusable by a corrected retry.
+  const boundarySession = 'session-delivery-boundary'
+
+  async function boundarySnapshot(sessions: readonly string[] = [boundarySession]): Promise<string> {
+    // Every session named by a rejected batch is inspected, so an event written
+    // into the other side of a session mismatch cannot hide; the delivery
+    // inspection view is global, covering every stored record.
+    const uniqueSessions = [...new Set(sessions)]
+    const perSession = await Promise.all(
+      uniqueSessions.map(async (sessionId) => ({
+        sessionId,
+        events: jsonSnapshot(await store.readSession(sessionId)),
+        export: await store.exportJsonl(sessionId),
+        history:
+          kit.history === undefined
+            ? null
+            : jsonSnapshot(await kit.history.confirmedHistory(sessionId)),
+      })),
+    )
+    return jsonSnapshot({
+      perSession,
+      deliveries: kit.inspection === undefined ? null : kit.inspection.deliveries(),
+    })
+  }
+
+  const invalidCombinationAttempts: ReadonlyArray<{
+    code: string
+    classification: CommitDelivery['classification']
+    terminalOutcome: CommitDelivery['terminalOutcome']
+    corrected: CommitDelivery['terminalOutcome']
+  }> = [
+    { code: 'delivery-invalid-combination:fully-delivered-failed', classification: 'fully-delivered', terminalOutcome: 'failed', corrected: 'completed' },
+    { code: 'delivery-invalid-combination:fully-delivered-cancelled', classification: 'fully-delivered', terminalOutcome: 'cancelled', corrected: 'completed' },
+    { code: 'delivery-invalid-combination:fully-delivered-unknown', classification: 'fully-delivered', terminalOutcome: 'unknown', corrected: 'completed' },
+    { code: 'delivery-invalid-combination:partial-unknown-completed', classification: 'partial-unknown', terminalOutcome: 'completed', corrected: 'cancelled' },
+    { code: 'delivery-invalid-combination:not-delivered-completed', classification: 'not-delivered', terminalOutcome: 'completed', corrected: 'failed' },
+  ]
+  for (const [index, attempt] of invalidCombinationAttempts.entries()) {
+    const delivery = fixtureCommitDelivery({
+      sessionId: boundarySession,
+      turnId: `turn-invalid-combination-${index}`,
+      segmentId: `segment-invalid-combination-${index}`,
+      textHash: `hash-invalid-combination-${index}`,
+      text: `invalid-combination-${index}`,
+      classification: attempt.classification,
+      terminalOutcome: attempt.terminalOutcome,
+    })
+    const eventId = `evt-invalid-combination-${index}`
+    const seq = 200 + index
+    const supportingEvent = (): RuntimeEvent =>
+      fixtureRuntimeEvent({ sessionId: boundarySession, eventId, seq, type: 'delivery.committed' })
+
+    const before = await boundarySnapshot()
+    const ack = await store.commitDeliveryWithEvent(delivery, supportingEvent())
+    check(
+      attempt.code,
+      ack.delivery.status === 'failed' && ack.event.outcome === 'failed',
+      'an inconsistent classification/terminalOutcome pair must be rejected as one paired failure',
+    )
+    check(
+      `${attempt.code}:paired-reason`,
+      ack.delivery.status === 'failed' &&
+        ack.event.outcome === 'failed' &&
+        ack.delivery.reasonCode === ack.event.reasonCode,
+      'a rejected pair must report the same reason on both sides',
+    )
+    check(
+      `${attempt.code}:no-residue`,
+      (await boundarySnapshot()) === before,
+      'a rejected pair must leave events, export, history and stored records unchanged',
+    )
+    const retry = await store.commitDeliveryWithEvent(
+      { ...delivery, terminalOutcome: attempt.corrected },
+      supportingEvent(),
+    )
+    check(
+      `${attempt.code}:retry`,
+      retry.delivery.status === 'applied' && retry.event.outcome === 'stored',
+      'a corrected retry reusing the rejected identity and sequence must apply',
+    )
+  }
+
+  const acceptedCombinations: ReadonlyArray<{
+    code: string
+    classification: CommitDelivery['classification']
+    terminalOutcome: CommitDelivery['terminalOutcome']
+  }> = [
+    { code: 'delivery-valid-combination:fully-delivered-completed', classification: 'fully-delivered', terminalOutcome: 'completed' },
+    { code: 'delivery-valid-combination:partial-unknown-cancelled', classification: 'partial-unknown', terminalOutcome: 'cancelled' },
+    { code: 'delivery-valid-combination:partial-unknown-failed', classification: 'partial-unknown', terminalOutcome: 'failed' },
+    { code: 'delivery-valid-combination:partial-unknown-unknown', classification: 'partial-unknown', terminalOutcome: 'unknown' },
+    { code: 'delivery-valid-combination:not-delivered-cancelled', classification: 'not-delivered', terminalOutcome: 'cancelled' },
+    { code: 'delivery-valid-combination:not-delivered-failed', classification: 'not-delivered', terminalOutcome: 'failed' },
+    { code: 'delivery-valid-combination:not-delivered-unknown', classification: 'not-delivered', terminalOutcome: 'unknown' },
+  ]
+  for (const [index, combination] of acceptedCombinations.entries()) {
+    const ack = await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({
+        sessionId: boundarySession,
+        turnId: `turn-valid-combination-${index}`,
+        segmentId: `segment-valid-combination-${index}`,
+        textHash: `hash-valid-combination-${index}`,
+        text: `valid-combination-${index}`,
+        classification: combination.classification,
+        terminalOutcome: combination.terminalOutcome,
+      }),
+      fixtureRuntimeEvent({
+        sessionId: boundarySession,
+        eventId: `evt-valid-combination-${index}`,
+        seq: 300 + index,
+        type: 'delivery.committed',
+      }),
+    )
+    check(
+      combination.code,
+      ack.delivery.status === 'applied' && ack.event.outcome === 'stored',
+      'a consistent classification/terminalOutcome pair must apply',
+    )
+  }
+
+  // --- Delivery boundary: delivery/event provenance and correlation (C7) ---
+  // Only a known-vs-known disagreement is contradictory: an absent or explicit
+  // `null` event component is legacy raw partial knowledge, never inferred. A
+  // contradiction is rejected before mutation, leaves the views unchanged and
+  // keeps the identity reusable; an unrelated version entry is preserved.
+  const correlationMismatches: ReadonlyArray<{ code: string; mismatch: Partial<RuntimeEvent> }> = [
+    { code: 'delivery-correlation:sessionId', mismatch: { sessionId: 'session-correlation-other' } },
+    { code: 'delivery-correlation:turnId', mismatch: { turnId: 'turn-correlation-other' } },
+    { code: 'delivery-correlation:segmentId', mismatch: { segmentId: 'segment-correlation-other' } },
+    { code: 'delivery-correlation:outputId', mismatch: { outputId: 'output-correlation-other' } },
+    {
+      code: 'delivery-correlation:personaProfileId',
+      mismatch: { versions: { personaProfileId: 'persona-correlation-other', personaProfileVersion: 'v1' } },
+    },
+    {
+      code: 'delivery-correlation:personaProfileVersion',
+      mismatch: { versions: { personaProfileId: 'persona-correlation', personaProfileVersion: 'v9' } },
+    },
+  ]
+  for (const [index, attempt] of correlationMismatches.entries()) {
+    const delivery = fixtureCommitDelivery({
+      sessionId: boundarySession,
+      turnId: `turn-correlation-${index}`,
+      segmentId: `segment-correlation-${index}`,
+      textHash: `hash-correlation-${index}`,
+      text: `correlation-${index}`,
+      outputId: `output-correlation-${index}`,
+      segmentIndex: index,
+      personaProfileId: 'persona-correlation',
+      personaProfileVersion: 'v1',
+    })
+    const eventId = `evt-correlation-${index}`
+    const seq = 400 + index
+    const baseEvent = (): Partial<RuntimeEvent> => ({
+      sessionId: boundarySession,
+      eventId,
+      seq,
+      type: 'delivery.committed',
+      turnId: delivery.turnId,
+      segmentId: delivery.segmentId,
+      outputId: delivery.outputId,
+      versions: { personaProfileId: 'persona-correlation', personaProfileVersion: 'v1' },
+    })
+
+    // A mismatching session names a second session; inspect it too, so an event
+    // the store might wrongly write there is caught as residue.
+    const eventSessionId = (attempt.mismatch.sessionId as string | undefined) ?? boundarySession
+    const involvedSessions = [boundarySession, eventSessionId]
+
+    const before = await boundarySnapshot(involvedSessions)
+    const rejected = await store.commitDeliveryWithEvent(
+      delivery,
+      fixtureRuntimeEvent({ ...baseEvent(), ...attempt.mismatch }),
+    )
+    check(
+      `${attempt.code}:rejected`,
+      rejected.delivery.status === 'failed' && rejected.event.outcome === 'failed',
+      'a contradictory known provenance or correlation must be rejected as one paired failure',
+    )
+    check(
+      `${attempt.code}:paired-reason`,
+      rejected.delivery.status === 'failed' &&
+        rejected.event.outcome === 'failed' &&
+        rejected.delivery.reasonCode === rejected.event.reasonCode,
+      'a rejected pair must report the same reason on both sides',
+    )
+    check(
+      `${attempt.code}:no-residue`,
+      (await boundarySnapshot(involvedSessions)) === before,
+      'a rejected pair must leave events, export, history and stored records unchanged in every implicated session',
+    )
+    const retry = await store.commitDeliveryWithEvent(delivery, fixtureRuntimeEvent(baseEvent()))
+    check(
+      `${attempt.code}:retry`,
+      retry.delivery.status === 'applied' && retry.event.outcome === 'stored',
+      'a corrected retry reusing the rejected identity and sequence must apply',
+    )
+  }
+
+  const validProvenanceCases: ReadonlyArray<{
+    code: string
+    delivery: Partial<CommitDelivery>
+    versions: RuntimeEvent['versions']
+    event?: Partial<RuntimeEvent>
+  }> = [
+    {
+      code: 'delivery-provenance:matching-event',
+      delivery: {},
+      versions: { personaProfileId: 'persona-provenance', personaProfileVersion: 'v3', voiceProfileId: 'voice-x' },
+    },
+    { code: 'delivery-provenance:event-versions-null', delivery: {}, versions: null },
+    { code: 'delivery-provenance:event-missing-persona-key', delivery: {}, versions: { voiceProfileId: 'voice-x' } },
+    {
+      code: 'delivery-provenance:half-pair-identity-only',
+      delivery: { personaProfileId: 'persona-provenance', personaProfileVersion: null },
+      versions: { personaProfileId: 'persona-provenance' },
+    },
+    {
+      code: 'delivery-provenance:half-pair-version-only',
+      delivery: { personaProfileId: null, personaProfileVersion: 'v3' },
+      versions: { personaProfileVersion: 'v3' },
+    },
+    {
+      code: 'delivery-provenance:all-null',
+      delivery: { personaProfileId: null, personaProfileVersion: null },
+      versions: null,
+    },
+    {
+      // A known event output against an unknown delivery output is partial
+      // knowledge, not a contradiction; the missing delivery output must not be
+      // inferred from the event.
+      code: 'delivery-provenance:output-null-event-known',
+      delivery: { outputId: null },
+      versions: { personaProfileId: 'persona-provenance', personaProfileVersion: 'v3' },
+      event: { outputId: 'output-event-only' },
+    },
+    {
+      // The literal string "null" is a value, never converted into a fabricated
+      // unknown marker.
+      code: 'delivery-provenance:literal-null-string',
+      delivery: { personaProfileId: null, personaProfileVersion: null },
+      versions: { personaProfileId: 'null' },
+    },
+  ]
+  for (const [index, testCase] of validProvenanceCases.entries()) {
+    const delivery = fixtureCommitDelivery({
+      sessionId: boundarySession,
+      turnId: `turn-valid-provenance-${index}`,
+      segmentId: `segment-valid-provenance-${index}`,
+      textHash: `hash-valid-provenance-${index}`,
+      text: `valid-provenance-${index}`,
+      outputId: `output-valid-provenance-${index}`,
+      segmentIndex: index,
+      personaProfileId: 'persona-provenance',
+      personaProfileVersion: 'v3',
+      ...testCase.delivery,
+    })
+    const ack = await store.commitDeliveryWithEvent(
+      delivery,
+      fixtureRuntimeEvent({
+        sessionId: boundarySession,
+        eventId: `evt-valid-provenance-${index}`,
+        seq: 500 + index,
+        type: 'delivery.committed',
+        turnId: delivery.turnId,
+        segmentId: delivery.segmentId,
+        outputId: delivery.outputId,
+        versions: testCase.versions,
+        ...testCase.event,
+      }),
+    )
+    check(
+      testCase.code,
+      ack.delivery.status === 'applied' && ack.event.outcome === 'stored',
+      'a delivery with partial or absent known event provenance must be accepted',
+    )
+  }
+  const preservedUnrelated = (await store.readSession(boundarySession)).find(
+    (event) => event.eventId === 'evt-valid-provenance-0',
+  )
+  check(
+    'delivery-provenance:unrelated-version-preserved',
+    preservedUnrelated?.versions?.['voiceProfileId'] === 'voice-x',
+    'an unrelated event version entry must be preserved, never dropped or inferred',
+  )
+  const literalNullIndex = validProvenanceCases.findIndex(
+    (testCase) => testCase.code === 'delivery-provenance:literal-null-string',
+  )
+  const literalNullEvent = (await store.readSession(boundarySession)).find(
+    (event) => event.eventId === `evt-valid-provenance-${literalNullIndex}`,
+  )
+  check(
+    'delivery-provenance:literal-null-string-preserved',
+    literalNullEvent?.versions?.['personaProfileId'] === 'null',
+    'a literal "null" version string is a value, never converted into a fabricated unknown',
+  )
+  if (hasReadView) {
+    const outputNullIndex = validProvenanceCases.findIndex(
+      (testCase) => testCase.code === 'delivery-provenance:output-null-event-known',
+    )
+    const turnId = `turn-valid-provenance-${outputNullIndex}`
+    const record =
+      kit.history !== undefined
+        ? (await kit.history.confirmedHistory(boundarySession)).find(
+            (candidate) => candidate.turnId === turnId,
+          )
+        : kit.inspection?.deliveries().find((candidate) => candidate.turnId === turnId)
+    check(
+      'delivery-provenance:output-null-not-inferred',
+      record !== undefined && record.outputId === null,
+      'a missing delivery output id must not be inferred from the event',
+    )
+  }
+
+  // --- Delivery boundary: malformed supporting event (C7) ---
+  // The supporting event is validated before its fields are read for
+  // correlation and before any mutation, so a null/non-string version member or
+  // an omitted `versions` key is one paired failure rather than a stored value
+  // or a thrown error. `versions: null` and absent persona keys stay legal and no
+  // null member is converted into a fabricated unknown.
+  const malformedEvents: ReadonlyArray<{ code: string; event: Partial<RuntimeEvent> }> = [
+    {
+      code: 'delivery-invalid-event:null-version-member',
+      event: { versions: { personaProfileId: null } as unknown as RuntimeEvent['versions'] },
+    },
+    {
+      code: 'delivery-invalid-event:non-string-version-member',
+      event: { versions: { personaProfileId: 7 } as unknown as RuntimeEvent['versions'] },
+    },
+    {
+      code: 'delivery-invalid-event:omitted-versions',
+      event: { versions: undefined as unknown as RuntimeEvent['versions'] },
+    },
+  ]
+  for (const [index, attempt] of malformedEvents.entries()) {
+    const delivery = fixtureCommitDelivery({
+      sessionId: boundarySession,
+      turnId: `turn-invalid-event-${index}`,
+      segmentId: `segment-invalid-event-${index}`,
+      textHash: `hash-invalid-event-${index}`,
+      text: `invalid-event-${index}`,
+      // Legacy-null delivery attribution: the malformed event must still be
+      // rejected and the nulls must not be replaced with fabricated values.
+      personaProfileId: null,
+      personaProfileVersion: null,
+    })
+    const eventId = `evt-invalid-event-${index}`
+    const seq = 600 + index
+    const malformedEvent = fixtureRuntimeEvent({
+      sessionId: boundarySession,
+      eventId,
+      seq,
+      type: 'delivery.committed',
+      turnId: delivery.turnId,
+      segmentId: delivery.segmentId,
+      outputId: delivery.outputId,
+      ...attempt.event,
+    })
+    const validEvent = (): RuntimeEvent =>
+      fixtureRuntimeEvent({
+        sessionId: boundarySession,
+        eventId,
+        seq,
+        type: 'delivery.committed',
+        turnId: delivery.turnId,
+        segmentId: delivery.segmentId,
+        outputId: delivery.outputId,
+        versions: null,
+      })
+
+    const before = await boundarySnapshot()
+    let ack: AtomicCommitAck
+    try {
+      ack = await store.commitDeliveryWithEvent(delivery, malformedEvent)
+    } catch {
+      check(
+        attempt.code,
+        false,
+        'a malformed supporting event must fail as a paired acknowledgement, not throw',
+      )
+      continue
+    }
+    check(
+      attempt.code,
+      ack.delivery.status === 'failed' && ack.event.outcome === 'failed',
+      'a malformed supporting event must fail as one paired failure',
+    )
+    check(
+      `${attempt.code}:paired-reason`,
+      ack.delivery.status === 'failed' &&
+        ack.event.outcome === 'failed' &&
+        ack.delivery.reasonCode === ack.event.reasonCode,
+      'a rejected pair must report the same reason on both sides',
+    )
+    check(
+      `${attempt.code}:no-residue`,
+      (await boundarySnapshot()) === before,
+      'a malformed supporting event must leave events, export, history and stored records unchanged',
+    )
+    const retry = await store.commitDeliveryWithEvent(delivery, validEvent())
+    check(
+      `${attempt.code}:retry`,
+      retry.delivery.status === 'applied' && retry.event.outcome === 'stored',
+      'a corrected retry reusing the rejected identity and sequence must apply',
     )
   }
 

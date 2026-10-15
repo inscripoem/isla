@@ -1,7 +1,10 @@
 import {
   appendAckSchema,
   atomicCommitAckSchema,
+  commitDeliverySchema,
   deliveryCommitAckSchema,
+  deliveryEventCorrelationIssue,
+  runtimeEventSchema,
   type AppendAck,
   type AtomicCommitAck,
   type ConfirmedDelivery,
@@ -35,6 +38,14 @@ import { canonicalJson, jsonValueIssue } from './payload'
  *   - no existing receipt -> `applied`; changed textHash, segment index or
  *     persona attribution -> `conflict`; same content and classification ->
  *     `duplicate`; same textHash + different classification -> `conflict`.
+ *   - a delivery whose required fields are omitted or malformed, whose
+ *     `classification`/`terminalOutcome` combination is inconsistent, or whose
+ *     known provenance/correlation contradicts the supporting event -> `failed`
+ *     (`invalid_delivery` / `inconsistent_delivery`) with nothing persisted.
+ *     A supporting event that fails `RuntimeEvent` validation (for example an
+ *     omitted `versions` or a non-string/null version member) -> `failed`
+ *     (`invalid_event`) before its fields are read. The same identity and
+ *     sequence remain reusable by a corrected retry.
  * readSession(sessionId) -> events for the session, `seq` strictly increasing.
  * exportJsonl(sessionId)  -> one JSON string per committed event, newline joined,
  *                            matching `readSession` exactly.
@@ -173,6 +184,63 @@ export function createEventStore(backend: StorageBackend = createInMemoryBackend
       // unsupported payload, a conflict (identity/sequence reuse or changed
       // content), or a storage failure. The delivery acknowledgement must not
       // claim one cause for another.
+      const parsedDelivery = commitDeliverySchema.safeParse(delivery)
+      // The store is the durable boundary: a delivery whose required fields are
+      // omitted or malformed is rejected before any mutation, so it can never be
+      // persisted with `undefined` attribution. The schema is strict, so an
+      // explicit `null` legacy unknown is accepted while an omitted field is not.
+      if (!parsedDelivery.success) {
+        return atomicCommitAckSchema.parse({
+          delivery: {
+            status: 'failed',
+            reasonCode: 'invalid_delivery',
+            message: 'delivery failed schema validation',
+          },
+          event: appendAckSchema.parse({
+            outcome: 'failed',
+            eventId: event.eventId,
+            seq: event.seq,
+            reasonCode: 'invalid_delivery',
+            message: 'atomic commit rejected an invalid delivery',
+          }),
+        })
+      }
+      // The supporting event is validated at the same boundary, before its
+      // fields are read for correlation: a malformed event (for example a
+      // missing `versions`, or a non-string/null version member) must not be
+      // read, must never be persisted, and must not reach the JSON payload
+      // check. This preserves the existing `unsupported_payload` behavior,
+      // because a function payload is still a schema-valid `unknown` value.
+      if (!runtimeEventSchema.safeParse(event).success) {
+        const message = 'supporting event failed schema validation'
+        return atomicCommitAckSchema.parse({
+          delivery: { status: 'failed', reasonCode: 'invalid_event', message },
+          event: appendAckSchema.parse({
+            outcome: 'failed',
+            eventId: event.eventId,
+            seq: event.seq,
+            reasonCode: 'invalid_event',
+            message,
+          }),
+        })
+      }
+      // Contradictory known provenance or correlation between the delivery and
+      // its supporting event is rejected before any mutation, as one paired
+      // failure: the batch is internally inconsistent, not an identity conflict.
+      const correlationIssue = deliveryEventCorrelationIssue(parsedDelivery.data, event)
+      if (correlationIssue !== null) {
+        const message = `delivery and supporting event disagree on ${correlationIssue}`
+        return atomicCommitAckSchema.parse({
+          delivery: { status: 'failed', reasonCode: 'inconsistent_delivery', message },
+          event: appendAckSchema.parse({
+            outcome: 'failed',
+            eventId: event.eventId,
+            seq: event.seq,
+            reasonCode: 'inconsistent_delivery',
+            message,
+          }),
+        })
+      }
       const failure = (
         reasonCode: 'storage_unavailable' | 'conflict' | 'unsupported_payload',
         eventFailure: AppendAck,

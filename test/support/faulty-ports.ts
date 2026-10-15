@@ -535,6 +535,166 @@ export function createWrongExportEventStore(
   }
 }
 
+/**
+ * Fault: drops the delivery attribution on write. The three required nullable
+ * fields are replaced with explicit nulls, so a known segment index or persona
+ * is lost while the commit still reports success. Proves the shared attribution
+ * checks detect lost fields.
+ */
+export function createAttributionDroppingEventStore(delegate: EventStorePort): EventStorePort {
+  return {
+    append: (event) => delegate.append(event),
+    commitDeliveryWithEvent: (delivery, event) =>
+      delegate.commitDeliveryWithEvent(
+        { ...delivery, segmentIndex: null, personaProfileId: null, personaProfileVersion: null },
+        event,
+      ),
+    readSession: (sessionId) => delegate.readSession(sessionId),
+    exportJsonl: (sessionId) => delegate.exportJsonl(sessionId),
+  }
+}
+
+/**
+ * Fault: fabricates a fixed attribution on write, substituting an invented
+ * index and persona for the originating segment/request. Proves the shared
+ * checks detect fabricated fields.
+ */
+export function createAttributionFabricatingEventStore(delegate: EventStorePort): EventStorePort {
+  return {
+    append: (event) => delegate.append(event),
+    commitDeliveryWithEvent: (delivery, event) =>
+      delegate.commitDeliveryWithEvent(
+        {
+          ...delivery,
+          segmentIndex: 0,
+          personaProfileId: 'persona-fabricated',
+          personaProfileVersion: '0',
+        },
+        event,
+      ),
+    readSession: (sessionId) => delegate.readSession(sessionId),
+    exportJsonl: (sessionId) => delegate.exportJsonl(sessionId),
+  }
+}
+
+/**
+ * Fault: silently normalizes an inconsistent classification/terminalOutcome
+ * pair to a consistent one before delegating, so the boundary accepts a pair it
+ * must reject. Proves the shared combination checks detect a bypassed boundary.
+ */
+export function createCombinationNormalizingEventStore(delegate: EventStorePort): EventStorePort {
+  return {
+    append: (event) => delegate.append(event),
+    commitDeliveryWithEvent: (delivery, event) =>
+      delegate.commitDeliveryWithEvent(
+        {
+          ...delivery,
+          terminalOutcome:
+            delivery.classification === 'fully-delivered'
+              ? 'completed'
+              : delivery.terminalOutcome === 'completed'
+                ? 'cancelled'
+                : delivery.terminalOutcome,
+        },
+        event,
+      ),
+    readSession: (sessionId) => delegate.readSession(sessionId),
+    exportJsonl: (sessionId) => delegate.exportJsonl(sessionId),
+  }
+}
+
+/**
+ * Fault: silently rewrites a contradicting supporting event to agree with the
+ * delivery before delegating, so a known provenance/correlation mismatch is
+ * accepted instead of rejected. Proves the shared correlation checks detect a
+ * bypassed boundary; unrelated version entries are still preserved.
+ */
+export function createProvenanceIgnoringEventStore(delegate: EventStorePort): EventStorePort {
+  return {
+    append: (event) => delegate.append(event),
+    commitDeliveryWithEvent: (delivery, event) =>
+      delegate.commitDeliveryWithEvent(delivery, {
+        ...event,
+        sessionId: delivery.sessionId,
+        turnId: event.turnId === null ? null : delivery.turnId,
+        segmentId: event.segmentId === null ? null : delivery.segmentId,
+        outputId: event.outputId === null ? null : delivery.outputId,
+        versions:
+          event.versions === null
+            ? null
+            : {
+                ...event.versions,
+                ...(event.versions['personaProfileId'] !== undefined &&
+                delivery.personaProfileId !== null
+                  ? { personaProfileId: delivery.personaProfileId }
+                  : {}),
+                ...(event.versions['personaProfileVersion'] !== undefined &&
+                delivery.personaProfileVersion !== null
+                  ? { personaProfileVersion: delivery.personaProfileVersion }
+                  : {}),
+              },
+      }),
+    readSession: (sessionId) => delegate.readSession(sessionId),
+    exportJsonl: (sessionId) => delegate.exportJsonl(sessionId),
+  }
+}
+
+/**
+ * Fault: a rejected delivery is persisted anyway. When the first commit is
+ * rejected (for example because a required field was omitted), the wrapper
+ * repairs the omitted field to an explicit null and commits again through the
+ * delegate, which stores **both** the delivery record and its supporting event
+ * behind the failed acknowledgement. This is not a record-only orphan: the
+ * whole batch is published despite the failure. Proves the shared snapshot
+ * check detects state published behind a failed acknowledgement, and the retry
+ * check detects that the consumed identity can no longer be applied.
+ */
+export function createPersistDespiteRejectionEventStore(delegate: EventStorePort): EventStorePort {
+  return {
+    append: (event) => delegate.append(event),
+    async commitDeliveryWithEvent(delivery, event) {
+      const ack = await delegate.commitDeliveryWithEvent(delivery, event)
+      if (ack.delivery.status === 'failed') {
+        await delegate.commitDeliveryWithEvent(
+          {
+            ...delivery,
+            segmentIndex: delivery.segmentIndex ?? null,
+            personaProfileId: delivery.personaProfileId ?? null,
+            personaProfileVersion: delivery.personaProfileVersion ?? null,
+          },
+          event,
+        )
+      }
+      return ack
+    },
+    readSession: (sessionId) => delegate.readSession(sessionId),
+    exportJsonl: (sessionId) => delegate.exportJsonl(sessionId),
+  }
+}
+
+/**
+ * Fault: when a delivery is rejected, the wrapper still publishes its
+ * supporting event without the delivery. This leaves a partial event behind a
+ * failed acknowledgement. Proves the shared snapshot checks detect partial
+ * events, not only partial delivery records.
+ */
+export function createPartialEventOnRejectedDeliveryEventStore(
+  delegate: EventStorePort,
+): EventStorePort {
+  return {
+    append: (event) => delegate.append(event),
+    async commitDeliveryWithEvent(delivery, event) {
+      const ack = await delegate.commitDeliveryWithEvent(delivery, event)
+      if (ack.delivery.status === 'failed') {
+        await delegate.append(event)
+      }
+      return ack
+    },
+    readSession: (sessionId) => delegate.readSession(sessionId),
+    exportJsonl: (sessionId) => delegate.exportJsonl(sessionId),
+  }
+}
+
 /** Fault: returns confirmed history in insertion order instead of event-seq order. */
 export function createInsertionOrderedHistoryQuery(source: {
   readonly deliveries: ConfirmedDelivery[]

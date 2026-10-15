@@ -29,6 +29,7 @@ The rules the verification agent applies and the QA records the team maintains.
 | INV-06 (projection no gap / idempotent) | C-20 | `m6-storage.test.ts::INV-06`; conformance `projection-no-gap-claim`, `projection-idempotent` |
 | INV-07 (record isolation) | C-24 | `m6-storage.test.ts` (isolation tests) |
 | INV-08 (history ordering) | C-25 | `m6-storage.test.ts` (ordering test) |
+| INV-09 (delivery attribution and consistent evidence) | C-46, C-47 | `m5-attribution.test.ts` (capture, persistence and reconstruction ordering); conformance `delivery-invalid-combination:*`, `delivery-invalid-event:*`, `delivery-correlation:*`, `delivery-provenance:*`; negative adapters `createCombinationNormalizingEventStore`, `createProvenanceIgnoringEventStore` |
 | FR-06 (history excludes non-delivered) | C-17, C-21 | `m6-storage.test.ts` (confirmed-history tests); conformance `history-fully-delivered-only` |
 | FR-06 (JSONL export carries `versions`) | C-22 | `m6-storage.test.ts` (version attribution) |
 | FR-06 / C-12 (replay isolation) | C-12 | `m6-storage.test.ts` (replay-isolation test) |

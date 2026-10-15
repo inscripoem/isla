@@ -13,7 +13,7 @@ entries:
       retaining actual M6 regressions and testing two M5 coordinators sharing storage.
     requirements: [FR-06]
     invariants: [INV-09]
-    cases: [C-45, C-46]
+    cases: [C-46, C-47]
     commits: []
     agent: opencode/deepseek-v4-flash
     provider: self-api

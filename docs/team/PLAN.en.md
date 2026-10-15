@@ -1,10 +1,10 @@
 # Isla — Team Work Plan v0.2
 
-Status: under review · 2026-10-10.5 · [Project overview](../../README.md)
+Status: under review · 2026-10-15.1 · [Project overview](../../README.md)
 
 ## Requirements and course-deliverable work
 
-The [candidate register](REQUIREMENTS.en.md) defines FR-01–FR-06, NFR-01–NFR-06 and INV-01–INV-03 mapped to the established module responsibilities; requirement acceptance remains under review. M1–M6 are module roles, not requirement IDs. The preparation baseline has executable deterministic tests and an actual supervisory review record. Numerical targets, the comparison baseline and named team reviewers remain to be settled before claiming the corresponding product acceptance; they do not block offline module development.
+The [candidate register](REQUIREMENTS.en.md) defines FR-01–FR-06, NFR-01–NFR-06 and INV-01–INV-09 mapped to the established module responsibilities; requirement acceptance remains under review. M1–M6 are module roles, not requirement IDs. The preparation baseline has executable deterministic tests and an actual supervisory review record. Numerical targets, the comparison baseline and named team reviewers remain to be settled before claiming the corresponding product acceptance; they do not block offline module development.
 
 S1-01 is divided into six concrete work items: R1 requirements/schema; R2 architecture/context/state/traceability; R3 governance and six blocking gates; R4 requirement-linked tests and offline integration; R5 authentic process records and six-member report input; R6 controlled comparison and demo. R1/R2 are coordinated by M5 with module-owner input; M6 leads R3 tooling; each owner supplies R4 tests and R5 evidence; M3/M4 supply R6 cases, M6 measurements and M1/M2 visible outputs. M5 consolidates integration and delivery. These follow the existing role boundaries. Each owner supplies their module evidence; the leader consolidates rather than authors every deliverable.
 
@@ -24,16 +24,16 @@ SQLite stores sessions, events, delivery outcomes, profiles and versioned memory
 
 ## Working directories
 
-Directory convention: 2026-10-10. All paths are relative to the repository root. The team-confirmed role allocation and workload ratings are unchanged. Existing console/runtime directories contain the diagnostic foundation; src/evaluation also contains requirements-validation tooling. Planned module directories are created when their real work starts, without placeholder implementations.
+Directory convention: 2026-10-10; implementation status checked 2026-10-15. All paths are relative to the repository root. The team-confirmed role allocation and workload ratings are unchanged. The runtime directory includes the coordinator, while the normal CLI and console still expose the diagnostic foundation. Planned module directories are created when their real work starts, without placeholder implementations.
 
 | Role | Main directory | Status | Editing boundary |
 | --- | --- | --- | --- |
-| M1 | `src/performance/` | Planned | Speech synthesis, browser playback and avatar adapters. Place the browser player public interface under `src/performance/browser/`; keep Node-only/provider code outside that subtree. M2 imports this browser interface. |
+| M1 | `src/performance/` | Fixed synthesis/mapped renderer and browser player merged (PR24/PR29); live services pending | Speech synthesis, browser playback and avatar adapters. Place the browser player public interface under `src/performance/browser/`; keep Node-only/provider code outside that subtree. M2 imports this browser interface. |
 | M2 | `src/console/` | Existing | Console input, configuration, control and presentation; integrate M1's player without taking ownership of playback internals. |
 | M3 | `src/decision/` | Planned | Response selection/intent policy, decision providers and rule reactions; no direct playback or authoritative session changes. |
-| M4 | `src/dialogue/` | Planned | Dialogue providers, persona/context assembly and memory semantics; use M6 storage APIs instead of writing SQL directly. |
+| M4 | `src/dialogue/` | PR23 open; head 1a8e928 awaiting renewed review; prior head 348ae71 independently verified | Dialogue providers, persona/context assembly and memory semantics; use M6 storage APIs instead of writing SQL directly. |
 | M5 — CHANG Xuben | `src/runtime/` | Existing | Authoritative session lifecycle, request scheduling, result validation, cancellation, dispatch and module composition. |
-| M6 | `src/storage/`, `src/evaluation/`, `.github/workflows/` | Storage planned; evaluation validation and CI existing | SQLite/migrations, recording/replay, common evaluation tooling and CI. Each module owner still supplies their own assertions and cases. |
+| M6 | `src/storage/`, `src/evaluation/`, `.github/workflows/` | In-memory storage merged (PR9); SQLite and governance PR26/PR27 remain drafts | SQLite/migrations, recording/replay, common evaluation tooling and CI. Each module owner still supplies their own assertions and cases. |
 
 `src/contracts/` is shared: M5 coordinates changes and affected producers/consumers review them. Owners place their tests in `test/offline/`; provider-dependent tests will use `test/live/`. M6 coordinates common fixtures and CI, not all module tests. Runtime prompts will use `prompts/`, with M3/M4 owning their respective prompt content. `docs/team/` holds English collaboration documents; Chinese understanding copies remain in OneDrive; machine-readable requirements and formal architecture artifacts still belong at the course-prescribed paths when prepared.
 
@@ -89,7 +89,9 @@ M1-02, M4-02 and M3-02 can subsequently proceed in parallel behind the unchanged
 
 M6-02 prepares measurement tooling alongside the offline work and compares implemented providers once usable results exist. M3/M4 supply semantic cases, M1/M2/M5 supply their observations. S1-01 records authentic evidence throughout; R1–R6 refine the existing course-deliverable work, not additional module assignments.
 
-Current readiness: shared application schemas and port interfaces live in `src/contracts/app/`; explicit fixtures, deliberately faulty adapters and reusable conformance suites live under `test/`; the offline composition runner and per-role commands are runnable. See [readiness kits](READINESS-KITS.en.md) for commands, ports to implement and replacement instructions. M5-01 now provides the production response-cycle coordinator with peer ports injected; it is under review. [M5 handoff](HANDOFF-M5-01.en.md) records its validation and the next I1-01 collaboration step. Other product modules, live providers, real browser/SQLite behavior and final quality targets remain pending; passing a fixture kit is not product acceptance.
+Current readiness: main at `b316080` contains the M5 coordinator, M1 fixed synthesis/mapped rendering/browser player, and M6 in-memory storage. Shared application schemas, fixtures and reusable conformance suites are available. PR30 (`1856c26`) adds delivery attribution and shared-store checks and remains open for affected-consumer review; PR23's revised M4 implementation remains unmerged. See [readiness kits](READINESS-KITS.en.md) for commands and replacement instructions. The [M5 handoff](HANDOFF-M5-01.en.md) records its original implementation evidence; its historical publication status is not the current branch status.
+
+The next integration target remains I1-01. The normal console and runtime CLI are diagnostic-only: the business connection, automatic response opportunities, browser execution/receipt bridge and production deadline binding still need integration. Use explicit substitutes for unavailable peer modules while preparing that boundary. The A/B/C labels in issue #22 describe delivery attribution and history recovery, not replacement project milestones; full cross-session recovery is not a prerequisite for the first offline loop. Each new implementation slice still follows the repository's plan approval rule. Live services, SQLite recovery, the product console and final quality targets remain pending; passing module tests is not product acceptance.
 
 ### Readiness command map
 

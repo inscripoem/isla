@@ -5,7 +5,7 @@ import {
 } from '../conformance/storage.conformance'
 import type { StorageKit } from '../conformance/storage.conformance'
 import { runtimeEventSchema } from '../../src/contracts'
-import type { RuntimeEvent } from '../../src/contracts'
+import type { CommitDelivery, RuntimeEvent } from '../../src/contracts'
 import * as correct from '../support/correct-ports'
 import * as faulty from '../support/faulty-ports'
 import {
@@ -184,6 +184,224 @@ describe('M6 focused negative adapters', () => {
       return { ...kit, history: faulty.createInsertionOrderedHistoryQuery(store) }
     })
     expect(violations.map((violation) => violation.code)).toContain('history-ordered-by-event-seq')
+  })
+})
+
+describe('M6 delivery attribution conformance', () => {
+  it('detects a store that drops the delivery attribution on write', async () => {
+    const violations = await collectStorageViolations(() => {
+      const store = correct.createFixtureEventStore()
+      const kit = correctKit({ store })
+      return { ...kit, store: faulty.createAttributionDroppingEventStore(store) }
+    })
+    const codes = violations.map((violation) => violation.code)
+    expect(codes).toContain('attribution-round-trip')
+    expect(codes).toContain('attribution-conflict-index')
+    expect(codes).toContain('attribution-conflict-version')
+    expect(codes).toContain('attribution-conflict-preserves-original')
+  })
+
+  it('detects a store that fabricates the delivery attribution on write', async () => {
+    const violations = await collectStorageViolations(() => {
+      const store = correct.createFixtureEventStore()
+      const kit = correctKit({ store })
+      return { ...kit, store: faulty.createAttributionFabricatingEventStore(store) }
+    })
+    const codes = violations.map((violation) => violation.code)
+    expect(codes).toContain('attribution-round-trip')
+    expect(codes).toContain('attribution-null-preserved')
+  })
+
+  it('rejects an omitted required attribution field without partial mutation (real M6)', async () => {
+    const backend = createInMemoryBackend()
+    const store = createEventStore(backend)
+    const history = createHistoryQuery(backend)
+
+    const omitted: Record<string, unknown> = {
+      ...fixtureCommitDelivery({
+        turnId: 'turn-invalid-delivery',
+        segmentId: 'segment-invalid-delivery',
+        textHash: 'hash-invalid-delivery',
+        text: 'invalid-delivery-spoken',
+      }),
+    }
+    delete omitted['segmentIndex']
+
+    const ack = await store.commitDeliveryWithEvent(
+      omitted as unknown as CommitDelivery,
+      fixtureRuntimeEvent({
+        eventId: 'evt-invalid-delivery',
+        seq: 1,
+        type: 'delivery.committed',
+      }),
+    )
+
+    expect(ack.delivery.status).toBe('failed')
+    expect(ack.event.outcome).toBe('failed')
+    // The rejected delivery leaves no partial event, record or history behind.
+    expect(await store.readSession(FIXTURE_SESSION_ID)).toHaveLength(0)
+    expect(await history.confirmedHistory(FIXTURE_SESSION_ID)).toHaveLength(0)
+  })
+
+  it('detects a store that ignores an omitted required attribution field', async () => {
+    const violations = await collectStorageViolations(() => {
+      const store = correct.createFixtureEventStore()
+      const kit = correctKit({ store })
+      return { ...kit, store: faulty.createAttributionDroppingEventStore(store) }
+    })
+    const codes = violations.map((violation) => violation.code)
+    expect(codes).toContain('attribution-omitted-rejected:segmentIndex')
+    expect(codes).toContain('attribution-omitted-rejected:personaProfileId')
+    expect(codes).toContain('attribution-omitted-rejected:personaProfileVersion')
+  })
+
+  it('detects state persisted behind a rejected acknowledgement', async () => {
+    const violations = await collectStorageViolations(() => {
+      const store = correct.createFixtureEventStore()
+      const kit = correctKit({ store })
+      // This adapter persists both the delivery and its supporting event after a
+      // rejected acknowledgement; it is not a record-only orphan.
+      return { ...kit, store: faulty.createPersistDespiteRejectionEventStore(store) }
+    })
+    const codes = violations.map((violation) => violation.code)
+    expect(codes).toContain('attribution-omitted-no-partial:segmentIndex')
+    // The published state also consumes the identity, so the retry cannot apply.
+    expect(codes).toContain('attribution-omitted-retry:segmentIndex')
+  })
+
+  it('detects a partial event left behind a rejected delivery', async () => {
+    const violations = await collectStorageViolations(() => {
+      const store = correct.createFixtureEventStore()
+      const kit = correctKit({ store })
+      return { ...kit, store: faulty.createPartialEventOnRejectedDeliveryEventStore(store) }
+    })
+    const codes = violations.map((violation) => violation.code)
+    expect(codes).toContain('attribution-omitted-no-partial:segmentIndex')
+  })
+
+  it('accepts a valid inspection-only kit', async () => {
+    const violations = await collectStorageViolations(() => {
+      const store = correct.createFixtureEventStore()
+      return {
+        store,
+        projection: correct.createFixtureMemoryProjection(),
+        // A HistoryQueryPort is deliberately omitted; inspection is the only view.
+        inspection: inspectionOf(store),
+        replay: correct.createFixtureReplayReader(store),
+        setFailNextCommit: () => {
+          store.failNextCommit = true
+        },
+      }
+    })
+    expect(violations).toEqual([])
+  })
+
+  it('detects an attribution fault visible only through the inspection view', async () => {
+    const violations = await collectStorageViolations(() => {
+      const store = correct.createFixtureEventStore()
+      return {
+        store: faulty.createAttributionDroppingEventStore(store),
+        projection: correct.createFixtureMemoryProjection(),
+        // No HistoryQueryPort: only the inspection view can reveal the fault.
+        inspection: inspectionOf(store),
+        replay: correct.createFixtureReplayReader(store),
+        setFailNextCommit: () => {
+          store.failNextCommit = true
+        },
+      }
+    })
+    const codes = violations.map((violation) => violation.code)
+    expect(codes).toContain('attribution-stored')
+    expect(codes).toContain('attribution-omitted-retry-attribution:segmentIndex')
+    expect(codes).toContain('attribution-conflict-preserves-original')
+  })
+
+  it('reports a missing read view instead of a silent full pass', async () => {
+    const violations = await collectStorageViolations(() => {
+      const store = correct.createFixtureEventStore()
+      return {
+        store,
+        projection: correct.createFixtureMemoryProjection(),
+        replay: correct.createFixtureReplayReader(store),
+        // Deliberately neither a HistoryQueryPort nor an inspection view.
+      }
+    })
+    expect(violations.map((violation) => violation.code)).toEqual([
+      'attribution-read-view-missing',
+    ])
+  })
+})
+
+describe('M6 delivery boundary conformance', () => {
+  it('rejects an inconsistent classification/terminalOutcome pair with no residue (real M6)', async () => {
+    const backend = createInMemoryBackend()
+    const store = createEventStore(backend)
+    const history = createHistoryQuery(backend)
+    const ack = await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({
+        turnId: 'turn-bad-combination',
+        segmentId: 'segment-bad-combination',
+        textHash: 'hash-bad-combination',
+        text: 'bad-combination',
+        classification: 'fully-delivered',
+        terminalOutcome: 'failed',
+      }),
+      fixtureRuntimeEvent({ eventId: 'evt-bad-combination', seq: 1, type: 'delivery.committed' }),
+    )
+    expect(ack.delivery.status).toBe('failed')
+    expect(ack.event.outcome).toBe('failed')
+    if (ack.delivery.status === 'failed') expect(ack.delivery.reasonCode).toBe('invalid_delivery')
+    if (ack.event.outcome === 'failed') expect(ack.event.reasonCode).toBe('invalid_delivery')
+    expect(await store.readSession(FIXTURE_SESSION_ID)).toHaveLength(0)
+    expect(await history.confirmedHistory(FIXTURE_SESSION_ID)).toHaveLength(0)
+  })
+
+  it('rejects contradictory known provenance as one paired failure (real M6)', async () => {
+    const backend = createInMemoryBackend()
+    const store = createEventStore(backend)
+    const ack = await store.commitDeliveryWithEvent(
+      fixtureCommitDelivery({
+        turnId: 'turn-bad-provenance',
+        segmentId: 'segment-bad-provenance',
+        textHash: 'hash-bad-provenance',
+        text: 'bad-provenance',
+        personaProfileId: 'persona-a',
+        personaProfileVersion: '1',
+      }),
+      fixtureRuntimeEvent({
+        eventId: 'evt-bad-provenance',
+        seq: 1,
+        type: 'delivery.committed',
+        versions: { personaProfileId: 'persona-b', personaProfileVersion: '1' },
+      }),
+    )
+    expect(ack.delivery.status).toBe('failed')
+    expect(ack.event.outcome).toBe('failed')
+    if (ack.delivery.status === 'failed') expect(ack.delivery.reasonCode).toBe('inconsistent_delivery')
+    if (ack.event.outcome === 'failed') expect(ack.event.reasonCode).toBe('inconsistent_delivery')
+    expect(await store.readSession(FIXTURE_SESSION_ID)).toHaveLength(0)
+  })
+
+  it('detects a store that bypasses the classification/outcome combination', async () => {
+    const violations = await collectStorageViolations(() => {
+      const store = correct.createFixtureEventStore()
+      const kit = correctKit({ store })
+      return { ...kit, store: faulty.createCombinationNormalizingEventStore(store) }
+    })
+    const codes = violations.map((violation) => violation.code)
+    expect(codes).toContain('delivery-invalid-combination:fully-delivered-failed')
+    expect(codes).toContain('delivery-invalid-combination:not-delivered-completed')
+  })
+
+  it('detects a store that ignores contradictory provenance and correlation', async () => {
+    const violations = await collectStorageViolations(() => {
+      const store = correct.createFixtureEventStore()
+      const kit = correctKit({ store })
+      return { ...kit, store: faulty.createProvenanceIgnoringEventStore(store) }
+    })
+    const codes = violations.map((violation) => violation.code)
+    expect(codes).toContain('delivery-correlation:sessionId:rejected')
+    expect(codes).toContain('delivery-correlation:personaProfileId:rejected')
   })
 })
 
@@ -507,6 +725,7 @@ describe('M6 confirmed history (C6/C7)', () => {
         textHash: 'h2',
         text: 'partial',
         classification: 'partial-unknown',
+        terminalOutcome: 'cancelled',
       }),
       fixtureRuntimeEvent({ eventId: 'e2', seq: 2, type: 'delivery.committed' }),
     )
@@ -517,6 +736,7 @@ describe('M6 confirmed history (C6/C7)', () => {
         textHash: 'h3',
         text: 'unspoken',
         classification: 'not-delivered',
+        terminalOutcome: 'failed',
       }),
       fixtureRuntimeEvent({ eventId: 'e3', seq: 3, type: 'delivery.committed' }),
     )
@@ -963,6 +1183,7 @@ describe('M6 storage integration (through the ports)', () => {
         textHash: 'h2',
         text: 'unspoken',
         classification: 'not-delivered',
+        terminalOutcome: 'failed',
       }),
       fixtureRuntimeEvent({ eventId: 'i-4', seq: 4, type: 'delivery.committed' }),
     )

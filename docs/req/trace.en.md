@@ -45,8 +45,8 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-41 | implemented | `test/offline/m6-storage.test.ts` | event content equality keeps array order significant |
 | C-43 | implemented | `test/offline/m6-storage.test.ts` | an event whose payload is not a JSON value is rejected before publication |
 | C-44 | implemented | `test/offline/m6-storage.test.ts` | a sparse array payload is not conflated with an empty array |
-| C-45 | implemented | `test/offline/m5-attribution.test.ts` | M5 delivery attribution capture: normal, request mutation, Stop, late receipt, shared sessions and explicit indices |
 | C-46 | implemented | `test/offline/m5-attribution.test.ts` | M6 delivery attribution persistence: strict fields, nulls, ordering and conflicts |
+| C-47 | implemented | `test/offline/m5-attribution.test.ts` | M5 delivery attribution capture: normal, request mutation, Stop, late receipt, shared sessions and explicit indices |
 
 ## Requirement trace
 
@@ -57,7 +57,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | FR-03 | M1 | C-06, C-11 | — |
 | FR-04 | M1 | C-01, C-04, C-10 | — |
 | FR-05 | M5 | C-03, C-04 | C-08 |
-| FR-06 | M6 | C-12, C-17, C-21, C-22, C-45, C-46 | — |
+| FR-06 | M6 | C-12, C-17, C-21, C-22, C-46, C-47 | — |
 | NFR-01 | M5 | — | metric baseline |
 | NFR-02 | M5 | C-10, C-17 | C-05, C-09, recovery duration |
 | NFR-03 | M3 | — | C-16, human rubric |
@@ -72,7 +72,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-06 | M6 | C-20 | — |
 | INV-07 | M6 | C-24 | — |
 | INV-08 | M6 | C-25 | — |
-| INV-09 | M5 | C-45, C-46 | M4/SQLite consumer rollout |
+| INV-09 | M5 | C-46, C-47 | M4/SQLite consumer rollout |
 
 ## Approval record
 
@@ -81,7 +81,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | READINESS-PLAN | Approved by the user on 2026-10-10 after a Chinese explanation | AGENTS.md authorization |
 | Contract/test design | Approved by the supervisor after corrections | `docs/team/READINESS-REVIEW.en.md` |
 | First-slice acceptance cases | Reviewed before implementation | READINESS-REVIEW |
-| Step A and relevant unsubmitted storage tests | Implementation approved by the user on 2026-10-14; result under review | Issue #22; storage revision 2026-10-14.1; no publication authorized |
+| Step A and relevant unsubmitted storage tests | Implementation and subsequent PR publication approved by the user; PR30 remains open for affected-consumer review | Issue #22; storage revision 2026-10-14.1; [PR30](https://github.com/inscripoem/isla/pull/30), published head `1856c26`. Current follow-up edits are local only; no further publication is authorized. |
 | Final numeric quality/performance/cost/retention targets | Not approved | Await a reviewed measured baseline |
 
 ## Honest limitations
