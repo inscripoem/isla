@@ -46,6 +46,12 @@ export class KokoroProviderError extends Error {
  * fictitious abort signal and must not claim to stop inference. The returned
  * Promise represents the real in-flight generation that occupies the adapter's
  * single slot until it settles.
+ *
+ * The provider is a long-lived dependency. Composition retains exactly one
+ * `SynthesisPort` adapter per provider and reuses it; the returned Promise is the
+ * only settlement signal, so an adapter-level `busy` result or a logical abort
+ * does not prove that this generation finished. See the performance README for
+ * the composition and replacement sequence.
  */
 export interface KokoroProvider {
   generate(input: KokoroProviderInput): Promise<KokoroRawAudio>
