@@ -1,8 +1,9 @@
-import type { PerformanceReceipt, PlayerPort, SynthesisPort } from '../../src/contracts'
+import type { PerformanceReceipt, PlayerPort } from '../../src/contracts'
 import type {
   KokoroProvider,
   KokoroProviderInput,
   KokoroRawAudio,
+  KokoroSynthesis,
   KokoroVoiceProfile,
 } from '../../src/performance/kokoro-types'
 import type { AudioResourceRegistry } from '../../src/performance/audio-resources'
@@ -251,7 +252,7 @@ export function createFixedRefFactory(ref: string): () => string {
 }
 
 export interface M1KokoroSynthesisKit {
-  readonly synthesis: SynthesisPort
+  readonly synthesis: KokoroSynthesis
   readonly provider: FakeKokoroProvider
   readonly registry: AudioResourceRegistry
   readonly clock: VirtualClock
