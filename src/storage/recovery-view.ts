@@ -3,7 +3,7 @@ import type { StoredDelivery } from './backend'
 import type { StoredDeliveriesSource } from './history-query'
 
 /**
- * M6 storage — recovery view (B3; ADR-005, INV-11).
+ * M6 storage — recovery view (B3; ADR-005, INV-12).
  *
  * Purpose
  * -------
