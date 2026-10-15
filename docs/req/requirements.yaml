@@ -84,6 +84,9 @@ requirements:
       - kind: deterministic
         description: Stored fixtures reconstruct order and outcomes; replay is isolated from live state.
         cases: [C-12, C-17]
+      - kind: deterministic
+        description: Confirmed history returns only fully-delivered records; the JSONL export carries event version attribution.
+        cases: [C-21, C-22]
 
   - id: NFR-01
     title: Responsiveness and synchronization
@@ -210,3 +213,77 @@ requirements:
       - kind: deterministic
         description: Zero privileged transitions from untrusted inputs.
         cases: [C-07]
+
+  - id: INV-04
+    title: Event identity within a session and session sequence numbers are unique
+    category: invariant
+    priority: must
+    owner: M6
+    collaborators: [M5]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Within a session, reusing an event id with different content or a session sequence number is rejected without overwriting; the same event id in another session is stored independently (FR-06; C7 session-scoped identity).
+        cases: [C-18, C-23]
+      - kind: deterministic
+        description: A conflicting atomic commit reports the conflict cause on both the delivery and the event acknowledgement and persists nothing (FR-06; C-17).
+        cases: [C-39]
+      - kind: deterministic
+        description: Event content equality is canonical (object key order is irrelevant) and keeps array order significant, so a re-serialised equivalent event is a duplicate rather than a conflict (FR-06).
+        cases: [C-40, C-41]
+      - kind: deterministic
+        description: An event payload must be a JSON value; an unsupported payload (undefined, function, symbol, bigint, non-finite number, sparse-array hole, Date/Map/Set, cycle) is rejected with `unsupported_payload` before publication and persists nothing, including in the atomic delivery path (FR-06).
+        cases: [C-43, C-44]
+
+  - id: INV-05
+    title: A delivery and its supporting event commit atomically
+    category: invariant
+    priority: must
+    owner: M6
+    collaborators: [M5, M4]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: A failed atomic write is reported for both the delivery and the event and persists no partial record; if any mutation in the batch cannot be prepared, none is published, so every index and history view is unchanged (FR-06; C-17).
+        cases: [C-19, C-38]
+
+  - id: INV-06
+    title: A memory projection never advances across a gap and is idempotent
+    category: invariant
+    priority: must
+    owner: M6
+    collaborators: [M4]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: A gap does not advance the projection and reapplying an applied event does not advance it (FR-06; C-12).
+        cases: [C-20]
+
+  - id: INV-07
+    title: Committed records are isolated from caller mutation
+    category: invariant
+    priority: must
+    owner: M6
+    collaborators: [M4, M5]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Mutating a caller's input after commit, or a returned record, cannot change committed state or JSONL output (FR-06 storage boundary).
+        cases: [C-24]
+
+  - id: INV-08
+    title: Confirmed history is ordered by the supporting event sequence
+    category: invariant
+    priority: must
+    owner: M6
+    collaborators: [M4, M5]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: confirmedHistory(sessionId) returns fully-delivered records ordered by the supporting event seq ascending, independent of insertion order (FR-06; M4/M5 issue #22).
+        cases: [C-25]

@@ -1,0 +1,287 @@
+# AI-use log (D1 / gate G6)
+# A pull request that changes code or prompts must update this file.
+# One entry per supervised change. English only.
+version: 1
+entries:
+  - date: 2026-10-12
+    task: M6-01
+    branch: m6-storage
+    change: "Implement in-memory M6 storage ports (EventStorePort, MemoryProjectionPort, ReplayReaderPort, HistoryQueryPort)"
+    requirements: [FR-06]
+    invariants: [INV-04, INV-05, INV-06]
+    commits: [f6bfae0, 77791d5]
+    agent: opencode/deepseek-v4-flash
+    human_review: "Corrected a production fault-injection API leak; moved failure injection into the test adapter"
+  - date: 2026-10-12
+    task: M6-01
+    branch: m6-storage
+    change: "Replace production fault hooks with an injected StorageBackend (ADR-001); add traceability artifacts"
+    requirements: [FR-06]
+    invariants: [INV-04, INV-05, INV-06]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Directed by the M6 owner after reviewing AGENTS.md and READINESS-KITS"
+  - date: 2026-10-13
+    task: M6-01
+    branch: m6-storage
+    change: "Session-scope event identity (PR #9 review item 1); fixture aligned to C7"
+    requirements: [FR-06]
+    invariants: [INV-04]
+    cases: [C-23]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "M5 review requested session scoping; implemented with ADR-002"
+  - date: 2026-10-13
+    task: M6-01
+    branch: m6-storage
+    change: "Isolate committed records (deep copy on write/read); back the history query by the store (PR #9 review item 2)"
+    requirements: [FR-06]
+    invariants: [INV-07]
+    cases: [C-24]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "M5 review requested an isolation boundary; implemented with ADR-002"
+  - date: 2026-10-13
+    task: M6-01
+    branch: m6-storage
+    change: "Order confirmed history by the supporting event seq (PR #9 review item 3; issue #22 ordering wording)"
+    requirements: [FR-06]
+    invariants: [INV-08]
+    cases: [C-25]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "M5 review required the documented ordering; implemented with ADR-002"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-storage
+    change: "PR #9 follow-up: make StorageBackend.commit atomic across the whole batch (prepare all, then publish); a later unpublishable mutation leaves no partial state"
+    requirements: [FR-06]
+    invariants: [INV-05]
+    cases: [C-38]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "M5 re-review (Medium): preserve atomicity when a later mutation fails; ADR-002 D4"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-storage
+    change: "PR #9 follow-up: report a conflicting atomic commit as `conflict` (not `storage_unavailable`) on both the delivery and the event acknowledgement"
+    requirements: [FR-06]
+    invariants: [INV-04]
+    cases: [C-39]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Self-review: the catalog promises a `conflict` response; ADR-002 D1"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-storage
+    change: "PR #9 follow-up: canonical (key-order-insensitive) event content equality, so a re-serialised equivalent event is a duplicate not a conflict"
+    requirements: [FR-06]
+    invariants: [INV-04]
+    cases: [C-40]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Self-review: the documented decision is canonical equality; the code used JSON.stringify; ADR-002 D1"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-storage
+    change: "PR #9 follow-up: canonical content equality compares non-plain values by content (Date/Map/Set via JSON semantics) and keeps array order significant; hardened tests"
+    requirements: [FR-06]
+    invariants: [INV-04]
+    cases: [C-40, C-41]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Self-review (mock M5): the first canonical implementation flattened Date payloads to `{}`; ADR-002 D1"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-storage
+    change: "PR #9 follow-up: define an event payload contract (JSON values) and reject unsupported payloads with `unsupported_payload` before publication; canonical comparison for accepted values (fixes sparse-array-vs-empty equality)"
+    requirements: [FR-06]
+    invariants: [INV-04]
+    cases: [C-41, C-43, C-44]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "M5 re-review: sparse array conflated with empty array; ADR-002 D1"
+  - date: "2026-10-13"
+    task: M1-01-A
+    branch: feat/m1-01-adapters
+    member: Pioneer141 (M1)
+    change: >-
+      Implement fixed-audio metadata preparation and mapped renderer adapters,
+      browser-safe shared type declarations, adapter documentation and real-adapter
+      regression tests. Preserve the four original fixture tests and shared contracts.
+    requirements: [FR-03, FR-04, NFR-06]
+    invariants: [INV-02]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: cityu
+    model: CS5351/DeepSeek-V4-Flash
+    opencode_version: 1.18.34
+    launch_flags: [--pure, --agent, build, --variant, xhigh]
+    sessions:
+      - ses_ecb9098ceffeZ18cTiNm64LYzZ
+      - ses_ecb7c2977ffeoamK3oUTKO1Pam
+    supervision: >-
+      Codex coordinated the genuine OpenCode sessions and independent AI review.
+      Review corrections addressed command snapshots, malformed driver observations,
+      capability and no-op validation, controlled audio references, request validation,
+      deadline checks and test-oracle accuracy. Codex prepared this publication record;
+      application source and tests were authored through OpenCode.
+    human_review: >-
+      The M1 member approved the v04 design scope, implementation start and publication.
+      Human M5 consumer review is pending; independent AI review is not that approval.
+    transcript_record: >-
+      Complete, unedited exports and run logs are retained privately by M1, including
+      the context-window error, fresh repair session and final LF-only correction.
+      Original transcripts and private evidence are not included in this public repository.
+    verification:
+      platform: Windows
+      node: 24.14.1
+      pnpm: 12.12.0
+      m1: "pnpm test:m1: 44 passed after final LF normalization."
+      typecheck: passed
+      lint: passed
+      build: passed
+      full_suite: >-
+        pnpm verify: 291 passed, 6 failed and 3 unhandled tsx spawn errors.
+        The six failures match the pre-implementation Windows baseline:
+        three import-boundary negative cases and three runtime CLI cases.
+        Full verification is not green on this Windows environment.
+    scope: >-
+      Actual fixed synthesis and mapped renderer, with controlled test dependencies
+      and the existing fixture player. Browser playback, real Stop/history integration,
+      live Kokoro/VTS, durable recovery and complete product acceptance remain pending.
+  - date: "2026-10-14"
+    task: M1-01-A-review-fix
+    branch: feat/m1-01-adapters
+    member: Pioneer141 (M1)
+    change: >-
+      Address M5 review 5515116186 on PR 24: convert a synchronously throwing
+      renderer driver into one correlated failed/driver_error receipt and add a
+      focused regression. Preserve the existing asynchronous rejection and abort paths.
+    requirements: [FR-03, NFR-06]
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: cityu
+    model: CS5351/DeepSeek-V4-Flash
+    opencode_version: 1.18.34
+    launch_flags: [--pure, --agent, build, --variant, xhigh, --auto]
+    sessions:
+      - ses_ec66a3e37ffetzJ7iXW2tXOmZM
+    supervision: >-
+      Codex coordinated the genuine OpenCode session, independently ran verification
+      and arranged an independent AI code review. OpenCode authored both application
+      changes. Codex appended this factual AI-use metadata; the source correction
+      and regression were not manually authored by Codex.
+    human_review: >-
+      M5 requested changes on the original PR head for this synchronous-exception
+      path. The M1 member explicitly authorized the correction, full transcript
+      preservation, commit/push and M5 re-review. Consumer re-review remains pending;
+      independent AI review is not that approval. No merge is authorized.
+    transcript_record: >-
+      The complete original native OpenCode export, raw run events and both stderr
+      files are retained privately. All assistant messages identify the expected
+      CityU model. The authentic sequence records the added regression failing
+      before production repair, followed by a passing run. No original transcript
+      was sanitized, reordered or replaced by a summary.
+    verification:
+      platform: Windows
+      node: 24.14.1
+      pnpm: 12.12.0
+      regression_before_repair: "pnpm test:m1: 1 failed, 44 passed."
+      m1: "pnpm test:m1: 45 passed after repair; independently rerun."
+      typecheck: passed
+      lint: passed
+      build: passed
+      full_suite: >-
+        pnpm verify: 292 passed, 6 failed and 3 unhandled tsx spawn errors.
+        The six failure names match this correction's fresh Windows baseline
+        (291 passed, 6 failed, 3 errors): three import-boundary negative cases and
+        three runtime CLI cases. Full verification is not green on Windows.
+    scope: >-
+      Synchronous renderer-driver failure receipts and one regression only;
+      preserve original command identity, one dispatch and exactly one binding
+      release invocation. The fixture player remains identified. A production
+      same-domain expiry-aborting DeadlineGate is a coordinated I1-01 requirement;
+      browser increment B and other owners' modules are unchanged by this correction.
+  - date: "2026-10-15"
+    task: M1-01-B
+    branch: feat/m1-01-player
+    member: Pioneer141 (M1)
+    change: >-
+      Implement single-output fixed-audio browser playback, the shared PlayerPort
+      adapter, an HTMLAudioElement driver and browser-safe public exports. Add
+      controlled real-player tests and an isolated localhost demonstration with
+      registered fixed speech assets; preserve increment A and shared contracts.
+    requirements: [FR-04, FR-05, NFR-06]
+    invariants: [INV-01]
+    commits: []
+    agent: opencode/deepseek-flash
+    provider: deepseek
+    model: deepseek-flash
+    opencode_version: 1.18.34
+    launch_flags: [--pure, --agent, build, --variant, xhigh, --auto]
+    sessions:
+      - ses_ec4ddc964ffe3niUxGTrN7EdbC
+      - ses_ec4d021abffetKtAtVh3qgdQW3
+    supervision: >-
+      Codex coordinated genuine native OpenCode execution, captured evidence,
+      independently ran checks and arranged independent AI code review. Application
+      source, tests and demonstration were authored through OpenCode. Codex prepared
+      this metadata. The user's temporary project-only override selects official
+      deepseek/deepseek-flash; historical CityU-model entries remain unchanged.
+    human_review: >-
+      The M1 member approved P001 v02 and interface/test design v04, then instructed
+      execution of the prepared next increment. Human M2 and M5 consumer review:
+      pending; M2 and M5 are the requested functional consumers at publication. Independent AI review:
+      no remaining material findings in the final working-tree version, with 14 file hashes retained privately; it does not constitute consumer approval.
+      Agents do not merge this repository.
+    transcript_record: >-
+      Complete unedited run JSONL and stderr, cumulative native session exports and
+      export stderr are retained privately per execution round. The second genuine
+      session began correction round 2 and was explicitly continued for rounds 3 and 4; failed
+      regressions and correction chronology remain in their original records.
+      All four raw files for every round are saved and audited against the expected official provider/model; all run/export exits are zero. Summaries and annotations
+      do not replace raw originals; private transcripts are excluded from this repository.
+    fixed_assets: >-
+      Two pre-generated Windows System.Speech.Synthesis Microsoft David Desktop
+      en-US WAV assets (rate 0, volume 100) match the fixture dialogue. Registered
+      references, measured frame-derived durations, Blob maps and SHA-256 hashes are
+      checked together. These fixed assets do not establish runtime Kokoro integration.
+    verification:
+      platform: Windows
+      node: 24.14.1
+      pnpm: 12.12.0
+      baseline_m1: "pnpm test:m1: 45 passed on main 3668e4c before implementation."
+      baseline_full_suite: >-
+        pnpm verify: 315 passed, 6 failed and 3 unhandled tsx spawn errors.
+        The six named failures are three import-boundary negative cases and three
+        runtime CLI cases; typecheck and lint passed.
+      regression_sequence: >-
+        Genuine correction rounds retain their actual failing regressions before
+        repair, including deferred cleanup/cancellation and pending-resolver disposal.
+        Round 2 recorded 7 failed/86 passed before repair; round 4 recorded 3 failed/95 passed before repair, then 98 passed. Independent probes exposed the intermediate create/cancel/dispose defects and are preserved.
+      m1: "pnpm test:m1: 98 passed; independently rerun on the final B working-tree version based on 3668e4c"
+      typecheck: "passed"
+      lint: "passed"
+      build: "passed"
+      full_suite: >-
+        pnpm verify: 368 passed, the same six named baseline failures and three tsx ENOENT errors.
+        Typecheck and lint passed; build passed independently. Full verification is not green on Windows.
+      browser: >-
+        Chrome 155 / Windows against final source hashes observed natural completion, Stop, active Dispose and rejection after disposal. Use actual HTMLAudioElement
+        playing/ended events for natural completion and cancelled receipts plus
+        paused/cleared-src/object-URL cleanup observations for Stop. These are media
+        API observations, not physical acoustic output or silence measurements.
+      browser_boundary: >-
+        Final actual browser/index.ts graph passed: 12 source files, no Node/backend/test or unresolved relative imports. The existing shared
+        checker and negative assertions remain unchanged; permanent actual-entry
+        coverage requires M5/M6 coordination.
+      ci: "Pending for the new branch head when this record was written; corresponding CI status is reported in the PR and Issue progress comment"
+    scope: >-
+      Actual local playback controller, PlayerPort wrapper and DOM driver, with
+      controlled dependencies for automated tests and real browser media-API
+      observation in an isolated demo. M2 product wire/bootstrap and M5 authoritative
+      deadline/start-aware delivery-history integration remain pending. Live
+      Kokoro/VTS, acoustic/network timing and complete product acceptance are not
+      established. Issue 2 remains open with unfinished M1-01/M1-02 items unchecked.
