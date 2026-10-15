@@ -154,6 +154,21 @@ export function createEventStore(backend: StorageBackend = createInMemoryBackend
       const payloadIssue = jsonValueIssue(event.payload)
       if (payloadIssue !== null) return unsupportedFailure(event, payloadIssue)
 
+      // Symmetric with `commitDeliveryWithEvent`: the durable boundary validates
+      // the complete event before any mutation, so a malformed event (for example
+      // a `versions` member that is null or not a string) is rejected with no
+      // record/sequence residue. Valid legacy `versions: null` or absent persona
+      // keys remain valid.
+      if (!runtimeEventSchema.safeParse(event).success) {
+        return appendAckSchema.parse({
+          outcome: 'failed',
+          eventId: event.eventId,
+          seq: event.seq,
+          reasonCode: 'invalid_event',
+          message: 'event failed schema validation',
+        })
+      }
+
       const sameId = backend.eventById(event.sessionId, event.eventId)
       if (sameId !== undefined) {
         return sameContent(sameId, event)

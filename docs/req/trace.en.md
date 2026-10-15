@@ -57,6 +57,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-45 | implemented | `test/offline/m6-sqlite-backend.test.ts` | the in-memory and SQLite backends agree end-to-end on accepted and rejected payloads |
 | C-46 | implemented | `test/offline/m5-attribution.test.ts` | M6 delivery attribution persistence: strict fields, nulls, ordering and conflicts |
 | C-47 | implemented | `test/offline/m5-attribution.test.ts` | M5 delivery attribution capture: normal, request mutation, Stop, late receipt, shared sessions and explicit indices |
+| C-49 | implemented | `test/offline/m6-storage.test.ts` | an event is validated against the schema before append mutates storage |
 
 ## Requirement trace
 
@@ -77,7 +78,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-01 | M5 | C-03, C-04 | — |
 | INV-02 | M5 | C-06 | — |
 | INV-03 | M5 | C-07 | — |
-| INV-04 | M6 | C-18, C-23, C-39, C-40, C-41, C-43, C-44 | — |
+| INV-04 | M6 | C-18, C-23, C-39, C-40, C-41, C-43, C-44, C-49 | — |
 | INV-05 | M6 | C-19, C-38, C-42 | — |
 | INV-06 | M6 | C-20 | — |
 | INV-07 | M6 | C-24 | — |
