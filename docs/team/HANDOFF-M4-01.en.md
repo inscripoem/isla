@@ -1,7 +1,7 @@
 # M4-01 dialogue handoff
 
-Revision: 2026-10-15.1. Owner: M4 — lowen. Status: under review.
-Branch: `m4v1`, based on merged preparation commit `384969d`. Local commit only; no push or PR.
+Revision: 2026-10-15.2. Owner: M4 — lowen. Status: under review.
+Branches: `m4v1` (open as PR #23) and `feat/m4-storage-integration` for the consumption tests described below.
 
 ## Implemented behavior
 
@@ -62,14 +62,16 @@ Shared C1–C7 schemas and port signatures are unchanged. `src/contracts/` is un
 
 ## Verification
 
-Verified on 2026-10-15 with Node 22.22.2 and pnpm 12.11.2: 51 M4 tests passed in `test/offline/m4-dialogue.test.ts`. Typecheck, lint (0 warnings / 0 errors) and build passed. The full suite reports 287 passed / 7 failed (294 tests in 16 files, 3 files failing), and all 7 failures are pre-existing Windows-platform issues unrelated to this change: `cli.test.ts` ×3 (spawning `node_modules/.bin/tsx` needs `.cmd` on Windows), `boundaries.test.ts` ×3 (path-resolution negative cases are not observable on Windows) and `requirements.test.ts` ×1 (this machine has `core.autocrlf = true`, so the file is CRLF while the test compares LF; the repository has no `.gitattributes`). Commands from the repository root:
+Verified on 2026-10-15 with Node 22.22.2 and pnpm 12.11.2: 59 M4 tests passed — 51 in `test/offline/m4-dialogue.test.ts` and 8 in `test/offline/m4-storage-integration.test.ts`. Typecheck, lint (0 warnings / 0 errors) and build passed. The full suite reports 422 passed / 7 failed (429 tests in 17 files, 3 files failing), and all 7 failures are pre-existing Windows-platform issues unrelated to this change: `cli.test.ts` ×3 (spawning `node_modules/.bin/tsx` needs `.cmd` on Windows), `boundaries.test.ts` ×3 (path-resolution negative cases are not observable on Windows) and `requirements.test.ts` ×1 (this machine has `core.autocrlf = true`, so the file is CRLF while the test compares LF; the repository has no `.gitattributes`). Commands from the repository root:
 
 ```sh
 pnpm test:m4
 pnpm verify
 ```
 
-Coverage, stated precisely. **Production dialogue** is exercised by `test/offline/m4-dialogue.test.ts`, which also runs the shared dialogue conformance collector against `createDialoguePort`. The composition and regression suites do **not** drive the production port: `test/support/runner-factories.ts` substitutes `createFixtureDialoguePort` when the caller supplies no dialogue port, and `test/offline/composition.test.ts` passes none. `createFixtureDialoguePort` in `test/support/correct-ports.ts` is an independent fixture implementation, not this module. M4-01 does not change that wiring, so **the production port has no cross-module coverage yet**; the cases that need it are listed below.
+Coverage, stated precisely. **Production dialogue** is exercised by `test/offline/m4-dialogue.test.ts`, which also runs the shared dialogue conformance collector against `createDialoguePort`. **Cross-module consumption** is exercised by `test/offline/m4-storage-integration.test.ts`, which drives the production port against the production M6 store — `createEventStore` / `createHistoryQuery` over `createInMemoryBackend` — rather than against a stand-in. It asserts consumer-visible behaviour only: that M4 reads history and never appends to it; that the durable source defines the record set while the local store contributes attribution alone; that a receiptless record is listed as confirmed history by M6 yet kept out of spoken memory by M4; that a failed atomic commit leaves no memory at all; that history follows the supporting event `seq` rather than arrival order; that two sessions stay apart when both reuse the same turn id; and that a restart over the same durable state rebuilds an identical prompt.
+
+The composition and regression suites still do **not** drive the production port: `test/support/runner-factories.ts` substitutes `createFixtureDialoguePort` when the caller supplies no dialogue port, and `test/offline/composition.test.ts` passes none. `createFixtureDialoguePort` in `test/support/correct-ports.ts` is an independent fixture implementation, not this module. M4 does not change that wiring, so the coordinator-driven cases remain M5's; they are listed below.
 
 The M4 tests cover generation invariants and the four termination paths; delivery memory, duplicate/conflict handling and caller-mutation isolation; session isolation of the registry, the delivery key and the persona attribution; context assembly, turn and character trimming, and the hard cap including a zero budget and an over-long newest turn; recall charging and recall that cannot fit; the durable-source composition rule and the local stand-in flag; FR-02 admission including `partial-unknown` + `failed`; interrupted-utterance marking; and persona authoring including the bible drift guard.
 
@@ -79,7 +81,7 @@ M4 supplies `createDialoguePort` and the delivery memory store, then reviews how
 
 | Owner | Requested implementation/review | Acceptance evidence |
 | --- | --- | --- |
-| M5 | Add cross-module cases that drive the **production** dialogue port rather than the fixture: failed delivery and session isolation through the coordinator. | A composed turn where a delivery fails after playback started, and one port instance serving two sessions, both against `createDialoguePort`. |
+| M5 | Add cross-module cases that drive the **production** dialogue port rather than the fixture: failed delivery and session isolation through the coordinator. | A composed turn where a delivery fails after playback started, and one port instance serving two sessions, both against `createDialoguePort`. Direct M4→M6 consumption is already covered by `test/offline/m4-storage-integration.test.ts`; what remains is the coordinator-driven path. |
 | M5 | Carry `DialogueSegment.index` through the coordinated C6/C7 update — see limitation 2 below. | An explicit ordinal present on a persisted delivery and on a confirmed-history record. |
 | M1 | Confirm which receipt ids accompany audio evidence, so `SPOKEN_RECEIPT_POLICY` admits the right deliveries. | Interrupted second segment leaves no confirmed spoken history; a later valid receipt completes the delivery once. |
 | M3 | Confirm that one `replyIntent` per turn is enough for the template lookup, and that allowed-intent filtering happens before the request reaches M4. | An out-of-set intent never reaches M4 as a valid request. |

@@ -1,6 +1,6 @@
 # Team Development
 
-Document revision: 2026-10-15.1. The team-confirmed allocation is unchanged.
+Document revision: 2026-10-15.2. The team-confirmed allocation is unchanged.
 
 Start an agent from the repository root with a short request such as "I am M3. Start my first task." [AGENTS.md](../../AGENTS.md) maps the role to its task, directories, tests and planning workflow. If the tool does not load AGENTS.md automatically, explicitly ask it to read that file. Review its proposed plan before authorizing code changes; members do not need to repeat the full project instructions in each prompt.
 
