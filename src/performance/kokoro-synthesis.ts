@@ -1,9 +1,14 @@
-import type { CallContext, ClockPort, PreparePerformance, PreparedAudio, SynthesisPort } from '../contracts/app'
+import type { CallContext, ClockPort, PreparePerformance, PreparedAudio } from '../contracts/app'
 import { preparePerformanceSchema } from '../contracts/app'
 import type { DeadlineGate } from './browser/types'
 import type { AudioResourceErrorCode, AudioResourceRegistry } from './audio-resources'
 import { AudioResourceError } from './audio-resources'
-import type { KokoroProvider, KokoroRawAudio, KokoroVoiceProfile } from './kokoro-types'
+import type {
+  KokoroProvider,
+  KokoroRawAudio,
+  KokoroSynthesis,
+  KokoroVoiceProfile,
+} from './kokoro-types'
 import { KokoroProviderError } from './kokoro-types'
 import { MONO_FLOAT32_WAV_FORMAT, encodeMonoFloat32Wav } from './wav'
 
@@ -31,10 +36,16 @@ import { MONO_FLOAT32_WAV_FORMAT, encodeMonoFloat32Wav } from './wav'
  * `SynthesisPort` adapter, initialized once and reused across turns and
  * Stop/logical cancellation. A logical failed or aborted `prepare` is not proof
  * that physical generation stopped, so the owner must observe the provider's
- * original generation settlement before replacing the adapter. Multiple adapters
- * over one provider need a separately designed shared exclusion, which this
- * module does not provide. No production composition exists here yet: installing
- * and accepting it remains M5 work.
+ * original generation settlement before replacing the adapter. The adapter
+ * exposes that settlement privately through `whenIdle()`: it resolves when the
+ * generation active at call time physically fulfills or rejects, resolves
+ * promptly when idle, and never rejects with the generation's failure. Each
+ * generation owns an independent observation. The owner must first stop
+ * admission to the old adapter, then `await whenIdle()` before replacing it;
+ * `whenIdle()` does not lock admission and does not prove registry or playback
+ * cleanup. Multiple adapters over one provider need a separately designed shared
+ * exclusion, which this module does not provide. No production composition
+ * exists here yet: installing and accepting it remains M5 work.
  *
  * Tokenizer-length and SDK truncation guards are NOT implemented or validated
  * here: the injected provider must itself refuse an over-long input with
@@ -148,7 +159,7 @@ function normalizeRawAudio(value: unknown): KokoroRawAudio | null {
   return { samples: new Float32Array(samples), sampleRate }
 }
 
-export function createKokoroSynthesis(deps: KokoroSynthesisDeps): SynthesisPort {
+export function createKokoroSynthesis(deps: KokoroSynthesisDeps): KokoroSynthesis {
   // A nested map keys the tuple structurally. Joining the two unrestricted C5
   // strings with any delimiter (including NUL) would make distinct legal tuples
   // collide, so the id and version are never concatenated.
@@ -168,6 +179,13 @@ export function createKokoroSynthesis(deps: KokoroSynthesisDeps): SynthesisPort 
   // closure-local, so it is not shared with a second adapter over the same
   // provider: that unsupported shape would need a separately designed exclusion.
   let generating = false
+
+  // A private, adapter-local observation of the physical settlement of the
+  // generation active when `whenIdle` is called. Each generation publishes its
+  // own promise, so an earlier settlement never releases a later wait. It is not
+  // a mutex, queue, cancellation API or lifecycle framework; it only mirrors the
+  // original provider Promise's fulfillment or rejection.
+  let settlement: Promise<void> | null = null
 
   const failure = (request: PreparePerformance, reasonCode: string): PreparedAudio => ({
     ok: false,
@@ -225,12 +243,21 @@ export function createKokoroSynthesis(deps: KokoroSynthesisDeps): SynthesisPort 
         return failure(validRequest, REASON_CANCELLED)
       }
 
-      // Reserve the real generation slot synchronously before invoking provider.
+      // Reserve the real generation slot and publish this generation's physical
+      // settlement observation synchronously, before invoking the provider. A
+      // provider that reentrantly calls `whenIdle()` inside `generate` therefore
+      // observes this generation rather than a stale or absent one. Each
+      // generation owns its own resolver, so an earlier settlement never releases
+      // a later wait and only this generation's own settlement resolves it.
       if (generating) {
         binding.release()
         return failure(validRequest, REASON_BUSY)
       }
       generating = true
+      let observeSettlement: () => void = () => {}
+      settlement = new Promise<void>((resolveSettlement) => {
+        observeSettlement = resolveSettlement
+      })
 
       let providerPromise: Promise<KokoroRawAudio>
       try {
@@ -240,7 +267,11 @@ export function createKokoroSynthesis(deps: KokoroSynthesisDeps): SynthesisPort 
           speed: profile.speed,
         })
       } catch (error) {
+        // A synchronous provider throw still reserved this generation's
+        // observation above. Clear the slot and release that same observation so
+        // a reentrant waiter cannot leak; it never rejects with the failure.
         generating = false
+        observeSettlement()
         binding.release()
         return failure(validRequest, providerFailureReason(error))
       }
@@ -329,6 +360,7 @@ export function createKokoroSynthesis(deps: KokoroSynthesisDeps): SynthesisPort 
         providerPromise.then(
           (audio) => {
             generating = false
+            observeSettlement()
             if (settled) return
             let value: PreparedAudio
             try {
@@ -340,6 +372,7 @@ export function createKokoroSynthesis(deps: KokoroSynthesisDeps): SynthesisPort 
           },
           (error) => {
             generating = false
+            observeSettlement()
             if (settled) return
             finish(failure(validRequest, providerFailureReason(error)))
           },
@@ -347,6 +380,12 @@ export function createKokoroSynthesis(deps: KokoroSynthesisDeps): SynthesisPort 
       })
 
       return result
+    },
+
+    whenIdle() {
+      // Observe the generation active at call time. A resolved (or absent)
+      // settlement means the adapter is already idle, so this resolves promptly.
+      return settlement ?? Promise.resolve()
     },
   }
 }
