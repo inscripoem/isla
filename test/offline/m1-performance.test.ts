@@ -2404,6 +2404,126 @@ describe('M1-02 Kokoro cancellation, expiry and the generation slot (K03)', () =
   })
 })
 
+describe('M1-02 provider ownership and replacement lifecycle (K03 ownership)', () => {
+  it('retains one adapter slot across a logically cancelled generation: one provider call, busy on reuse, reuse only after settlement', async () => {
+    const provider = createFakeKokoroProvider()
+    const kit = createM1KokoroSynthesisKit({ provider })
+    const firstContext = createCallContext()
+    const first = kit.synthesis.prepare(fixturePreparePerformance(), firstContext)
+    expect(provider.calls()).toHaveLength(1)
+    expect(provider.inFlight()).toBe(1)
+
+    firstContext.abort()
+    const firstResult = await first
+    expect(firstResult).toMatchObject({ ok: false, reasonCode: 'cancelled_or_expired' })
+    if (firstResult.ok) throw new Error('expected a failed cancelled result')
+    expect('audioRef' in firstResult).toBe(false)
+
+    // The same retained adapter is still physically busy: a fresh independent
+    // request and context report busy and the provider is not invoked again.
+    const busy = await kit.synthesis.prepare(
+      fixturePreparePerformance({ requestId: 'reuse-while-pending' }),
+      createCallContext(),
+    )
+    expect(busy).toMatchObject({ ok: false, reasonCode: 'busy' })
+    expect(provider.calls()).toHaveLength(1)
+    expect(provider.inFlight()).toBe(1)
+    expect(kit.registry.snapshot().activeCount).toBe(0)
+
+    // A late fulfillment after logical cancellation publishes no reference.
+    provider.resolveNext(createKokoroRawAudio())
+    await microtasks()
+    expect(kit.registry.snapshot().activeCount).toBe(0)
+    expect(provider.inFlight()).toBe(0)
+
+    // Only after physical settlement does the retained adapter accept the next
+    // generation, still with a single simultaneous physical generation.
+    provider.setAutoResolve(createKokoroRawAudio())
+    const reused = await kit.synthesis.prepare(
+      fixturePreparePerformance({ requestId: 'after-settlement' }),
+      createCallContext(),
+    )
+    expect(reused.ok).toBe(true)
+    expect(kit.registry.snapshot().activeCount).toBe(1)
+    expect(provider.calls()).toHaveLength(2)
+    expect(provider.maxInFlight()).toBe(1)
+  })
+
+  it('does not release busy when a cancelled prepare resolves, releasing only after the underlying rejection', async () => {
+    const provider = createFakeKokoroProvider()
+    const kit = createM1KokoroSynthesisKit({ provider })
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason)
+    }
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const context = createCallContext()
+      const first = kit.synthesis.prepare(fixturePreparePerformance(), context)
+      context.abort()
+      await expect(first).resolves.toMatchObject({ ok: false, reasonCode: 'cancelled_or_expired' })
+
+      // The logical prepare resolved, yet the physical generation is still
+      // pending, so the slot must remain busy for a fresh independent request.
+      expect(provider.inFlight()).toBe(1)
+      const busy = await kit.synthesis.prepare(
+        fixturePreparePerformance({ requestId: 'busy-before-reject-settles' }),
+        createCallContext(),
+      )
+      expect(busy).toMatchObject({ ok: false, reasonCode: 'busy' })
+      expect(provider.calls()).toHaveLength(1)
+
+      provider.rejectNext(new Error('late boom'))
+      await microtasks()
+      expect(provider.inFlight()).toBe(0)
+      expect(unhandled).toEqual([])
+
+      // The same retained adapter is reusable once the rejection settled.
+      provider.setAutoResolve(createKokoroRawAudio())
+      const reused = await kit.synthesis.prepare(
+        fixturePreparePerformance({ requestId: 'after-late-reject' }),
+        createCallContext(),
+      )
+      expect(reused.ok).toBe(true)
+      expect(kit.registry.snapshot().activeCount).toBe(1)
+      expect(provider.calls()).toHaveLength(2)
+      expect(provider.maxInFlight()).toBe(1)
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
+  it('constructs a replacement adapter for the same provider only after the first generation physically settles', async () => {
+    const provider = createFakeKokoroProvider()
+    const firstKit = createM1KokoroSynthesisKit({ provider })
+    const context = createCallContext()
+    const first = firstKit.synthesis.prepare(fixturePreparePerformance(), context)
+    expect(provider.inFlight()).toBe(1)
+    context.abort()
+    await expect(first).resolves.toMatchObject({ ok: false, reasonCode: 'cancelled_or_expired' })
+
+    // This is the caller's compliant sequence, not an adapter guard: physical
+    // work is still in flight, so a premature replacement is not constructed.
+    expect(provider.inFlight()).toBe(1)
+
+    provider.resolveNext(createKokoroRawAudio())
+    await microtasks()
+    expect(provider.inFlight()).toBe(0)
+
+    const replacementKit = createM1KokoroSynthesisKit({ provider })
+    provider.setAutoResolve(createKokoroRawAudio())
+    const replaced = await replacementKit.synthesis.prepare(
+      fixturePreparePerformance({ requestId: 'replacement' }),
+      createCallContext(),
+    )
+    expect(replaced.ok).toBe(true)
+    expect(provider.calls()).toHaveLength(2)
+    expect(provider.maxInFlight()).toBe(1)
+    expect(replacementKit.registry.snapshot().activeCount).toBe(1)
+    expect(firstKit.registry.snapshot().activeCount).toBe(0)
+  })
+})
+
 describe('M1-02 controlled audio-resource registry (K04)', () => {
   const registrationFor = (
     bytes: Uint8Array,

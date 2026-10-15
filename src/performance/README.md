@@ -98,6 +98,48 @@ by this adapter; the injected provider must refuse an over-long input with
 `input_too_long` before inference. Concrete `kokoro-js` loading, dependency/model
 installation and a real-SDK smoke test are increment B work.
 
+#### Composition and provider ownership
+
+The factory returns a long-lived `SynthesisPort`, and the surrounding composition
+owns the lifetime of both the provider and that adapter. The supported shape is
+**one provider plus one retained adapter**, initialized once and reused across
+turns and Stop/logical cancellation. Do **not** build a new adapter per turn, and
+do **not** share one provider across several adapters: the in-flight generation
+slot is local to one adapter instance, so two adapters over the same provider do
+not exclude each other and could start overlapping physical work. Multiple
+adapters would require a separately designed shared exclusion, which this module
+does not provide. The adapter reports `busy` only for a second concurrent call on
+the *same* adapter instance.
+
+A logical owner abort or expiry settles the returned `PreparedAudio` promptly,
+but that result is **not** evidence the physical provider generation stopped. The
+retained adapter stays `busy` for new work until the provider's original
+`generate` Promise settles; a late fulfillment publishes no reference and a late
+rejection is consumed. The owner must therefore observe that original generation
+settlement before replacing the adapter. There is no automatic guard against
+constructing a premature replacement; the compliant sequence below is the
+caller's responsibility.
+
+```ts
+// One provider and one retained adapter for the whole composition lifetime.
+const provider: KokoroProvider = /* concrete kokoro-js facade, increment B */
+const synthesis: SynthesisPort = createKokoroSynthesis({
+  provider,
+  profiles,
+  registry,
+  clock,
+  deadlineGate,
+})
+
+// Reuse `synthesis` for every turn and across Stop. Only after the provider's
+// own generation promise has settled may the owner replace the adapter.
+```
+
+No production composition exists in this checkout yet; installing it and
+accepting its ownership is M5 work. The offline tests in this module exercise the
+real adapter over a controlled provider and verify the caller's compliant
+sequence — they are not evidence that a production root is integrated.
+
 ### Audio resource registry (M1-02 increment A)
 
 `createAudioResourceRegistry({ clock, byteBudget, retentionMs, newRef? })` is a
