@@ -32,38 +32,58 @@ extend the baseline, how every function stays traceable, the authority boundarie
 Identifiers are **stable, globally unique and never reused**. The pain this fixes: several owners adding
 rows to the same shared register (`requirements.yaml`, `case-registry.yaml`, `invariants.md`) on parallel
 branches each pick "the next free number" and collide — the collision only appears at merge time, so a
-validator cannot prevent it. The fix is a **reservation convention**.
+validator cannot prevent it. The fix is to **namespace each owner's IDs** (§3.1), with a numeric-block
+fallback if the team prefers zero tooling churn (§3.4).
 
-### 3.1 Reserve a numeric block per module owner (new IDs only)
+### 3.1 Namespace new IDs by owner (primary)
+
+New IDs carry the declaring module's **owner prefix**; the trailing number is private to that owner.
 
 | Owner | Cases | Invariants | ADRs |
 | --- | --- | --- | --- |
-| M1 | `C-1xx` | `INV-1x` | global `ADR-0xx` |
-| M2 | `C-2xx` | `INV-2x` | global |
-| M3 | `C-3xx` | `INV-3x` | global |
-| M4 | `C-4xx` | `INV-4x` | global |
-| M5 | `C-5xx` | `INV-5x` | global |
-| M6 | `C-6xx` | `INV-6x` | global |
+| M1 | `C-M1-n` | `INV-M1-n` | global `ADR-0xx` |
+| M2 | `C-M2-n` | `INV-M2-n` | global |
+| M3 | `C-M3-n` | `INV-M3-n` | global |
+| M4 | `C-M4-n` | `INV-M4-n` | global |
+| M5 | `C-M5-n` | `INV-M5-n` | global |
+| M6 | `C-M6-n` | `INV-M6-n` | global |
 
 ### 3.2 Rules
 
-1. **Grandfathering.** IDs already published (`C-01…C-50`, `INV-01…INV-15`, and any ID allocated under the
-   old scheme before this document is adopted — e.g. `C-48`…`C-51`) are kept as-is and **never renumbered**.
-2. **New IDs use the owner's block.** A module adds only IDs inside its own block.
-3. **Allocate in the register first.** Before adding a row, reserve the ID in the register via the
-   coordination thread; **never self-assign "the next number."**
+1. **Grandfathering.** IDs already published (`C-01…C-51`, `INV-01…INV-15`, and any ID allocated under the
+   old scheme before this document is adopted) are kept as-is and **never renumbered**.
+2. **New IDs carry the owner prefix.** A module adds only IDs under its own prefix (`C-M6-1`).
+3. **Prefix must match the Owner column.** The `Owner` already recorded for a row must agree with the ID
+   prefix; drift (or reassignment) is a violation, not a silent renumber.
 4. **Append-only.** A retired ID is never reused.
 5. **Renumbering is recorded**, never silent — it goes in the change log (delta), with an old→new mapping.
 
-**Why it works:** the case/invariant `id` field is a free-form string (no schema pattern), and the
-`C-\d+` / `INV-\d+` recognisers still match a block ID (`C-601`, `INV-62`). So no schema change is needed,
-and two owners can no longer collide by construction.
+### 3.3 Why a prefix, not a partial counter
+
+The defect is a **merge-time collision in a shared namespace**; the canonical fix for that is
+**namespacing**, not partitioning one global counter. A prefix guarantees distinct IDs across owners
+**by construction** (no allocation step, no lookup table), is **self-documenting**, and — decisively —
+**composes with the endgame** (§6): once registries are per-owner fragments, each fragment numbers its own
+rows with no cross-owner coordination at all.
+
+### 3.4 Fallback — numeric blocks (if the team rejects the tooling change)
+
+| Owner | Cases | Invariants |
+| --- | --- | --- |
+| M1…M6 | `C-1xx`…`C-6xx` | `INV-1x`…`INV-6x` |
+
+Blocks are zero-churn (`C-\d+` still matches) but only **shrink** the collision surface: they still need
+a cross-owner allocation step, cap each owner at 100 IDs, need a lookup table to read ownership, and do
+not compose with per-owner fragments. Acceptable only while each module has a single writer.
 
 ## 4. Verification
 
 - The **traceability fitness function** (`src/evaluation/trace-fitness.ts`) rejects duplicate IDs and
   dangling references across the registers; the registers are schema-validated by the readiness suite.
-- *(Advisory, optional)* a check may flag a **new** ID whose block does not match its declaring module.
+- **Tooling cost of prefixes (one-time, shared):** widen the case recogniser at
+  `trace-fitness.ts:58` from `/\bC-\d+\b/g` to accept `C-<owner>-<n>` (e.g. `/\bC-(?:M\d+-)?\d+\b/g`), and
+  add a **prefix ↔ Owner-column** check. Legacy IDs keep matching unchanged.
+- *(Advisory, optional)* a check may flag a **new** ID whose prefix does not match its declaring module.
 
 ## 5. Change policy
 
@@ -72,6 +92,8 @@ and two owners can no longer collide by construction.
 
 ## 6. Follow-up (proposed)
 
-The durable structural fix beyond blocks is **per-owner sources + a generator** (`cases.d/M6.yaml` →
-generated combined register), which also removes merge conflicts on the shared files. That is a larger,
-coordinated change and would be recorded as its own ADR.
+The durable structural fix beyond §3 is **per-owner sources + a generator** (`cases.d/M6.yaml` →
+generated combined register), which also removes merge conflicts on the shared files. With owner prefixes
+each fragment numbers its own rows (`C-M6-1…`) with **no cross-owner allocation**, so the two changes are
+complementary — which is why prefixes are preferred over blocks. That is a larger, coordinated change and
+would be recorded as its own ADR.
