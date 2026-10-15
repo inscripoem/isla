@@ -17,12 +17,24 @@ import { MONO_FLOAT32_WAV_FORMAT, encodeMonoFloat32Wav } from './wav'
  * limit, no silent segmentation), and registers the generated audio as an opaque
  * `audio://` resource only after the physical provider settles.
  *
- * The adapter owns one real in-flight generation slot per provider instance.
- * There is no scheduler or queue: a second concurrent call fails `busy` rather
- * than spawning a second generation. A logical owner abort/expiry resolves a
- * failed result promptly and releases its deadline binding, but the physical slot
- * stays occupied until the original provider Promise settles; a late fulfillment
- * or rejection is consumed without publishing a reference or leaking a rejection.
+ * Each adapter instance owns one real in-flight generation slot. The slot is
+ * local to this adapter instance, not a provider-wide mutex: two adapters built
+ * over the same provider would not observe each other and would not exclude
+ * concurrent physical generation. There is no scheduler or queue: a second
+ * concurrent call on the same adapter fails `busy` rather than spawning a second
+ * generation. A logical owner abort/expiry resolves a failed result promptly and
+ * releases its deadline binding, but the physical slot stays occupied until the
+ * original provider Promise settles; a late fulfillment or rejection is consumed
+ * without publishing a reference or leaking a rejection.
+ *
+ * Composition ownership: the supported shape is one provider plus one retained
+ * `SynthesisPort` adapter, initialized once and reused across turns and
+ * Stop/logical cancellation. A logical failed or aborted `prepare` is not proof
+ * that physical generation stopped, so the owner must observe the provider's
+ * original generation settlement before replacing the adapter. Multiple adapters
+ * over one provider need a separately designed shared exclusion, which this
+ * module does not provide. No production composition exists here yet: installing
+ * and accepting it remains M5 work.
  *
  * Tokenizer-length and SDK truncation guards are NOT implemented or validated
  * here: the injected provider must itself refuse an over-long input with
@@ -152,7 +164,9 @@ export function createKokoroSynthesis(deps: KokoroSynthesisDeps): SynthesisPort 
     profiles.set(raw.voiceProfileId, byVersion)
   }
 
-  // The provider instance owns exactly one physical generation slot.
+  // This adapter instance owns exactly one physical generation slot. The flag is
+  // closure-local, so it is not shared with a second adapter over the same
+  // provider: that unsupported shape would need a separately designed exclusion.
   let generating = false
 
   const failure = (request: PreparePerformance, reasonCode: string): PreparedAudio => ({
