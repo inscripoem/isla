@@ -7,6 +7,31 @@ These rules bound how the coding agent may structure work: which module owns whi
 extend the baseline, how every function stays traceable, the authority boundaries, and — added 2026-10-15
 — how **stable identifiers are allocated** so parallel contributors cannot collide.
 
+## Why this document exists (evidence, not paperwork)
+
+Governance exists because **one class of defect has already recurred three times**, each time costing
+rebases, renumber scripts and cross-team coordination in the middle of a delivery:
+
+| Incident | What happened | Cost paid |
+| --- | --- | --- |
+| `C-45` | M5 and M6 both published `C-45`. | M5 renumbered to `C-47`; case references updated across branches. |
+| `INV-09` | M5's delivery attribution and M6's config/recovery both claimed the `INV-09…13` range. | M6 renumbered `INV-09…13` → `INV-10…14` and re-mapped every trace row. |
+| `C-49` | M6 and M4 both allocated `C-49`. | M6 yields the ID to M4 and moves to `C-51`; a renumber script + a coordination thread. |
+
+**Root cause — one, not three:** identifiers are **global-sequential** in **shared registers** and are
+**self-assigned** on **parallel branches**. Each branch is individually valid, so the clash surfaces only
+**at merge**. That means **testing cannot prevent it** (there is nothing wrong to test on either branch),
+and the cost lands on whoever merges — usually by surprise.
+
+**Why the response is structural, not a reminder:** a plain convention was already in force (threads,
+"take the next free number") and it failed three times, because it depends on every contributor
+remembering and on allocation being serialised across teams. What holds instead is a convention **CI can
+check** plus a **namespace that makes collisions impossible by construction** — the same principle the repo
+already applies to invariants: put the rule in a **fail-closed gate**, not in a prompt or a memo.
+
+This document is therefore both the **D3 deliverable** and the fix: module rules and authority boundaries
+(§1–§2), the ID convention (§3), and the gate that enforces it (§4).
+
 ## 1. Module organization
 
 1. **One home per element.** Each architectural element maps to **exactly one** module. Ownership is the
