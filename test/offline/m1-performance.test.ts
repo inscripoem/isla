@@ -11,6 +11,7 @@ import {
   NO_OP_ACTION,
   performanceReceiptMessageSchema,
   performanceReceiptSchema,
+  preparedAudioSchema,
 } from '../../src/contracts'
 import {
   collectPerformanceViolations,
@@ -64,6 +65,29 @@ import { createPlaybackController } from '../../src/performance/browser/player'
 import { createPlayerPort } from '../../src/performance/browser/player-port'
 import { createFixtureRunner } from '../support/runner-factories'
 import { createVirtualClock } from '../support/virtual-clock'
+import {
+  M1_KOKORO_PROVIDER_VOICE_ID,
+  M1_KOKORO_SAMPLE_COUNT,
+  M1_KOKORO_SAMPLE_RATE,
+  M1_KOKORO_SPEED,
+  createFakeKokoroProvider,
+  createFixedRefFactory,
+  createKokoroRawAudio,
+  createM1KokoroSynthesisKit,
+  createRegistryPlayerKit,
+  createSequentialRefFactory,
+  decodeMonoFloat32Wav,
+  defaultKokoroProfile,
+} from '../support/m1-kokoro-kit'
+import type { KokoroRawAudio, KokoroVoiceProfile } from '../../src/performance/kokoro-types'
+import { KokoroProviderError } from '../../src/performance/kokoro-types'
+import type { AudioResourceRegistration } from '../../src/performance/audio-resources'
+import {
+  AudioResourceError,
+  createAudioResourceRegistry,
+} from '../../src/performance/audio-resources'
+import { createKokoroSynthesis } from '../../src/performance/kokoro-synthesis'
+import { encodeMonoFloat32Wav } from '../../src/performance/wav'
 
 /** Deterministically drain queued microtasks without wall-clock waits. */
 async function microtasks(rounds = 8): Promise<void> {
@@ -2038,5 +2062,1065 @@ describe('M1 actual adapter substitution and Stop composition (T11, T12)', () =>
     expect(deliveries).toHaveLength(2)
     expect(deliveries[0]?.classification).toBe('fully-delivered')
     expect(deliveries[1]?.classification).toBe('partial-unknown')
+  })
+})
+
+/* ------------------------------------------------------------------------- *
+ * M1-02 increment A: injected Kokoro synthesis adapter (K01), cancellation
+ * and the single generation slot (K03), the controlled audio-resource
+ * registry (K04) and substitution through the unchanged SynthesisPort (R01).
+ * ------------------------------------------------------------------------- */
+
+const KOKORO_WAV_BYTES = 44 + M1_KOKORO_SAMPLE_COUNT * 4
+
+describe('M1-02 Kokoro synthesis adapter (K01)', () => {
+  it('prepares a WAV resource with exact identity and voice mapping and no playback effect', async () => {
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve(createKokoroRawAudio())
+    const kit = createM1KokoroSynthesisKit({ provider })
+    const request = fixturePreparePerformance()
+    const prepared = await kit.synthesis.prepare(request, createCallContext())
+
+    expect(prepared).toMatchObject({
+      ok: true,
+      requestId: request.requestId,
+      sessionId: request.sessionId,
+      epoch: request.epoch,
+      turnId: request.turnId,
+      segmentId: request.segmentId,
+      format: 'audio/wav',
+      timing: null,
+    })
+    expect(preparedAudioSchema.safeParse(prepared).success).toBe(true)
+    if (!prepared.ok) return
+    expect(prepared.audioRef.startsWith('audio://')).toBe(true)
+    expect(prepared.durationMs).toBeCloseTo(
+      (M1_KOKORO_SAMPLE_COUNT / M1_KOKORO_SAMPLE_RATE) * 1000,
+      9,
+    )
+    expect(provider.calls()).toEqual([
+      { text: request.text, voiceId: M1_KOKORO_PROVIDER_VOICE_ID, speed: M1_KOKORO_SPEED },
+    ])
+    expect(kit.registry.snapshot().activeCount).toBe(1)
+    expect(kit.gate.bindCount()).toBe(1)
+    expect(kit.gate.releaseCount()).toBe(1)
+  })
+
+  it('encodes deterministic mono IEEE-float WAV bytes that independently decode to the provider samples', async () => {
+    const samples = createKokoroRawAudio().samples
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve({ samples, sampleRate: M1_KOKORO_SAMPLE_RATE })
+    const kit = createM1KokoroSynthesisKit({ provider })
+    const prepared = await kit.synthesis.prepare(fixturePreparePerformance(), createCallContext())
+    expect(prepared.ok).toBe(true)
+    if (!prepared.ok) return
+
+    const lease = await kit.registry.resolve(prepared.audioRef, createCallContext().signal)
+    const bytes = new Uint8Array(await lease.blob.arrayBuffer())
+    lease.release()
+
+    const decoded = decodeMonoFloat32Wav(bytes)
+    expect(decoded).toMatchObject({
+      riff: 'RIFF',
+      wave: 'WAVE',
+      audioFormat: 3,
+      channels: 1,
+      sampleRateHz: M1_KOKORO_SAMPLE_RATE,
+      bitsPerSample: 32,
+      dataByteLength: M1_KOKORO_SAMPLE_COUNT * 4,
+      frameCount: M1_KOKORO_SAMPLE_COUNT,
+    })
+    expect(decoded.durationMs).toBeCloseTo(
+      (M1_KOKORO_SAMPLE_COUNT / M1_KOKORO_SAMPLE_RATE) * 1000,
+      9,
+    )
+    expect(decoded.samples).toHaveLength(M1_KOKORO_SAMPLE_COUNT)
+    decoded.samples.forEach((value, index) => {
+      expect(value).toBeCloseTo(samples[index], 6)
+    })
+    expect(lease.blob.type).toBe('audio/wav')
+  })
+
+  it('snapshots the configured profile and request so later caller mutation cannot alter retained data', async () => {
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve(createKokoroRawAudio())
+    const profile = defaultKokoroProfile()
+    const kit = createM1KokoroSynthesisKit({ provider, profiles: [profile] })
+    ;(profile as unknown as { providerVoiceId: string }).providerVoiceId = 'mutated'
+    ;(profile as unknown as { speed: number }).speed = 9
+
+    const request = fixturePreparePerformance()
+    const pending = kit.synthesis.prepare(request, createCallContext())
+    ;(request as unknown as { text: string }).text = 'mutated text'
+    ;(request as unknown as { requestId: string }).requestId = 'mutated'
+    const prepared = await pending
+
+    expect(provider.calls()).toEqual([
+      { text: 'We talked about the concert.', voiceId: M1_KOKORO_PROVIDER_VOICE_ID, speed: M1_KOKORO_SPEED },
+    ])
+    expect(prepared).toMatchObject({ ok: true, requestId: 'prepare-req-1' })
+  })
+
+  it('returns unknown_voice_profile with zero generation for an unknown voice or version', async () => {
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve()
+    const kit = createM1KokoroSynthesisKit({ provider })
+    for (const override of [{ voiceProfileId: 'unknown-voice' }, { voiceProfileVersion: '9' }]) {
+      const prepared = await kit.synthesis.prepare(
+        fixturePreparePerformance(override),
+        createCallContext(),
+      )
+      expect(prepared).toMatchObject({
+        ok: false,
+        reasonCode: 'unknown_voice_profile',
+        requestId: 'prepare-req-1',
+      })
+    }
+    expect(provider.calls()).toEqual([])
+    expect(kit.registry.snapshot().activeCount).toBe(0)
+  })
+
+  it('rejects a malformed identity-bearing request without any provider or resource effect', async () => {
+    const provider = createFakeKokoroProvider()
+    const kit = createM1KokoroSynthesisKit({ provider })
+    const malformed: PreparePerformance[] = [
+      fixturePreparePerformance({ requestId: '' }),
+      fixturePreparePerformance({ sessionId: '' }),
+      fixturePreparePerformance({ epoch: -1 }),
+      fixturePreparePerformance({ turnId: '' }),
+      fixturePreparePerformance({ segmentId: '' }),
+      fixturePreparePerformance({ text: '' }),
+    ]
+    for (const request of malformed) {
+      await expect(kit.synthesis.prepare(request, createCallContext())).rejects.toThrow()
+    }
+    expect(provider.calls()).toEqual([])
+    expect(kit.registry.snapshot().activeCount).toBe(0)
+  })
+
+  it('forwards a long text verbatim without a character limit or segmentation', async () => {
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve()
+    const kit = createM1KokoroSynthesisKit({ provider })
+    const text = 'sentence one. '.repeat(400).trim()
+    const prepared = await kit.synthesis.prepare(
+      fixturePreparePerformance({ text }),
+      createCallContext(),
+    )
+    expect(prepared.ok).toBe(true)
+    expect(provider.calls()).toEqual([
+      { text, voiceId: M1_KOKORO_PROVIDER_VOICE_ID, speed: M1_KOKORO_SPEED },
+    ])
+  })
+
+  it('rejects empty, malformed and non-finite provider audio as invalid_audio', async () => {
+    const cases: unknown[] = [
+      createKokoroRawAudio(0),
+      { samples: 'not-samples', sampleRate: M1_KOKORO_SAMPLE_RATE },
+      { samples: new Float32Array([0, 1]), sampleRate: 0 },
+      { samples: new Float32Array([0, 1]), sampleRate: Number.NaN },
+      { samples: new Float32Array([0, Number.NaN]), sampleRate: M1_KOKORO_SAMPLE_RATE },
+      { samples: new Float32Array([0, Number.POSITIVE_INFINITY]), sampleRate: M1_KOKORO_SAMPLE_RATE },
+      null,
+    ]
+    for (const audio of cases) {
+      const provider = createFakeKokoroProvider()
+      provider.setAutoResolve(audio as KokoroRawAudio)
+      const kit = createM1KokoroSynthesisKit({ provider })
+      const prepared = await kit.synthesis.prepare(fixturePreparePerformance(), createCallContext())
+      expect(prepared).toMatchObject({ ok: false, reasonCode: 'invalid_audio' })
+      expect(kit.registry.snapshot().activeCount).toBe(0)
+    }
+  })
+
+  it('forwards a controlled provider input_too_long refusal as an honest failure', async () => {
+    const provider = createFakeKokoroProvider()
+    provider.setAutoReject(new KokoroProviderError('input_too_long'))
+    const kit = createM1KokoroSynthesisKit({ provider })
+    const prepared = await kit.synthesis.prepare(fixturePreparePerformance(), createCallContext())
+    expect(prepared).toMatchObject({
+      ok: false,
+      reasonCode: 'input_too_long',
+      requestId: 'prepare-req-1',
+    })
+    expect(kit.registry.snapshot().activeCount).toBe(0)
+  })
+})
+
+describe('M1-02 Kokoro cancellation, expiry and the generation slot (K03)', () => {
+  it('fails at the earliest request/context deadline before invoking the provider', async () => {
+    const provider = createFakeKokoroProvider()
+    const clock = createVirtualClock(50)
+    const kit = createM1KokoroSynthesisKit({ provider, clock })
+    const requestFirst = await kit.synthesis.prepare(
+      fixturePreparePerformance({ deadline: { atMs: 50 } }),
+      createCallContext(100),
+    )
+    expect(requestFirst).toMatchObject({ ok: false, reasonCode: 'cancelled_or_expired' })
+
+    clock.set(40)
+    const contextFirst = await kit.synthesis.prepare(
+      fixturePreparePerformance({ deadline: { atMs: 100 } }),
+      createCallContext(40),
+    )
+    expect(contextFirst).toMatchObject({ ok: false, reasonCode: 'cancelled_or_expired' })
+
+    expect(provider.calls()).toEqual([])
+    expect(kit.gate.bindCount()).toBe(0)
+  })
+
+  it('fails an already-aborted context with zero generation', async () => {
+    const provider = createFakeKokoroProvider()
+    const kit = createM1KokoroSynthesisKit({ provider })
+    const context = createCallContext()
+    context.abort()
+    const prepared = await kit.synthesis.prepare(fixturePreparePerformance(), context)
+    expect(prepared).toMatchObject({ ok: false, reasonCode: 'cancelled_or_expired' })
+    expect(provider.calls()).toEqual([])
+  })
+
+  it('maps a synchronous provider throw and an asynchronous rejection to provider_failed and frees the slot', async () => {
+    const syncProvider = createFakeKokoroProvider()
+    syncProvider.setAutoThrow(new Error('sync boom'))
+    const syncKit = createM1KokoroSynthesisKit({ provider: syncProvider })
+    const syncResult = await syncKit.synthesis.prepare(fixturePreparePerformance(), createCallContext())
+    expect(syncResult).toMatchObject({ ok: false, reasonCode: 'provider_failed' })
+    expect(syncKit.gate.releaseCount()).toBe(1)
+
+    const asyncProvider = createFakeKokoroProvider()
+    asyncProvider.setAutoReject(new Error('async boom'))
+    const asyncKit = createM1KokoroSynthesisKit({ provider: asyncProvider })
+    const asyncResult = await asyncKit.synthesis.prepare(fixturePreparePerformance(), createCallContext())
+    expect(asyncResult).toMatchObject({ ok: false, reasonCode: 'provider_failed' })
+
+    asyncProvider.setAutoResolve(createKokoroRawAudio())
+    const recovered = await asyncKit.synthesis.prepare(fixturePreparePerformance(), createCallContext())
+    expect(recovered.ok).toBe(true)
+  })
+
+  it('resolves a prompt failure on abort while the slot stays busy until physical settlement', async () => {
+    const provider = createFakeKokoroProvider()
+    const kit = createM1KokoroSynthesisKit({ provider })
+    const context = createCallContext()
+    const first = kit.synthesis.prepare(fixturePreparePerformance(), context)
+    expect(provider.pendingCount()).toBe(1)
+    context.abort()
+    await expect(first).resolves.toMatchObject({ ok: false, reasonCode: 'cancelled_or_expired' })
+    expect(kit.gate.releaseCount()).toBe(1)
+
+    const busy = await kit.synthesis.prepare(
+      fixturePreparePerformance({ requestId: 'busy-attempt' }),
+      createCallContext(),
+    )
+    expect(busy).toMatchObject({ ok: false, reasonCode: 'busy' })
+    expect(provider.pendingCount()).toBe(1)
+    expect(kit.registry.snapshot().activeCount).toBe(0)
+
+    provider.resolveNext(createKokoroRawAudio())
+    await microtasks()
+    expect(kit.registry.snapshot().activeCount).toBe(0)
+
+    provider.setAutoResolve(createKokoroRawAudio())
+    const third = await kit.synthesis.prepare(
+      fixturePreparePerformance({ requestId: 'third' }),
+      createCallContext(),
+    )
+    expect(third.ok).toBe(true)
+    expect(kit.registry.snapshot().activeCount).toBe(1)
+  })
+
+  it('consumes a late rejection without an unhandled rejection and frees the slot', async () => {
+    const provider = createFakeKokoroProvider()
+    const kit = createM1KokoroSynthesisKit({ provider })
+    const context = createCallContext()
+    const first = kit.synthesis.prepare(fixturePreparePerformance(), context)
+    context.abort()
+    await expect(first).resolves.toMatchObject({ ok: false, reasonCode: 'cancelled_or_expired' })
+    provider.rejectNext(new Error('late boom'))
+    await microtasks()
+    expect(kit.registry.snapshot().activeCount).toBe(0)
+
+    provider.setAutoResolve(createKokoroRawAudio())
+    const next = await kit.synthesis.prepare(
+      fixturePreparePerformance({ requestId: 'after-late-reject' }),
+      createCallContext(),
+    )
+    expect(next.ok).toBe(true)
+  })
+
+  it('aborts pending generation through an expiring virtual deadline gate', async () => {
+    const gate = createExpiringDeadlineGate(0)
+    const provider = createFakeKokoroProvider()
+    const kit = createM1KokoroSynthesisKit({ provider, gate })
+    const pending = kit.synthesis.prepare(
+      fixturePreparePerformance({ deadline: { atMs: 1000 } }),
+      createCallContext(1000),
+    )
+    expect(provider.pendingCount()).toBe(1)
+    gate.advance(1000)
+    await expect(pending).resolves.toMatchObject({ ok: false, reasonCode: 'cancelled_or_expired' })
+    expect(kit.gate.releaseCount()).toBe(1)
+    provider.resolveNext(createKokoroRawAudio())
+    await microtasks()
+    expect(kit.registry.snapshot().activeCount).toBe(0)
+  })
+
+  it('retires a fresh resource when a reentrant dependency aborts during registration', async () => {
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve(createKokoroRawAudio())
+    const kit = createM1KokoroSynthesisKit({ provider })
+    const context = createCallContext()
+    const registry = kit.registry
+    const originalRegister = registry.register.bind(registry)
+    registry.register = (request) => {
+      context.abort()
+      return originalRegister(request)
+    }
+
+    const prepared = await kit.synthesis.prepare(fixturePreparePerformance(), context)
+    expect(prepared).toMatchObject({ ok: false, reasonCode: 'cancelled_or_expired' })
+    expect(registry.snapshot().activeCount).toBe(0)
+    expect(registry.snapshot().usedBytes).toBe(0)
+  })
+
+  it('returns resource_closed when the registry was disposed before registration', async () => {
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve(createKokoroRawAudio())
+    const kit = createM1KokoroSynthesisKit({ provider })
+    kit.registry.dispose()
+    const prepared = await kit.synthesis.prepare(fixturePreparePerformance(), createCallContext())
+    expect(prepared).toMatchObject({ ok: false, reasonCode: 'resource_closed' })
+    expect(provider.calls()).toHaveLength(1)
+  })
+
+  it('returns session_retired when a trusted owner invalidated the session before registration', async () => {
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve(createKokoroRawAudio())
+    const kit = createM1KokoroSynthesisKit({ provider })
+    kit.registry.retireBefore(FIXTURE_SESSION_ID, 5)
+    const prepared = await kit.synthesis.prepare(fixturePreparePerformance(), createCallContext())
+    expect(prepared).toMatchObject({ ok: false, reasonCode: 'session_retired' })
+    expect(kit.registry.snapshot().usedBytes).toBe(0)
+  })
+})
+
+describe('M1-02 controlled audio-resource registry (K04)', () => {
+  const registrationFor = (
+    bytes: Uint8Array,
+    overrides: Partial<AudioResourceRegistration> = {},
+  ): AudioResourceRegistration => ({
+    requestId: 'req-k',
+    sessionId: FIXTURE_SESSION_ID,
+    epoch: 1,
+    turnId: 'turn-k',
+    segmentId: 'seg-k',
+    voiceProfileId: 'voice-k',
+    voiceProfileVersion: '1',
+    format: 'audio/wav',
+    bytes,
+    ...overrides,
+  })
+
+  const makeRegistry = (overrides: {
+    byteBudget?: number
+    retentionMs?: number
+    newRef?: () => string
+    clock?: ReturnType<typeof createVirtualClock>
+  } = {}) =>
+    createAudioResourceRegistry({
+      clock: overrides.clock ?? createVirtualClock(0),
+      byteBudget: overrides.byteBudget ?? 1000,
+      retentionMs: overrides.retentionMs ?? 1000,
+      newRef: overrides.newRef ?? createSequentialRefFactory(),
+    })
+
+  it('registers opaque refs, resolves owned blobs and rejects arbitrary or unknown refs', async () => {
+    const registry = makeRegistry()
+    const registration = registry.register(registrationFor(new Uint8Array([1, 2, 3, 4])))
+    expect(registration.audioRef.startsWith('audio://')).toBe(true)
+
+    for (const ref of ['/abs/path.wav', 'https://cdn.example.com/a.wav', 'file:///audio', 'audio://missing']) {
+      await expect(registry.resolve(ref, createCallContext().signal)).rejects.toThrow()
+    }
+
+    const lease = await registry.resolve(registration.audioRef, createCallContext().signal)
+    expect(lease.blob).toBeInstanceOf(Blob)
+    expect(lease.blob.size).toBe(4)
+    lease.release()
+    lease.release()
+    expect(registry.snapshot().usedBytes).toBe(0)
+
+    // A released reference is never reusable.
+    await expect(registry.resolve(registration.audioRef, createCallContext().signal)).rejects.toThrow()
+  })
+
+  it('enforces the byte budget exactly, leaves no partial entry and recovers bytes on retire', () => {
+    const registry = makeRegistry({ byteBudget: 4 })
+    const first = registry.register(registrationFor(new Uint8Array([0, 0, 0, 0])))
+    expect(() => registry.register(registrationFor(new Uint8Array([1])))).toThrow(AudioResourceError)
+    expect(registry.snapshot()).toMatchObject({ usedBytes: 4, activeCount: 1 })
+
+    expect(registry.retire(first.audioRef)).toBe(true)
+    expect(registry.snapshot()).toMatchObject({ usedBytes: 0, activeCount: 0 })
+
+    registry.register(registrationFor(new Uint8Array([1, 2])))
+    expect(registry.snapshot().usedBytes).toBe(2)
+  })
+
+  it('rejects a colliding reference atomically without overwriting the existing resource', async () => {
+    const registry = makeRegistry({ newRef: createFixedRefFactory('audio://fixed/one') })
+    registry.register(registrationFor(new Uint8Array([1, 2])))
+    let collision: unknown = null
+    try {
+      registry.register(registrationFor(new Uint8Array([3, 4, 5])))
+    } catch (error) {
+      collision = error
+    }
+    expect(collision).toBeInstanceOf(AudioResourceError)
+    expect((collision as AudioResourceError).code).toBe('ref_collision')
+    const snapshot = registry.snapshot()
+    expect(snapshot).toMatchObject({ usedBytes: 2, activeCount: 1 })
+  })
+
+  it('rejects a factory that returns a non-audio or path-like reference', () => {
+    for (const ref of ['/abs/path.wav', 'https://cdn.example.com/a.wav', 'file:///x', 'audio://']) {
+      const registry = makeRegistry({ newRef: createFixedRefFactory(ref) })
+      expect(() => registry.register(registrationFor(new Uint8Array([1, 2])))).toThrow(AudioResourceError)
+      expect(registry.snapshot()).toMatchObject({ usedBytes: 0, activeCount: 0 })
+    }
+  })
+
+  it('reclaims expired unleased resources and refuses aborted or expired resolves', async () => {
+    const clock = createVirtualClock(0)
+    const registry = makeRegistry({ clock, retentionMs: 100 })
+    const registration = registry.register(registrationFor(new Uint8Array([1, 2, 3])))
+    clock.set(100)
+
+    const aborted = createCallContext()
+    aborted.abort()
+    await expect(registry.resolve(registration.audioRef, aborted.signal)).rejects.toThrow()
+    await expect(registry.resolve(registration.audioRef, createCallContext().signal)).rejects.toThrow()
+    expect(registry.snapshot()).toMatchObject({ usedBytes: 0, activeCount: 0 })
+  })
+
+  it('reclaims expired unleased resources through the explicit collectExpired hook', () => {
+    const clock = createVirtualClock(0)
+    const registry = makeRegistry({ clock, retentionMs: 100 })
+    registry.register(registrationFor(new Uint8Array([1, 2, 3])))
+    clock.set(150)
+    expect(registry.collectExpired()).toBe(1)
+    expect(registry.snapshot().usedBytes).toBe(0)
+  })
+
+  it('blocks new acquisition and late registration after session retirement while a held lease stays valid', async () => {
+    const registry = makeRegistry()
+    const registration = registry.register(registrationFor(new Uint8Array([1, 2, 3, 4])))
+    const lease = await registry.resolve(registration.audioRef, createCallContext().signal)
+    expect(registry.snapshot()).toMatchObject({ activeCount: 1, leasedCount: 1 })
+
+    expect(registry.retireBefore(FIXTURE_SESSION_ID, 2)).toBe(1)
+    await expect(registry.resolve(registration.audioRef, createCallContext().signal)).rejects.toThrow()
+    expect(() => registry.register(registrationFor(new Uint8Array([9])))).toThrow(AudioResourceError)
+
+    expect(lease.blob.size).toBe(4)
+    lease.release()
+    expect(registry.snapshot()).toMatchObject({ usedBytes: 0, activeCount: 0 })
+  })
+
+  it('retireSession retires every session resource and refuses later epochs', async () => {
+    const registry = makeRegistry()
+    const registration = registry.register(registrationFor(new Uint8Array([1, 2])))
+    const lease = await registry.resolve(registration.audioRef, createCallContext().signal)
+    expect(registry.retireSession(FIXTURE_SESSION_ID)).toBe(1)
+    expect(() => registry.register(registrationFor(new Uint8Array([3]), { epoch: 9 }))).toThrow(
+      AudioResourceError,
+    )
+    lease.release()
+    expect(registry.snapshot().activeCount).toBe(0)
+  })
+
+  it('rejects new work on dispose, pins leased bytes until the last release, then reclaims', async () => {
+    const registry = makeRegistry()
+    const registration = registry.register(registrationFor(new Uint8Array([1, 2, 3, 4])))
+    const lease = await registry.resolve(registration.audioRef, createCallContext().signal)
+    registry.dispose()
+
+    expect(registry.snapshot()).toMatchObject({ disposed: true, activeCount: 1, usedBytes: 4 })
+    expect(() => registry.register(registrationFor(new Uint8Array([1])))).toThrow(AudioResourceError)
+    await expect(registry.resolve(registration.audioRef, createCallContext().signal)).rejects.toThrow()
+
+    lease.release()
+    expect(registry.snapshot()).toMatchObject({ activeCount: 0, usedBytes: 0 })
+  })
+
+  it('lets two leases release independently and reclaims on the last release only', async () => {
+    const registry = makeRegistry()
+    const registration = registry.register(registrationFor(new Uint8Array([1, 2, 3, 4])))
+    const first = await registry.resolve(registration.audioRef, createCallContext().signal)
+    const second = await registry.resolve(registration.audioRef, createCallContext().signal)
+    expect(registry.snapshot()).toMatchObject({ activeCount: 1, usedBytes: 4 })
+
+    first.release()
+    expect(registry.snapshot()).toMatchObject({ activeCount: 1, usedBytes: 4 })
+    second.release()
+    expect(registry.snapshot()).toMatchObject({ activeCount: 0, usedBytes: 0 })
+  })
+
+  it('returns a protected metadata view that cannot mutate registry state', () => {
+    const registry = makeRegistry()
+    const registration = registry.register(registrationFor(new Uint8Array([1, 2])))
+    const snapshot = registry.snapshot()
+    const view = snapshot.resources[0] as unknown as { audioRef: string; byteLength: number }
+    view.audioRef = 'mutated'
+    view.byteLength = 999
+    const again = registry.snapshot()
+    expect(again.resources[0]?.audioRef).toBe(registration.audioRef)
+    expect(again.usedBytes).toBe(2)
+  })
+
+  it('retires a prepared-but-never-dispatched resource explicitly and by expiry, recovering bytes', async () => {
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve(createKokoroRawAudio())
+    const clock = createVirtualClock(0)
+    const kit = createM1KokoroSynthesisKit({ provider, clock, retentionMs: 100 })
+
+    const prepared = await kit.synthesis.prepare(fixturePreparePerformance(), createCallContext())
+    expect(prepared.ok).toBe(true)
+    if (!prepared.ok) return
+    expect(kit.registry.snapshot().usedBytes).toBe(KOKORO_WAV_BYTES)
+    expect(kit.registry.retire(prepared.audioRef)).toBe(true)
+    expect(kit.registry.snapshot().usedBytes).toBe(0)
+
+    const second = await kit.synthesis.prepare(
+      fixturePreparePerformance({ requestId: 'expiring' }),
+      createCallContext(),
+    )
+    expect(second.ok).toBe(true)
+    clock.set(100)
+    expect(kit.registry.collectExpired()).toBe(1)
+    expect(kit.registry.snapshot().usedBytes).toBe(0)
+  })
+
+  it('generates 20 sequential outputs without an epoch quota and allows a new output after reclamation', async () => {
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve(createKokoroRawAudio())
+    const kit = createM1KokoroSynthesisKit({ provider, byteBudget: 200 })
+    const refs = new Set<string>()
+    for (let index = 0; index < 20; index += 1) {
+      const prepared = await kit.synthesis.prepare(
+        fixturePreparePerformance({ requestId: `p-${index}`, segmentId: `seg-${index}` }),
+        createCallContext(),
+      )
+      expect(prepared.ok).toBe(true)
+      if (!prepared.ok) return
+      refs.add(prepared.audioRef)
+      const lease = await kit.registry.resolve(prepared.audioRef, createCallContext().signal)
+      lease.release()
+    }
+    expect(refs.size).toBe(20)
+
+    const final = await kit.synthesis.prepare(
+      fixturePreparePerformance({ requestId: 'final', segmentId: 'final' }),
+      createCallContext(),
+    )
+    expect(final.ok).toBe(true)
+    expect(kit.registry.snapshot().usedBytes).toBe(KOKORO_WAV_BYTES)
+  })
+})
+
+describe('M1-02 increment A independent-review regressions', () => {
+  const registrationFor = (
+    bytes: Uint8Array,
+    overrides: Partial<AudioResourceRegistration> = {},
+  ): AudioResourceRegistration => ({
+    requestId: 'req-k',
+    sessionId: FIXTURE_SESSION_ID,
+    epoch: 1,
+    turnId: 'turn-k',
+    segmentId: 'seg-k',
+    voiceProfileId: 'voice-k',
+    voiceProfileVersion: '1',
+    format: 'audio/wav',
+    bytes,
+    ...overrides,
+  })
+
+  const makeRegistry = (overrides: {
+    byteBudget?: number
+    retentionMs?: number
+    newRef?: () => string
+    clock?: ReturnType<typeof createVirtualClock>
+  } = {}) =>
+    createAudioResourceRegistry({
+      clock: overrides.clock ?? createVirtualClock(0),
+      byteBudget: overrides.byteBudget ?? 1000,
+      retentionMs: overrides.retentionMs ?? 1000,
+      newRef: overrides.newRef ?? createSequentialRefFactory(),
+    })
+
+  it('keeps distinct public voice tuples distinct with embedded NUL characters', async () => {
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve(createKokoroRawAudio())
+    const configured: KokoroVoiceProfile = {
+      ...defaultKokoroProfile(),
+      voiceProfileId: 'public\u0000part',
+      voiceProfileVersion: 'v1',
+    }
+    const kit = createM1KokoroSynthesisKit({ provider, profiles: [configured] })
+    const collision = await kit.synthesis.prepare(
+      fixturePreparePerformance({ voiceProfileId: 'public', voiceProfileVersion: 'part\u0000v1' }),
+      createCallContext(),
+    )
+    expect(collision).toMatchObject({ ok: false, reasonCode: 'unknown_voice_profile' })
+    const matched = await kit.synthesis.prepare(
+      fixturePreparePerformance({ voiceProfileId: 'public\u0000part', voiceProfileVersion: 'v1' }),
+      createCallContext(),
+    )
+    expect(matched).toMatchObject({ ok: true })
+    expect(provider.calls()).toHaveLength(1)
+  })
+
+  it('rejects non-string or non-numeric profile fields before any effect', () => {
+    const overrides: Array<Record<string, unknown>> = [
+      { voiceProfileId: 5 },
+      { voiceProfileVersion: null },
+      { providerVoiceId: 7 },
+      { speed: 'fast' },
+      { speed: Number.NaN },
+      { speed: 0 },
+    ]
+    for (const override of overrides) {
+      expect(() =>
+        createM1KokoroSynthesisKit({
+          profiles: [{ ...defaultKokoroProfile(), ...override } as unknown as KokoroVoiceProfile],
+        }),
+      ).toThrow()
+    }
+  })
+
+  it('preserves a synchronous input_too_long refusal and releases the slot and binding', async () => {
+    const provider = createFakeKokoroProvider()
+    provider.setAutoThrow(new KokoroProviderError('input_too_long'))
+    const kit = createM1KokoroSynthesisKit({ provider })
+    const prepared = await kit.synthesis.prepare(fixturePreparePerformance(), createCallContext())
+    expect(prepared).toMatchObject({
+      ok: false,
+      reasonCode: 'input_too_long',
+      requestId: 'prepare-req-1',
+    })
+    expect(kit.gate.releaseCount()).toBe(1)
+    expect(kit.registry.snapshot().activeCount).toBe(0)
+
+    provider.setAutoResolve(createKokoroRawAudio())
+    const recovered = await kit.synthesis.prepare(
+      fixturePreparePerformance({ requestId: 'after-refusal' }),
+      createCallContext(),
+    )
+    expect(recovered.ok).toBe(true)
+    expect(kit.gate.releaseCount()).toBe(2)
+  })
+
+  it('retires a fresh resource when the final publication clock observation aborts', async () => {
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve(createKokoroRawAudio())
+    const clock = createVirtualClock(0)
+    const kit = createM1KokoroSynthesisKit({ provider, clock })
+    const context = createCallContext()
+    const realNowMs = clock.nowMs.bind(clock)
+    let abortedInsideClock = false
+    clock.nowMs = () => {
+      const value = realNowMs()
+      if (!abortedInsideClock && kit.registry.snapshot().activeCount > 0) {
+        abortedInsideClock = true
+        context.abort()
+      }
+      return value
+    }
+
+    const prepared = await kit.synthesis.prepare(fixturePreparePerformance(), context)
+    expect(abortedInsideClock).toBe(true)
+    expect(prepared).toMatchObject({ ok: false, reasonCode: 'cancelled_or_expired' })
+    expect(kit.registry.snapshot().activeCount).toBe(0)
+    expect(kit.registry.snapshot().usedBytes).toBe(0)
+  })
+
+  it('returns a correlated failure when the final clock observation retires the original session', async () => {
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve(createKokoroRawAudio())
+    const clock = createVirtualClock(0)
+    const kit = createM1KokoroSynthesisKit({ provider, clock })
+    const realNowMs = clock.nowMs.bind(clock)
+    let invalidated = false
+    clock.nowMs = () => {
+      const value = realNowMs()
+      if (!invalidated && kit.registry.snapshot().activeCount > 0) {
+        invalidated = true
+        kit.registry.retireSession(FIXTURE_SESSION_ID)
+      }
+      return value
+    }
+
+    const prepared = await kit.synthesis.prepare(fixturePreparePerformance(), createCallContext())
+    expect(invalidated).toBe(true)
+    expect(prepared).toMatchObject({
+      ok: false,
+      reasonCode: 'session_retired',
+      requestId: 'prepare-req-1',
+      sessionId: FIXTURE_SESSION_ID,
+      epoch: 1,
+    })
+    expect(kit.registry.snapshot().activeCount).toBe(0)
+    expect(kit.registry.snapshot().usedBytes).toBe(0)
+  })
+
+  it('returns a correlated failure when the final clock observation disposes the registry', async () => {
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve(createKokoroRawAudio())
+    const clock = createVirtualClock(0)
+    const kit = createM1KokoroSynthesisKit({ provider, clock })
+    const realNowMs = clock.nowMs.bind(clock)
+    let invalidated = false
+    clock.nowMs = () => {
+      const value = realNowMs()
+      if (!invalidated && kit.registry.snapshot().activeCount > 0) {
+        invalidated = true
+        kit.registry.dispose()
+      }
+      return value
+    }
+
+    const prepared = await kit.synthesis.prepare(fixturePreparePerformance(), createCallContext())
+    expect(invalidated).toBe(true)
+    expect(prepared).toMatchObject({
+      ok: false,
+      reasonCode: 'resource_closed',
+      requestId: 'prepare-req-1',
+      sessionId: FIXTURE_SESSION_ID,
+      epoch: 1,
+    })
+    expect(kit.registry.snapshot().activeCount).toBe(0)
+    expect(kit.registry.snapshot().usedBytes).toBe(0)
+  })
+
+  it('uses the earlier request deadline for a pending generation and retains the physical slot', async () => {
+    const gate = createExpiringDeadlineGate(0)
+    const provider = createFakeKokoroProvider()
+    const kit = createM1KokoroSynthesisKit({ provider, gate })
+    const pending = kit.synthesis.prepare(
+      fixturePreparePerformance({ deadline: { atMs: 100 } }),
+      createCallContext(1000),
+    )
+    expect(provider.pendingCount()).toBe(1)
+    gate.advance(100)
+    await expect(pending).resolves.toMatchObject({ ok: false, reasonCode: 'cancelled_or_expired' })
+    expect(kit.gate.releaseCount()).toBe(1)
+
+    const busy = await kit.synthesis.prepare(
+      fixturePreparePerformance({ requestId: 'busy', deadline: { atMs: 1000 } }),
+      createCallContext(1000),
+    )
+    expect(busy).toMatchObject({ ok: false, reasonCode: 'busy' })
+    expect(provider.pendingCount()).toBe(1)
+
+    provider.resolveNext(createKokoroRawAudio())
+    await microtasks()
+    expect(kit.registry.snapshot().activeCount).toBe(0)
+  })
+
+  it('uses the earlier context deadline for a pending generation and releases exactly once', async () => {
+    const gate = createExpiringDeadlineGate(0)
+    const provider = createFakeKokoroProvider()
+    const kit = createM1KokoroSynthesisKit({ provider, gate })
+    const pending = kit.synthesis.prepare(
+      fixturePreparePerformance({ deadline: { atMs: 1000 } }),
+      createCallContext(100),
+    )
+    expect(provider.pendingCount()).toBe(1)
+    gate.advance(100)
+    await expect(pending).resolves.toMatchObject({ ok: false, reasonCode: 'cancelled_or_expired' })
+    expect(kit.gate.releaseCount()).toBe(1)
+    provider.resolveNext(createKokoroRawAudio())
+    await microtasks()
+    expect(kit.registry.snapshot().activeCount).toBe(0)
+  })
+
+  it('snapshots validated identity and owned bytes before a reentrant ref factory can mutate them', async () => {
+    const bytes = new Uint8Array([1, 2, 3, 4])
+    const request = registrationFor(bytes)
+    let registry!: ReturnType<typeof createAudioResourceRegistry>
+    const newRef = (): string => {
+      ;(request as { requestId: string }).requestId = 'mutated'
+      ;(request as { sessionId: string }).sessionId = ''
+      ;(request as { epoch: number }).epoch = -1
+      bytes[0] = 99
+      return 'audio://kokoro/reentrant-snapshot'
+    }
+    registry = makeRegistry({ newRef })
+    const registered = registry.register(request)
+    expect(registry.snapshot().resources[0]).toMatchObject({
+      requestId: 'req-k',
+      sessionId: FIXTURE_SESSION_ID,
+      epoch: 1,
+    })
+    const lease = await registry.resolve(registered.audioRef, createCallContext().signal)
+    const owned = new Uint8Array(await lease.blob.arrayBuffer())
+    lease.release()
+    expect([...owned]).toEqual([1, 2, 3, 4])
+  })
+
+  it('retains the original requestId through registration and synthesis and protects the view', async () => {
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve(createKokoroRawAudio())
+    const kit = createM1KokoroSynthesisKit({ provider })
+    const request = fixturePreparePerformance({ requestId: 'orig-req' })
+    const prepared = await kit.synthesis.prepare(request, createCallContext())
+    expect(prepared.ok).toBe(true)
+
+    const view = kit.registry.snapshot().resources[0] as unknown as { requestId: string }
+    expect(view.requestId).toBe('orig-req')
+    view.requestId = 'mutated'
+    expect(kit.registry.snapshot().resources[0]?.requestId).toBe('orig-req')
+  })
+
+  it('rejects a registration whose ref factory retires the session, with no entry or bytes', () => {
+    let registry!: ReturnType<typeof createAudioResourceRegistry>
+    const newRef = (): string => {
+      registry.retireSession(FIXTURE_SESSION_ID)
+      return 'audio://kokoro/session-retired'
+    }
+    registry = makeRegistry({ newRef })
+    let caught: AudioResourceError | null = null
+    try {
+      registry.register(registrationFor(new Uint8Array([1, 2, 3])))
+    } catch (error) {
+      caught = error as AudioResourceError
+    }
+    expect(caught?.code).toBe('session_retired')
+    expect(registry.snapshot()).toMatchObject({ activeCount: 0, usedBytes: 0 })
+  })
+
+  it('rejects a registration whose ref factory disposes the registry, with no entry or bytes', () => {
+    let registry!: ReturnType<typeof createAudioResourceRegistry>
+    const newRef = (): string => {
+      registry.dispose()
+      return 'audio://kokoro/disposed'
+    }
+    registry = makeRegistry({ newRef })
+    let caught: AudioResourceError | null = null
+    try {
+      registry.register(registrationFor(new Uint8Array([1, 2, 3])))
+    } catch (error) {
+      caught = error as AudioResourceError
+    }
+    expect(caught?.code).toBe('disposed')
+    expect(registry.snapshot()).toMatchObject({ activeCount: 0, usedBytes: 0 })
+  })
+
+  it('revalidates admission after the registration clock boundary and rejects a stale registration', () => {
+    let registry!: ReturnType<typeof createAudioResourceRegistry>
+    let refIssued = false
+    const clock = createVirtualClock(0)
+    const realNowMs = clock.nowMs.bind(clock)
+    clock.nowMs = () => {
+      const value = realNowMs()
+      if (refIssued) registry.retireSession(FIXTURE_SESSION_ID)
+      return value
+    }
+    const newRef = (): string => {
+      refIssued = true
+      return 'audio://kokoro/clock-retired'
+    }
+    registry = makeRegistry({ clock, newRef })
+    let caught: AudioResourceError | null = null
+    try {
+      registry.register(registrationFor(new Uint8Array([1, 2, 3])))
+    } catch (error) {
+      caught = error as AudioResourceError
+    }
+    expect(caught?.code).toBe('session_retired')
+    expect(registry.snapshot()).toMatchObject({ activeCount: 0, usedBytes: 0 })
+  })
+
+  it('rejects a reentrant resolve whose clock disposes the registry, with no lease or leaked accounting', async () => {
+    let registry!: ReturnType<typeof createAudioResourceRegistry>
+    const clock = createVirtualClock(0)
+    const realNowMs = clock.nowMs.bind(clock)
+    let disposeOnNext = false
+    clock.nowMs = () => {
+      const value = realNowMs()
+      if (disposeOnNext) registry.dispose()
+      return value
+    }
+    registry = makeRegistry({ clock })
+    const registration = registry.register(registrationFor(new Uint8Array([1, 2, 3])))
+    disposeOnNext = true
+    await expect(registry.resolve(registration.audioRef, createCallContext().signal)).rejects.toThrow()
+    expect(registry.snapshot()).toMatchObject({ activeCount: 0, usedBytes: 0, leasedCount: 0 })
+  })
+
+  it('rejects a reentrant resolve whose clock aborts the caller signal, without a lease', async () => {
+    let registry!: ReturnType<typeof createAudioResourceRegistry>
+    const clock = createVirtualClock(0)
+    const realNowMs = clock.nowMs.bind(clock)
+    const context = createCallContext()
+    let abortOnNext = false
+    clock.nowMs = () => {
+      const value = realNowMs()
+      if (abortOnNext) context.abort()
+      return value
+    }
+    registry = makeRegistry({ clock })
+    const registration = registry.register(registrationFor(new Uint8Array([1, 2, 3])))
+    abortOnNext = true
+    await expect(registry.resolve(registration.audioRef, context.signal)).rejects.toThrow()
+    expect(registry.snapshot()).toMatchObject({ activeCount: 1, usedBytes: 3, leasedCount: 0 })
+  })
+
+  it('preserves a legal __proto__ session id as an own key in the protection snapshot', () => {
+    const registry = makeRegistry()
+    expect(registry.retireSession('__proto__')).toBe(0)
+    const snapshot = registry.snapshot()
+    expect(Object.hasOwn(snapshot.retiredSessions, '__proto__')).toBe(true)
+    expect((snapshot.retiredSessions as Record<string, number>)['__proto__']).toBe(
+      Number.POSITIVE_INFINITY,
+    )
+    ;(snapshot.retiredSessions as Record<string, number>)['__proto__'] = 0
+    expect((registry.snapshot().retiredSessions as Record<string, number>)['__proto__']).toBe(
+      Number.POSITIVE_INFINITY,
+    )
+  })
+
+  it('rejects non-integer or unrepresentable sample rates before publishing a ref', async () => {
+    for (const sampleRate of [24000.5, 2 ** 30, 2 ** 32]) {
+      const provider = createFakeKokoroProvider()
+      provider.setAutoResolve(createKokoroRawAudio(2, sampleRate))
+      const kit = createM1KokoroSynthesisKit({ provider })
+      const prepared = await kit.synthesis.prepare(fixturePreparePerformance(), createCallContext())
+      expect(prepared).toMatchObject({ ok: false, reasonCode: 'invalid_audio' })
+      expect(kit.registry.snapshot()).toMatchObject({ activeCount: 0, usedBytes: 0 })
+    }
+  })
+
+  it('rejects unrepresentable sample rates at the WAV encoder boundary', () => {
+    for (const sampleRate of [24000.5, 0, -1, Number.NaN, 2 ** 30, 2 ** 32]) {
+      expect(() => encodeMonoFloat32Wav(new Float32Array([0, 1]), sampleRate)).toThrow()
+    }
+  })
+
+  it('encodes a canonical representable sample rate into a consistent parsed header and duration', async () => {
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve(createKokoroRawAudio(4, 24000))
+    const kit = createM1KokoroSynthesisKit({ provider })
+    const prepared = await kit.synthesis.prepare(fixturePreparePerformance(), createCallContext())
+    expect(prepared.ok).toBe(true)
+    if (!prepared.ok) return
+    const lease = await kit.registry.resolve(prepared.audioRef, createCallContext().signal)
+    const bytes = new Uint8Array(await lease.blob.arrayBuffer())
+    lease.release()
+    const decoded = decodeMonoFloat32Wav(bytes)
+    expect(decoded.sampleRateHz).toBe(24000)
+    expect(decoded.dataByteLength).toBe(16)
+    expect(decoded.durationMs).toBeCloseTo((4 / 24000) * 1000, 9)
+  })
+})
+
+describe('M1-02 substitution through the unchanged SynthesisPort (R01)', () => {
+  it('substitutes fixed and injected Kokoro synthesis through the same port', async () => {
+    const fixed = createFixedSynthesis({ entries: createM1ActualAssetEntries(), clock: createVirtualClock(0) })
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve(createKokoroRawAudio())
+    const kit = createM1KokoroSynthesisKit({ provider })
+
+    const fixedResult = await fixed.prepare(fixturePreparePerformance(), createCallContext())
+    const kokoroResult = await kit.synthesis.prepare(fixturePreparePerformance(), createCallContext())
+
+    expect(fixedResult).toMatchObject({ ok: true, audioRef: M1_ACTUAL_SEGMENT_0_REF })
+    expect(kokoroResult).toMatchObject({ ok: true, timing: null })
+    if (!kokoroResult.ok) return
+    expect(kokoroResult.audioRef.startsWith('audio://')).toBe(true)
+    expect(kokoroResult.durationMs).not.toBe(M1_ACTUAL_SEGMENT_0_DURATION_MS)
+  })
+
+  it('passes the shared performance collector with the real Kokoro synthesis and registry-backed player', async () => {
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve(createKokoroRawAudio())
+    const registry = createAudioResourceRegistry({
+      clock: createVirtualClock(0),
+      byteBudget: 1_000_000,
+      retentionMs: 60_000,
+      newRef: createFixedRefFactory(M1_FIXTURE_SEGMENT_0_REF),
+    })
+    const synthesis = createKokoroSynthesis({
+      provider,
+      profiles: [defaultKokoroProfile()],
+      registry,
+      clock: createVirtualClock(0),
+      deadlineGate: createExpiringDeadlineGate(0),
+    })
+    const media = createControlledMediaDriver()
+    media.setAutoEvents(true)
+    const playerKit = createRegistryPlayerKit(registry, { media })
+    const { renderer, driver } = createM1FixtureMappedRenderer()
+    driver.setAuto({ stage: 'accepted', reasonCode: 'kokoro-ok', localTimeMs: null })
+
+    const violations = await collectPerformanceViolations(() => ({
+      synthesis,
+      renderer,
+      player: playerKit.player,
+    }))
+    expect(violations).toEqual([])
+  })
+
+  it('plays valid registry refs, applies Stop mid-second output and reclaims leases through the real player', async () => {
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve(createKokoroRawAudio())
+    const kit = createM1KokoroSynthesisKit({ provider, byteBudget: 1_000_000 })
+    const media = createControlledMediaDriver({ autoEvents: true, holdEndedFrom: 1 })
+    const playerKit = createRegistryPlayerKit(kit.registry, { media })
+    const rendererKit = createM1FixtureMappedRenderer()
+    rendererKit.driver.setAuto({ stage: 'accepted', reasonCode: 'ok', localTimeMs: null })
+
+    const runner = createFixtureRunner({
+      synthesis: kit.synthesis,
+      player: playerKit.player,
+      renderer: rendererKit.renderer,
+      segmentCount: 2,
+    })
+    let firstOutputId = ''
+    let secondOutputId = ''
+    runner.hooks.onPlaybackStart = async (index, outputId) => {
+      if (index === 0) firstOutputId = outputId
+      if (index === 1) {
+        secondOutputId = outputId
+        await media.startedGate(1)
+        await runner.stop()
+      }
+    }
+
+    await runner.resume()
+    await runner.accept('What did you say about the concert?')
+    await runner.runTurn()
+    await microtasks()
+
+    expect(media.createCount()).toBe(2)
+    const completed = playerKit.observed.filter((receipt) => receipt.stage === 'completed')
+    expect(completed).toHaveLength(1)
+    expect(completed[0]?.outputId).toBe(firstOutputId)
+    expect(
+      playerKit.observed.some((receipt) => receipt.stage === 'started' && receipt.outputId === secondOutputId),
+    ).toBe(true)
+    expect(
+      playerKit.observed.some((receipt) => receipt.stage === 'cancelled' && receipt.outputId === secondOutputId),
+    ).toBe(true)
+    expect(completed.some((receipt) => receipt.outputId === secondOutputId)).toBe(false)
+    expect(media.handles()[1]?.detached()).toBe(true)
+
+    const deliveries = runner.deliveries()
+    expect(deliveries).toHaveLength(2)
+    expect(deliveries[0]?.classification).toBe('fully-delivered')
+    expect(deliveries[1]?.classification).toBe('partial-unknown')
+
+    await microtasks()
+    expect(kit.registry.snapshot().usedBytes).toBe(0)
   })
 })
