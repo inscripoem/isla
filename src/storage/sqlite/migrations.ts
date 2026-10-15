@@ -3,13 +3,13 @@ import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 
 /**
- * M6 storage — schema versioning and migrations (B1; INV-09, INV-10).
+ * M6 storage — schema versioning and migrations (B1; INV-10, INV-11).
  *
  * Guarantees
  * ----------
- * - INV-09: an unsupported (newer) `schema_version` is rejected, never silently
+ * - INV-10: an unsupported (newer) `schema_version` is rejected, never silently
  *   opened or forward-migrated.
- * - INV-10: before applying pending migrations to a database that already holds
+ * - INV-11: before applying pending migrations to a database that already holds
  *   schema, a consistent snapshot of the database is taken (`VACUUM INTO`, which
  *   includes committed WAL content) and the migration fails closed — no schema
  *   change, no version bump — if that snapshot cannot be produced; every pending
