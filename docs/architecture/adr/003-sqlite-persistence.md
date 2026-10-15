@@ -44,7 +44,8 @@ contract version (`0.2`) and the diagnostic protocol version (1).
 
 - Durable, versioned store with auditable backups; the store stays database-agnostic (B2 implements
   `StorageBackend` over this schema).
-- `persona_version` and `terminal_outcome` columns are created now (M4 interop, `facts/08`).
+- `terminal_outcome` is created now; the pre-#22 `persona_version` column is created in migration 1
+  and dropped in migration 2 (superseded by the persona id/version pair).
 
 ## Design process (ADD)
 

@@ -44,7 +44,8 @@ observable behaviour — and its invariants — stay identical to the in-memory 
 ## Consequences
 
 - Durable store with the same observable behaviour; the conformance suite passes over SQLite.
-- `persona_version` is stored `NULL` until the C6 delivery carries it (M4 interop gap).
+- #22 attribution: the delivery record's `segmentIndex`, `personaProfileId` and `personaProfileVersion`
+  are persisted (migration 2); the legacy `persona_version` column is dropped once verified empty.
 
 ## Design process (ADD)
 
