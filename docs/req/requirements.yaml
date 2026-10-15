@@ -361,7 +361,7 @@ requirements:
         description: After a restart, only fully-delivered history is restored; unresolved records remain unknown with their terminal outcome and are never replayed (FR-06; C7, C-17).
         cases: [C-32, C-33]
 
-  - id: INV-12
+  - id: INV-13
     title: The traceability chain is machine-checked
     category: invariant
     priority: must
@@ -374,7 +374,7 @@ requirements:
         description: A broken chain link (unregistered invariant, unknown trace case, missing component, unresolved ADR reference, a governed row without an owner, or a failure mode without a fallback) fails the trace gate; a valid repository produces no violations.
         cases: [C-34, C-35, C-37]
 
-  - id: INV-13
+  - id: INV-14
     title: A code or prompt change updates the AI-use log
     category: invariant
     priority: must
