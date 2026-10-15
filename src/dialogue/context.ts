@@ -36,10 +36,12 @@ import type { MemoryBucketReason } from './memory-semantics'
  * See `estimatedCharacters` for exactly which characters are counted.
  *
  * Known limitation (recorded rather than hidden): `confirmedEventRefs` carries
- * runtime event ids, but a confirmed record exposes no event id. A reference
- * therefore cannot be resolved to a record and is only used as an ordering hint.
- * If M6 later exposes the delivery-to-event relationship, `matchesReference`
- * should be replaced so the hint becomes an exact filter.
+ * runtime event ids, but a confirmed record exposes no event id, so a reference
+ * cannot be resolved to a record. An unresolved hint must not move durable
+ * records, so the references are reported through `warnings` and otherwise
+ * ignored: they do not affect which records exist or what order they appear in.
+ * If a later contract exposes the delivery-to-event relationship, they can become
+ * an exact filter over the authoritative order rather than a reordering hint.
  */
 
 /* -------------------------------------------------------------------------- */
@@ -439,7 +441,9 @@ export async function assembleDialogueContext(
   const historyFlat = kept.turns.flatMap((turn) => turn.segments)
   const warnings: string[] = []
   if (refs.size > 0) {
-    warnings.push('confirmedEventRefs could not be resolved to records; used as ordering hint only')
+    warnings.push(
+      'confirmedEventRefs could not be resolved to records; they are reported only and do not affect order',
+    )
   }
   if (kept.turns.some((turn) => turn.interrupted)) {
     warnings.push('context contains an interrupted utterance; it is marked, not completed')

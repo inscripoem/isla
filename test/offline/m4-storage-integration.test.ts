@@ -12,6 +12,7 @@ import type {
 } from '../../src/dialogue'
 import { createEventStore, createHistoryQuery, createInMemoryBackend } from '../../src/storage'
 import type { StorageBackend } from '../../src/storage'
+import { orderTurnDeliveries } from '../../src/runtime/delivery-order'
 import type {
   AtomicCommitAck,
   ClockPort,
@@ -602,5 +603,80 @@ describe('M4 consumes the durable M6 store', () => {
 
     expect(second.turns.map((turn) => turn.text)).toEqual(first.turns.map((turn) => turn.text))
     expect(renderDialoguePrompt(second)).toBe(renderDialoguePrompt(first))
+  })
+})
+
+/**
+ * The within-turn ordering rule is implemented twice: once as M5's
+ * `orderTurnDeliveries` helper, which is the statement of the rule in
+ * INTERFACES, and once as the comparison inline in `assembleDialogueContext`,
+ * which is what actually reconstructs a turn. The shared conformance kit covers
+ * the storage layer only, so nothing mechanically prevents the two from drifting
+ * apart on the same data.
+ *
+ * This guard runs both over the same persisted records and fails if they
+ * disagree. It reaches across the module boundary on purpose: the dependency
+ * direction (a port implementation depending on the runtime layer) is
+ * uncomfortable, so the options are either to move the helper somewhere both
+ * modules can depend on, in which case this test is replaced by a direct call
+ * and the local comparison is deleted, or to keep two implementations and keep
+ * this guard.
+ */
+describe('M4 turn reconstruction agrees with the shared ordering helper', () => {
+  it('produces the same segment order for known, tied and unknown indices', async () => {
+    const harness = storeHarness()
+    // Committed so that arrival order, identifier spelling and index order all
+    // disagree, and covering every branch of the rule: a known index, a tie on
+    // that index, a lower index, and an unknown index.
+    expectApplied(
+      await commitSpoken(harness, {
+        turnId: 'turn-order',
+        segmentId: 'seg-zzz',
+        text: 'Unknown position.',
+        seq: 10,
+        segmentIndex: null,
+      }),
+    )
+    expectApplied(
+      await commitSpoken(harness, {
+        turnId: 'turn-order',
+        segmentId: 'seg-aaa',
+        text: 'Second position, later event.',
+        seq: 20,
+        segmentIndex: 2,
+      }),
+    )
+    expectApplied(
+      await commitSpoken(harness, {
+        turnId: 'turn-order',
+        segmentId: 'seg-mmm',
+        text: 'Second position, earlier event.',
+        seq: 30,
+        segmentIndex: 2,
+      }),
+    )
+    expectApplied(
+      await commitSpoken(harness, {
+        turnId: 'turn-order',
+        segmentId: 'seg-bbb',
+        text: 'First position.',
+        seq: 40,
+        segmentIndex: 0,
+      }),
+    )
+
+    const records = await harness.history.confirmedHistory(FIXTURE_SESSION_ID)
+    const shared = orderTurnDeliveries(records, FIXTURE_SESSION_ID, 'turn-order').map(
+      (record) => record.segmentId,
+    )
+
+    // The rule stated once, so the test cannot pass vacuously when both sides are
+    // wrong in the same way: index 0, then the index-2 tie in supporting-event
+    // order, then the unknown index last.
+    expect(shared).toEqual(['seg-bbb', 'seg-aaa', 'seg-mmm', 'seg-zzz'])
+
+    const view = await assembleOver({ history: harness.history })
+    expect(view.turns[0]?.turnId).toBe('turn-order')
+    expect(view.turns[0]?.segments.map((segment) => segment.segmentId)).toEqual(shared)
   })
 })
