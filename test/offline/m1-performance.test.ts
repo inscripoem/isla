@@ -4199,10 +4199,11 @@ describe('M1-02 increment B worker provider host (B02, controlled transport)', (
       samples: new Float32Array([1]),
     })
     await microtasks()
-    // A matching result after a fatal error must not fulfil before exit, and a
-    // native error does not request logical termination.
+    // A matching result after a fatal error must not fulfil before exit. Like
+    // init_error and messageerror, a worker error requests native termination
+    // once, but occupancy is preserved until the observed actual exit.
     expect(outcome).toBe('pending')
-    expect(kit.transport.terminateCount()).toBe(0)
+    expect(kit.transport.terminateCount()).toBe(1)
     await expect(
       handle.provider.generate({ text: 'b', voiceId: 'af_heart', speed: 1 }),
     ).rejects.toThrow(/closed/)
@@ -4212,6 +4213,71 @@ describe('M1-02 increment B worker provider host (B02, controlled transport)', (
     expect(outcome).toBe('rejected')
     expect(kit.transport.generatePosts()).toHaveLength(1)
     expect(kit.transport.disposePosts()).toBe(0)
+  })
+
+  it('requests termination once for repeated errors before ready and rejects init only on exit', async () => {
+    const kit = createControlledWorkerKit()
+    const pending = createKokoroWorkerProvider(kokoroSdkTestConfig(), {
+      createWorker: kit.createWorker,
+    })
+    let outcome = 'pending'
+    pending.then(
+      () => {
+        outcome = 'resolved'
+      },
+      () => {
+        outcome = 'rejected'
+      },
+    )
+
+    kit.transport.emitError(new Error('early boom'))
+    kit.transport.emitError(new Error('early boom again'))
+    await microtasks()
+    expect(kit.transport.terminateCount()).toBe(1)
+    // No exit yet: the error never settles initialization by itself.
+    expect(outcome).toBe('pending')
+
+    // A ready queued behind the repeated fatal errors must not resolve init.
+    kit.transport.emitReady()
+    await microtasks()
+    expect(outcome).toBe('pending')
+
+    kit.transport.emitExit(1)
+    await expect(pending).rejects.toThrow(/early boom/)
+    await microtasks()
+    expect(outcome).toBe('rejected')
+  })
+
+  it('requests termination once for repeated errors after ready and close waits for exit', async () => {
+    const { kit, handle } = await startWorkerProvider()
+    const generation = handle.provider.generate({ text: 'a', voiceId: 'af_heart', speed: 1 })
+    await microtasks()
+    generation.catch(() => {})
+
+    kit.transport.emitError(new Error('late boom'))
+    kit.transport.emitError(new Error('late boom again'))
+    await microtasks()
+    // Repeated fatal events request termination exactly once.
+    expect(kit.transport.terminateCount()).toBe(1)
+    // Admission is closed but the pending job and its slot are preserved.
+    await expect(
+      handle.provider.generate({ text: 'b', voiceId: 'af_heart', speed: 1 }),
+    ).rejects.toThrow(/closed/)
+
+    const closing = handle.close()
+    let closed = false
+    closing.then(() => {
+      closed = true
+    })
+    await microtasks()
+    expect(closed).toBe(false)
+    // close does not post dispose while a physical job is still pending.
+    expect(kit.transport.disposePosts()).toBe(0)
+
+    kit.transport.emitExit(1)
+    await closing
+    expect(closed).toBe(true)
+    await expect(generation).rejects.toThrow(/late boom/)
   })
 
   it('ignores a matching result after a messageerror and requests termination once', async () => {

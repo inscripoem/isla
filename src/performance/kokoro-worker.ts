@@ -5,8 +5,11 @@
  * through the `.mjs` tsx bootstrap. On ordinary import in the main thread it is
  * inert: it neither starts a worker nor imports or downloads the SDK. Inside the
  * worker it loads the SDK and model once from the validated local-only config,
- * reports readiness, and serves at most one generation at a time. Dispose
- * requests release the loaded model through its public API and then exit.
+ * reports readiness, and serves at most one generation at a time. A dispose
+ * request closes new-generation admission immediately; if a generation is
+ * already physical it keeps its genuine lifecycle, and the loaded model is
+ * released through its public API exactly once and only after that generation's
+ * result path finishes (or after initialization settles), then the worker exits.
  *
  * The message shapes are the host protocol declared in
  * `kokoro-worker-provider.ts`; they carry only plain tagged metadata and a
@@ -93,31 +96,75 @@ async function runKokoroWorker(config: KokoroProviderConfig): Promise<void> {
   const port = parentPort
   if (port === null) return
 
-  const send = (message: KokoroWorkerOutboundMessage): void => {
-    port.postMessage(message)
+  // Control and error messages carry plain tagged metadata and need no transfer.
+  // Only a successful result transfers the dedicated owned sample copy below.
+  const send = (message: KokoroWorkerOutboundMessage, transfer?: readonly ArrayBuffer[]): void => {
+    port.postMessage(message, transfer)
   }
 
   let disposeModel: () => Promise<void> = async () => {}
   let provider: KokoroProvider | null = null
   let initialized = false
   let busy = false
+  let disposing = false
   let shuttingDown = false
   let disposeRequested = false
+  let shutdownPromise: Promise<void> | null = null
 
-  const shutdown = async (): Promise<void> => {
-    if (shuttingDown) return
-    shuttingDown = true
+  // The physical generation's own settlement signal. A dispose defers model
+  // disposal and process exit by awaiting it, so an admitted job finishes its
+  // result path instead of being cut off.
+  let generationSettled: Promise<void> | null = null
+  let settleGeneration: (() => void) | null = null
+
+  const beginGeneration = (): void => {
+    busy = true
+    generationSettled = new Promise<void>((resolve) => {
+      settleGeneration = resolve
+    })
+  }
+
+  const endGeneration = (): void => {
+    busy = false
+    const settle = settleGeneration
+    settleGeneration = null
+    if (settle !== null) settle()
+  }
+
+  /** Release the loaded model through its public API at most once. */
+  const disposeOnce = async (): Promise<void> => {
+    if (disposing) return
+    disposing = true
     try {
       await disposeModel()
     } catch {
       // Best-effort SDK disposal; exit still releases the thread's resources.
     }
-    process.exit(0)
+  }
+
+  const shutdown = (): Promise<void> => {
+    if (shutdownPromise !== null) return shutdownPromise
+    shuttingDown = true
+    shutdownPromise = (async () => {
+      // Wait for a generation that was already admitted to fulfill or reject and
+      // finish its single result path before disposing the model and exiting.
+      if (generationSettled !== null) await generationSettled
+      await disposeOnce()
+      process.exit(0)
+    })()
+    return shutdownPromise
+  }
+
+  // Shutdown may only begin once initialization has actually settled; a dispose
+  // during initialization closes admission but waits for that settlement first.
+  const maybeShutdown = (): void => {
+    if (!disposeRequested || !initialized) return
+    void shutdown()
   }
 
   const handleGenerate = async (jobId: number, input: KokoroProviderInput): Promise<void> => {
     const active = provider
-    if (active === null || shuttingDown) {
+    if (active === null || shuttingDown || disposeRequested) {
       send({ kind: 'result', jobId, ok: false, error: 'worker is not accepting generation' })
       return
     }
@@ -126,12 +173,16 @@ async function runKokoroWorker(config: KokoroProviderConfig): Promise<void> {
       send({ kind: 'result', jobId, ok: false, error: 'worker busy' })
       return
     }
-    busy = true
+    beginGeneration()
     try {
       const audio = await active.generate(input)
-      // A dedicated owned copy keeps any SDK-owned view intact.
+      // A dedicated owned copy keeps any SDK-owned view intact; only this copy's
+      // buffer is transferred, never the SDK's own buffer.
       const samples = new Float32Array(audio.samples)
-      send({ kind: 'result', jobId, ok: true, sampleRate: audio.sampleRate, samples })
+      send(
+        { kind: 'result', jobId, ok: true, sampleRate: audio.sampleRate, samples },
+        [samples.buffer as ArrayBuffer],
+      )
     } catch (error) {
       if (error instanceof KokoroProviderError) {
         send({ kind: 'result', jobId, ok: false, code: error.code })
@@ -139,7 +190,7 @@ async function runKokoroWorker(config: KokoroProviderConfig): Promise<void> {
         send({ kind: 'result', jobId, ok: false, error: describeError(error) })
       }
     } finally {
-      busy = false
+      endGeneration()
     }
   }
 
@@ -150,7 +201,7 @@ async function runKokoroWorker(config: KokoroProviderConfig): Promise<void> {
     }
     if (isDisposeMessage(value)) {
       disposeRequested = true
-      if (initialized) void shutdown()
+      maybeShutdown()
     }
   })
 
@@ -160,18 +211,14 @@ async function runKokoroWorker(config: KokoroProviderConfig): Promise<void> {
     provider = await createKokoroProvider(config, loaded.loader)
   } catch (error) {
     send({ kind: 'init_error', message: describeError(error) })
-    try {
-      await disposeModel()
-    } catch {
-      // Best-effort disposal of any partially loaded model before exit.
-    }
+    await disposeOnce()
     process.exit(1)
     return
   }
 
   initialized = true
-  send({ kind: 'ready' })
-  if (disposeRequested) void shutdown()
+  if (!disposeRequested) send({ kind: 'ready' })
+  maybeShutdown()
 }
 
 if (isKokoroWorkerRuntime()) {
