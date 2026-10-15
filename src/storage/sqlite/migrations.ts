@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
 
@@ -10,9 +10,11 @@ import type { DatabaseSync } from 'node:sqlite'
  * - INV-09: an unsupported (newer) `schema_version` is rejected, never silently
  *   opened or forward-migrated.
  * - INV-10: before applying pending migrations to a database that already holds
- *   schema, the file is backed up (WAL checkpointed first so the copy is
- *   complete); every pending migration and the version bump apply as one
- *   transaction, so a failure rolls back and leaves the prior version intact.
+ *   schema, a consistent snapshot of the database is taken (`VACUUM INTO`, which
+ *   includes committed WAL content) and the migration fails closed — no schema
+ *   change, no version bump — if that snapshot cannot be produced; every pending
+ *   migration and the version bump then apply as one transaction, so a failure
+ *   rolls back and leaves the prior version intact.
  * - Idempotent: re-running `migrate` on an up-to-date database is a no-op.
  *
  * `schema_version` is independent of the application contract version (`0.2`)
@@ -168,10 +170,10 @@ function databaseHasSchema(database: DatabaseSync): boolean {
 }
 
 /**
- * Apply all pending migrations. Rejects an unsupported schema version; backs up
- * an existing database (after a WAL checkpoint) before changing it; applies
- * every pending migration and the version bump atomically; idempotent when
- * already current.
+ * Apply all pending migrations. Rejects an unsupported schema version; takes a
+ * consistent pre-migration backup of an existing database (failing closed if the
+ * snapshot cannot be produced) before changing it; applies every pending
+ * migration and the version bump atomically; idempotent when already current.
  */
 export function migrate(
   database: DatabaseSync,
@@ -191,12 +193,21 @@ export function migrate(
 
   let backedUp = false
   if (databaseHasSchema(database) && existsSync(io.dbPath)) {
-    // WAL: flush committed data into the main file so the backup is complete
-    // and self-contained (copying the .db alone could miss the -wal contents).
-    database.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+    // Consistent snapshot. `VACUUM INTO` materialises the database's logical
+    // content (including committed WAL frames) into a new file under a read
+    // transaction, so a concurrent reader cannot yield a partial copy.
+    //
+    // Why not checkpoint-then-copy: `PRAGMA wal_checkpoint(TRUNCATE)` reports its
+    // outcome (`busy`, `log`, `checkpointed`) rather than guaranteeing one, so a
+    // reader holding a snapshot leaves `busy = 1` and the WAL unflushed — copying
+    // the `.db` alone could then miss committed rows while still reporting a
+    // successful backup. `VACUUM INTO` either writes a complete snapshot or
+    // throws; on throw we fail closed below, before any schema change.
     mkdirSync(io.backupDir, { recursive: true })
     const stamp = io.timestampMs ?? Date.now()
-    copyFileSync(io.dbPath, join(io.backupDir, `isla-v${current}-${stamp}.db`))
+    const backupPath = join(io.backupDir, `isla-v${current}-${stamp}.db`)
+    rmSync(backupPath, { force: true })
+    database.exec(`VACUUM INTO '${backupPath.replace(/'/g, "''")}'`)
     backedUp = true
   }
 
