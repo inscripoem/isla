@@ -6,7 +6,6 @@ import * as faulty from '../support/faulty-ports'
 import { createCallContext } from '../support/context'
 import {
   FIXTURE_SESSION_ID,
-  FIXTURE_TURN_ID,
   fixtureCommitDelivery,
   fixtureDialogueRequest,
 } from '../support/fixture-data'
@@ -28,6 +27,7 @@ import {
   isSubstantiveSpeech,
   isTruncatedSpeech,
   personaAuthoringIssues,
+  personaVersionKey,
   renderDialoguePrompt,
   renderPersonaBlock,
   resolveCharacterProfile,
@@ -409,7 +409,7 @@ describe('M4 context assembly', () => {
     await seedHistory(memory)
 
     const capture: { view: AssembledDialogueContext | null } = { view: null }
-    const port = createDialoguePort({ clock: FIXTURE_CLOCK, 
+    const port = createDialoguePort({ clock: FIXTURE_CLOCK,
       history: memory,
       textSource: capturingTextSource(capture),
     })
@@ -442,7 +442,7 @@ describe('M4 context assembly', () => {
 describe('M4 persona recall seam', () => {
   it('recalls nothing by default, leaving the prompt unchanged', async () => {
     const capture: { view: AssembledDialogueContext | null } = { view: null }
-    const port = createDialoguePort({ clock: FIXTURE_CLOCK, 
+    const port = createDialoguePort({ clock: FIXTURE_CLOCK,
       textSource: capturingTextSource(capture),
     })
     await generate(port, fixtureDialogueRequest())
@@ -457,7 +457,7 @@ describe('M4 persona recall seam', () => {
 
   it('renders recalled facts with their bible provenance when enabled', async () => {
     const capture: { view: AssembledDialogueContext | null } = { view: null }
-    const port = createDialoguePort({ clock: FIXTURE_CLOCK, 
+    const port = createDialoguePort({ clock: FIXTURE_CLOCK,
       textSource: capturingTextSource(capture),
       personaRecall: {
         recall: () => [
@@ -484,7 +484,7 @@ describe('M4 persona recall seam', () => {
 
     async function historyTurns(recalledLength: number): Promise<number> {
       const capture: { view: AssembledDialogueContext | null } = { view: null }
-      const port = createDialoguePort({ clock: FIXTURE_CLOCK, 
+      const port = createDialoguePort({ clock: FIXTURE_CLOCK,
         history: memory,
         textSource: capturingTextSource(capture),
         personaRecall: {
@@ -619,22 +619,26 @@ describe('M4 context continuity', () => {
 
   it('drops memory from an older persona before current-persona memory', async () => {
     const memory = createDeliveryMemoryStore()
-    memory.noteTurnPersona(FIXTURE_SESSION_ID, 'turn-old', 'character-fixture@0')
+    // Attribution comes from each record's persisted persona fields, so the
+    // fixtures supply explicit durable pairs.
     await memory.commit(
       fixtureCommitDelivery({
         turnId: 'turn-old',
         segmentId: 'seg-0',
         textHash: 'hash-old',
         text: 'Old persona line.',
+        personaProfileId: 'character-fixture',
+        personaProfileVersion: '0',
       }),
     )
-    memory.noteTurnPersona(FIXTURE_SESSION_ID, 'turn-new', 'character-fixture@1')
     await memory.commit(
       fixtureCommitDelivery({
         turnId: 'turn-new',
         segmentId: 'seg-0',
         textHash: 'hash-new',
         text: 'Current persona line.',
+        personaProfileId: 'character-fixture',
+        personaProfileVersion: '1',
       }),
     )
 
@@ -659,13 +663,35 @@ describe('M4 context continuity', () => {
     expect(capture.view?.truncatedByCharacterLimit).toBe(true)
   })
 
-  it('remembers which persona produced a turn', async () => {
+  it('derives persona attribution only from the persisted delivery fields', async () => {
     const memory = createDeliveryMemoryStore()
-    const port = createDialoguePort({ clock: FIXTURE_CLOCK, memory })
-    await generate(port)
-    await memory.commit(fixtureCommitDelivery({ turnId: FIXTURE_TURN_ID }))
+    await memory.commit(
+      fixtureCommitDelivery({
+        turnId: 'turn-known',
+        segmentId: 'seg-known',
+        textHash: 'hash-known',
+        personaProfileId: 'character-fixture',
+        personaProfileVersion: '1',
+      }),
+    )
+    await memory.commit(
+      fixtureCommitDelivery({
+        turnId: 'turn-unknown',
+        segmentId: 'seg-unknown',
+        textHash: 'hash-unknown',
+        personaProfileId: null,
+        personaProfileVersion: null,
+      }),
+    )
 
-    expect(memory.audit()[0]?.personaVersion).toBe('character-fixture@1')
+    const audit = memory.audit()
+    expect(audit.find((entry) => entry.delivery.turnId === 'turn-known')?.personaVersion).toBe(
+      personaVersionKey('character-fixture', '1'),
+    )
+    // An all-null persisted pair stays unknown and is never invented.
+    expect(
+      audit.find((entry) => entry.delivery.turnId === 'turn-unknown')?.personaVersion,
+    ).toBeNull()
   })
 })
 
@@ -832,17 +858,16 @@ describe('M4 session isolation', () => {
     expect(await memory.confirmedHistory('session-two')).toHaveLength(1)
   })
 
-  it('keeps persona attribution apart per session', async () => {
+  it('keeps persisted persona attribution apart per session', async () => {
     const memory = createDeliveryMemoryStore()
-    memory.noteTurnPersona('session-one', 'turn-1', 'character-fixture@1')
-    memory.noteTurnPersona('session-two', 'turn-1', 'character-fixture@0')
-
     await memory.commit(
       fixtureCommitDelivery({
         sessionId: 'session-one',
         turnId: 'turn-1',
         segmentId: 'seg-0',
         textHash: 'hash-one',
+        personaProfileId: 'character-fixture',
+        personaProfileVersion: '1',
       }),
     )
     await memory.commit(
@@ -851,12 +876,18 @@ describe('M4 session isolation', () => {
         turnId: 'turn-1',
         segmentId: 'seg-0',
         textHash: 'hash-two',
+        personaProfileId: 'character-fixture',
+        personaProfileVersion: '0',
       }),
     )
 
-    const entries = await memory.memoryEntries('session-one')
-    expect(entries).toHaveLength(1)
-    expect(entries[0]?.personaVersion).toBe('character-fixture@1')
+    const entriesOne = await memory.memoryEntries('session-one')
+    const entriesTwo = await memory.memoryEntries('session-two')
+    expect(entriesOne).toHaveLength(1)
+    expect(entriesTwo).toHaveLength(1)
+    // The same local turn id under two sessions keeps its own persisted persona.
+    expect(entriesOne[0]?.personaVersion).toBe(personaVersionKey('character-fixture', '1'))
+    expect(entriesTwo[0]?.personaVersion).toBe(personaVersionKey('character-fixture', '0'))
   })
 })
 
@@ -977,28 +1008,41 @@ describe('M4 history source composition', () => {
    * substitute for the durable source. Choosing it merely because it is non-empty
    * would let one newly committed delivery replace reconstructed history.
    */
-  it('treats the durable source as authoritative and the local store as attribution', async () => {
+  it('treats the durable source as authoritative and does not borrow the local store', async () => {
     const durable = createDeliveryMemoryStore()
     const local = createDeliveryMemoryStore()
-    for (const turnId of ['turn-1', 'turn-2', 'turn-3']) {
+    for (const turnId of ['turn-1', 'turn-2']) {
       await durable.commit(
         fixtureCommitDelivery({
           turnId,
           segmentId: 'seg-0',
           textHash: `hash-${turnId}`,
           text: `${turnId} line.`,
+          personaProfileId: null,
+          personaProfileVersion: null,
         }),
       )
     }
-    // The port notes the persona while generating; M5 commits the delivery
-    // afterwards, so the attribution is already in place when the commit lands.
-    local.noteTurnPersona(FIXTURE_SESSION_ID, 'turn-3', 'character-fixture@0')
+    await durable.commit(
+      fixtureCommitDelivery({
+        turnId: 'turn-3',
+        segmentId: 'seg-0',
+        textHash: 'hash-turn-3',
+        text: 'turn-3 line.',
+        personaProfileId: 'character-fixture',
+        personaProfileVersion: '1',
+      }),
+    )
+    // A local record with a contradictory persona for turn-3 must not influence
+    // the durable record's attribution.
     await local.commit(
       fixtureCommitDelivery({
         turnId: 'turn-3',
         segmentId: 'seg-0',
         textHash: 'hash-turn-3',
         text: 'turn-3 line.',
+        personaProfileId: 'character-fixture',
+        personaProfileVersion: '0',
       }),
     )
 
@@ -1018,9 +1062,75 @@ describe('M4 history source composition', () => {
     expect(view?.historySource).toBe('history-port')
     // Every durable record survives; the smaller local view does not truncate it.
     expect(view?.turns.map((turn) => turn.turnId)).toEqual(['turn-1', 'turn-2', 'turn-3'])
-    // Attribution is the local store's job, and it only knows what it was told.
-    expect(view?.turns[2]?.personaVersion).toBe('character-fixture@0')
+    // Attribution is the durable record's own persisted pair.
+    expect(view?.turns[2]?.personaVersion).toBe(personaVersionKey('character-fixture', '1'))
     expect(view?.turns[0]?.personaVersion).toBeNull()
+  })
+
+  it('does not infer a missing or partial persisted persona from local state', async () => {
+    const durable = createDeliveryMemoryStore()
+    const local = createDeliveryMemoryStore()
+    const legacy: Array<{ turnId: string; personaProfileId: string | null; personaProfileVersion: string | null }> = [
+      { turnId: 'turn-half-id', personaProfileId: 'character-fixture', personaProfileVersion: null },
+      { turnId: 'turn-half-version', personaProfileId: null, personaProfileVersion: '1' },
+      { turnId: 'turn-all-null', personaProfileId: null, personaProfileVersion: null },
+    ]
+    for (const entry of legacy) {
+      await durable.commit(
+        fixtureCommitDelivery({
+          turnId: entry.turnId,
+          segmentId: 'seg-0',
+          textHash: `hash-${entry.turnId}`,
+          text: `${entry.turnId} line.`,
+          personaProfileId: entry.personaProfileId,
+          personaProfileVersion: entry.personaProfileVersion,
+        }),
+      )
+      // The local store has a complete, contradictory pair for the same key; it
+      // must not fill in the missing durable component.
+      await local.commit(
+        fixtureCommitDelivery({
+          turnId: entry.turnId,
+          segmentId: 'seg-0',
+          textHash: `hash-${entry.turnId}`,
+          text: `${entry.turnId} line.`,
+          personaProfileId: 'character-fixture',
+          personaProfileVersion: '0',
+        }),
+      )
+    }
+
+    const capture = captureView()
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      history: durable,
+      memory: local,
+      textSource: capturingTextSource(capture),
+    })
+    await generate(port)
+
+    // The three turn identities and their raw partial fields must actually be
+    // present, so an empty history cannot satisfy the assertion below vacuously.
+    const view = capture.view
+    expect(view?.turns.map((turn) => turn.turnId)).toEqual([
+      'turn-half-id',
+      'turn-half-version',
+      'turn-all-null',
+    ])
+    expect(
+      view?.history.map((record) => [
+        record.turnId,
+        record.personaProfileId,
+        record.personaProfileVersion,
+      ]),
+    ).toEqual([
+      ['turn-half-id', 'character-fixture', null],
+      ['turn-half-version', null, '1'],
+      ['turn-all-null', null, null],
+    ])
+    // Neither a half-known pair nor an all-null pair is comparable; each stays
+    // unknown rather than borrowing the local pair.
+    expect(view?.turns.map((turn) => turn.personaVersion)).toEqual([null, null, null])
   })
 
   it('flags the in-memory store as a stand-in rather than durable history', async () => {
@@ -1041,5 +1151,132 @@ describe('M4 history source composition', () => {
     expect(
       capture.view?.warnings.some((warning) => warning.includes('no durable history source')),
     ).toBe(true)
+  })
+})
+
+describe('M4 coordinated attribution adoption', () => {
+  it('builds a persona key that cannot collide across identity/version boundaries', () => {
+    // A naive `id@version` join would make these two distinct personas equal.
+    expect(personaVersionKey('a@b', 'c')).not.toBe(personaVersionKey('a', 'b@c'))
+    expect(personaVersionKey('character-fixture', '1')).toBe(
+      personaVersionKey('character-fixture', '1'),
+    )
+  })
+
+  it('adopts persisted segmentIndex and persona in the projection and immutability checks', async () => {
+    const memory = createDeliveryMemoryStore()
+    const base = fixtureCommitDelivery({
+      turnId: 'turn-adopt',
+      segmentId: 'seg-adopt',
+      textHash: 'hash-adopt',
+      text: 'Adopted attribution.',
+      segmentIndex: 3,
+      personaProfileId: 'persona-x',
+      personaProfileVersion: '9',
+    })
+    expect((await memory.commit(base)).status).toBe('applied')
+
+    const [record] = await memory.confirmedHistory(FIXTURE_SESSION_ID)
+    expect(record?.segmentIndex).toBe(3)
+    expect(record?.personaProfileId).toBe('persona-x')
+    expect(record?.personaProfileVersion).toBe('9')
+
+    // Each attribution field is immutable identity, exactly like M6.
+    expect((await memory.commit({ ...base, segmentIndex: 4 })).status).toBe('conflict')
+    expect((await memory.commit({ ...base, personaProfileId: 'persona-y' })).status).toBe('conflict')
+    expect((await memory.commit({ ...base, personaProfileVersion: '10' })).status).toBe('conflict')
+    // The identical re-commit is still an idempotent duplicate.
+    expect((await memory.commit(base)).status).toBe('duplicate')
+    expect(memory.records()).toHaveLength(1)
+  })
+
+  it('orders turn segments by persisted segmentIndex, unknown last, ties in source order', async () => {
+    const memory = createDeliveryMemoryStore()
+    const segment = (
+      segmentId: string,
+      segmentIndex: number | null,
+      text: string,
+    ): ReturnType<typeof fixtureCommitDelivery> =>
+      fixtureCommitDelivery({
+        turnId: 'turn-order',
+        segmentId,
+        segmentIndex,
+        textHash: `hash-${segmentId}`,
+        text,
+      })
+    // Committed in an order that disagrees with the index order; unknown index
+    // has no claimed position.
+    await memory.commit(segment('seg-unknown', null, 'Unknown position.'))
+    await memory.commit(segment('seg-two', 2, 'Second position.'))
+    await memory.commit(segment('seg-zero', 0, 'First position.'))
+    await memory.commit(segment('seg-two-tie', 2, 'Second position tie.'))
+
+    const capture = captureView()
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      memory,
+      textSource: capturingTextSource(capture),
+    })
+    await generate(port)
+
+    const segments = capture.view?.turns[0]?.segments ?? []
+    expect(segments.map((entry) => entry.segmentId)).toEqual([
+      'seg-zero',
+      'seg-two',
+      'seg-two-tie',
+      'seg-unknown',
+    ])
+    expect(segments[segments.length - 1]?.segmentIndex).toBeNull()
+  })
+
+  it('does not reorder authoritative history for unresolved confirmedEventRefs', async () => {
+    const memory = createDeliveryMemoryStore()
+    for (const turnId of ['turn-1', 'turn-2']) {
+      await memory.commit(
+        fixtureCommitDelivery({
+          turnId,
+          segmentId: 'seg-0',
+          textHash: `hash-${turnId}`,
+          text: `${turnId} line.`,
+        }),
+      )
+    }
+
+    const capture = captureView()
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      memory,
+      textSource: capturingTextSource(capture),
+    })
+    // The ref would match turn-2 under the old ordering hint; an unresolved hint
+    // must not move durable records.
+    await generate(port, fixtureDialogueRequest({ confirmedEventRefs: ['turn-2'] }))
+
+    expect(capture.view?.turns.map((turn) => turn.turnId)).toEqual(['turn-1', 'turn-2'])
+    expect(
+      capture.view?.warnings.some((warning) => warning.includes('confirmedEventRefs')),
+    ).toBe(true)
+  })
+
+  it('excludes the persona prompt block from the history and recall budget', async () => {
+    const memory = createDeliveryMemoryStore()
+    await memory.commit(
+      fixtureCommitDelivery({ turnId: 'turn-budget', segmentId: 'seg-0', textHash: 'hash-b' }),
+    )
+
+    const capture = captureView()
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      history: memory,
+      textSource: capturingTextSource(capture),
+    })
+    await generate(port)
+
+    const view = capture.view
+    expect(view).not.toBeNull()
+    const chargedHistory = (view?.turns ?? []).reduce((total, turn) => total + turn.characters, 0)
+    // The persona block is nonempty but is not part of the character budget.
+    expect(renderPersonaBlock(FIXTURE_CHARACTER_PROFILE).length).toBeGreaterThan(0)
+    expect(view?.estimatedCharacters).toBe(chargedHistory)
   })
 })

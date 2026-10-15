@@ -102,9 +102,43 @@ export const DEFAULT_CHARACTER_PROFILES: readonly CharacterProfile[] = [
  * version number under a different profile id is a different character. Memory
  * records store this key so words spoken by a superseded character stay
  * identifiable afterwards.
+ *
+ * A profile id or a version may contain any character, including whatever
+ * delimiter a naive join would use. Concatenating with `@` would let
+ * `("a@b", "c")` and `("a", "b@c")` collide into one key, so a record from one
+ * persona could be mistaken for another's. The canonical key is therefore the
+ * JSON pair, which distinguishes identity from version unambiguously for any
+ * inputs and never merges two different personas.
  */
 export function personaVersionKey(profileId: string, version: string): string {
-  return `${profileId}@${version}`
+  return JSON.stringify([profileId, version])
+}
+
+/**
+ * A complete, known persona attribution. Returns null when either the identity
+ * or the version is missing: a partial pair is not comparable, and treating it
+ * as a concrete persona would invent knowledge the evidence does not carry.
+ */
+export function personaRefFrom(
+  profileId: string | null,
+  version: string | null,
+): { profileId: string; version: string } | null {
+  if (profileId === null || version === null) return null
+  return { profileId, version }
+}
+
+/**
+ * Canonical comparison key for a delivery's captured attribution, or null when
+ * the delivery carries no complete known persona pair. Durable delivery evidence
+ * takes precedence over a process-local note; a partial or absent pair stays
+ * unknown rather than being fabricated.
+ */
+export function personaKeyFromDelivery(delivery: {
+  personaProfileId: string | null
+  personaProfileVersion: string | null
+}): string | null {
+  const ref = personaRefFrom(delivery.personaProfileId, delivery.personaProfileVersion)
+  return ref === null ? null : personaVersionKey(ref.profileId, ref.version)
 }
 
 /**

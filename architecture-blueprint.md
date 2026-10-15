@@ -1,6 +1,6 @@
 # Isla architecture blueprint
 
-Revision: 2026-10-15.1. The team-confirmed allocation is retained. Product requirement/interface acceptance remains under review. Main at `b316080` includes the diagnostic foundation, shared contracts, fixture kits, M5 coordinator, M1 fixed synthesis/mapped rendering/browser player, and M6 in-memory storage. PR30 delivery attribution and PR23 dialogue remain open; SQLite and governance PR26/PR27 remain drafts. The integrated product loop is still pending.
+Revision: 2026-10-15.1. The team-confirmed allocation is retained. Product requirement/interface acceptance remains under review. Main at `a28d76f` includes the diagnostic foundation, shared contracts, fixture kits, M5 coordinator, M1 fixed synthesis/mapped rendering/browser player, and M6 in-memory storage. PR23 dialogue is merged; PR30 attribution and local M4 contract adoption remain under review; SQLite and governance PR26/PR27 remain drafts. The integrated product loop is still pending.
 
 ## Scope and current behavior
 
@@ -15,7 +15,7 @@ Use one package. All paths below are relative to the repository root. Planned pa
 | M1 | `src/performance/` | Fixed adapters and browser player merged; live services pending | Synthesis, browser playback and avatar adapters; expose the browser player through `src/performance/browser/`, separate from Node-only/provider implementation. |
 | M2 | `src/console/` | Existing | Input, configuration, control and presentation; consume M1's player through its public interface. |
 | M3 | `src/decision/` | Planned | Message selection, reply intent, decision providers and rule reactions; no authoritative output dispatch. |
-| M4 | `src/dialogue/` | PR23 open; revised implementation awaiting re-review | Dialogue providers, persona/context assembly and memory semantics; access persistence through M6 interfaces. |
+| M4 | `src/dialogue/` | PR23 squash-merged; local PR30 compatibility under owner review | Dialogue providers, persona/context assembly and memory semantics; access persistence through M6 interfaces. |
 | M5 — CHANG Xuben | `src/runtime/` | Existing | Authoritative lifecycle, request scheduling, validation, cancellation, dispatch and composition. |
 | M6 | `src/storage/`, `src/evaluation/`, `.github/workflows/` | In-memory storage merged; SQLite/governance drafts open | SQLite/migrations, recording/replay, common evaluation tooling and CI. |
 

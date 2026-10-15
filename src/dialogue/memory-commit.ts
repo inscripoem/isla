@@ -5,9 +5,10 @@ import type {
   DeliveryClassification,
   DeliveryCommitAck,
 } from '../contracts'
-import type { MemoryEntry, MemoryEntrySource } from './context'
-import { deliveryKey, turnKey } from './delivery-key'
+import type { MemoryEntry } from './context'
+import { deliveryKey } from './delivery-key'
 import { classifyMemoryBucket } from './memory-semantics'
+import { personaKeyFromDelivery } from './persona'
 
 /**
  * Delivery memory: generated text only becomes spoken history here.
@@ -84,13 +85,14 @@ export function isAllowedDeliveryPair(
 }
 
 /**
- * A stored delivery plus the version metadata M4 keeps beside it.
+ * A stored delivery plus the persona attribution M4 keeps beside it.
  *
- * `personaVersion` is an M4-internal field: the C6 wire format does not carry it
- * yet, and M4 must not add fields to the shared contract to remember who spoke.
- * The dialogue port records which persona produced a turn, and the commit logic
- * below looks it up. `null` means M4 has no record, and trimming then treats the
- * record as current rather than stale.
+ * Attribution is derived only from the delivery's own persisted
+ * `personaProfileId`/`personaProfileVersion` (see `personaKeyFromDelivery`). A
+ * partial or absent pair is unknown and remains unknown: it is never inferred
+ * from turn identity, a local note or any other process-local state. `null`
+ * means unknown, and trimming then treats the record as current rather than
+ * stale.
  */
 export interface StoredDelivery {
   delivery: CommitDelivery
@@ -99,28 +101,6 @@ export interface StoredDelivery {
   seq: number
 }
 
-/**
- * Set by the dialogue port when it generates a turn, read when M5 commits that
- * turn's delivery. Kept narrow so the commit port does not depend on a full
- * store implementation.
- *
- * The session is required because a turn is only identified by
- * `(sessionId, turnId)`: the session-scoped turn counter restarts for every
- * session, so keying by `turnId` alone would hand one session's persona
- * attribution to another session.
- */
-export interface TurnPersonaSink {
-  noteTurnPersona(sessionId: string, turnId: string, personaVersion: string): void
-}
-
-/**
- * The memory capability the dialogue port needs: a versioned read side, plus a
- * place to record which persona generated a turn. `createDeliveryMemoryStore()`
- * satisfies both; M4-02 can swap in M6-backed storage without changing this
- * interface.
- */
-export type DialogueMemory = MemoryEntrySource & TurnPersonaSink
-
 export interface DeliveryMemoryStore {
   /** Store one delivery. Idempotent; a contradictory input is never applied. */
   commit(delivery: CommitDelivery): Promise<DeliveryCommitAck>
@@ -128,12 +108,10 @@ export interface DeliveryMemoryStore {
   confirmedHistory(sessionId: string): Promise<ConfirmedDelivery[]>
   /** Full audit view, including partial deliveries and records never delivered. */
   records(): readonly CommitDelivery[]
-  /** Audit view with version metadata; an input to context assembly. */
+  /** Audit view with persona attribution; an input to context assembly. */
   audit(): readonly StoredDelivery[]
-  /** Versioned confirmed records offered to `MemoryEntrySource`. */
+  /** Confirmed records with persona attribution, for `MemoryEntrySource`. */
   memoryEntries(sessionId: string): Promise<readonly MemoryEntry[]>
-  /** Remember which persona generated a turn. See TurnPersonaSink. */
-  noteTurnPersona(sessionId: string, turnId: string, personaVersion: string): void
 }
 
 /**
@@ -160,6 +138,11 @@ function toConfirmedDelivery(delivery: CommitDelivery): ConfirmedDelivery {
     receiptId: delivery.receiptId,
     classification: delivery.classification,
     modality: delivery.modality,
+    // Persisted projection of the coordinated attribution: the original segment
+    // index and the generating persona. Unknown legacy values stay explicit null.
+    segmentIndex: delivery.segmentIndex,
+    personaProfileId: delivery.personaProfileId,
+    personaProfileVersion: delivery.personaProfileVersion,
   })
 }
 
@@ -178,7 +161,6 @@ function conflictAck(
 
 export function createDeliveryMemoryStore(): DeliveryMemoryStore {
   const stored = new Map<string, StoredDelivery>()
-  const turnPersona = new Map<string, string>()
   let seq = 0
 
   return {
@@ -202,9 +184,10 @@ export function createDeliveryMemoryStore(): DeliveryMemoryStore {
       if (existing === undefined) {
         stored.set(key, {
           delivery: Object.freeze(isolate(delivery)),
-          personaVersion:
-            turnPersona.get(turnKey({ sessionId: delivery.sessionId, turnId: delivery.turnId })) ??
-            null,
+          // Attribution comes only from the delivery's own persisted fields. A
+          // partial or absent pair stays unknown (null): it is never inferred
+          // from turn identity, a local note or any other process-local state.
+          personaVersion: personaKeyFromDelivery(delivery),
           seq: seq++,
         })
         return {
@@ -215,11 +198,17 @@ export function createDeliveryMemoryStore(): DeliveryMemoryStore {
       }
 
       /*
-       * A changed text hash means the finalized text moved under a stable segment
-       * identity. That breaks immutability, so it is reported as a conflict
-       * rather than applied as an update.
+       * A changed text hash, segment index or persona attribution means the
+       * immutable identity moved under a stable delivery key. That breaks
+       * immutability, so it is reported as a conflict rather than applied as an
+       * update - the same rule M6 enforces at the storage boundary.
        */
-      if (existing.delivery.textHash !== delivery.textHash) {
+      if (
+        existing.delivery.textHash !== delivery.textHash ||
+        existing.delivery.segmentIndex !== delivery.segmentIndex ||
+        existing.delivery.personaProfileId !== delivery.personaProfileId ||
+        existing.delivery.personaProfileVersion !== delivery.personaProfileVersion
+      ) {
         return conflictAck(existing.delivery, delivery, key)
       }
 
@@ -275,17 +264,6 @@ export function createDeliveryMemoryStore(): DeliveryMemoryStore {
           delivery: toConfirmedDelivery(entry.delivery),
           personaVersion: entry.personaVersion,
         }))
-    },
-
-    noteTurnPersona(sessionId, turnId, personaVersion) {
-      /*
-       * Entries are never evicted. A receipt can arrive long after its turn was
-       * generated, and the attribution must still resolve to the persona that
-       * produced it, so dropping old entries would lose exactly the late-receipt
-       * case this exists for. The unbounded growth is a known limitation, to be
-       * resolved by the persistent attribution path (issue #22, item 3).
-       */
-      turnPersona.set(turnKey({ sessionId, turnId }), personaVersion)
     },
   }
 }

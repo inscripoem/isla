@@ -17,8 +17,8 @@ import { createFinalizedSegmentRegistry, deriveSegmentId } from './segment-id'
 import { isSubstantiveSpeech, normalizeFinalText } from './text'
 import { buildDialogueUsage } from './usage'
 import { FIXTURE_DIALOGUE_MODEL, FIXTURE_DIALOGUE_MODEL_VERSION } from './usage'
-import { personaVersionKey, resolveCharacterProfile } from './persona'
-import type { DialogueMemory } from './memory-commit'
+import { resolveCharacterProfile } from './persona'
+import type { MemoryEntrySource } from './context'
 
 /**
  * Dialogue generation.
@@ -79,12 +79,12 @@ export interface DialoguePortOptions {
    */
   history?: HistoryQueryPort
   /**
-   * Versioned attribution side: it records which persona produced each generated
-   * turn, so trimming can identify memory written by a superseded persona. It also
-   * provides persona facts for the record set, and is used as the record source
-   * only when no durable `history` was supplied - see `assembleDialogueContext`.
+   * Local record source. It is used as the record source only when no durable
+   * `history` was supplied - see `assembleDialogueContext`. Persona attribution
+   * travels on the persisted delivery itself, so this side no longer carries a
+   * separate version map.
    */
-  memory?: DialogueMemory
+  memory?: MemoryEntrySource
   /**
    * Persona fact recall. Omitted means no recall, equivalent to
    * `PERSONA_RECALL_POLICY = 'off'`. The recall block shares one character budget
@@ -169,18 +169,6 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
         // would impersonate one the operator never selected.
         return buildEnd(request, 'failed', 0, startedAtMs, 'failed')
       }
-
-      /*
-       * Record which persona is behind the turn before generating, so a delivery
-       * committed for this turn later can carry the version. Memory of what was said
-       * can outlive the persona that said it, and trimming has to know which is
-       * which. The session is part of the key because turn ids restart per session.
-       */
-      options.memory?.noteTurnPersona(
-        request.sessionId,
-        request.turnId,
-        personaVersionKey(profile.profileId, profile.version),
-      )
 
       const view = await assembleDialogueContext({
         request,
