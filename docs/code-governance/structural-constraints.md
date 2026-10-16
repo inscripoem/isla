@@ -77,11 +77,15 @@ New IDs carry the declaring module's **owner prefix**; the trailing number is pr
 
 ### 3.2 Rules
 
-1. **Grandfathering.** IDs already published (`C-01…C-51`, `INV-01…INV-15`, and any ID allocated under the
-   old scheme before this document is adopted) are kept as-is and **never renumbered**.
+1. **Grandfathering.** Every id published, or already allocated on a branch in flight, when this convention
+   is adopted is kept as-is and **never renumbered**. At this revision: `INV-01…INV-09` and `C-01…C-47` are
+   published on `main`; `INV-10…INV-14` and `C-48…C-51` are allocated on branches in flight; `INV-15` is
+   pending. The convention applies to ids allocated **after** adoption.
 2. **New IDs carry the owner prefix.** A module adds only IDs under its own prefix (`C-M6-1`).
-3. **Prefix must match the Owner column.** The `Owner` already recorded for a row must agree with the ID
-   prefix; drift (or reassignment) is a violation, not a silent renumber.
+3. **Prefix must match the recorded owner.** The owner already recorded for a row must agree with the id
+   prefix; drift (or reassignment) is a violation, not a silent renumber. Where a register exposes the owner
+   as a column — the `Owner` column that lands with the R3 tooling PR (§4) — that column is the value
+   checked; until then the owner is read from the row's existing component/verification text.
 4. **Append-only.** A retired ID is never reused.
 5. **Renumbering is recorded**, never silent — it goes in the change log (delta), with an old→new mapping.
 
@@ -136,7 +140,7 @@ truth.
 | Tier | Where it lives | Examples | Rule |
 | --- | --- | --- | --- |
 | **Authoritative** | in-repo, English, version-controlled | ADRs, deltas, the registers, `src/contracts/`, source, these governance docs | the **single source of truth** — what review approves and what the gates read |
-| **Derived** | in-repo, regenerable | `docs/architecture/evaluation-table.md`, indexes, knowledge-base copies | must cite the authoritative artifact it is generated from; never hand-edited as truth; regenerate from source |
+| **Derived** | in-repo, regenerable | `docs/architecture/evaluation-table.md` (once M6-02 generates it), indexes, knowledge-base copies | must cite the authoritative artifact it is generated from; never hand-edited as truth; regenerate from source |
 | **External** | **outside** the checkout | raw session transcripts/exports, Chinese understanding copies, evidence ZIPs, historical review snapshots | referenced by id/hash; **never** substituted for a repo artifact and never committed when the submission whitelist excludes it |
 
 1. **The repository is the single source of truth.** A derived or external copy never overrides it — for
@@ -163,9 +167,10 @@ truth.
    announce it in the coordination thread, and expect the shared file to merge-conflict while several
    owners are active — resolve by **union** (keep every owner's row), never by dropping a row that is not
    yours.
-4. **The register records its own owner.** Where a register carries an `Owner` column (invariants, trace
-   matrix) that column is authoritative for who answers for the row, and it must agree with the id prefix
-   (§3.2).
+4. **The register records its own owner.** Where a register carries an owner (the `Owner` column that lands
+   with the R3 tooling PR on `invariants.md` and `trace-matrix.md`) it is authoritative for who answers for
+   the row, and it must agree with the id prefix (§3.2). Until that column is on `main`, ownership is read
+   from the row's existing `Enforcing component` text.
 
 ## 7. Change policy
 
