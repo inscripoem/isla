@@ -555,3 +555,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Owner-approved Option A (mixed-artifact classification); ADR-006"
+  - date: 2026-10-16
+    task: R3
+    branch: m6-r3-gates
+    change: "R3 gate increment: enforce the owner-prefixed id convention in the traceability fitness function (accept C-M6-1 as well as C-12; reject a prefixed id whose Owner is not that module) and implement gate G4 as an honest non-blocking check (reports not run without an evaluation set, never a pass; fails a table that omits the fixed conditions NFR-01 requires); accuracy pass on README, ADR-006 and the debt register"
+    requirements: [FR-06]
+    invariants: [INV-12]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Pending owner review; the case id for the id-enforcement and the G4 gate follows the convention in docs/code-governance/structural-constraints.md (allocate before adding, never self-assign)"
