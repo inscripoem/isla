@@ -40,7 +40,7 @@ The CI pipeline implements the six blocking gates plus the traceability fitness 
 
 | Gate | Enforced by |
 | --- | --- |
-| G1 — tests approved before implementation | a pull-request review gate (the `tests-approved` label); not a CI step |
+| G1 — tests approved before implementation | the **`verify` job** (advisory step): the `tests-approved` label on a code/prompt pull request |
 | G2 — static analysis + boundary | `pnpm typecheck && pnpm lint`; `pnpm test:readiness` (import/permission boundaries) |
 | G3 — requirements schema | `pnpm test:readiness` (registry validation) |
 | G4 — semantic evaluation | `pnpm gate:eval` — reports **not run** without an evaluation set + provider access (never a pass), and fails an evaluation table that omits the fixed conditions NFR-01 requires |
