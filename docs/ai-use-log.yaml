@@ -585,3 +585,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Addresses M5's CHANGES_REQUESTED on 92871c2. This entry itself was demanded by the newly wired G6 gate, which failed the push run for a src/ change without a log update - the gate catching its own author. No re-review requested yet; G1 remains advisory."
+  - date: 2026-10-16
+    task: R3
+    branch: m6-r3-gates
+    change: "R3 double-check corrections: the tooling now cites the renumbered invariants (trace -> INV-13, AI-use log -> INV-14) across trace-fitness, ai-use-log-gate, ci.yml and ADR-006; and the gate change-set file is written under .cache (gitignored) instead of the repository root. Found by running the new pre-review checklist over our own work."
+    requirements: [FR-06]
+    invariants: [INV-13, INV-14]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Same self-review pass as the M5 review fixes; no re-review requested yet."
