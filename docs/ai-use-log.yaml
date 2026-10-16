@@ -773,3 +773,72 @@ entries:
       explicit entry test to test:m1. PR34 still depends on PR33. Production
       M5/M2 integration, live VTS, PR36 fixes and full product/course acceptance
       remain separate. Issue2 stays open with unfinished tasks unchecked.
+  - date: 2026-10-16
+    task: M1-02-M6-entry-coverage
+    branch: feat/m1-02-kokoro-live
+    member: Pioneer141 (M1)
+    change: Add the three worker-entry regressions requested by M6 review
+      5542951948 for busy admission, coded provider rejection and loaded-model
+      initialization failure; preserve the original five entry test bodies.
+    requirements: [FR-04, FR-05, NFR-06]
+    invariants: [INV-01]
+    commits: []
+    agent: opencode/deepseek-flash
+    provider: deepseek
+    model: deepseek-flash
+    opencode_version: 1.18.34
+    launch_flags: [--pure, --agent, build, --variant, xhigh, --auto]
+    sessions: [ses_ebaf70a05ffe7Bg2SToPGXS9fV]
+    supervision: OpenCode authored the actual-entry test and private harness
+      changes. Codex scoped and captured the genuine native session, ran fresh
+      baseline and final checks, arranged independent AI review and prepared
+      factual metadata and authorized GitHub publication.
+    human_review: The user explicitly authorized these three coverage cases,
+      full transcripts, commit/push, an English M6 reply, Issue2 synchronization
+      and M5/M6 re-review requests. The preceding head had M5 approval and M6
+      COMMENTED feedback; review of this new head remains pending.
+    transcript_record: One genuine official DeepSeek session, two rounds, eight
+      unabridged raw event/export/stderr originals and two passing central
+      model/session audits; source and archive bytes and hashes match.
+    development_sequence: Round01 added three cases over existing correct
+      production behavior and all eight entry cases passed on the first run.
+      Supervisor review then requested final settled message counts and no-ready
+      assertions. Round02 tightened those assertions and kept the same green
+      results. No failing production mutation or test-first red is claimed.
+    verification:
+      platform: Windows
+      node: 24.14.1
+      starting_head: 20cbd7eecd2dca56a01a1c78ce4950fb7b6b7303
+      baseline_entry: 5 passed
+      baseline_m1: 211 passed
+      baseline_full: 536 passed, six named Windows failures and three tsx ENOENT
+        errors; verify exited1 and the separate build passed.
+      entry: 8 passed, including the three new actual-entry branch cases.
+      m1: 214 passed across the two explicit offline files.
+      typecheck: passed
+      lint: passed
+      build: passed
+      full_suite: Final bounded rerun539 passed with the same six baseline
+        failure names and three tsx ENOENT errors; verify remains exit1.
+      intermediate_full_run: The first final full run536 passed with nine
+        failures and three tsx errors, including three unchanged HTTP health
+        tests failing fetch with bad port. The isolated server suite then passed
+        19/19 and the unchanged full rerun returned to the six-failure baseline.
+        The first result is retained; its intermittent port cause is not proven.
+      independent_review: Eight actual-entry cases passed independently and
+        final test/worker hashes are bound. Busy and final result counts, real
+        reset-module error-class identity, initialization failure and original
+        five test bodies were checked. Cleanup was statically reviewed; no new
+        deliberately failing teardown probe was run.
+      ci: Pending for this new coverage commit at record creation; exact-head
+        results are reported separately in PR34 and Issue2.
+    scope: Only the existing entry test and this append-only AI-use metadata
+      change. Native MessageChannel and controlled inference exercise the real
+      entry; no SDK/weights, production implementation, public API, package,
+      dependency, lock, CI policy or live smoke change. Existing safe teardown
+      waits for the controlled exit before closing ports and restoring mocks.
+      M6 minor malformed-message/null-parentPort/README-command notes remain
+      outside this three-branch slice. PR34 stays stacked on PR33. M2/M5
+      production adoption, dynamic audio HTTP/resolver integration, live VTS
+      and full product/course acceptance remain separate. Keep Issue2 Open
+      with unfinished tasks unchecked; agents never merge or enable auto-merge.
