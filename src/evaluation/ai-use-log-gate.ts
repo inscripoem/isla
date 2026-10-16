@@ -3,7 +3,7 @@ import { readChangedFiles } from './changed-files'
 
 /**
  * M6 / R3 — gate G6: a code or prompt change must update the AI-use log
- * (ADR-006, INV-13; docs/ai-use-log.yaml).
+ * (ADR-006, INV-14; docs/ai-use-log.yaml).
  *
  * The gate takes the list of changed files — from explicit arguments, or from the
  * list CI writes to `CHANGED_FILES_FILE` — and fails when `src/` or `prompts/`

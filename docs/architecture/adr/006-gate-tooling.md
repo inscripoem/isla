@@ -1,7 +1,7 @@
 # ADR-006 — Governance gate tooling and traceability fitness functions
 
 Status: under review (M6). Shared-architecture coordination with M5 pending.
-Date: 2026-10-14 · Owner: M6 · Invariants: INV-12 · Cases: C-34, C-35, C-37.
+Date: 2026-10-14 · Owner: M6 · Invariants: INV-13 · Cases: C-34, C-35, C-37.
 Relates to: ADR-001..005. Revision type: ADD (new capability, R3 / #17).
 
 ## Context
@@ -27,7 +27,7 @@ inside `pnpm test`, but are not named gates; G1/G4/G6 are absent). The course di
      when PRs are merged.
 - Uses a tolerant Markdown-table parser (`src/evaluation/markdown.ts`) — **no new schema**; revisit
   machine-readable YAML sources + a generator later.
-- Enabled by `INV-12`; verified by **C-34** (valid repo → no violations), **C-35** (injected defect → violation)
+- Enabled by `INV-13`; verified by **C-34** (valid repo → no violations), **C-35** (injected defect → violation)
   and **C-37** (governed row without an owner → violation).
 
 ### D2 — The gates are explicit and blocking
@@ -35,7 +35,7 @@ inside `pnpm test`, but are not named gates; G1/G4/G6 are absent). The course di
   `pnpm test:readiness`; **trace** `pnpm test:trace`; **G5** `pnpm test`; **G6** `pnpm gate:ai-use-log`
   over the pull-request diff; then `pnpm build`.
 - **G6** is `src/evaluation/ai-use-log-gate.ts` — a code/prompt change must also update
-  `docs/ai-use-log.yaml` (INV-13).
+  `docs/ai-use-log.yaml` (INV-14).
 - **G1** is an **advisory step inside the `verify` job**: it reads the `tests-approved` label on a
   pull request that changes code or prompts. It becomes blocking when the team agrees and branch
   protection requires `verify` — the check is the job, not a separately named check. **G4** is
@@ -70,7 +70,7 @@ inside `pnpm test`, but are not named gates; G1/G4/G6 are absent). The course di
 
 1. Review inputs — D7 gates; the visibility playbook. 2. Drivers — verifiable governance.
 3. Decompose — parse vs checks. 4. Concepts — fitness functions; injected filesystem. 5. Instantiate —
-`markdown.ts`, `trace-fitness.ts`. 6. Record — this ADR + rows + INV-12 + C-34/C-35/C-37 + Delta-006.
+`markdown.ts`, `trace-fitness.ts`. 6. Record — this ADR + rows + INV-13 + C-34/C-35/C-37 + Delta-006.
 7. Evaluate — 3-tier verify.
 
 ## Re-open triggers

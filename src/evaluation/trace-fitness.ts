@@ -9,7 +9,7 @@ import {
 } from './requirements-registry'
 
 /**
- * M6 / R3 — traceability fitness functions (ADR-006, INV-12).
+ * M6 / R3 — traceability fitness functions (ADR-006, INV-13).
  *
  * Machine-checks the visibility chain (`REQ → Driver → Concept → Element →
  * Interface → Code → Test → Monitor`) across the repository artifacts. An empty

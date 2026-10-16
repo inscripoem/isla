@@ -7,7 +7,7 @@ name: CI
 #   G2  static analysis  — typecheck + lint on every commit
 #   G3  schema + boundary — requirements registry validates; import/permission
 #       boundaries hold (the readiness suite)
-#   trace — traceability fitness functions (INV-12): a broken chain link fails
+#   trace — traceability fitness functions (INV-13): a broken chain link fails
 #   G5  regression       — every offline suite passes, zero regression
 #   G6  AI-use log       — a code/prompt change must update docs/ai-use-log.yaml
 #   G4  semantic eval    — not run without an evaluation set + provider access
