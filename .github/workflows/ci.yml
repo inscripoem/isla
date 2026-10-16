@@ -63,9 +63,12 @@ jobs:
           fi
           # NUL-separated all the way to the gates, so a path containing a space or a
           # newline stays one path.
-          echo "changed files: $(tr -cd '\0' < .cache/changed-files.nul | wc -c | tr -d ' ')"
+          COUNT="$(tr -cd '\0' < .cache/changed-files.nul | wc -c | tr -d ' ')"
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "changed files: $COUNT"
 
       - name: G1 - test approval (advisory until the team enables it)
+        id: g1
         if: github.event_name == 'pull_request'
         env:
           PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
@@ -73,27 +76,55 @@ jobs:
         run: pnpm gate:test-approval advise
 
       - name: G2 - static analysis (typecheck + lint)
+        id: g2
         run: pnpm typecheck && pnpm lint
 
       - name: G3 - requirements schema + import/permission boundaries
+        id: g3
         run: pnpm test:readiness
 
       - name: trace - traceability fitness functions
+        id: trace
         env:
           # The frozen-path check runs against the diff acquired above.
           CHANGED_FILES_FILE: .cache/changed-files.nul
         run: pnpm test:trace
 
       - name: G5 - regression (all offline suites)
+        id: g5
         run: pnpm test
 
       - name: G6 - AI-use log updated for code/prompt changes
+        id: g6
         env:
           CHANGED_FILES_FILE: .cache/changed-files.nul
         run: pnpm gate:ai-use-log
 
       - name: G4 - semantic evaluation (reported not run without an evaluation set)
+        id: g4
         run: pnpm gate:eval
 
       - name: build
+        id: build
         run: pnpm build
+
+      - name: gate summary
+        if: always()
+        run: |
+          {
+            echo "## Gate summary"
+            echo ""
+            echo "Derived from each step's own outcome; the enforcement state in the label is the gate's documented design."
+            echo ""
+            echo "| Gate | Outcome |"
+            echo "| --- | --- |"
+            echo "| diff acquisition | ${{ steps.changed.outcome }} — ${{ steps.changed.outputs.count }} file(s) |"
+            echo "| G1 test approval (advisory) | ${{ steps.g1.outcome }} |"
+            echo "| G2 static analysis + boundary | ${{ steps.g2.outcome }} |"
+            echo "| G3 requirements schema | ${{ steps.g3.outcome }} |"
+            echo "| trace traceability fitness | ${{ steps.trace.outcome }} |"
+            echo "| G5 regression | ${{ steps.g5.outcome }} |"
+            echo "| G6 AI-use log | ${{ steps.g6.outcome }} |"
+            echo "| G4 semantic eval (not run without an evaluation set) | ${{ steps.g4.outcome }} |"
+            echo "| build | ${{ steps.build.outcome }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
