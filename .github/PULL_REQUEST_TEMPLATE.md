@@ -29,6 +29,19 @@
 ## Operational limits
 - Unsupported assets/actions; service availability; measurement conditions:
 
+## Pre-review self-check (the author runs this first; the reviewer repeats it)
+
+- [ ] **1 — Does each gate actually run in CI?** Named command, the inputs it needs, and the events that
+      trigger it. A unit test of a function is not the pipeline.
+- [ ] **2 — Does a failure go red?** No `|| true`, no swallowed error, no fallback that turns a broken
+      check into a pass.
+- [ ] **3 — Do the claims match the facts?** The counts and commands in this description equal this head's
+      actual run; a file's prose agrees with its data (for example an `Owner` cell and the header).
+- [ ] **4 — Does documented behaviour match the mechanism?** Every promise in a document is executable —
+      "CI re-runs when the label is added" implies the workflow lists that trigger.
+- [ ] **5 — Did you run it yourself?** Frozen install, the role command and `verify`, plus each gate CLI
+      with a valid, an invalid and an empty input — and the numbers quoted above come from that run.
+
 ## Gates (D7)
 - [ ] G1 tests approved before implementation (label `tests-approved`)
 - [ ] G2 static/boundary green
