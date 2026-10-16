@@ -1464,3 +1464,14 @@ entries:
       production adoption, dynamic audio HTTP/resolver integration, live VTS
       and full product/course acceptance remain separate. Keep Issue2 Open
       with unfinished tasks unchecked; agents never merge or enable auto-merge.
+
+  - date: 2026-10-16
+    task: M6-02
+    branch: m6-02-bench
+    change: "M6-02 slice 1 (measurement record): src/evaluation/metrics.ts — AttemptRecord / StageTiming / AttemptUsage, a nearest-rank percentile with no dependency, and an honest summarise (failed and cancelled attempts are counted, a stage reports the sample it measured, usage is summed only when every attempt reports it). Plus ADR-007, Delta-007 and 10 tests. Additive only: no contract, register or behaviour change."
+    requirements: [NFR-01, NFR-03, NFR-04]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Owner-directed head start while PRs #26/#27/#32 await review. ADR-007 records the honesty rules; ids are pending allocation per structural-constraints.md section 3 (allocate before adding, never self-assign)."
