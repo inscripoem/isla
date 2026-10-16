@@ -1,11 +1,12 @@
 # Structural constraints
 
-Status: **proposal (M6), for team review.** Owner: M6 (tooling) with M5 coordination. Date: 2026-10-15.
+Status: **proposal (M6), for team review.** Owner: M6 (tooling) with M5 coordination. Revision 2026-10-16.1.
 Course deliverable: **D3 (coding governance)**. Companion: `verification-constraints.md` (D4).
 
 These rules bound how the coding agent may structure work: which module owns which element, how modules
-extend the baseline, how every function stays traceable, the authority boundaries, and — added 2026-10-15
-— how **stable identifiers are allocated** so parallel contributors cannot collide.
+extend the baseline, how every function stays traceable, the authority boundaries, how **stable
+identifiers are allocated** so parallel contributors cannot collide, **which artifacts are authoritative**,
+**which register each owner may edit**, and **what enforces each rule**.
 
 ## Why this document exists (evidence, not paperwork)
 
@@ -30,7 +31,8 @@ check** plus a **namespace that makes collisions impossible by construction** �
 already applies to invariants: put the rule in a **fail-closed gate**, not in a prompt or a memo.
 
 This document is therefore both the **D3 deliverable** and the fix: module rules and authority boundaries
-(§1–§2), the ID convention (§3), and the gate that enforces it (§4).
+(§1–§2), the ID convention (§3), and — for every rule — the mechanism that enforces it and whether that
+mechanism is on `main` yet (§4). Artifact authority and register ownership follow in §5–§6.
 
 ## 1. Module organization
 
@@ -88,7 +90,7 @@ New IDs carry the declaring module's **owner prefix**; the trailing number is pr
 The defect is a **merge-time collision in a shared namespace**; the canonical fix for that is
 **namespacing**, not partitioning one global counter. A prefix guarantees distinct IDs across owners
 **by construction** (no allocation step, no lookup table), is **self-documenting**, and — decisively —
-**composes with the endgame** (§6): once registries are per-owner fragments, each fragment numbers its own
+**composes with the endgame** (§8): once registries are per-owner fragments, each fragment numbers its own
 rows with no cross-owner coordination at all.
 
 ### 3.4 Fallback — numeric blocks (if the team rejects the tooling change)
@@ -101,21 +103,77 @@ Blocks are zero-churn (`C-\d+` still matches) but only **shrink** the collision 
 a cross-owner allocation step, cap each owner at 100 IDs, need a lookup table to read ownership, and do
 not compose with per-owner fragments. Acceptable only while each module has a single writer.
 
-## 4. Verification
+## 4. Rules and their enforcement
 
-- The **traceability fitness function** (`src/evaluation/trace-fitness.ts`) rejects duplicate IDs and
-  dangling references across the registers; the registers are schema-validated by the readiness suite.
-- **Tooling cost of prefixes (one-time, shared):** widen the case recogniser at
-  `trace-fitness.ts:58` from `/\bC-\d+\b/g` to accept `C-<owner>-<n>` (e.g. `/\bC-(?:M\d+-)?\d+\b/g`), and
-  add a **prefix ↔ Owner-column** check. Legacy IDs keep matching unchanged.
-- *(Advisory, optional)* a check may flag a **new** ID whose prefix does not match its declaring module.
+A rule without an enforcement mechanism is a preference. Each rule below names the mechanism that fails
+when it is broken, and **whether that mechanism is on `main` yet** — so this document never claims a gate
+that does not exist.
 
-## 5. Change policy
+| Rule | Enforcement | State |
+| --- | --- | --- |
+| Module boundary: production must not import `test/`; cross-module calls go through ports (§1.4) | import-boundary tests | ✅ on `main` |
+| Registers are schema-valid; ids are unique and reference existing rows (§3) | readiness suite over `requirements.yaml` / `case-registry.yaml` | ✅ on `main` |
+| The trace chain is complete; dangling references fail (§1.3) | `src/evaluation/trace-fitness.ts` + the `trace` gate | ⏳ **R3 (#27)** |
+| Frozen paths require an ADR and human review (§7) | `docs/architecture/frozen.yaml` + the `frozen-modified` check | ⏳ **R3 (#27)** |
+| Every change updates the AI-use log (G6) | `ai-use-log-gate.ts` + the G6 gate | ⏳ **R3 (#27)** |
+| One task = one commit; no agent merges; PR checklist | `.github/PULL_REQUEST_TEMPLATE.md` (+ `AGENTS.md`) | ⏳ **R3 (#27)** / ✅ `AGENTS.md` |
+| A new id's prefix matches its `Owner` (§3.2) | *proposed* check in `trace-fitness.ts` | ⏳ **to be added** (needs the §3 decision) |
+| The case recogniser accepts prefixed ids (§3.1) | *proposed* widening of `trace-fitness.ts` | ⏳ **to be added** |
 
-- Paths in `docs/architecture/frozen.yaml` require an ADR and human review (fail-closed).
+Until the ⏳ rows land, they are **convention + review**, not gates — and the document says so rather than
+implying otherwise. The R3 tooling PR is the enforcement half of this document; the two halves are
+deliberately separate so the rules can be reviewed on their own.
+
+**Tooling cost of the prefix convention (one-time, shared):** widen the case recogniser at
+`trace-fitness.ts` from `/\bC-\d+\b/g` to accept `C-<owner>-<n>` (e.g. `/\bC-(?:M\d+-)?\d+\b/g`), and add
+the **prefix ↔ `Owner`-column** check. Legacy ids keep matching unchanged.
+
+## 5. Artifacts: authority and lifecycle
+
+Every artifact belongs to exactly one of three tiers, and the tier decides whether it may be treated as
+truth.
+
+| Tier | Where it lives | Examples | Rule |
+| --- | --- | --- | --- |
+| **Authoritative** | in-repo, English, version-controlled | ADRs, deltas, the registers, `src/contracts/`, source, these governance docs | the **single source of truth** — what review approves and what the gates read |
+| **Derived** | in-repo, regenerable | `docs/architecture/evaluation-table.md`, indexes, knowledge-base copies | must cite the authoritative artifact it is generated from; never hand-edited as truth; regenerate from source |
+| **External** | **outside** the checkout | raw session transcripts/exports, Chinese understanding copies, evidence ZIPs, historical review snapshots | referenced by id/hash; **never** substituted for a repo artifact and never committed when the submission whitelist excludes it |
+
+1. **The repository is the single source of truth.** A derived or external copy never overrides it — for
+   example the superseded October review snapshot must not be cited as current when an in-repo document
+   covers the same subject.
+2. **Every artifact has a documented path and an owner.** ADRs land at `docs/architecture/adr/NNN-*.md`,
+   change records at `docs/architecture/delta/NNN-*.md`, registers under `docs/req/` and
+   `docs/architecture/`, governance under `docs/code-governance/`.
+3. **Nothing is committed that the whitelist excludes** — raw evidence, secrets and Chinese copies stay
+   outside, with only a reference (id or hash) in the repository. Do not fabricate a deliverable to fill a
+   path.
+4. **Names are stable.** Sequential `NNN-<slug>` files are numbered once; a rename or move is recorded, not
+   silent.
+
+## 6. Registers: ownership and no orphan artifacts
+
+1. **No orphan artifact.** Every artifact is reachable in the chain
+   (`REQ → Driver → Concept → Element → Interface → Code → Test → Monitor`) and listed in the trace matrix,
+   the case registry or the requirements registry. An artifact that no requirement or owner can reach is a
+   defect, not a spare.
+2. **Additions are validated, not asserted.** A register row must use an allocated id (§3) and reference
+   rows that exist; the readiness suite schema-checks the register on every change.
+3. **Shared registers are edited by coordination, not by habit.** Allocate the id **before** adding the row,
+   announce it in the coordination thread, and expect the shared file to merge-conflict while several
+   owners are active — resolve by **union** (keep every owner's row), never by dropping a row that is not
+   yours.
+4. **The register records its own owner.** Where a register carries an `Owner` column (invariants, trace
+   matrix) that column is authoritative for who answers for the row, and it must agree with the id prefix
+   (§3.2).
+
+## 7. Change policy
+
+- Paths in `docs/architecture/frozen.yaml` require an ADR and human review (fail-closed). *(The manifest and
+  its `frozen-modified` check land with the R3 tooling PR; see §4.)*
 - This document is **reviewer-managed**; changes go through a pull request with M5 coordination.
 
-## 6. Follow-up (proposed)
+## 8. Follow-up (proposed)
 
 The durable structural fix beyond §3 is **per-owner sources + a generator** (`cases.d/M6.yaml` →
 generated combined register), which also removes merge conflicts on the shared files. With owner prefixes
