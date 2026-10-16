@@ -1,4 +1,8 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { CHANGED_FILES_ENV, readChangedFiles } from '../../src/evaluation/changed-files'
 import {
   collectTraceViolations,
   nodeTraceFs,
@@ -22,7 +26,44 @@ function codes(base: TraceFs, overrides: Record<string, string>): string[] {
 
 describe('traceability fitness functions (C-34)', () => {
   it('reports no violations on the committed repository', () => {
-    expect(collectTraceViolations(nodeTraceFs(ROOT))).toEqual([])
+    expect(collectTraceViolations(nodeTraceFs(ROOT), { changedFiles: readChangedFiles() })).toEqual([])
+  })
+
+  it('enforces the frozen manifest against the changed-file list CI supplies', () => {
+    // The same path CI uses: the list comes from CHANGED_FILES_FILE. Without this,
+    // the frozen check only ever runs in an isolated unit test and never against a
+    // real pull request's diff.
+    const dir = mkdtempSync(join(tmpdir(), 'trace-changed-'))
+    const list = join(dir, 'changed.txt')
+    writeFileSync(list, 'src/contracts/app/ports.ts\n')
+    const previous = process.env[CHANGED_FILES_ENV]
+    process.env[CHANGED_FILES_ENV] = list
+    try {
+      const found = collectTraceViolations(nodeTraceFs(ROOT), {
+        changedFiles: readChangedFiles(),
+      }).map((violation) => violation.code)
+      expect(found).toContain('frozen-modified')
+    } finally {
+      if (previous === undefined) delete process.env[CHANGED_FILES_ENV]
+      else process.env[CHANGED_FILES_ENV] = previous
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('treats a missing or empty changed-file path as a successful empty diff', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'trace-changed-'))
+    const empty = join(dir, 'empty.txt')
+    writeFileSync(empty, '')
+    const previous = process.env[CHANGED_FILES_ENV]
+    process.env[CHANGED_FILES_ENV] = empty
+    try {
+      expect(readChangedFiles()).toEqual([])
+      expect(collectTraceViolations(nodeTraceFs(ROOT), { changedFiles: readChangedFiles() })).toEqual([])
+    } finally {
+      if (previous === undefined) delete process.env[CHANGED_FILES_ENV]
+      else process.env[CHANGED_FILES_ENV] = previous
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
 
