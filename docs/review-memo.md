@@ -43,3 +43,33 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
 - Fix: explicit **`Owner`** column on both tables; the trace fitness function now rejects a governed
   table without an Owner column or an empty owner per row; case **C-37**; INV-12 acceptance extended.
 - Result: ADR-006 (D1 check 8), Delta-006, INV-12 + C-37. Verified: `test:trace` 9, `verify` 302.
+
+## PR #26 — M6-01 B1–B3 SQLite persistence, migrations, backend and restart recovery
+
+- Date: 2026-10-16 · Reviewer: M5 (`inscripoem`) · Verdict: **APPROVED** (after changes)
+- Earlier verdict: **CHANGES REQUIRED** (2026-10-14) — the pre-migration backup copied the `.db` after a
+  discarded `wal_checkpoint`, so with a concurrent reader the copy was truncated while `backedUp: true` was
+  reported (BUG-005).
+- Re-review: the backup is a consistent `VACUUM INTO` snapshot with a pinned-WAL-reader regression, and the
+  migration fails closed if the snapshot cannot be produced. Independent macOS checks: 567 tests, typecheck,
+  lint and build.
+- Recorded follow-up: **C-49/C-50 to M4, C-51 to M6** remain a coordinated registry/test/trace change.
+
+## PR #27 — M6-01 R3 gate tooling
+
+- Date: 2026-10-16 · Reviewer: M5 (`inscripoem`) · Verdict: **CHANGES REQUIRED** at `92871c2`
+- Findings and fixes: the frozen check never received the diff (BUG-008); the acquisition was fail-open and
+  word-split (BUG-009); the Owner column re-owned INV-01..03 (BUG-011); the G1 trigger excluded `labeled`; a
+  stale test count. Fixed in `31700a5`, `a32cbec`, `c6508bf`, `4150b78`, plus the entry rule (`100bc9f`,
+  `688e0c1`).
+- Re-review requested at `688e0c1`.
+
+## PR #32 — D3 structural constraints, id convention, governance index, MCP manifest
+
+- Date: 2026-10-16 · Reviewer: M5 (`inscripoem`) · Verdict: **comments** — a recommendation, not adoption
+- Points: owner-prefixed ids recommended for future allocations; include `INV-15` and keep the
+  C-49/C-50/C-51 resolution explicit; name who reserves global ADR numbers and when the `AGENTS.md`
+  instruction becomes operative; separate code present on a branch from protection enforced in CI; an empty
+  `list_mcp_resources` cannot establish the absence of servers or tools.
+- Fixes at `3c52788`: the MCP claim is scoped with the server/tool inventory recorded **unknown**, §3.5
+  answers the ADR and adoption questions, §4 separates code from enforcement, `INV-15` added.
