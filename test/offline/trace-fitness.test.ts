@@ -35,7 +35,7 @@ describe('traceability fitness functions (C-34)', () => {
     // real pull request's diff.
     const dir = mkdtempSync(join(tmpdir(), 'trace-changed-'))
     const list = join(dir, 'changed.txt')
-    writeFileSync(list, 'src/contracts/app/ports.ts\n')
+    writeFileSync(list, 'src/contracts/app/ports.ts\0')
     const previous = process.env[CHANGED_FILES_ENV]
     process.env[CHANGED_FILES_ENV] = list
     try {

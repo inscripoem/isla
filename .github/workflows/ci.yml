@@ -61,14 +61,15 @@ jobs:
             echo "::error::could not acquire the changed-file list ($BASE..HEAD); the diff gates are not verified"
             exit 1
           fi
-          tr '\0' '\n' < .cache/changed-files.nul > .cache/changed-files.txt
-          echo "changed files: $(wc -l < .cache/changed-files.txt | tr -d ' ')"
+          # NUL-separated all the way to the gates, so a path containing a space or a
+          # newline stays one path.
+          echo "changed files: $(tr -cd '\0' < .cache/changed-files.nul | wc -c | tr -d ' ')"
 
       - name: G1 - test approval (advisory until the team enables it)
         if: github.event_name == 'pull_request'
         env:
           PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
-          CHANGED_FILES_FILE: .cache/changed-files.txt
+          CHANGED_FILES_FILE: .cache/changed-files.nul
         run: pnpm gate:test-approval advise
 
       - name: G2 - static analysis (typecheck + lint)
@@ -80,7 +81,7 @@ jobs:
       - name: trace - traceability fitness functions
         env:
           # The frozen-path check runs against the diff acquired above.
-          CHANGED_FILES_FILE: .cache/changed-files.txt
+          CHANGED_FILES_FILE: .cache/changed-files.nul
         run: pnpm test:trace
 
       - name: G5 - regression (all offline suites)
@@ -88,7 +89,7 @@ jobs:
 
       - name: G6 - AI-use log updated for code/prompt changes
         env:
-          CHANGED_FILES_FILE: .cache/changed-files.txt
+          CHANGED_FILES_FILE: .cache/changed-files.nul
         run: pnpm gate:ai-use-log
 
       - name: G4 - semantic evaluation (reported not run without an evaluation set)
