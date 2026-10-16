@@ -565,3 +565,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Pending owner review; the case id for the id-enforcement and the G4 gate follows the convention in docs/code-governance/structural-constraints.md (allocate before adding, never self-assign)"
+  - date: 2026-10-16
+    task: R3
+    branch: m6-g1-gate
+    change: "Proposal for gate G1 (tests approved before implementation): src/evaluation/test-approval-gate.ts reads the tests-approved pull-request label for a change under src/ or prompts/, run as an ADVISORY CI step that reports and never fails a run, with an enforce mode ready to switch on; the proposal document records the six decisions, the step-by-step behaviour and the traceability chain"
+    requirements: [FR-06]
+    invariants: [INV-12]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Awaiting the team's agreement (at least 3 of 6) before switching the step from advise to enforce; case id C-M6-1 is pending allocation per structural-constraints.md section 3"
