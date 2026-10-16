@@ -1,6 +1,9 @@
 name: CI
 
 # Blocking gates (D7), enforced in code (ADR-006). Coverage:
+#   G1  test approval    — a code/prompt pull request should carry the
+#       tests-approved label; ADVISORY (reports, does not fail) until the team
+#       enables enforcement — see docs/code-governance/g1-test-approval-proposal.md
 #   G2  static analysis  — typecheck + lint on every commit
 #   G3  schema + boundary — requirements registry validates; import/permission
 #       boundaries hold (the readiness suite)
@@ -11,11 +14,11 @@ name: CI
 #       (reported explicitly, never as a pass); fails a table that lacks the
 #       fixed conditions NFR-01 requires
 #   build                — production bundle
-# Not covered here and reported honestly: G1 (tests approved before
-# implementation) is a pull-request review gate, not a CI step. Live provider tests
-# (test/live is intentionally empty), real browser audio/VTS behaviour and remote
-# branch protection are out of scope. This workflow defines the gates; it does not
-# assert that remote branch protection is configured. Only a human merge is
+# Not covered here: the *timing* half of G1 (that the label was applied before the
+# change) stays a review obligation, and branch protection is a human/remote
+# setting. Live provider tests (test/live is intentionally empty) and real browser
+# audio/VTS behaviour are out of scope. This workflow defines the gates; it does
+# not assert that remote branch protection is configured. Only a human merge is
 # permitted.
 
 on:
@@ -37,6 +40,15 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+
+      - name: G1 - test approval (advisory until the team enables it)
+        if: github.event_name == 'pull_request'
+        env:
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          CHANGED="$(git diff --name-only "$BASE_SHA" HEAD 2>/dev/null || true)"
+          pnpm gate:test-approval advise $CHANGED
 
       - name: G2 - static analysis (typecheck + lint)
         run: pnpm typecheck && pnpm lint
