@@ -575,3 +575,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Awaiting the team's agreement (at least 3 of 6) before switching the step from advise to enforce; case id C-M6-1 is pending allocation per structural-constraints.md section 3"
+  - date: 2026-10-16
+    task: R3
+    branch: m6-r3-gates
+    change: "M5 review fixes on R3: the frozen-path check now runs against the real CI diff (changed-files.ts plus a negative case); one fail-closed, NUL-safe diff acquisition shared by G1, trace and G6; INV-01..03 Owner restored to M5; the pull_request trigger includes labeled/unlabeled and the docs name the real check (the G1 step inside verify); plus the five-question pre-review checklist in the PR template and verification-constraints."
+    requirements: [FR-06]
+    invariants: [INV-13, INV-14]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Addresses M5's CHANGES_REQUESTED on 92871c2. This entry itself was demanded by the newly wired G6 gate, which failed the push run for a src/ change without a log update - the gate catching its own author. No re-review requested yet; G1 remains advisory."
