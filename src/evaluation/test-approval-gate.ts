@@ -1,4 +1,5 @@
 import { pathToFileURL } from 'node:url'
+import { readChangedFiles } from './changed-files'
 
 /**
  * M6 / R3 — gate G1: tests are approved before implementation (ADR-006).
@@ -67,11 +68,14 @@ function main(argv: readonly string[]): number {
     .split(',')
     .map((label) => label.trim())
     .filter((label) => label.length > 0)
+  // Explicit arguments win; otherwise read the list CI wrote to CHANGED_FILES_FILE,
+  // so a filename containing a space cannot be split by the shell.
+  const fromArgv = argv.slice(1)
   return runCli(
     {
       isPullRequest: process.env.GITHUB_EVENT_NAME === 'pull_request',
       labels,
-      changedFiles: argv.slice(1),
+      changedFiles: fromArgv.length > 0 ? fromArgv : readChangedFiles(),
     },
     mode,
   )

@@ -1,12 +1,15 @@
 import { pathToFileURL } from 'node:url'
+import { readChangedFiles } from './changed-files'
 
 /**
  * M6 / R3 — gate G6: a code or prompt change must update the AI-use log
  * (ADR-006, INV-13; docs/ai-use-log.yaml).
  *
- * The gate takes the list of changed files (the CI step derives it from the pull
- * request diff) and fails when `src/` or `prompts/` changed without a change to
- * `docs/ai-use-log.yaml`. It is a pure function so tests can prove both outcomes.
+ * The gate takes the list of changed files — from explicit arguments, or from the
+ * list CI writes to `CHANGED_FILES_FILE` — and fails when `src/` or `prompts/`
+ * changed without a change to `docs/ai-use-log.yaml`. A file is used in CI so a
+ * filename containing a space is not split into two paths. It is a pure function so
+ * tests can prove both outcomes.
  */
 
 export const AI_USE_LOG_PATH = 'docs/ai-use-log.yaml'
@@ -39,5 +42,8 @@ function runCli(changedFiles: readonly string[]): number {
 const invokedDirectly =
   process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href
 if (invokedDirectly) {
-  process.exitCode = runCli(process.argv.slice(2))
+  // Explicit arguments win; otherwise read the list CI wrote to CHANGED_FILES_FILE,
+  // so a filename containing a space cannot be split by the shell.
+  const fromArgv = process.argv.slice(2)
+  process.exitCode = runCli(fromArgv.length > 0 ? fromArgv : readChangedFiles())
 }

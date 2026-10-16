@@ -41,3 +41,11 @@ describe('G1 test-approval gate', () => {
     expect(runCli({ ...code, labels: [TEST_APPROVAL_LABEL] }, 'enforce')).toBe(0)
   })
 })
+
+describe('G1 reads the CI change set (finding 2)', () => {
+  it('counts a spaced filename under src/ as a code change', () => {
+    // Reached through CHANGED_FILES_FILE, so the space survives: the gate sees one
+    // code path, not two broken ones.
+    expect(collectTestApprovalViolations({ isPullRequest: true, labels: [], changedFiles: ['src/a b.ts'] })).toHaveLength(1)
+  })
+})
