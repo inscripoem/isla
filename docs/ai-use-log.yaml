@@ -495,3 +495,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Self-review: the in-memory C-38 does not cover SQLite; ADR-004 D1"
+  - date: 2026-10-16
+    task: M6-01
+    branch: m6-storage-evidence
+    change: "M6-01 evidence: a seeded property suite asserting INV-04/07/08 over many operation sequences applied OUT of sequence order, plus the same sequence replayed over in-memory and SQLite (generalising C-45); and a durability suite recovering from a crash-state copy of the database files (committed rows recovered, uncommitted discarded, schema version intact) and reading a committed row without a clean close. Both mutation-checked."
+    requirements: [FR-06]
+    invariants: [INV-04, INV-07, INV-08, INV-12]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Targets the two claims marked unproven: durable recovery beyond a clean reopen, and universality of the invariants. Case ids pending allocation per structural-constraints.md section 3."
