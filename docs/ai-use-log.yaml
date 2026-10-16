@@ -615,3 +615,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Found while assessing whether the six gates are strong enough; no re-review requested yet."
+  - date: 2026-10-16
+    task: R3
+    branch: m6-r3-gates
+    change: "G6 now requires the log change to ADD a complete entry: the CI step records the log's own diff and the gate rejects a change that only edits the file (no new entry with task/change/agent). Applied only when a code or prompt change triggers the rule, so a documentation-only fix to the log is not forced to invent an entry; a patch that was expected and did not arrive fails closed. Closes the loophole the shape check left open."
+    requirements: [FR-06]
+    invariants: [INV-14]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Makes the previous commit's claim true; no re-review requested yet."
