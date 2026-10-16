@@ -595,3 +595,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Same self-review pass as the M5 review fixes; no re-review requested yet."
+  - date: 2026-10-16
+    task: R3
+    branch: m6-r3-gates
+    change: "R3 deep-check hardening of the change-set acquisition: the list is NUL-separated end to end, so a path containing a space or a newline stays one path, and the reader is strict - an unset variable is a local run with no diff, but a set-but-missing or unreadable file FAILS the run with a named error instead of passing vacuously. Found by probing the gate CLIs with a directory, a missing file and a newline path."
+    requirements: [FR-06]
+    invariants: [INV-13, INV-14]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Same self-review pass; no re-review requested yet."

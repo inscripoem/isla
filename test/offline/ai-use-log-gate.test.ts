@@ -43,15 +43,46 @@ describe('AI-use log gate (G6, C-36)', () => {
 
 describe('AI-use log gate reads the CI change set (finding 2)', () => {
   it('reads the list from CHANGED_FILES_FILE', () => {
-    expect(collectAiUseLogViolations(changedFilesFrom('src/storage/event-store.ts\n'))).toHaveLength(1)
+    expect(collectAiUseLogViolations(changedFilesFrom('src/storage/event-store.ts\0'))).toHaveLength(1)
   })
 
   it('keeps a filename containing a space as one path', () => {
     // An argv list would split this into two entries and change what the gate sees.
-    expect(changedFilesFrom('src/storage/my file.ts\n')).toEqual(['src/storage/my file.ts'])
+    expect(changedFilesFrom('src/storage/my file.ts\0')).toEqual(['src/storage/my file.ts'])
   })
 
   it('passes when only documentation changed', () => {
-    expect(collectAiUseLogViolations(changedFilesFrom('docs/readme.md\n'))).toHaveLength(0)
+    expect(collectAiUseLogViolations(changedFilesFrom('docs/readme.md\0'))).toHaveLength(0)
+  })
+})
+
+describe('the change set acquisition is strict (finding 2)', () => {
+  it('keeps a path containing a newline as one entry', () => {
+    // A newline-separated list would split this into two paths and change what the
+    // gate sees; the list is NUL-separated for exactly this reason.
+    expect(changedFilesFrom('src/a\nb.ts\0')).toEqual(['src/a\nb.ts'])
+  })
+
+  it('throws when the variable is set but the change set was never written', () => {
+    // A change set that was expected and did not arrive must fail the run, not read
+    // as "nothing changed": that would turn a broken pipeline into a passing gate.
+    const previous = process.env[CHANGED_FILES_ENV]
+    process.env[CHANGED_FILES_ENV] = join(tmpdir(), 'definitely-not-written.txt')
+    try {
+      expect(() => readChangedFiles()).toThrow(/not acquired/)
+    } finally {
+      if (previous === undefined) delete process.env[CHANGED_FILES_ENV]
+      else process.env[CHANGED_FILES_ENV] = previous
+    }
+  })
+
+  it('returns an empty list when the variable is unset (a local run)', () => {
+    const previous = process.env[CHANGED_FILES_ENV]
+    delete process.env[CHANGED_FILES_ENV]
+    try {
+      expect(readChangedFiles()).toEqual([])
+    } finally {
+      if (previous !== undefined) process.env[CHANGED_FILES_ENV] = previous
+    }
   })
 })
