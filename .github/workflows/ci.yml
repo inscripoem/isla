@@ -41,14 +41,31 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
+      - name: changed files (the gate diff, acquired once)
+        id: changed
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          BASE="$BASE_SHA"
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            # A branch-creation push carries an all-zero `before`: diff the tip against
+            # its parent and say so, rather than silently reviewing nothing.
+            BASE="$(git rev-parse --verify --quiet HEAD~1 || git rev-parse HEAD)"
+          fi
+          if ! git diff --name-only -z "$BASE" HEAD > .changed-files.nul; then
+            echo "::error::could not acquire the changed-file list ($BASE..HEAD); the diff gates are not verified"
+            exit 1
+          fi
+          tr '\0' '\n' < .changed-files.nul > .changed-files.txt
+          echo "changed files: $(wc -l < .changed-files.txt | tr -d ' ')"
+
       - name: G1 - test approval (advisory until the team enables it)
         if: github.event_name == 'pull_request'
         env:
           PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          CHANGED="$(git diff --name-only "$BASE_SHA" HEAD 2>/dev/null || true)"
-          pnpm gate:test-approval advise $CHANGED
+          CHANGED_FILES_FILE: .changed-files.txt
+        run: pnpm gate:test-approval advise
 
       - name: G2 - static analysis (typecheck + lint)
         run: pnpm typecheck && pnpm lint
@@ -58,23 +75,17 @@ jobs:
 
       - name: trace - traceability fitness functions
         env:
-          # The frozen-path check needs the actual diff; without it the check can
-          # never fail in CI (it is only exercised by an isolated unit test).
+          # The frozen-path check runs against the diff acquired above.
           CHANGED_FILES_FILE: .changed-files.txt
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          git diff --name-only "$BASE_SHA" HEAD 2>/dev/null > .changed-files.txt || : > .changed-files.txt
-          pnpm test:trace
+        run: pnpm test:trace
 
       - name: G5 - regression (all offline suites)
         run: pnpm test
 
       - name: G6 - AI-use log updated for code/prompt changes
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          CHANGED="$(git diff --name-only "$BASE_SHA" HEAD 2>/dev/null || git diff --name-only HEAD~1 HEAD 2>/dev/null || true)"
-          pnpm gate:ai-use-log $CHANGED
+          CHANGED_FILES_FILE: .changed-files.txt
+        run: pnpm gate:ai-use-log
 
       - name: G4 - semantic evaluation (reported not run without an evaluation set)
         run: pnpm gate:eval
