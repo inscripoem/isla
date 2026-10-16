@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   AI_USE_LOG_PATH,
+  collectAiUseLogEntryViolations,
   collectAiUseLogShapeViolations,
   collectAiUseLogViolations,
 } from '../../src/evaluation/ai-use-log-gate'
@@ -135,5 +136,36 @@ entries:
 
   it('rejects invalid YAML', () => {
     expect(collectAiUseLogShapeViolations('entries: [\n  - date: 2026').join(' ')).toContain('not valid YAML')
+  })
+})
+
+describe('the log change must add a complete entry (not just touch the file)', () => {
+  const COMPLETE = [
+    'diff --git a/docs/ai-use-log.yaml b/docs/ai-use-log.yaml',
+    '+++ b/docs/ai-use-log.yaml',
+    '+  - date: 2026-10-16',
+    '+    task: R3',
+    '+    branch: m6-r3-gates',
+    '+    change: A real change.',
+    '+    agent: opencode/deepseek-v4-flash',
+  ].join('\n')
+
+  it('accepts a patch that adds a complete entry', () => {
+    expect(collectAiUseLogEntryViolations(['src/x.ts', AI_USE_LOG_PATH], COMPLETE)).toEqual([])
+  })
+
+  it('rejects a patch that only edits the file', () => {
+    const trivial = '+++ b/docs/ai-use-log.yaml\n+\n'
+    expect(collectAiUseLogEntryViolations(['src/x.ts', AI_USE_LOG_PATH], trivial).join(' ')).toContain(
+      'must add a complete entry',
+    )
+  })
+
+  it('does not apply when no code or prompt changed (a documentation fix is free)', () => {
+    expect(collectAiUseLogEntryViolations(['docs/readme.md', AI_USE_LOG_PATH], '+++ x\n+\n')).toEqual([])
+  })
+
+  it('is not verified without a patch (a local run)', () => {
+    expect(collectAiUseLogEntryViolations(['src/x.ts', AI_USE_LOG_PATH], null)).toEqual([])
   })
 })

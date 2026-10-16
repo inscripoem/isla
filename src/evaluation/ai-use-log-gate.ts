@@ -19,6 +19,9 @@ import { readChangedFiles } from './changed-files'
 
 export const AI_USE_LOG_PATH = 'docs/ai-use-log.yaml'
 
+/** File CI writes the log's own diff to, so the gate can inspect what was added. */
+export const AI_USE_LOG_PATCH_ENV = 'AI_USE_LOG_PATCH_FILE'
+
 const CODE_OR_PROMPT_PREFIXES = ['src/', 'prompts/']
 
 /** Fields every entry must carry as a non-empty string. */
@@ -81,6 +84,48 @@ export function collectAiUseLogShapeViolations(text: string): string[] {
   return violations
 }
 
+/**
+ * The change must **add a complete entry**, not merely touch the file. Only applied
+ * when the update rule applies (a code or prompt change), so a documentation-only fix
+ * to the log is not forced to invent an entry.
+ *
+ * `patch` is the log's diff. A missing patch is not verified (a local run); a patch
+ * that was expected and did not arrive fails, like the change-set file.
+ */
+export function collectAiUseLogEntryViolations(
+  changedFiles: readonly string[],
+  patch: string | null,
+): string[] {
+  const touchesCodeOrPrompt = changedFiles.some((file) =>
+    CODE_OR_PROMPT_PREFIXES.some((prefix) => file.startsWith(prefix)),
+  )
+  if (!touchesCodeOrPrompt || !changedFiles.includes(AI_USE_LOG_PATH)) return []
+  if (patch === null) return []
+
+  const added = patch
+    .split('\n')
+    .filter((line) => line.startsWith('+') && !line.startsWith('+++'))
+    .map((line) => line.slice(1))
+  const startsAnEntry = added.some((line) => /^\s*-\s+date:/.test(line))
+  const carriesFields = ['task', 'change', 'agent'].every((field) =>
+    added.some((line) => new RegExp(`^\\s+${field}:`).test(line)),
+  )
+  if (startsAnEntry && carriesFields) return []
+  return [
+    `the ${AI_USE_LOG_PATH} change must add a complete entry; editing the file alone does not record what changed (gate G6)`,
+  ]
+}
+
+/** The log's own diff, or null when the variable is unset. Set-but-missing throws. */
+function readLogPatch(env: NodeJS.ProcessEnv = process.env): string | null {
+  const path = env[AI_USE_LOG_PATCH_ENV]
+  if (path === undefined || path.trim().length === 0) return null
+  if (!existsSync(path)) {
+    throw new Error(`${AI_USE_LOG_PATCH_ENV} points at ${path}, which does not exist — the log diff was not acquired`)
+  }
+  return readFileSync(path, 'utf8')
+}
+
 /** Read the log, or report its absence as a violation: the log is a required artifact. */
 function collectLogFileViolations(): string[] {
   if (!existsSync(AI_USE_LOG_PATH)) return [`${AI_USE_LOG_PATH} is missing (gate G6)`]
@@ -93,6 +138,12 @@ function runCli(changedFiles: readonly string[]): number {
     process.stderr.write('G6: no changed files provided; the log-update rule is not verified\n')
   } else {
     violations.push(...collectAiUseLogViolations(changedFiles))
+    const patch = readLogPatch()
+    if (patch === null) {
+      process.stderr.write(`G6: no ${AI_USE_LOG_PATCH_ENV}; the entry rule is not verified\n`)
+    } else {
+      violations.push(...collectAiUseLogEntryViolations(changedFiles, patch))
+    }
   }
   if (violations.length === 0) {
     process.stdout.write('G6: AI-use log gate passed\n')
