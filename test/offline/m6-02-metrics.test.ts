@@ -33,6 +33,7 @@ function attempt(overrides: Partial<AttemptRecord> = {}): AttemptRecord {
     totalMs: 100,
     attempts: 1,
     usage: { ...FULL_USAGE },
+    failureReason: null,
     ...overrides,
   }
 }
