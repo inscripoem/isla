@@ -121,16 +121,17 @@ that does not exist.
 | Frozen paths require an ADR and human review (§7) | `docs/architecture/frozen.yaml` + the `frozen-modified` check | ⏳ **R3 (#27)** |
 | Every change updates the AI-use log (G6) | `ai-use-log-gate.ts` + the G6 gate | ⏳ **R3 (#27)** |
 | One task = one commit; no agent merges; PR checklist | `.github/PULL_REQUEST_TEMPLATE.md` (+ `AGENTS.md`) | ⏳ **R3 (#27)** / ✅ `AGENTS.md` |
-| A new id's prefix matches its `Owner` (§3.2) | *proposed* check in `trace-fitness.ts` | ⏳ **to be added** (needs the §3 decision) |
-| The case recogniser accepts prefixed ids (§3.1) | *proposed* widening of `trace-fitness.ts` | ⏳ **to be added** |
+| A new id's prefix matches its `Owner` (§3.2) | `invariant-owner-mismatch` / `trace-case-owner-mismatch` in `trace-fitness.ts` | ✅ **R3 (#27)** |
+| The case recogniser accepts prefixed ids (§3.1) | `CASE_ID` in `trace-fitness.ts` matches both `C-12` and `C-M6-1` | ✅ **R3 (#27)** |
 
 Until the ⏳ rows land, they are **convention + review**, not gates — and the document says so rather than
 implying otherwise. The R3 tooling PR is the enforcement half of this document; the two halves are
 deliberately separate so the rules can be reviewed on their own.
 
-**Tooling cost of the prefix convention (one-time, shared):** widen the case recogniser at
-`trace-fitness.ts` from `/\bC-\d+\b/g` to accept `C-<owner>-<n>` (e.g. `/\bC-(?:M\d+-)?\d+\b/g`), and add
-the **prefix ↔ `Owner`-column** check. Legacy ids keep matching unchanged.
+**Tooling cost of the prefix convention (paid, with the R3 tooling PR):** the case recogniser in
+`trace-fitness.ts` now accepts both `C-12` and `C-M6-1`, and the **prefix ↔ `Owner`** check is in place
+(`invariant-owner-mismatch`, `trace-case-owner-mismatch`). Legacy ids keep matching unchanged, and a legacy
+numeric id carries no module claim, so it is not checked against the `Owner` cell.
 
 ## 5. Artifacts: authority and lifecycle
 
