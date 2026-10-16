@@ -1,3 +1,6 @@
 allowBuilds:
   esbuild: true
+  onnxruntime-node@1.21.0: false
+  protobufjs@7.6.6: false
+  sharp@0.34.5: false
 storeDir: .cache/pnpm-store
