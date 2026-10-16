@@ -22,6 +22,7 @@
     "test:readiness": "vitest run test/offline/contracts.test.ts test/offline/requirements.test.ts test/offline/boundaries.test.ts",
     "test:trace": "vitest run test/offline/trace-fitness.test.ts",
     "gate:ai-use-log": "tsx src/evaluation/ai-use-log-gate.ts",
+    "gate:eval": "tsx src/evaluation/eval-gate.ts",
     "req:schema": "tsx src/evaluation/emit-req-schema.ts",
     "verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
     "preview": "vite preview"

@@ -7,13 +7,14 @@ name: CI
 #   trace — traceability fitness functions (INV-12): a broken chain link fails
 #   G5  regression       — every offline suite passes, zero regression
 #   G6  AI-use log       — a code/prompt change must update docs/ai-use-log.yaml
+#   G4  semantic eval    — not run without an evaluation set + provider access
+#       (reported explicitly, never as a pass); fails a table that lacks the
+#       fixed conditions NFR-01 requires
 #   build                — production bundle
 # Not covered here and reported honestly: G1 (tests approved before
-# implementation) is a pull-request review gate, not a CI step; G4 (semantic
-# evaluation) needs an evaluation set + provider access and is scaffolded to
-# report "not run" rather than "pass"; live provider tests (test/live is
-# intentionally empty), real browser audio/VTS behaviour and remote branch
-# protection are out of scope. This workflow defines the gates; it does not
+# implementation) is a pull-request review gate, not a CI step. Live provider tests
+# (test/live is intentionally empty), real browser audio/VTS behaviour and remote
+# branch protection are out of scope. This workflow defines the gates; it does not
 # assert that remote branch protection is configured. Only a human merge is
 # permitted.
 
@@ -55,6 +56,9 @@ jobs:
         run: |
           CHANGED="$(git diff --name-only "$BASE_SHA" HEAD 2>/dev/null || git diff --name-only HEAD~1 HEAD 2>/dev/null || true)"
           pnpm gate:ai-use-log $CHANGED
+
+      - name: G4 - semantic evaluation (reported not run without an evaluation set)
+        run: pnpm gate:eval
 
       - name: build
         run: pnpm build
