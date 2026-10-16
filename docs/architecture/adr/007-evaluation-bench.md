@@ -23,9 +23,9 @@ runner that produces records). Both are pure over injected dependencies; neither
 
 ### D2 — One attempt is one record, and nothing is dropped
 
-Every attempt is recorded with its outcome — `completed`, `cancelled` or `failed`. A failed attempt is a
-**measurement, not a gap**: dropping it would inflate the success picture and hide the tail NFR-01 asks
-about.
+Every attempt is recorded with its outcome — `completed`, `cancelled` or `failed` — and a failed attempt
+**records why**. A failed attempt is a **measurement, not a gap**: dropping it would inflate the success
+picture and hide the tail NFR-01 asks about.
 
 ### D3 — Missing is unknown, never zero
 
@@ -36,8 +36,9 @@ total is a lie.
 
 ### D4 — Cold and warm are separate populations
 
-The first attempt after process start is summarised apart from subsequent attempts (NFR-01 requires the
-cold/warm state to be documented). Mixing them would hide the warm-up cost.
+The **first attempt a variant actually makes** in a run is summarised apart from its later attempts
+(NFR-01 requires the cold/warm state to be documented). Mixing them would hide the warm-up cost. A
+deliberately not-run case is **not** an attempt, so it does not consume a variant's cold slot.
 
 ### D5 — Nearest-rank percentiles, no dependency
 

@@ -54,7 +54,8 @@ Once the id convention is agreed (PR #32), the rows are added to `docs/req/requi
   - **"not run" is first class** — `{ ran: false, reason }` yields a `notRun` entry and **no** record, so
     nothing is claimed — ADR-007 D6;
   - **the bench labels its own records** — `caseId`, `variantId` and `cold` are set by the runner, so a
-    variant cannot mis-attribute a result; `cold` is the **first attempt of that variant** in the run.
+    variant cannot mis-attribute a result; `cold` is the **first attempt that variant actually made** in the
+    run, and a not-run case does not consume that slot.
 - **Deviation from the design note, for the record:** the runner takes **only** `runVariant`. The planned
   `now()` dependency was dropped because every timing already arrives inside the record; a run's wall-clock
   stamp belongs to the report slice (S4), which needs it for the header.
@@ -64,5 +65,5 @@ Once the id convention is agreed (PR #32), the rows are added to `docs/req/requi
 
 ### Verification (slices 2 + 3)
 
-- `npx vitest run test/offline/m6-02-comparison.test.ts test/offline/m6-02-metrics.test.ts` → **17 passed**.
+- `npx vitest run test/offline/m6-02-comparison.test.ts test/offline/m6-02-metrics.test.ts` → **18 passed**.
 - `pnpm verify` → clean.
