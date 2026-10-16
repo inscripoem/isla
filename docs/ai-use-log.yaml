@@ -605,3 +605,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Same self-review pass; no re-review requested yet."
+  - date: 2026-10-16
+    task: R3
+    branch: m6-r3-gates
+    change: "Gate G6 now validates the AI-use log's shape, not only that the file changed: every entry must carry a non-empty date (YYYY-MM-DD), task, change and agent, with requirements/invariants/commits as lists, and the log must exist and parse. A one-line edit can no longer satisfy the gate. Proven against the committed log (0 violations) and by mutation (removing one agent field fails, naming the entry)."
+    requirements: [FR-06]
+    invariants: [INV-14]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Found while assessing whether the six gates are strong enough; no re-review requested yet."

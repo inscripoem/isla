@@ -1,8 +1,12 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { collectAiUseLogViolations } from '../../src/evaluation/ai-use-log-gate'
+import {
+  AI_USE_LOG_PATH,
+  collectAiUseLogShapeViolations,
+  collectAiUseLogViolations,
+} from '../../src/evaluation/ai-use-log-gate'
 import { CHANGED_FILES_ENV, readChangedFiles } from '../../src/evaluation/changed-files'
 
 /** Write a changed-file list the way CI does, and read it back as the gate would. */
@@ -84,5 +88,52 @@ describe('the change set acquisition is strict (finding 2)', () => {
     } finally {
       if (previous !== undefined) process.env[CHANGED_FILES_ENV] = previous
     }
+  })
+})
+
+describe('AI-use log entry shape (finding: a one-line edit must not satisfy G6)', () => {
+  const valid = `version: "1"
+entries:
+  - date: 2026-10-16
+    task: R3
+    branch: m6-r3-gates
+    change: A real change.
+    requirements: [FR-06]
+    invariants: [INV-13]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+`
+
+  it('accepts the committed log (the rule must not break the real file)', () => {
+    expect(collectAiUseLogShapeViolations(readFileSync(AI_USE_LOG_PATH, 'utf8'))).toEqual([])
+  })
+
+  it('accepts a well-formed entry', () => {
+    expect(collectAiUseLogShapeViolations(valid)).toEqual([])
+  })
+
+  it('rejects an entry with no agent', () => {
+    const broken = valid.replace('    agent: opencode/deepseek-v4-flash\n', '')
+    expect(collectAiUseLogShapeViolations(broken).join(' ')).toContain('"agent"')
+  })
+
+  it('rejects an entry whose date is not YYYY-MM-DD', () => {
+    expect(collectAiUseLogShapeViolations(valid.replace('date: 2026-10-16', 'date: yesterday')).join(' ')).toContain(
+      'YYYY-MM-DD',
+    )
+  })
+
+  it('rejects an entry whose requirement list is not a list', () => {
+    expect(collectAiUseLogShapeViolations(valid.replace('requirements: [FR-06]', 'requirements: FR-06')).join(' ')).toContain(
+      '"requirements" must be a list',
+    )
+  })
+
+  it('rejects a log with no entries list', () => {
+    expect(collectAiUseLogShapeViolations('version: "1"\n').join(' ')).toContain('entries')
+  })
+
+  it('rejects invalid YAML', () => {
+    expect(collectAiUseLogShapeViolations('entries: [\n  - date: 2026').join(' ')).toContain('not valid YAML')
   })
 })
