@@ -460,7 +460,7 @@ entries:
     branch: m6-sqlite
     change: "B1 SQLite foundation: config, database handle and versioned migration runner (sub-issue #10)"
     requirements: [FR-06]
-    invariants: [INV-09, INV-10]
+    invariants: [INV-10, INV-11]
     cases: [C-26, C-27]
     commits: []
     agent: opencode/deepseek-v4-flash
@@ -480,7 +480,7 @@ entries:
     branch: m6-sqlite
     change: "B3 restart/recovery: recovery view (confirmed vs unresolved), terminal-outcome read-back (sub-issue #12)"
     requirements: [FR-06]
-    invariants: [INV-11]
+    invariants: [INV-12]
     cases: [C-32, C-33]
     commits: []
     agent: opencode/deepseek-v4-flash
