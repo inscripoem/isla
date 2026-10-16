@@ -7,11 +7,25 @@ The agent's external surface — the tools and context sources it may use — is
 governance, because a tool can read or change state the repository does not control. This manifest records
 what is configured today and governs every extension of it.
 
-## Current configuration
+## Current configuration, and what it does and does not establish
 
-**No MCP servers are configured.** `list_mcp_resources` returns no servers, resources or templates, so no
-third-party resource is exposed to the agent at this time. This is the honest current state; it is not a
-gap to be filled by inventing a server.
+**Scope inspected.** The OpenCode harness in this workspace, through its resource listing. On 2026-10-16
+that call returned **no MCP resources and no resource templates**.
+
+**What that establishes.** That no MCP **resource** was exposed to the agent through that particular
+listing, in that harness, at that moment. Nothing more.
+
+**What it does not establish.** A **resource listing is not an inventory of servers or tools.** It cannot
+show that no MCP server is configured, nor that no tool is available: a server may expose only tools, a
+resource may be filtered by scope or permissions, and the listing covers one harness rather than the whole
+configuration surface. The **server and tool inventory is therefore unknown**, and is recorded as unknown
+rather than as "none" — the same rule this project applies to measurements elsewhere: a missing value is
+`unknown`, never `0`.
+
+**What would be required to claim it.** An inventory of the **configured servers and the tools each
+declares**, read from the client configuration and its transport, for a named harness and configuration
+path. Until that exists, this manifest records an empty *resource* listing and an **unknown** server/tool
+inventory.
 
 ## What is authoritative
 

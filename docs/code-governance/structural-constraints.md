@@ -77,10 +77,14 @@ New IDs carry the declaring module's **owner prefix**; the trailing number is pr
 
 ### 3.2 Rules
 
-1. **Grandfathering.** Every id published, or already allocated on a branch in flight, when this convention
-   is adopted is kept as-is and **never renumbered**. At this revision: `INV-01…INV-09` and `C-01…C-47` are
-   published on `main`; `INV-10…INV-14` and `C-48…C-51` are allocated on branches in flight; `INV-15` is
-   pending. The convention applies to ids allocated **after** adoption.
+1. **Grandfathering, and the in-flight inventory.** Every id published, or explicitly allocated on a
+   branch in flight, when this convention is adopted is kept as-is and **never renumbered**. At this
+   revision: `INV-01…INV-09` and `C-01…C-47` are published on `main`; the in-flight allocations are
+   `INV-10…INV-14` and `C-48…C-51` (`#26`, `#27`), plus **`INV-15`**, the within-turn ordering rule carried
+   by `#36`. Two resolutions are recorded explicitly and unchanged: **`C-49` and `C-50` go to M4**, and
+   **`C-51` goes to M6** (append validation) — `#26` still records that case as `C-49` until the
+   coordinated registry/test/trace follow-up runs. The convention applies to ids allocated **after**
+   adoption.
 2. **New IDs carry the owner prefix.** A module adds only IDs under its own prefix (`C-M6-1`).
 3. **Prefix must match the recorded owner.** The owner already recorded for a row must agree with the id
    prefix; drift (or reassignment) is a violation, not a silent renumber. Where a register exposes the owner
@@ -107,6 +111,21 @@ Blocks are zero-churn (`C-\d+` still matches) but only **shrink** the collision 
 a cross-owner allocation step, cap each owner at 100 IDs, need a lookup table to read ownership, and do
 not compose with per-owner fragments. Acceptable only while each module has a single writer.
 
+### 3.5 Adoption, and who reserves the global ADR numbers
+
+**ADR numbers are global, not per-owner.** They are allocated sequentially (`ADR-0NN`) and `001…007` are
+taken. **Which role reserves them is not yet assigned — that is the one gap in this convention.** Proposed:
+the **coordination thread (#25) acts as the registrar** (M5 coordinates architecture and scope), the
+`docs/architecture/adr/` index is the record, and a new number is announced there **before** the file is
+written. Until that is agreed, an author proposing an ADR announces its number in #25 first and takes the
+next free one only after that.
+
+**When this becomes an operative instruction.** It **already is**. The `AGENTS.md` rule added by this PR
+tells every coding agent to take its id from §3, and that rule is deliberately scheme-agnostic. What awaits
+the team is the **scheme inside §3** (owner-prefixed ids, with the numeric block as the fallback) — not
+whether agents follow §3. If the team chooses the block fallback, `AGENTS.md` needs no change at all; only
+§3.1 and §3.4 would.
+
 ## 4. Rules and their enforcement
 
 A rule without an enforcement mechanism is a preference. Each rule below names the mechanism that fails
@@ -117,9 +136,9 @@ that does not exist.
 | --- | --- | --- |
 | Module boundary: production must not import `test/`; cross-module calls go through ports (§1.4) | import-boundary tests | ✅ on `main` |
 | Registers are schema-valid; ids are unique and reference existing rows (§3) | readiness suite over `requirements.yaml` / `case-registry.yaml` | ✅ on `main` |
-| The trace chain is complete; dangling references fail (§1.3) | `src/evaluation/trace-fitness.ts` + the `trace` gate | ⏳ **R3 (#27)** |
-| Frozen paths require an ADR and human review (§7) | `docs/architecture/frozen.yaml` + the `frozen-modified` check | ⏳ **R3 (#27)** |
-| Every change updates the AI-use log (G6) | `ai-use-log-gate.ts` + the G6 gate | ⏳ **R3 (#27)** |
+| The trace chain is complete; dangling references fail (§1.3) | `src/evaluation/trace-fitness.ts` + the `trace` gate | 🧩 code on R3 (#27), **not blocking** |
+| Frozen paths require an ADR and human review (§7) | `docs/architecture/frozen.yaml` + the `frozen-modified` check, run against the **change set CI supplies** | 🧩 code on R3 (#27), **not blocking** |
+| Every change updates the AI-use log (G6) | `ai-use-log-gate.ts` + the G6 gate | 🧩 code on R3 (#27), **not blocking** |
 | One task = one commit; no agent merges; PR checklist | `.github/PULL_REQUEST_TEMPLATE.md` (+ `AGENTS.md`) | ⏳ **R3 (#27)** / ✅ `AGENTS.md` |
 | A new id's prefix matches its `Owner` (§3.2) | `invariant-owner-mismatch` / `trace-case-owner-mismatch` in `trace-fitness.ts` | ✅ **R3 (#27)** |
 | The case recogniser accepts prefixed ids (§3.1) | `CASE_ID` in `trace-fitness.ts` matches both `C-12` and `C-M6-1` | ✅ **R3 (#27)** |
@@ -127,6 +146,13 @@ that does not exist.
 Until the ⏳ rows land, they are **convention + review**, not gates — and the document says so rather than
 implying otherwise. The R3 tooling PR is the enforcement half of this document; the two halves are
 deliberately separate so the rules can be reviewed on their own.
+
+**Code present is not protection enforced.** Every row marked *R3 (#27)* is code that exists on that
+branch and runs as a step of the `verify` job. **None of it blocks a merge until branch protection requires
+the `verify` check**, which is a human/remote setting and is **not** in place today — so today these gates
+inform a reviewer rather than prevent a merge. Both rows that the previous revision listed as *to be added*
+are now implemented on that branch: the frozen check receives the change set CI supplies (so changing a
+frozen path can fail the run), and the owner-prefix check runs.
 
 **Tooling cost of the prefix convention (paid, with the R3 tooling PR):** the case recogniser in
 `trace-fitness.ts` now accepts both `C-12` and `C-M6-1`, and the **prefix ↔ `Owner`** check is in place
