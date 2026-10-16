@@ -30,7 +30,10 @@ human has read and agreed the tests. CI reads the label.
 2. Agree the tests with a reviewer or the module owner — say which tests will prove the change, before the
    implementation is finished.
 3. A reviewer adds the label **`tests-approved`** to the pull request. One label is enough for the whole PR.
-4. CI runs again when the label is added and the G1 step passes.
+4. CI runs again when the label is added — the workflow lists `labeled` and `unlabeled`
+   explicitly, because they are not in the default `pull_request` set — and the G1 step passes.
+   The check is the **`G1` step inside the `verify` job**, so a branch-protection rule would
+   require `verify` rather than a separately named check.
 
 **For CI (what the machine does)**
 
