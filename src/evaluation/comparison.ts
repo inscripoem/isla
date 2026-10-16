@@ -18,8 +18,9 @@ import { summarise, type AttemptRecord, type ComparisonSummary } from './metrics
  *    nothing is claimed.
  *  - **The bench labels the record.** `caseId`, `variantId` and `cold` are set by
  *    the runner, not accepted from the variant, so a variant cannot mis-attribute
- *    its own results. `cold` is the **first attempt of that variant** in this run
- *    (a per-variant warm-up); every later attempt is warm (NFR-01 cold/warm state).
+ *    its own results. `cold` is the **first attempt that variant actually made** in
+ *    this run (a per-variant warm-up); every later attempt is warm. A deliberately
+ *    not-run case is not an attempt, so it does not consume the cold slot.
  *
  * Every other field — outcome, timing, totals, attempts, usage — comes from the
  * variant through `runVariant`; the runner does not invent a measurement.
@@ -89,13 +90,12 @@ export async function runComparison(
 ): Promise<ComparisonRun> {
   const records: AttemptRecord[] = []
   const notRun: NotRunEntry[] = []
-  const attempted = new Set<string>()
 
   for (const variant of input.variants) {
+    // A variant is "cold" until it has actually attempted something. A deliberately
+    // not-run case is not an attempt, so it must not consume the cold slot.
+    let warmedUp = false
     for (const evalCase of input.cases) {
-      const cold = !attempted.has(variant.id)
-      attempted.add(variant.id)
-
       let run: VariantRun
       try {
         run = await deps.runVariant(variant, evalCase)
@@ -105,7 +105,7 @@ export async function runComparison(
         records.push({
           caseId: evalCase.id,
           variantId: variant.id,
-          cold,
+          cold: !warmedUp,
           outcome: 'failed',
           timing: { ...NO_TIMING },
           totalMs: null,
@@ -113,12 +113,14 @@ export async function runComparison(
           usage: { inputTokens: null, outputTokens: null, costUsd: null, usageMissing: true },
           failureReason: describeError(error),
         })
+        warmedUp = true
         continue
       }
 
       if (run.ran) {
         // The bench owns the identity of the record; the variant owns the measurement.
-        records.push({ ...run.record, caseId: evalCase.id, variantId: variant.id, cold })
+        records.push({ ...run.record, caseId: evalCase.id, variantId: variant.id, cold: !warmedUp })
+        warmedUp = true
       } else {
         notRun.push({ variantId: variant.id, caseId: evalCase.id, reason: run.reason })
       }

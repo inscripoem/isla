@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { runComparison, type EvalCase, type Variant, type VariantRun } from '../../src/evaluation/comparison'
+import type { AttemptRecord } from '../../src/evaluation/metrics'
 import { SYNTHETIC_CASES, SYNTHETIC_VARIANT, syntheticRunVariant } from '../support/m6-02-synthetic'
 
 const CASE: EvalCase = { id: 'case-1', input: 'hi' }
@@ -8,6 +9,28 @@ const VARIANT: Variant = { id: 'v1', kind: 'rules', combined: false }
 
 function never(): Promise<VariantRun> {
   return Promise.reject(new Error('should not be called'))
+}
+
+/** A completed attempt; its identity fields are wrong on purpose (see the fixture). */
+function completedRecord(): AttemptRecord {
+  return {
+    caseId: 'ignored',
+    variantId: 'ignored',
+    cold: false,
+    outcome: 'completed',
+    timing: {
+      submitMs: null,
+      planMs: null,
+      dialogueMs: null,
+      synthesisMs: null,
+      firstAudibleMs: 10,
+      stopToSilenceMs: null,
+    },
+    totalMs: 10,
+    attempts: 1,
+    usage: { inputTokens: 1, outputTokens: 1, costUsd: 0, usageMissing: false },
+    failureReason: null,
+  }
 }
 
 describe('runComparison — offline end-to-end (no provider)', () => {
@@ -50,32 +73,28 @@ describe('runComparison — offline end-to-end (no provider)', () => {
   it('gives each variant its own cold first attempt', async () => {
     const second: Variant = { id: 'v2', kind: 'model', combined: true }
     const run = await runComparison({ variants: [VARIANT, second], cases: [CASE] }, {
-      runVariant: async () => ({
-        ran: true,
-        record: {
-          caseId: 'ignored',
-          variantId: 'ignored',
-          cold: false,
-          outcome: 'completed',
-          timing: {
-            submitMs: null,
-            planMs: null,
-            dialogueMs: null,
-            synthesisMs: null,
-            firstAudibleMs: 10,
-            stopToSilenceMs: null,
-          },
-          totalMs: 10,
-          attempts: 1,
-          usage: { inputTokens: 1, outputTokens: 1, costUsd: 0, usageMissing: false },
-          failureReason: null,
-        },
-      }),
+      runVariant: async () => ({ ran: true, record: completedRecord() }),
     })
     expect(run.records.map((record) => [record.variantId, record.cold])).toEqual([
       ['v1', true],
       ['v2', true],
     ])
+  })
+
+  it('does not let a not-run case consume the cold slot', async () => {
+    const cases: EvalCase[] = [
+      { id: 'case-skip', input: 'skipped' },
+      { id: 'case-run', input: 'runs' },
+    ]
+    const run = await runComparison({ variants: [VARIANT], cases }, {
+      runVariant: async (_variant, evalCase) =>
+        evalCase.id === 'case-skip'
+          ? { ran: false, reason: 'not configured' }
+          : { ran: true, record: completedRecord() },
+    })
+    expect(run.notRun).toEqual([{ variantId: 'v1', caseId: 'case-skip', reason: 'not configured' }])
+    // Nothing was attempted for case-skip, so the first real attempt is still cold.
+    expect(run.records.map((record) => [record.caseId, record.cold])).toEqual([['case-run', true]])
   })
 })
 
