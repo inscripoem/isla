@@ -89,3 +89,48 @@ describe('traceability fitness functions reject defects (C-35)', () => {
     expect(found).toContain('frozen-modified')
   })
 })
+
+describe('owner-prefixed ids (structural-constraints.md §3)', () => {
+  const REQUIRED = 'docs/req/requirements.yaml'
+  const INVARIANTS = 'docs/architecture/invariants.md'
+  const TRACE = 'docs/architecture/trace-matrix.md'
+
+  it('recognises an owner-prefixed case id in a trace row', () => {
+    const base = nodeTraceFs(ROOT)
+    // Left unregistered on purpose: if the recogniser did not accept the prefixed
+    // form it would skip the id and report nothing at all.
+    const mutated = base.read(TRACE).replace('C-25', 'C-M6-1')
+    expect(codes(base, { [TRACE]: mutated })).toContain('trace-case-unknown')
+  })
+
+  it('accepts a prefixed invariant whose Owner names the same module', () => {
+    const base = nodeTraceFs(ROOT)
+    const found = codes(base, {
+      [REQUIRED]: base.read(REQUIRED).replace('- id: INV-12', '- id: INV-M6-12'),
+      [INVARIANTS]: base.read(INVARIANTS).replace(/^\| INV-12 \|/m, '| INV-M6-12 |'),
+    })
+    expect(found).not.toContain('invariant-owner-mismatch')
+    expect(found).not.toContain('invariant-unregistered')
+  })
+
+  it('flags a prefixed invariant whose Owner names a different module', () => {
+    const base = nodeTraceFs(ROOT)
+    const found = codes(base, {
+      [REQUIRED]: base.read(REQUIRED).replace('- id: INV-12', '- id: INV-M6-12'),
+      // The same row, but its Owner cell says M5 while the id claims M6.
+      [INVARIANTS]: base
+        .read(INVARIANTS)
+        .replace(/^\| INV-12 \|(.*)\| M6 \|$/m, '| INV-M6-12 |$1| M5 |'),
+    })
+    expect(found).toContain('invariant-owner-mismatch')
+  })
+
+  it('leaves a legacy numeric id unchecked against the Owner cell', () => {
+    const base = nodeTraceFs(ROOT)
+    // A numeric id carries no module claim, so a mixed Owner cell is not a defect.
+    const found = codes(base, {
+      [INVARIANTS]: base.read(INVARIANTS).replace(/^\| INV-12 \|(.*)\| M6 \|$/m, '| INV-12 |$1| M5 |'),
+    })
+    expect(found).not.toContain('invariant-owner-mismatch')
+  })
+})

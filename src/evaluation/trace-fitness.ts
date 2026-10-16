@@ -55,9 +55,17 @@ const ARCH = 'docs/architecture'
 const ADR_DIR = `${ARCH}/adr`
 const DELTA_DIR = `${ARCH}/delta`
 const ADR_ID = /ADR-(\d{3})/g
-const CASE_ID = /\bC-\d+\b/g
+// Accepts both the legacy numeric id (`C-12`) and the owner-prefixed id
+// (`C-M6-1`) from the convention in docs/code-governance/structural-constraints.md
+// §3. A prefixed id that does not match is silently skipped, so the recogniser
+// must be widened before the convention is adopted.
+const CASE_ID = /\bC-(?:M[1-6]-)?\d+\b/g
 const SRC_PATH = /`(src\/[^`]+)`/g
 const FROZEN_MANIFEST = `${ARCH}/frozen.yaml`
+/** Module named by an owner-prefixed id (`C-M6-1` / `INV-M6-1`), or nothing. */
+const OWNER_PREFIXED_ID = /^(?:C|INV)-(M[1-6])-\d+$/
+/** Modules named in an Owner cell (`M5`, `M6`, …). Captured so the id is read. */
+const OWNER_MODULE = /\b(M[1-6])\b/g
 
 function architectureDocs(fs: TraceFs): string[] {
   const at = (dir: string): string[] =>
@@ -66,6 +74,21 @@ function architectureDocs(fs: TraceFs): string[] {
       .filter((name) => name.endsWith('.md'))
       .map((name) => `${dir}/${name}`)
   return [...at(ARCH), ...at(ADR_DIR), ...at(DELTA_DIR)]
+}
+
+/**
+ * The module an owner-prefixed id names (`C-M6-1` → `M6`), or `null` for a legacy
+ * numeric id (`C-12`). Only a prefixed id carries an owner claim, so only it is
+ * checked against the row's Owner cell.
+ */
+function prefixedIdModule(id: string): string | null {
+  const match = OWNER_PREFIXED_ID.exec(id.trim())
+  return match === null ? null : (match[1] ?? null)
+}
+
+/** Modules named in an Owner cell. */
+function ownerModules(cell: string): ReadonlySet<string> {
+  return new Set(Array.from(cell.matchAll(OWNER_MODULE), (match) => match[1] as string))
 }
 
 export function collectTraceViolations(fs: TraceFs, options: TraceOptions = {}): TraceViolation[] {
@@ -127,8 +150,19 @@ export function collectTraceViolations(fs: TraceFs, options: TraceOptions = {}):
         if (verifyColumn >= 0 && (row[verifyColumn] ?? '').length === 0) {
           add('invariant-no-verification', `invariant ${requirement.id} has no verification`)
         }
-        if (ownerColumn >= 0 && (row[ownerColumn] ?? '').trim().length === 0) {
-          add('invariant-no-owner', `invariant ${requirement.id} has no owner`)
+        if (ownerColumn >= 0) {
+          const owner = (row[ownerColumn] ?? '').trim()
+          if (owner.length === 0) {
+            add('invariant-no-owner', `invariant ${requirement.id} has no owner`)
+          } else {
+            const named = prefixedIdModule(requirement.id)
+            if (named !== null && !ownerModules(owner).has(named)) {
+              add(
+                'invariant-owner-mismatch',
+                `invariant ${requirement.id} names module ${named}, but its Owner cell does not`,
+              )
+            }
+          }
         }
       }
     }
@@ -158,7 +192,22 @@ export function collectTraceViolations(fs: TraceFs, options: TraceOptions = {}):
         }
         if (caseColumn >= 0) {
           for (const match of (row[caseColumn] ?? '').matchAll(CASE_ID)) {
-            if (!caseIds.has(match[0])) add('trace-case-unknown', `trace row references unknown case ${match[0]}`)
+            const id = match[0]
+            if (!caseIds.has(id)) {
+              add('trace-case-unknown', `trace row references unknown case ${id}`)
+              continue
+            }
+            const named = prefixedIdModule(id)
+            if (
+              named !== null &&
+              ownerColumn >= 0 &&
+              !ownerModules((row[ownerColumn] ?? '').trim()).has(named)
+            ) {
+              add(
+                'trace-case-owner-mismatch',
+                `trace row references ${id}, which names module ${named}, but its Owner cell does not`,
+              )
+            }
           }
         }
       }

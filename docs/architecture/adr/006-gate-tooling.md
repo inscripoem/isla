@@ -36,8 +36,14 @@ inside `pnpm test`, but are not named gates; G1/G4/G6 are absent). The course di
   over the pull-request diff; then `pnpm build`.
 - **G6** is `src/evaluation/ai-use-log-gate.ts` — a code/prompt change must also update
   `docs/ai-use-log.yaml` (INV-13).
-- **G1** is a pull-request review gate (a `tests-approved` label), not a CI step. **G4** is scaffolded
-  and reports **not run** without an evaluation set + provider access (team-gated).
+- **G1** is a pull-request review gate (a `tests-approved` label), not a CI step. **G4** is
+  `src/evaluation/eval-gate.ts`, wired as the `G4` step (`pnpm gate:eval`): it reports **not run** without
+  an evaluation set + provider access (team-gated) — never a pass — and fails an evaluation table that
+  omits the fixed conditions NFR-01 requires.
+- The traceability fitness function recognises both the legacy numeric id (`C-12`) and the owner-prefixed
+  id of the convention in `docs/code-governance/structural-constraints.md` §3 (`C-M6-1`), and rejects a
+  prefixed id whose row Owner does not name the module the id claims (`invariant-owner-mismatch`,
+  `trace-case-owner-mismatch`).
 - The README documents the gate design (D7); branch protection remains a human/remote setting.
 
 ### D3 — Governance documents
