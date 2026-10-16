@@ -73,6 +73,11 @@ export interface AttemptRecord {
   /** Response-provider attempts used for this opportunity (NFR-04 allows one). */
   attempts: number
   usage: AttemptUsage
+  /**
+   * Why the attempt failed, or `null`. A failure with no reason is a gap in the
+   * evidence, so the runner always fills this when it records a failed attempt.
+   */
+  failureReason: string | null
 }
 
 export interface Percentiles {

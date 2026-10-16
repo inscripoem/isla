@@ -676,3 +676,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Owner-directed head start while PRs #26/#27/#32 await review. ADR-007 records the honesty rules; ids are pending allocation per structural-constraints.md section 3 (allocate before adding, never self-assign)."
+  - date: 2026-10-16
+    task: M6-02
+    branch: m6-02-bench
+    change: "M6-02 slices 2-3 (runner + offline end-to-end): src/evaluation/comparison.ts — runComparison over variants x cases with an injected runVariant, so the bench aggregates and does not compose; a thrown variant is recorded as a failure with a reason rather than losing the case; a deliberate not-run case yields a notRun entry and no attempt. Plus a synthetic case set / scripted variant (test/support/m6-02-synthetic.ts) and 7 tests. AttemptRecord gains failureReason. The planned now() dependency was dropped (timings already arrive in the record; the wall-clock stamp belongs to the report slice)."
+    requirements: [NFR-01, NFR-03, NFR-04]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Owner-directed; ids still pending allocation per structural-constraints.md section 3. Three cross-owner questions are open in issue #41."
