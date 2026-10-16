@@ -22,7 +22,7 @@ The runner (`comparison.ts`), the eval set and the generated report follow in la
 
 ## Traceability
 
-Per `docs/code-governance/structural-constraints.md` §3, a new id is **allocated in the register before it
+Per `docs/code-governance/structural-constraints.md` §3 (lands with **PR #32**), a new id is **allocated in the register before it
 is used, and nobody self-assigns one**. So this slice records its traceability intent here and leaves the
 ids **pending allocation**:
 
@@ -39,7 +39,7 @@ Once the id convention is agreed (PR #32), the rows are added to `docs/req/requi
 
 - `comparison.ts` (the runner) and any provider integration.
 - The eval set (synthetic first, then M3/M4 cases and labels).
-- The generated `docs/architecture/evaluation-table.md`.
+- The generated `docs/architecture/evaluation-table.md` — **not yet produced** (the report slice, S4).
 
 ---
 

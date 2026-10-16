@@ -686,3 +686,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Owner-directed; ids still pending allocation per structural-constraints.md section 3. Three cross-owner questions are open in issue #41."
+  - date: 2026-10-16
+    task: M6-02
+    branch: m6-02-bench
+    change: "M6-02 self-review fix: the runner consumed a variant's cold slot before running, so a deliberately not-run case marked the variant as warmed up and the next case - the first attempt actually made - was recorded as warm. Warm-up is now consumed only when an attempt is recorded. A regression test was written first and failed against the old code. ADR-007 D2/D4 and Delta-007 reconciled with the behaviour."
+    requirements: [NFR-01]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Found in the owner-requested double-check of slices 1-3; ids still pending allocation per structural-constraints.md section 3 (PR #32)."

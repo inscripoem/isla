@@ -1,7 +1,7 @@
 # ADR-007 — Shared comparison and measurement bench (M6-02)
 
 Status: accepted (proposal under review). Date: 2026-10-16. Owner: M6 (evaluation tooling lane).
-Related: ADR-006 (gate tooling), `docs/code-governance/structural-constraints.md` §4.
+Related: ADR-006 (gate tooling — lands with **PR #27**) · `docs/code-governance/structural-constraints.md` §4 (lands with **PR #32**).
 
 ## Problem
 
@@ -69,7 +69,8 @@ Running the bench against a real provider requires a provider. Without one, the 
 - The aggregate is deliberately conservative: one missing usage makes the total unknown.
 - `D3` (the stage names) is **provisional** until the I1-01 timing convention is agreed; the stage set is
   one type, so a rename is a contained change (see Re-open triggers).
-- The bench ships *machinery*, not results: `evaluation-table.md` stays empty until M3/M4 supply cases and
+- The bench ships *machinery*, not results: the report slice (S4) produces
+  `docs/architecture/evaluation-table.md`, which **does not exist yet** and stays empty until M3/M4 supply cases and
   a provider run happens.
 
 ## Re-open triggers
@@ -82,6 +83,6 @@ Running the bench against a real provider requires a provider. Without one, the 
 ## References
 
 - `PLAN.en.md:53, 90, 116`; `REQUIREMENTS.en.md:34` (NFR-01), `:36` (NFR-03), `:37` (NFR-04).
-- `docs/code-governance/structural-constraints.md` §4 — rules and their enforcement.
-- Gate **G4** (`src/evaluation/eval-gate.ts`, ADR-006) reads the evaluation table this bench generates.
+- `docs/code-governance/structural-constraints.md` §4 — rules and their enforcement (lands with **PR #32**).
+- Gate **G4** (`src/evaluation/eval-gate.ts`, ADR-006 — lands with **PR #27**) reads the evaluation table this bench generates.
 - Delta-007.
