@@ -39,6 +39,8 @@ interface Harness {
   next(): Promise<unknown>
   releaseInit(): void
   initStarted(): boolean
+  initModelLoaded(): boolean
+  rejectInitialization(error: unknown): void
   disposeCalls(): number
   exitCalls(): readonly number[]
   generateCalls(): number
@@ -76,6 +78,8 @@ describe('M1-02 worker entry lifecycle (B02, actual entry)', () => {
       modelDisposeCalls: 0,
       providerGenerateCalls: 0,
       initStarted: false,
+      modelLoaded: false,
+      rejectInit: null as { error: unknown } | null,
       resolveInitGate: null as (() => void) | null,
       pending: null as {
         resolve(audio: KokoroRawAudio): void
@@ -120,7 +124,11 @@ describe('M1-02 worker entry lifecycle (B02, actual entry)', () => {
     ): Promise<unknown> => {
       state.initStarted = true
       await loader.loadModel(config)
+      state.modelLoaded = true
       await initGate
+      // A deliberate rejection only takes effect once the model was loaded, so
+      // the failure path still exercises the loaded-model disposal.
+      if (state.rejectInit !== null) throw state.rejectInit.error
       return provider
     }
 
@@ -225,6 +233,11 @@ describe('M1-02 worker entry lifecycle (B02, actual entry)', () => {
         state.resolveInitGate?.()
       },
       initStarted: () => state.initStarted,
+      initModelLoaded: () => state.modelLoaded,
+      rejectInitialization: (error) => {
+        state.rejectInit = { error }
+        state.resolveInitGate?.()
+      },
       disposeCalls: () => state.modelDisposeCalls,
       exitCalls: () => state.exitCodes.slice(),
       generateCalls: () => state.providerGenerateCalls,
@@ -389,5 +402,134 @@ describe('M1-02 worker entry lifecycle (B02, actual entry)', () => {
     harness.send({ kind: 'dispose' })
     await harness.awaitExit()
     expect(harness.disposeCalls()).toBe(1)
+  })
+
+  it('refuses a second generation while the first is physically pending without a second provider call or overlap', async () => {
+    const harness = await startEntry()
+    harness.releaseInit()
+    expect(await harness.next()).toMatchObject({ kind: 'ready' })
+
+    harness.send({
+      kind: 'generate',
+      jobId: 1,
+      input: { text: 'first', voiceId: 'af_heart', speed: 1 },
+    })
+    await harness.until(() => harness.generateCalls() === 1)
+
+    // The second generation arrives before any dispose while the first is still
+    // physically pending.
+    harness.send({
+      kind: 'generate',
+      jobId: 2,
+      input: { text: 'second', voiceId: 'af_heart', speed: 1 },
+    })
+    expect(await harness.next()).toMatchObject({
+      kind: 'result',
+      jobId: 2,
+      ok: false,
+      error: 'worker busy',
+    })
+    // Exactly one refusal for job 2, no second provider call and no overlap: the
+    // first generation is still the only physical job in flight.
+    expect(harness.generateCalls()).toBe(1)
+    const job2Results = harness.capturedPosts().filter((post) => {
+      const message = post.message as { kind?: unknown; jobId?: unknown }
+      return message.kind === 'result' && message.jobId === 2
+    })
+    expect(job2Results).toHaveLength(1)
+
+    // The admitted first generation keeps its original correlated success.
+    harness.resolveGeneration({ samples: new Float32Array([1, 2, 3]), sampleRate: 24000 })
+    expect(await harness.next()).toMatchObject({
+      kind: 'result',
+      jobId: 1,
+      ok: true,
+      sampleRate: 24000,
+    })
+    expect(harness.generateCalls()).toBe(1)
+
+    harness.send({ kind: 'dispose' })
+    await harness.awaitExit()
+    expect(harness.disposeCalls()).toBe(1)
+    expect(harness.exitCalls()).toEqual([0])
+    // After the final controlled exit the refusal count is still exactly one: no
+    // second job2 result was emitted by any late path.
+    const job2ResultsAfterExit = harness.capturedPosts().filter((post) => {
+      const message = post.message as { kind?: unknown; jobId?: unknown }
+      return message.kind === 'result' && message.jobId === 2
+    })
+    expect(job2ResultsAfterExit).toHaveLength(1)
+  })
+
+  it('reports the original job with the provider failure code and stays available for a safe dispose', async () => {
+    const harness = await startEntry()
+    // startEntry resets the module registry and imports the actual entry; import
+    // the real error class only now so `instanceof` matches the worker's class
+    // identity instead of a second copy of the module.
+    const { KokoroProviderError } = await import('../../src/performance/kokoro-types')
+    harness.releaseInit()
+    expect(await harness.next()).toMatchObject({ kind: 'ready' })
+
+    harness.send({
+      kind: 'generate',
+      jobId: 5,
+      input: { text: 'too long', voiceId: 'af_heart', speed: 1 },
+    })
+    await harness.until(() => harness.generateCalls() === 1)
+
+    harness.rejectGeneration(new KokoroProviderError('input_too_long'))
+    const result = await harness.next()
+    expect(result).toMatchObject({
+      kind: 'result',
+      jobId: 5,
+      ok: false,
+      code: 'input_too_long',
+    })
+    // A declared provider failure carries only the code, never a generic error.
+    expect(result).not.toHaveProperty('error')
+
+    // The coded refusal is a result, not a shutdown: no premature disposal/exit.
+    await tick()
+    expect(harness.disposeCalls()).toBe(0)
+    expect(harness.exitCalls()).toEqual([])
+
+    harness.send({ kind: 'dispose' })
+    await harness.awaitExit()
+    expect(harness.disposeCalls()).toBe(1)
+    expect(harness.exitCalls()).toEqual([0])
+  })
+
+  it('reports one init_error, no ready, zero generations and one loaded-model dispose when initialization rejects', async () => {
+    const harness = await startEntry()
+    // Reject initialization only after the factory's model has been loaded, so
+    // the failure path still disposes that loaded model exactly once.
+    await harness.until(() => harness.initModelLoaded())
+    harness.rejectInitialization(new Error('m1 entry init failure'))
+
+    expect(await harness.next()).toMatchObject({
+      kind: 'init_error',
+      message: 'm1 entry init failure',
+    })
+
+    // Almost all assertions run on the fully settled snapshot after the actual
+    // controlled exit, so the one-terminal/no-ready contract is enforced on the
+    // complete message history rather than inferred from a single next().
+    await harness.awaitExit()
+    const captured = harness.capturedPosts().map((post) => post.message)
+    const initErrors = captured.filter(
+      (message) => (message as { kind?: unknown }).kind === 'init_error',
+    )
+    expect(initErrors).toHaveLength(1)
+    expect(initErrors[0]).toMatchObject({
+      kind: 'init_error',
+      message: 'm1 entry init failure',
+    })
+    const readyPosts = captured.filter(
+      (message) => (message as { kind?: unknown }).kind === 'ready',
+    )
+    expect(readyPosts).toHaveLength(0)
+    expect(harness.generateCalls()).toBe(0)
+    expect(harness.disposeCalls()).toBe(1)
+    expect(harness.exitCalls()).toEqual([1])
   })
 })
