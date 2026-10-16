@@ -90,6 +90,15 @@ requirements:
       - kind: deterministic
         description: M5 retains original segment index and generating persona identity/version through delivery and M6 history; legacy unknowns remain explicit null, changed attribution conflicts, and history preserves supporting-event sequence order.
         cases: [C-46, C-47]
+      - kind: deterministic
+        description: The in-memory and SQLite backends produce identical committed state, JSONL export and confirmed history for the same operations, and reject unsupported payloads identically (FR-06).
+        cases: [C-45]
+      - kind: deterministic
+        description: The SQLite backend passes the storage conformance suite, its committed data survives reopen with session isolation and ordered confirmed history, and the delivery terminal outcome is persisted for recovery.
+        cases: [C-29, C-30, C-31]
+      - kind: deterministic
+        description: On restart only confirmed history is restored; unresolved records remain unknown with their outcome and are never replayed.
+        cases: [C-32, C-33]
 
   - id: NFR-01
     title: Responsiveness and synchronization
@@ -238,6 +247,9 @@ requirements:
       - kind: deterministic
         description: An event payload must be a JSON value; an unsupported payload (undefined, function, symbol, bigint, non-finite number, sparse-array hole, Date/Map/Set, cycle) is rejected with `unsupported_payload` before publication and persists nothing, including in the atomic delivery path (FR-06).
         cases: [C-43, C-44]
+      - kind: deterministic
+        description: An event is validated against the RuntimeEvent schema before publication on both append and the atomic delivery path; a malformed event (for example a null or non-string versions member) is rejected without record or sequence residue and a corrected retry reusing the identity/sequence applies, while legacy versions:null or absent persona keys remain valid (FR-06).
+        cases: [C-51]
 
   - id: INV-05
     title: A delivery and its supporting event commit atomically
@@ -251,6 +263,9 @@ requirements:
       - kind: deterministic
         description: A failed atomic write is reported for both the delivery and the event and persists no partial record; if any mutation in the batch cannot be prepared, none is published, so every index and history view is unchanged (FR-06; C-17).
         cases: [C-19, C-38]
+      - kind: deterministic
+        description: The SQLite backend applies every mutation of a batch in one transaction and rolls back on any failure, so a failing later mutation leaves no partial state (FR-06).
+        cases: [C-42]
 
   - id: INV-06
     title: A memory projection never advances across a gap and is idempotent
@@ -303,3 +318,45 @@ requirements:
       - kind: deterministic
         description: Delivery records retain the original segment index and generating persona identity/version through normal completion, Stop and late receipts. M6 preserves those values on read and reports a conflict on changed attribution; legacy unknowns remain null rather than being inferred.
         cases: [C-46, C-47]
+
+  - id: INV-10
+    title: Storage configuration and schema version are validated before use
+    category: invariant
+    priority: must
+    owner: M6
+    collaborators: [M5]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: An empty path override is rejected (never silently defaulted) and an unsupported (newer) schema version is rejected (never silently opened or forward-migrated) (FR-06 SQLite storage).
+        cases: [C-26, C-27]
+
+  - id: INV-11
+    title: A schema migration is recoverable
+    category: invariant
+    priority: must
+    owner: M6
+    collaborators: [M5]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: An existing database is backed up before pending migrations and each migration is transactional, so a failure leaves the prior version intact (FR-06).
+        cases: [C-27, C-28]
+      - kind: deterministic
+        description: The v2 migration preserves genuinely unknown legacy attribution as NULL and drops the legacy persona_version column only when it holds no data; contradictory classification/outcome rows and non-NULL legacy persona values are refused with the database preserved (FR-06).
+        cases: [C-48]
+
+  - id: INV-12
+    title: Restart restores only confirmed history and never replays unresolved output
+    category: invariant
+    priority: must
+    owner: M6
+    collaborators: [M5, M4]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: After a restart, only fully-delivered history is restored; unresolved records remain unknown with their terminal outcome and are never replayed (FR-06; C7, C-17).
+        cases: [C-32, C-33]

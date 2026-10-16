@@ -1,4 +1,4 @@
-import type { ConfirmedDelivery, RuntimeEvent } from '../contracts'
+import type { CommitDelivery, ConfirmedDelivery, RuntimeEvent } from '../contracts'
 
 /**
  * M6 storage — persistence backend seam (C6/C7, FR-06).
@@ -35,12 +35,19 @@ export type StorageMutation =
       readonly record: ConfirmedDelivery
       /** Sequence of the supporting event; orders confirmed history (INV-08). */
       readonly eventSeq: number
+      /**
+       * Terminal outcome persisted for recovery (C-17): a durable store must not
+       * lose whether an unresolved segment completed, was cancelled or failed.
+       */
+      readonly terminalOutcome: CommitDelivery['terminalOutcome']
     }
 
-/** A committed delivery with the sequence of its supporting event. */
+/** A committed delivery with the sequence and outcome of its supporting event. */
 export interface StoredDelivery {
   readonly record: ConfirmedDelivery
   readonly eventSeq: number
+  /** Terminal outcome persisted for recovery (C-17) — never upgraded later. */
+  readonly terminalOutcome: CommitDelivery['terminalOutcome']
 }
 
 /** Composite delivery identity: sessionId:turnId:segmentId:modality. */
@@ -60,8 +67,13 @@ export interface StorageBackend {
   sequenceOwner(sessionId: string, seq: number): string | undefined
   /** Committed events for a session (unordered). */
   sessionEvents(sessionId: string): RuntimeEvent[]
-  /** Committed delivery with this composite key, if any. */
-  deliveryByKey(key: string): ConfirmedDelivery | undefined
+  /** Committed delivery with this composite identity, if any. */
+  deliveryByKey(
+    sessionId: string,
+    turnId: string,
+    segmentId: string,
+    modality: ConfirmedDelivery['modality'],
+  ): ConfirmedDelivery | undefined
   /** Committed deliveries with their supporting event sequence. */
   storedDeliveries(): readonly StoredDelivery[]
   /** Apply all mutations atomically; throw on storage failure. */

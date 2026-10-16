@@ -77,3 +77,24 @@ The table describes the persistence target. Current main supplies an in-memory b
 Startup begins **stopped** with a new session identity, restores only confirmed history, and leaves
 unresolved outputs `unknown` without replay. Storage failure marks evidence incomplete and blocks new
 turns pending recovery; **Stop and local cancellation never wait for a database write**.
+
+## Schema, migration and configuration (B1; ADR-003)
+
+- **Configuration:** `resolveStorageConfig` — `ISLA_STORAGE_DB_PATH` override; default
+  `.cache/isla/isla.db` (ignored local storage, outside OneDrive). An empty override is rejected
+  (fail-fast, never a silent default).
+- **Schema version:** a single-row `schema_version` table, independent of contract `0.2` and diagnostic
+  protocol `1`. An unsupported (newer) version is rejected — never silently opened or forward-migrated.
+- **Migrations:** applied in a transaction (rollback on failure) and idempotent when current; an
+  existing database is backed up under `<dbDir>/backups/` before pending migrations.
+- **Pragmas:** WAL journal, foreign keys, busy timeout.
+- **Backend (B2; ADR-004):** `src/storage/sqlite/backend.ts` implements `StorageBackend` over this
+  schema — reads build fresh rows (INV-07), `commit` is one transaction (INV-05), `event_seq` orders
+  history (INV-08); the full delivery including `terminal_outcome` is persisted for recovery (C-17).
+
+## Recovery (B3; ADR-005)
+
+- On restart, `createRecoveryView` separates `confirmed` (fully-delivered, ordered by supporting event
+  `seq`) from `unresolved` (partial/unknown or not-delivered, with their terminal outcome).
+- **Only confirmed history is restored**; unresolved records remain `unknown` and are **never
+  replayed** (INV-11). M5 owns the lifecycle (new stopped session, blocked turns); M6 owns the data.
