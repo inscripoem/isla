@@ -1,6 +1,6 @@
 # M4-01 dialogue handoff
 
-Revision: 2026-10-15.4. Owner: M4 — lowen. Status: under review.
+Revision: 2026-10-16.1. Owner: M4 — lowen. Status: under review.
 Base: PR23 was squash-merged into main as `a28d76f`. This revision sits on top of the PR30 candidate `7297da4`, which already contains the M4 compatibility increment; it adds only the M4-owned follow-ups — an ordering-agreement guard against the shared helper, truthful `confirmedEventRefs` wording, and dual-environment verification. It is deliberately held back until PR30 lands, so that the eventual diff against main is exactly this increment. The standalone PR23 approval does not approve the contract change.
 
 ## Implemented behavior
@@ -64,14 +64,16 @@ The coordinated storage-contract revision (owned by M5) added the required nulla
 
 ## Verification
 
-Verified on 2026-10-15 on both environments this work is reviewed on:
+Verified on 2026-10-15/16 on both environments this work is reviewed on. Two revisions are listed so the counts cannot be read as one run: **M4-01** is PR23, squash-merged into main as `a28d76f`; **this revision** is PR35 at `ae5b4a3`, which adds the C-50 agreement guard (one more M4 test) and the F3/F4 corrections. The suite total also moves with the work merged into main between the two revisions (487 → 540), which is a scope change and not a coverage gain.
 
-| Environment | `pnpm test:m4` | `pnpm verify` |
-| --- | --- | --- |
-| macOS, Node 22.23.2 / pnpm 12.3.4 (M5's re-review run) | 67 passed (67) | 487 passed / 0 failed (487 tests, 19 files) |
-| Windows, Node 22.22.2 / pnpm 12.11.2 (M4 owner's run) | 67 passed (67) | 480 passed / 7 failed (487 tests, 19 files) |
+| Revision | Environment | `pnpm test:m4` | `pnpm verify` |
+| --- | --- | --- | --- |
+| M4-01 (PR23, `a28d76f`) | macOS, Node 22.23.2 / pnpm 12.3.4 (M5's re-review run) | 67 passed (67) | 487 passed / 0 failed (487 tests, 19 files) |
+| M4-01 (PR23, `a28d76f`) | Windows, Node 22.22.2 / pnpm 12.11.2 (M4 owner's run) | 67 passed (67) | 480 passed / 7 failed (487 tests, 19 files) |
+| This revision (PR35, `ae5b4a3`) | macOS, Node 22.23.2 / pnpm 12.3.4 (M5's re-review run) | 68 passed (68) | 540 passed / 0 failed (540 tests, 19 files) |
+| This revision (PR35, `ae5b4a3`) | Windows, Node 22.22.2 / pnpm 12.11.2 (M4 owner's run) | 68 passed (68) | 533 passed / 7 failed (540 tests, 19 files) |
 
-Typecheck, lint (0 warnings / 0 errors) and build pass on both. Both environments agree on the test total of 487 and on the M4 suite of 67, so the difference is a platform difference and not a coverage difference. The 7 Windows failures are the long-standing set, unchanged in name by this work: `cli.test.ts` ×3 (spawning `node_modules/.bin/tsx` needs `.cmd` on Windows), `boundaries.test.ts` ×3 (path-resolution negative cases are not observable on Windows) and `requirements.test.ts` ×1 (`core.autocrlf = true` with no `.gitattributes`, so the file is CRLF while the test compares LF). They reproduce only on Windows. Commands from the repository root:
+Within each revision the two environments agree on the suite total (487, then 540) and on the M4 suite size (67, then 68), so the residual difference is a platform difference and not a coverage difference. The 7 Windows failures are reported separately and are unchanged by this revision: they are the long-standing set, unchanged in name by this work — `cli.test.ts` ×3 (spawning `node_modules/.bin/tsx` needs `.cmd` on Windows), `boundaries.test.ts` ×3 (path-resolution negative cases are not observable on Windows) and `requirements.test.ts` ×1 (`core.autocrlf = true` with no `.gitattributes`, so the file is CRLF while the test compares LF). They reproduce only on Windows and are present in *both* revisions, so they are not introduced by PR35. Typecheck, lint (0 warnings / 0 errors) and build pass on both environments in both revisions. Commands from the repository root:
 
 ```sh
 pnpm test:m4

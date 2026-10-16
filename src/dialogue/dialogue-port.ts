@@ -13,6 +13,7 @@ import type {
 import { assembleDialogueContext } from './context'
 import type { AssembledDialogueContext } from './context'
 import type { PersonaRecallPort } from './persona-recall'
+import type { DeliveryRecallPort } from './memory-recall'
 import { createFinalizedSegmentRegistry, deriveSegmentId } from './segment-id'
 import { isSubstantiveSpeech, normalizeFinalText } from './text'
 import { buildDialogueUsage } from './usage'
@@ -91,6 +92,12 @@ export interface DialoguePortOptions {
    * with confirmed history, see ./persona-recall.
    */
   personaRecall?: PersonaRecallPort
+  /**
+   * Delivery-memory recall over confirmed turns that aged out of the recency
+   * window. Adds no I/O (candidates are already loaded during assembly) and no
+   * model call; see ./memory-recall. Omitted means no delivery recall.
+   */
+  deliveryRecall?: DeliveryRecallPort
   textSource?: DialogueTextSource
   /** Clamped to MAX_DIALOGUE_SEGMENTS whatever value is passed. */
   maxSegments?: number
@@ -176,6 +183,7 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
         ...(options.history === undefined ? {} : { history: options.history }),
         ...(options.memory === undefined ? {} : { memory: options.memory }),
         ...(options.personaRecall === undefined ? {} : { personaRecall: options.personaRecall }),
+        ...(options.deliveryRecall === undefined ? {} : { deliveryRecall: options.deliveryRecall }),
       })
 
       const candidates = (await source.compose(view, maxSegments)).slice(0, maxSegments)

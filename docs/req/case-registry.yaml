@@ -222,3 +222,20 @@ cases:
     verifier:
       file: test/offline/m5-attribution.test.ts
       test: "M5 delivery attribution capture (C-47)"
+
+  # Allocated to M4 by M5's coordination decision in #25 (2026-10-16). Ids
+  # allocated under the pre-adoption scheme are retained (structural-constraints
+  # §3.2 rule 1); new allocations after adoption carry the owner prefix.
+  - id: C-49
+    status: implemented
+    title: M4 admission divergence — a receiptless delivery is confirmed history for the durable store but stays out of spoken memory
+    verifier:
+      file: test/offline/m4-storage-integration.test.ts
+      test: "lists a receiptless delivery as confirmed history while M4 keeps it out of spoken memory"
+
+  - id: C-50
+    status: implemented
+    title: M4 within-turn reconstruction agrees with the shared ordering helper
+    verifier:
+      file: test/offline/m4-storage-integration.test.ts
+      test: "produces the same segment order for known, tied and unknown indices"
