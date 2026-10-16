@@ -57,7 +57,14 @@ jobs:
         run: pnpm test:readiness
 
       - name: trace - traceability fitness functions
-        run: pnpm test:trace
+        env:
+          # The frozen-path check needs the actual diff; without it the check can
+          # never fail in CI (it is only exercised by an isolated unit test).
+          CHANGED_FILES_FILE: .changed-files.txt
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          git diff --name-only "$BASE_SHA" HEAD 2>/dev/null > .changed-files.txt || : > .changed-files.txt
+          pnpm test:trace
 
       - name: G5 - regression (all offline suites)
         run: pnpm test
