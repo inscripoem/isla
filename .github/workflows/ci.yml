@@ -56,18 +56,19 @@ jobs:
             # its parent and say so, rather than silently reviewing nothing.
             BASE="$(git rev-parse --verify --quiet HEAD~1 || git rev-parse HEAD)"
           fi
-          if ! git diff --name-only -z "$BASE" HEAD > .changed-files.nul; then
+          mkdir -p .cache
+          if ! git diff --name-only -z "$BASE" HEAD > .cache/changed-files.nul; then
             echo "::error::could not acquire the changed-file list ($BASE..HEAD); the diff gates are not verified"
             exit 1
           fi
-          tr '\0' '\n' < .changed-files.nul > .changed-files.txt
-          echo "changed files: $(wc -l < .changed-files.txt | tr -d ' ')"
+          tr '\0' '\n' < .cache/changed-files.nul > .cache/changed-files.txt
+          echo "changed files: $(wc -l < .cache/changed-files.txt | tr -d ' ')"
 
       - name: G1 - test approval (advisory until the team enables it)
         if: github.event_name == 'pull_request'
         env:
           PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
-          CHANGED_FILES_FILE: .changed-files.txt
+          CHANGED_FILES_FILE: .cache/changed-files.txt
         run: pnpm gate:test-approval advise
 
       - name: G2 - static analysis (typecheck + lint)
@@ -79,7 +80,7 @@ jobs:
       - name: trace - traceability fitness functions
         env:
           # The frozen-path check runs against the diff acquired above.
-          CHANGED_FILES_FILE: .changed-files.txt
+          CHANGED_FILES_FILE: .cache/changed-files.txt
         run: pnpm test:trace
 
       - name: G5 - regression (all offline suites)
@@ -87,7 +88,7 @@ jobs:
 
       - name: G6 - AI-use log updated for code/prompt changes
         env:
-          CHANGED_FILES_FILE: .changed-files.txt
+          CHANGED_FILES_FILE: .cache/changed-files.txt
         run: pnpm gate:ai-use-log
 
       - name: G4 - semantic evaluation (reported not run without an evaluation set)
