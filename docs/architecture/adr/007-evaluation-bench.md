@@ -50,18 +50,6 @@ deliberately not-run case is **not** an attempt, so it does not consume a varian
 Running the bench against a real provider requires a provider. Without one, the run is reported as
 **not run** — never a fabricated pass. Gate G4 reads the same rule from the generated evaluation table.
 
-### D8 — A case carries only what changes the prompt per case
-
-`EvalCase` is `{ id, input, replyIntent?, heldOut?, labels? }` (issue #41 Q3a). `replyIntent` is M3's actual
-intent — which template renders the reply — and is distinct from `labels.intent`, the human reference label.
-`heldOut` keeps an evaluated case out of any tuning loop (NFR-03). An absent field stays absent: the bench
-never substitutes a default, because a missing intent or hold-out state rendered as a value would make two
-runs look comparable when they are not.
-
-Conditions that hold for the **whole run** — persona id and version, model and prompt versions, text budget,
-history source and record set, text source, clock domain — live in the report's `FixedConditions` (D7), not
-on each case. Duplicating them per case would let one run contain two different "fixed" conditions.
-
 ### D7 — The report is a receipt, and it refuses what it cannot support
 
 `src/evaluation/report.ts` renders a run into the Markdown that gate **G4** reads. It is not a pass/fail
@@ -82,8 +70,21 @@ Two rules are structural rather than prose: an unobserved stage prints `—`, ne
 first-attempt window is labelled **"first attempt"**, not "cold", because it does not establish a cold
 process, provider, worker or cache (#41, M5). The declared cold/warm state is the run condition.
 
-Without provider access the table stays absent and G4 keeps reporting **not run** — the correct answer,
-not a pass.
+The report names its run (`runId`) and generation date, so a reader can attribute the artifact; neither is
+inferred from the records. Without provider access the table stays absent and G4 keeps reporting **not
+run** — the correct answer, not a pass.
+
+### D8 — A case carries only what changes the prompt per case
+
+`EvalCase` is `{ id, input, replyIntent?, heldOut?, labels? }` (issue #41 Q3a). `replyIntent` is M3's actual
+intent — which template renders the reply — and is distinct from `labels.intent`, the human reference label.
+`heldOut` keeps an evaluated case out of any tuning loop (NFR-03). An absent field stays absent: the bench
+never substitutes a default, because a missing intent or hold-out state rendered as a value would make two
+runs look comparable when they are not.
+
+Conditions that hold for the **whole run** — persona id and version, model and prompt versions, text budget,
+history source and record set, text source, clock domain — live in the report's `FixedConditions` (D7), not
+on each case. Duplicating them per case would let one run contain two different "fixed" conditions.
 
 ## Alternatives considered
 

@@ -716,4 +716,14 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Owner-approved slice; ids remain pending allocation."
+  - date: 2026-10-17
+    task: M6-02
+    branch: m6-02-bench
+    change: "M6-02 S4 self-review corrections: the report's cost formatter rounded $0.002 to $0.0 (a non-zero cost shown as zero), so cost now prints up to six decimals with a regression test; the report requires and prints a run id and generation date; the per-variant usage cell reuses summarise instead of re-implementing the partial-total rule; ADR-007 D7/D8 were out of order and are corrected. No change to the refusal rules."
+    requirements: [NFR-01, NFR-03, NFR-04]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Found by the requested second pass; each fix mutation-checked (one decimal fails the cost test, removing the run-id guard fails its test)."
 
