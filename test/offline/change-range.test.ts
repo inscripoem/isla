@@ -140,6 +140,42 @@ describe('change range resolution against a real repository', () => {
     expect(wholeRange.split('\n')).toContain('src/root.ts')
   })
 
+  it('falls back to the merge base when a force-push names a commit the checkout does not have', () => {
+    const directory = repo()
+    const baseCommit = commit(directory, 'README.md', 'main\n', 'main commit')
+    git(directory, ['switch', '-q', '-c', 'feature'])
+    commit(directory, 'src/a.ts', 'export const a = 1\n', 'feat')
+    git(directory, ['update-ref', 'refs/remotes/origin/main', baseCommit])
+
+    // A force-push records the old tip in `before`; that commit is unreachable and a
+    // fresh checkout may not have it, so the range must fall back to the branch point.
+    const resolved = resolveFromEnvironment(
+      { EVENT_NAME: 'push', PUSH_BEFORE: 'f'.repeat(40) },
+      directory,
+    )
+    expect(resolved).toEqual({ kind: 'range', base: baseCommit, source: 'merge-base' })
+  })
+
+  it('still uses `before` when that commit exists', () => {
+    const directory = repo()
+    const first = commit(directory, 'README.md', 'one\n', 'first')
+    commit(directory, 'README.md', 'two\n', 'second')
+    expect(resolveFromEnvironment({ EVENT_NAME: 'push', PUSH_BEFORE: first }, directory)).toEqual({
+      kind: 'range',
+      base: first,
+      source: 'push',
+    })
+  })
+
+  it('does not use a missing `before` when no merge base exists either', () => {
+    const directory = repo()
+    commit(directory, 'src/a.ts', 'a\n', 'first')
+    commit(directory, 'src/a.ts', 'ab\n', 'second')
+    expect(
+      resolveFromEnvironment({ EVENT_NAME: 'push', PUSH_BEFORE: 'f'.repeat(40) }, directory).kind,
+    ).toBe('unavailable')
+  })
+
   it('fails closed when a branch-creation push has no merge base but does have a parent', () => {
     const directory = repo()
     commit(directory, 'src/a.ts', 'a\n', 'first')
