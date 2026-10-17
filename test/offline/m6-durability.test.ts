@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -16,17 +16,20 @@ import { FIXTURE_SESSION_ID, fixtureRuntimeEvent } from '../support/fixture-data
  * M6-01 — durability: recovery from the files a crash leaves behind.
  *
  * `m6-recovery.test.ts` reopens a database that was **closed cleanly**, so the WAL is
- * already checkpointed and recovery never runs. This test leaves a transaction
- * uncommitted — the state a crash produces — copies `isla.db` and its `-wal` exactly
- * as they sit on disk, and requires a fresh handle over that copy to:
+ * already checkpointed and recovery never runs. This test copies `isla.db` and its
+ * `-wal` exactly as they sit on disk after committed writes, and requires a fresh
+ * handle over that copy to:
  *
  *   1. recover every **committed** row,
- *   2. discard the **uncommitted** one,
- *   3. keep the schema version, so no migration is re-run or half-applied.
+ *   2. keep the schema version, so no migration is re-run or half-applied.
  *
- * Honest limitation: it reproduces the on-disk state a crash leaves, not a real
- * process kill. A true kill would exercise the same SQLite recovery path, but only a
- * subprocess could show that, and the failure mode here is the one FR-06/INV-12 rest on.
+ * Honest limitation: it reproduces the on-disk state a crash leaves for **committed**
+ * data, not a real process kill. It does **not** cover an uncommitted WAL tail: SQLite
+ * keeps the dirty pages of a small uncommitted transaction in the page cache and only
+ * writes frames at COMMIT or when the cache spills, so a one-row `BEGIN`/`INSERT`
+ * leaves the `-wal` byte-identical (review #42 verified the same size and SHA-256 on
+ * this fixture). Proving that case needs either a cache-spill fixture or a real killed
+ * subprocess, and neither is asserted here.
  */
 
 const directories: string[] = []
@@ -35,7 +38,7 @@ afterEach(() => {
 })
 
 describe('M6-01 durability — recovery from a crash-state copy (INV-12, FR-06)', () => {
-  it('recovers committed rows, discards an uncommitted one, and keeps the version', async () => {
+  it('recovers committed rows from a crash-state copy and keeps the version', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'm6-crash-'))
     directories.push(directory)
     const dbPath = join(directory, 'isla.db')
@@ -57,21 +60,18 @@ describe('M6-01 durability — recovery from a crash-state copy (INV-12, FR-06)'
       expect(ack).toMatchObject({ outcome: 'stored' })
     }
 
-    // A write that is journaled but never committed: a crash between BEGIN and COMMIT.
-    db.exec('BEGIN')
-    db.prepare(
-      `INSERT INTO events
-         (session_id, event_id, seq, timestamp_ms, epoch, turn_id, segment_id, output_id,
-          type, source_module, versions, payload)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(FIXTURE_SESSION_ID, 'uncommitted', 4, 4, 0, 'turn-1', 'seg-4', null, 'user-input', 'M5', null, '{}')
-
     // Copy the files exactly as a crash would leave them, then abandon the handle.
+    // The `-wal` holds the committed frames that were not checkpointed yet: recovering
+    // them is what this case proves, and the assertion below is what makes the copy
+    // meaningful rather than an empty file.
     const crashed = join(directory, 'crashed')
     mkdirSync(crashed, { recursive: true })
     copyFileSync(dbPath, join(crashed, 'isla.db'))
     expect(existsSync(`${dbPath}-wal`)).toBe(true)
+    const walBytes = statSync(`${dbPath}-wal`).size
+    expect(walBytes).toBeGreaterThan(0)
     copyFileSync(`${dbPath}-wal`, join(crashed, 'isla.db-wal'))
+    expect(statSync(join(crashed, 'isla.db-wal')).size).toBe(walBytes)
     if (existsSync(`${dbPath}-shm`)) copyFileSync(`${dbPath}-shm`, join(crashed, 'isla.db-shm'))
     db.close()
 
