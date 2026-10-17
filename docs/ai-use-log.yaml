@@ -1505,4 +1505,14 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Owner-approved slice. Ids remain pending allocation per structural-constraints.md section 3; the coverage row is in verification-constraints.md."
+  - date: 2026-10-17
+    task: M6-02
+    branch: m6-02-bench
+    change: "M6-02 slice 5: the case shape from issue #41 Q3a. EvalCase gains optional replyIntent (M3's actual intent, distinct from the human labels.intent) and heldOut (NFR-03). The runner passes the case through unchanged and never defaults an absent field; run-wide conditions stay in FixedConditions rather than being duplicated per case."
+    requirements: [NFR-01, NFR-03, NFR-04]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Owner-approved slice; ids remain pending allocation."
 

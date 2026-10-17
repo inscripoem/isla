@@ -39,6 +39,18 @@ export interface EvalCase {
   /** The viewer input the case exercises. */
   readonly input: string
   /**
+   * M3-owned: the intent whose template renders the reply (issue #41 Q3a). Distinct
+   * from `labels.intent`, which is the human **reference** label. Absence is unknown
+   * and is never defaulted — a missing intent rendered as a value would make two runs
+   * look comparable when they are not.
+   */
+  readonly replyIntent?: string
+  /**
+   * Kept out of any tuning loop (NFR-03). Absence is unknown: the bench does not
+   * assume a case is held out, and it does not assume it is not.
+   */
+  readonly heldOut?: boolean
+  /**
    * Human reference labels (NFR-03). Absent for a synthetic case — an absent label
    * is unknown, never a stand-in for a real one.
    */
