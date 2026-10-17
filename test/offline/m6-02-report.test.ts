@@ -90,11 +90,18 @@ function sampleRun(): ComparisonRun {
   }
 }
 
-function input(overrides: { run?: ComparisonRun; conditions?: Partial<FixedConditions> } = {}): ReportInput {
+const META = { runId: 'run-2026-10-17-1', generatedAt: '2026-10-17' }
+
+function input(overrides: {
+  run?: ComparisonRun
+  conditions?: Partial<FixedConditions>
+  meta?: { runId: string; generatedAt: string }
+} = {}): ReportInput {
   return {
     run: overrides.run ?? sampleRun(),
     variants: [VARIANT],
     conditions: { ...CONDITIONS, ...overrides.conditions },
+    meta: overrides.meta ?? META,
   }
 }
 
@@ -110,6 +117,23 @@ describe('the evaluation report is a receipt for a real run', () => {
     for (const detail of ['persona', 'model version', 'prompt version', 'text budget', 'history', 'clock', 'maxturns', 'recall port']) {
       expect(text).toContain(detail)
     }
+  })
+
+  it('names the run it describes', () => {
+    const result = renderEvaluationReport(input())
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.markdown).toContain('> Run `run-2026-10-17-1` — generated 2026-10-17.')
+  })
+
+  it('prints a small cost with enough precision to be true', () => {
+    const known = sampleRun()
+    const records = [record({ caseId: 'case-normal', cold: true })]
+    const run = { ...known, records, notRun: [], summary: summarise(records) }
+    const result = renderEvaluationReport(input({ run, conditions: { sampleSize: 1 } }))
+    if (!result.ok) throw new Error('unreachable')
+    // 0.002 at one decimal would print "0.0": a non-zero cost reported as zero.
+    expect(result.markdown).toContain('$0.002')
+    expect(result.markdown).not.toContain('$0.0 |')
   })
 
   it('counts completed, cancelled and failed attempts, and reports the failure rate', () => {
@@ -192,10 +216,20 @@ describe('the report refuses a run it cannot honestly publish', () => {
     expect(violationsOf({ conditions: { providers: [] } }).join(' ')).toContain('at least one provider')
   })
 
+  it('refuses a report that cannot be attributed', () => {
+    expect(violationsOf({ meta: { runId: '   ', generatedAt: '2026-10-17' } }).join(' ')).toContain('run id is required')
+    expect(violationsOf({ meta: { runId: 'run-1', generatedAt: '17/10/2026' } }).join(' ')).toContain('YYYY-MM-DD')
+  })
+
   it('refuses a record for a variant the run did not declare', () => {
     const run = sampleRun()
     expect(
-      collectReportViolations({ run, variants: [{ ...VARIANT, id: 'other' }], conditions: { ...CONDITIONS } }).join(' '),
+      collectReportViolations({
+        run,
+        variants: [{ ...VARIANT, id: 'other' }],
+        conditions: { ...CONDITIONS },
+        meta: META,
+      }).join(' '),
     ).toContain('not declared in the run')
   })
 })

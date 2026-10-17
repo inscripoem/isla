@@ -1,10 +1,10 @@
 import type { ComparisonRun, Variant } from './comparison'
 import {
   TIMING_STAGES,
+  summarise,
   summariseWindow,
-  type AttemptRecord,
-  type ComparisonSummary,
   type Percentiles,
+  type UsageSummary,
   type WindowSummary,
 } from './metrics'
 
@@ -51,10 +51,18 @@ export interface FixedConditions {
   readonly recall: { readonly supplied: boolean; readonly maxTurns: number | null }
 }
 
+/** Identity of the run the report describes: without it the artifact is unattributable. */
+export interface RunMeta {
+  readonly runId: string
+  /** ISO calendar date, `YYYY-MM-DD`; supplied by the caller so the report stays deterministic. */
+  readonly generatedAt: string
+}
+
 export interface ReportInput {
   readonly run: ComparisonRun
   readonly variants: readonly Variant[]
   readonly conditions: FixedConditions
+  readonly meta: RunMeta
 }
 
 export type ReportResult =
@@ -73,8 +81,13 @@ function hasMeasuredTiming(run: ComparisonRun): boolean {
 }
 
 export function collectReportViolations(input: ReportInput): string[] {
-  const { run, variants, conditions } = input
+  const { run, variants, conditions, meta } = input
   const violations: string[] = []
+
+  if (blank(meta.runId)) violations.push('the run id is required: a report that cannot be attributed is not evidence')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(meta.generatedAt)) {
+    violations.push('generatedAt must be a YYYY-MM-DD date')
+  }
 
   if (blank(conditions.hardware)) violations.push('hardware is required for a published report')
   if (blank(conditions.workload)) violations.push('workload is required for a published report')
@@ -135,20 +148,29 @@ export function collectReportViolations(input: ReportInput): string[] {
   return violations
 }
 
+/** A number with at most `digits` decimals, without trailing zeros. */
+function decimal(value: number, digits: number): string {
+  const fixed = value.toFixed(digits)
+  return fixed.includes('.') ? fixed.replace(/0+$/, '').replace(/\.$/, '') : fixed
+}
+
+/** Milliseconds: one decimal is enough to read, and `—` means "not observed". */
 function number(value: number | null): string {
-  if (value === null) return '—'
-  return Number.isInteger(value) ? String(value) : value.toFixed(1)
+  return value === null ? '—' : decimal(value, 1)
+}
+
+/** Cost: six decimals, because a per-attempt cost of $0.002 must not print as $0.0. */
+function cost(value: number | null): string {
+  return value === null ? '—' : decimal(value, 6)
 }
 
 function rate(value: number): string {
   return `${(value * 100).toFixed(1)}%`
 }
 
-function usage(summary: ComparisonSummary): string {
-  if (summary.usage.unknown) return 'unknown'
-  return `${number(summary.usage.inputTokens)} in / ${number(summary.usage.outputTokens)} out / $${number(
-    summary.usage.costUsd,
-  )}`
+function usage(summary: UsageSummary): string {
+  if (summary.unknown) return 'unknown'
+  return `${number(summary.inputTokens)} in / ${number(summary.outputTokens)} out / $${cost(summary.costUsd)}`
 }
 
 const STAGE_LABEL: Record<(typeof TIMING_STAGES)[number], string> = {
@@ -170,12 +192,14 @@ function latencyRows(variantId: string, window: string, summary: WindowSummary):
 }
 
 export function renderEvaluationReport(input: ReportInput): ReportResult {
-  const { run, variants, conditions } = input
+  const { run, variants, conditions, meta } = input
   const violations = collectReportViolations(input)
   if (violations.length > 0) return { ok: false, violations }
 
   const lines: string[] = [
     '# Evaluation report',
+    '',
+    `> Run \`${meta.runId}\` — generated ${meta.generatedAt}.`,
     '',
     '> The conditions below are **declared by the run harness**, not inferred from the records.',
     '> Gate **G4** checks that hardware, provider, workload, sample size and cold/warm state are',
@@ -212,9 +236,8 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
     const cancelled = records.filter((record) => record.outcome === 'cancelled').length
     const failed = records.filter((record) => record.outcome === 'failed').length
     const failureRate = records.length === 0 ? 0 : failed / records.length
-    // The aggregate is per variant; recomputing it here would duplicate the honesty
-    // rules in metrics.ts, so the summary's usage is used only for a single variant.
-    const usageCell = variants.length === 1 ? usage(run.summary) : usageCellFor(records)
+    // One aggregation rule: reuse `summarise`, so the report cannot drift from the metric.
+    const usageCell = usage(summarise(records).usage)
     lines.push(
       `| ${variant.id} | ${variant.kind} | ${variant.combined ? 'yes' : 'no'} | ${records.length} | ${completed} | ${cancelled} | ${failed} | ${rate(
         failureRate,
@@ -267,19 +290,4 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
   }
 
   return { ok: true, markdown: `${lines.join('\n')}\n` }
-}
-/** Usage for one variant, derived without inventing a partial total. */
-function usageCellFor(records: readonly AttemptRecord[]): string {
-  if (records.length === 0) return '—'
-  if (records.some((record) => record.usage.usageMissing)) return 'unknown'
-  const sum = (pick: (usage: AttemptRecord['usage']) => number | null): number | null => {
-    const values = records.map((record) => pick(record.usage))
-    if (values.some((value) => value === null)) return null
-    return values.reduce<number>((total, value) => total + (value ?? 0), 0)
-  }
-  const input = sum((usage) => usage.inputTokens)
-  const output = sum((usage) => usage.outputTokens)
-  const cost = sum((usage) => usage.costUsd)
-  if (input === null || output === null || cost === null) return 'unknown'
-  return `${number(input)} in / ${number(output)} out / $${number(cost)}`
 }

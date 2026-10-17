@@ -1,4 +1,4 @@
-# Delta-007 — Evaluation bench: the measurement record
+# Delta-007 — Evaluation bench: measurement, runner, report and case shape
 
 Change record for **ADR-007**. Date: 2026-10-16. Branch `m6-02-bench` (based on `main`).
 Scope: **additive** — no register, contract, schema or behaviour change.
@@ -86,8 +86,19 @@ Once the id convention is agreed (PR #32), the rows are added to `docs/req/requi
 
 ### Verification (slice 4)
 
-- `npx vitest run test/offline/m6-02-report.test.ts` → **12 passed**.
-- `pnpm verify` → clean (re-measured on this head; see the PR body).
+- `npx vitest run test/offline/m6-02-report.test.ts` → **15 passed**.
+- `pnpm verify` → **601 passed / 25 files**.
+
+### Corrections after self-review (same slice, before delivery)
+
+- **Cost precision:** the generic number formatter rounded to one decimal, so a per-attempt cost of
+  `$0.002` printed as `$0.0` — a non-zero cost reported as zero. Cost now prints up to six decimals, with a
+  test that fails at one decimal.
+- **Run identity:** the report now requires a `runId` and a `YYYY-MM-DD` generation date and prints them in
+  the header. Without them the artifact cannot be attributed to a run.
+- **One aggregation rule:** the per-variant usage cell re-implemented the partial-total rule; it now calls
+  `summarise` and formats the result, so the report cannot drift from the metric.
+- **Decision order:** D8 had been inserted before D7; corrected.
 
 ---
 
@@ -103,5 +114,5 @@ Once the id convention is agreed (PR #32), the rows are added to `docs/req/requi
 ### Verification (slice 5)
 
 - `npx vitest run test/offline/m6-02-comparison.test.ts` → **9 passed**.
-- `pnpm verify` → re-measured on this head (see the PR body).
+- `pnpm verify` → **601 passed / 25 files**.
 
