@@ -81,7 +81,7 @@ Verified on 2026-10-15/16 on both environments this work is reviewed on. Two rev
 | M4-01 (PR23, `a28d76f`) | Windows, Node 22.22.2 / pnpm 12.11.2 (M4 owner's run) | 67 passed (67) | 480 passed / 7 failed (487 tests, 19 files) |
 | This revision (PR35, `ae5b4a3`) | macOS, Node 22.23.2 / pnpm 12.3.4 (M5's re-review run) | 68 passed (68) | 540 passed / 0 failed (540 tests, 19 files) |
 | This revision (PR35, `ae5b4a3`) | Windows, Node 22.22.2 / pnpm 12.11.2 (M4 owner's run) | 68 passed (68) | 533 passed / 7 failed (540 tests, 19 files) |
-| Local increment (unpublished) | Windows, Node 22.22.2 / pnpm 12.11.2 (M4 owner's run) | 83 passed (83) | 573 passed / 10 failed (583 tests, 23 files) |
+| Local increment (unpublished, on merged `main` `8937f7d`) | Windows, Node 22.22.2 / pnpm 12.11.2 (M4 owner's run) | 83 passed (83) | 581 passed / 10 failed (591 tests, 25 files) |
 
 Within each revision the two environments agree on the suite total (487, then 540) and on the M4 suite size (67, then 68), so the residual difference is a platform difference and not a coverage difference. The 7 Windows failures are reported separately and are unchanged by this revision: they are the long-standing set, unchanged in name by this work — `cli.test.ts` ×3 (spawning `node_modules/.bin/tsx` needs `.cmd` on Windows), `boundaries.test.ts` ×3 (path-resolution negative cases are not observable on Windows) and `requirements.test.ts` ×1 (`core.autocrlf = true` with no `.gitattributes`, so the file is CRLF while the test compares LF). They reproduce only on Windows and are present in *both* revisions, so they are not introduced by PR35.
 
