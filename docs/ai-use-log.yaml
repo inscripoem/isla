@@ -718,10 +718,40 @@ entries:
       directed that the provenance deviation be recorded truthfully. Consumer
       review by M5 (shared transport port, player-to-runtime channel) and by M1
       (the browser mount boundary) is requested and remains pending; publication is
-      not acceptance, and the tests-approved label is a human action. M5 review on
-      PR #43 requested two P2 corrections — preserve the operation that is playing
-      across duplicates, stale or invalid commands and rejected cancels, and keep
-      session state monotonic across old acknowledgements and snapshots — and both
-      are fixed here with four new offline regressions (m2-console.test.ts: 20
-      passed, 655 in the full suite), so a renewed M5 consumer review is requested.
+      not acceptance, and the tests-approved label is a human action.
+  - date: 2026-10-17
+    task: M2-01
+    branch: feat/m2-01-console
+    change: >-
+      Resolve the two P2 findings from M5's review of PR #43 without changing
+      application protocol 0.2. player-binding.ts now offers each performance
+      command over the current caller signal and supersedes the operation holding
+      the single admission slot only on an explicit `busy` conflict, so a
+      duplicate, a stale or invalid command and a rejected cancel preserve the
+      operation that is playing; console-state.ts keeps session state monotonic by
+      rejecting an older-epoch control acknowledgement for session state and
+      dropping a same-session older-epoch snapshot. Add four offline regressions in
+      test/offline/m2-console.test.ts.
+    requirements: [FR-01, FR-04, FR-05]
+    invariants: [INV-01, INV-12]
+    cases: []
+    commits: [377d8535777f94f0ba832e41409e304893dd9a4b]
+    agent: traecode/deepseek-v4.1-flash
+    provider: trae-cn
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      The same recorded governance deviation as the M2-01 console entry above:
+      this review-fix increment was authored in a TraeCode session under the
+      Captain-approved plan, so no OpenCode session identifier exists or is
+      asserted.
+    verification:
+      role: "pnpm test:m2: 20 passed."
+      full_suite: "pnpm verify: 655 tests in 29 files; typecheck, lint and build passed."
+      regressions: >-
+        The four new cases were confirmed to fail against the pre-fix source (the
+        two source edits temporarily stashed) and to pass with the fix.
+    human_review: >-
+      Requested: renewed M5 consumer review of the two corrected findings and their
+      four regressions. Merge remains a human action; no merge or auto-merge was
+      requested or performed.
 
