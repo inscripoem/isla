@@ -79,12 +79,12 @@ New IDs carry the declaring module's **owner prefix**; the trailing number is pr
 
 1. **Grandfathering, and the in-flight inventory.** Every id published, or explicitly allocated on a
    branch in flight, when this convention is adopted is kept as-is and **never renumbered**. At this
-   revision: `INV-01…INV-09` and `C-01…C-47` are published on `main`; the in-flight allocations are
-   `INV-10…INV-14` and `C-48…C-51` (`#26`, `#27`), plus **`INV-15`**, the within-turn ordering rule carried
-   by `#36`. Two resolutions are recorded explicitly and unchanged: **`C-49` and `C-50` go to M4**, and
-   **`C-51` goes to M6** (append validation) — `#26` still records that case as `C-49` until the
-   coordinated registry/test/trace follow-up runs. The convention applies to ids allocated **after**
-   adoption.
+   revision: `INV-01…INV-12` and case ids up to `C-48` are on `main` (`C-34…C-37` are unused), `INV-13`
+   and `INV-14` land with #27, and the explicitly allocated in-flight ids are `C-49`/`C-50` (M4, #35),
+   `C-51` (M6, prepared in #42) and `INV-15` (M5's within-turn rule, #36). Two resolutions are recorded
+   explicitly and unchanged: **`C-49` and `C-50` go to M4**, and **`C-51` goes to M6** (append validation) —
+   `main` still records that case as `C-49` until the coordinated migration in #42 lands. The convention
+   applies to ids allocated **after** adoption.
 2. **New IDs carry the owner prefix.** A module adds only IDs under its own prefix (`C-M6-1`).
 3. **Prefix must match the recorded owner.** The owner already recorded for a row must agree with the id
    prefix; drift (or reassignment) is a violation, not a silent renumber. Where a register exposes the owner
@@ -121,10 +121,16 @@ number and self-select it.
 
 **An allocation is not an ID until its row is registered.** A number agreed in the thread is a
 **reservation**. It takes effect when the row exists in the register that owns it
-(`docs/req/case-registry.yaml`, `docs/req/requirements.yaml`, `docs/architecture/invariants.md`). The
+(`docs/req/case-registry.yaml`, `docs/req/requirements.yaml`, `docs/architecture/invariants.md`), and an id
+is **free only if no row on `main` uses it** — a thread allocation that names it does not make it free. The
 register's duplicate-id check — not the thread — is what proves an ID is real; two owners holding the same
 reservation at merge time is exactly the collision class this section exists to prevent. A reservation that
 is never registered may be released by the registrar (M5).
+
+**What applies now, before adoption.** IDs are global, stable and never reused; a new ID is reserved in
+#25; and an ID is free only when no registered row uses it. What awaits adoption is only the **naming
+scheme** (§3.1–§3.3: owner prefixes, or the numeric block in §3.4) — not the stable-ID and registration
+rules above, which apply today.
 
 **When the owner-prefixed scheme becomes operative.** Not yet. It becomes operative only when all three
 hold, and the third is what records the decision:
@@ -134,10 +140,10 @@ hold, and the third is what records the decision:
    R3 tooling (#27);
 3. an **adoption revision** is recorded here naming that decision.
 
-Until then, new IDs are **reserved in the coordination thread (#25)**. No prefixed ID is operative merely
-because this document exists, and the ADR reservation responsibility is not open: M5 coordinates it in #25,
-as above. The `AGENTS.md` rule is deliberately scheme-agnostic — it says to take the ID from §3, which stays
-true if the team adopts the numeric-block fallback (§3.4) instead — so it needs no change in that case.
+Until then, a prefixed id is **not** operative merely because this document exists; reservations continue in
+#25, as described above. The ADR reservation responsibility is not open: M5 coordinates it in #25. The
+`AGENTS.md` rule is deliberately scheme-agnostic — it says to take the ID from §3, which stays true if the
+team adopts the numeric-block fallback (§3.4) instead — so it needs no change in that case.
 
 ## 4. Rules and their enforcement
 
