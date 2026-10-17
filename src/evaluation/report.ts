@@ -232,16 +232,15 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
 
   for (const variant of variants) {
     const records = run.records.filter((record) => record.variantId === variant.id)
-    const completed = records.filter((record) => record.outcome === 'completed').length
-    const cancelled = records.filter((record) => record.outcome === 'cancelled').length
-    const failed = records.filter((record) => record.outcome === 'failed').length
-    const failureRate = records.length === 0 ? 0 : failed / records.length
-    // One aggregation rule: reuse `summarise`, so the report cannot drift from the metric.
-    const usageCell = usage(summarise(records).usage)
+    // One aggregation rule: every cell below comes from `summarise`, so the report
+    // cannot drift from the metric definitions.
+    const variantSummary = summarise(records)
     lines.push(
-      `| ${variant.id} | ${variant.kind} | ${variant.combined ? 'yes' : 'no'} | ${records.length} | ${completed} | ${cancelled} | ${failed} | ${rate(
-        failureRate,
-      )} | ${usageCell} |`,
+      `| ${variant.id} | ${variant.kind} | ${variant.combined ? 'yes' : 'no'} | ${variantSummary.attempts} | ${
+        variantSummary.outcomes.completed
+      } | ${variantSummary.outcomes.cancelled} | ${variantSummary.outcomes.failed} | ${rate(
+        variantSummary.failureRate,
+      )} | ${usage(variantSummary.usage)} |`,
     )
   }
 
