@@ -93,3 +93,20 @@ human has read and agreed the tests. CI reads the label.
 Please reply on issue #25 with **agree**, **agree with changes**, or **no**, and one line of reason.
 - Switching the gate from *advisory* to *enforcing* needs **at least half the team (3 of 6)**.
 - Until then the step stays advisory and every open pull request continues to pass.
+
+## 10. Activation conditions (proposed — not active)
+
+G1 stays **advisory** until all three conditions hold. None of them is satisfied by merging this document or
+by this PR; this section records the conditions, not an activation.
+
+1. **A recorded tally, not a count.** Switching `advise` → `enforce` needs at least **three of the six**
+   owners to agree explicitly, and the tally names which PR or comment each agreement came from. An
+   approval on the PR that carries this proposal counts for its author, not for another owner.
+2. **Verified wiring.** The `G1` check name inside the `verify` job must be the one branch protection
+   requires, and a real run must show the check reported (not skipped) on a pull request and on the
+   `labeled`/`unlabeled` events. A rule that names a check that never runs blocks nothing.
+3. **The label is the author's claim, not proof.** `tests-approved` records that someone asserts the tests
+   were agreed; it does not prove they were agreed, nor that it happened before the first commit (§8).
+   A tally must therefore cite the agreement, not the label.
+
+Until then the step prints a warning and never fails a run, and changing it is a separate decision.
