@@ -35,6 +35,11 @@ import {
  * otherwise.
  */
 
+/**
+ * The conditions a run was performed under. They are **declared** by the harness: the
+ * report can print them, but it cannot verify them, and G4 can only check that they are
+ * recorded (issue #41 Q3; NFR-01).
+ */
 export interface FixedConditions {
   readonly hardware: string
   readonly providers: readonly string[]
@@ -60,6 +65,7 @@ export interface RunMeta {
   readonly generatedAt: string
 }
 
+/** Everything the report needs: the run, the variants it covered, the conditions and its identity. */
 export interface ReportInput {
   readonly run: ComparisonRun
   readonly variants: readonly Variant[]
@@ -75,20 +81,46 @@ function blank(value: string): boolean {
   return value.trim().length === 0
 }
 
-/** A timing value was actually observed somewhere in the run. */
-function hasMeasuredTiming(run: ComparisonRun): boolean {
-  return run.records.some((record) =>
-    TIMING_STAGES.some((stage) => record.timing[stage] !== null),
+/** A real calendar date: `Date.parse` accepts 2026-02-31 by rolling it into March. */
+function isCalendarDate(text: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false
+  const [year, month, day] = text.split('-').map(Number) as [number, number, number]
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return (
+    date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
   )
 }
 
+/** A duration was actually observed somewhere in the run — a stage or the total. */
+function hasMeasuredDuration(run: ComparisonRun): boolean {
+  return run.records.some(
+    (record) => record.totalMs !== null || TIMING_STAGES.some((stage) => record.timing[stage] !== null),
+  )
+}
+
+/** Every duration a record claims, stage timings included. */
+function durationsOf(record: ComparisonRun['records'][number]): readonly (number | null)[] {
+  return [record.totalMs, ...TIMING_STAGES.map((stage) => record.timing[stage])]
+}
+
+function invalidNumber(value: number | null): boolean {
+  return value !== null && (!Number.isFinite(value) || value < 0)
+}
+
+/**
+ * Everything that makes the report unpublishable, in a stable order.
+ *
+ * Validation is deliberately stricter than the renderer needs: a report is evidence, so a
+ * negative duration, a failed attempt without a reason or a declared sample that differs
+ * from the records is a defect even if it would print.
+ */
 export function collectReportViolations(input: ReportInput): string[] {
   const { run, variants, conditions, meta } = input
   const violations: string[] = []
 
   if (blank(meta.runId)) violations.push('the run id is required: a report that cannot be attributed is not evidence')
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(meta.generatedAt)) {
-    violations.push('generatedAt must be a YYYY-MM-DD date')
+  if (!isCalendarDate(meta.generatedAt)) {
+    violations.push('generatedAt must be a real YYYY-MM-DD calendar date')
   }
 
   if (blank(conditions.hardware)) violations.push('hardware is required for a published report')
@@ -133,10 +165,28 @@ export function collectReportViolations(input: ReportInput): string[] {
       'a fixture text source is not a benchmark: it consumes no tokens and is not comparable to a provider run',
     )
   }
-  if (conditions.clock === 'injected' && hasMeasuredTiming(run)) {
+  if (conditions.clock === 'injected' && hasMeasuredDuration(run)) {
     violations.push(
       'an injected clock cannot measure latency: a fixture clock returns a constant, so its durations are not measurements',
     )
+  }
+
+  for (const record of run.records) {
+    const label = `${record.variantId}/${record.caseId}`
+    if (durationsOf(record).some(invalidNumber)) {
+      violations.push(`${label} records a duration that is negative or not a finite number`)
+    }
+    if (!Number.isInteger(record.attempts) || record.attempts < 0) {
+      violations.push(`${label} records ${record.attempts} attempts; a whole number >= 0 is required`)
+    }
+    if (
+      [record.usage.inputTokens, record.usage.outputTokens, record.usage.costUsd].some(invalidNumber)
+    ) {
+      violations.push(`${label} records usage that is negative or not a finite number`)
+    }
+    if (record.outcome === 'failed' && (record.failureReason ?? '').trim().length === 0) {
+      violations.push(`${label} is a failed attempt with no reason; a failure without a reason is a gap`)
+    }
   }
 
   const ids = variants.map((variant) => variant.id)
@@ -166,10 +216,17 @@ function cost(value: number | null): string {
   return value === null ? '—' : decimal(value, 6)
 }
 
+/** A Markdown table cell: a pipe or a line break would break the table. */
+function cell(value: string | number): string {
+  return String(value).replace(/\|/g, '\\|').replace(/\r?\n/g, ' ')
+}
+
+/** A share of attempts, one decimal. */
 function rate(value: number): string {
   return `${(value * 100).toFixed(1)}%`
 }
 
+/** Tokens and cost, or `unknown` — never a partial total. */
 function usage(summary: UsageSummary): string {
   if (summary.unknown) return 'unknown'
   return `${number(summary.inputTokens)} in / ${number(summary.outputTokens)} out / $${cost(summary.costUsd)}`
@@ -184,15 +241,22 @@ const STAGE_LABEL: Record<(typeof TIMING_STAGES)[number], string> = {
   stopToSilenceMs: 'stop→silence (M1/M2)',
 }
 
+/** One row per stage: the sample it measured, then p50/p95 (`—` when n = 0). */
 function latencyRows(variantId: string, window: string, summary: WindowSummary): string[] {
   return TIMING_STAGES.map((stage) => {
-    const cell: Percentiles = summary.stages[stage]
-    return `| ${variantId} | ${window} | ${STAGE_LABEL[stage]} | ${cell.n} | ${number(cell.p50)} | ${number(
-      cell.p95,
-    )} |`
+    const measured: Percentiles = summary.stages[stage]
+    return `| ${cell(variantId)} | ${window} | ${STAGE_LABEL[stage]} | ${measured.n} | ${number(
+      measured.p50,
+    )} | ${number(measured.p95)} |`
   })
 }
 
+/**
+ * Render the Markdown gate G4 reads, or return the reasons the run cannot be published.
+ *
+ * Rendering never throws for a bad input: the refusals are data, so a caller can show them.
+ * Use `writeEvaluationReport` to create the artifact itself.
+ */
 export function renderEvaluationReport(input: ReportInput): ReportResult {
   const { run, variants, conditions, meta } = input
   const violations = collectReportViolations(input)
@@ -211,16 +275,16 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
     '',
     '| Condition | Value |',
     '| --- | --- |',
-    `| Hardware | ${conditions.hardware} |`,
-    `| Providers | ${conditions.providers.join(', ')} |`,
-    `| Workload | ${conditions.workload} |`,
+    `| Hardware | ${cell(conditions.hardware)} |`,
+    `| Providers | ${cell(conditions.providers.join(', '))} |`,
+    `| Workload | ${cell(conditions.workload)} |`,
     `| Sample size (attempts) | ${conditions.sampleSize} |`,
     `| Cold/warm state (declared) | ${conditions.coldWarm} |`,
-    `| Persona profile | \`${conditions.persona.profileId}\` @ \`${conditions.persona.version}\` |`,
-    `| Model version | ${conditions.modelVersion} |`,
-    `| Prompt version | ${conditions.promptVersion} |`,
-    `| Text budget | ${conditions.textBudget.maxCharacters} characters — ${conditions.textBudget.accounting} |`,
-    `| History | ${conditions.history.source} / ${conditions.history.recordSet} |`,
+    `| Persona profile | \`${cell(conditions.persona.profileId)}\` @ \`${cell(conditions.persona.version)}\` |`,
+    `| Model version | ${cell(conditions.modelVersion)} |`,
+    `| Prompt version | ${cell(conditions.promptVersion)} |`,
+    `| Text budget | ${conditions.textBudget.maxCharacters} characters — ${cell(conditions.textBudget.accounting)} |`,
+    `| History | ${conditions.history.source} / ${cell(conditions.history.recordSet)} |`,
     `| Text source | ${conditions.textSource} |`,
     `| Clock | ${conditions.clock} |`,
     `| maxTurns | ${number(conditions.recall.maxTurns)} |`,
@@ -238,7 +302,7 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
     // cannot drift from the metric definitions.
     const variantSummary = summarise(records)
     lines.push(
-      `| ${variant.id} | ${variant.kind} | ${variant.combined ? 'yes' : 'no'} | ${variantSummary.attempts} | ${
+      `| ${cell(variant.id)} | ${variant.kind} | ${variant.combined ? 'yes' : 'no'} | ${variantSummary.attempts} | ${
         variantSummary.outcomes.completed
       } | ${variantSummary.outcomes.cancelled} | ${variantSummary.outcomes.failed} | ${rate(
         variantSummary.failureRate,
@@ -269,14 +333,14 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
     '',
     '## Every attempt',
     '',
-    '| Case | Variant | Outcome | total ms | attempts | Note |',
-    '| --- | --- | --- | --- | --- | --- |',
+    '| Case | Variant | Window | Outcome | total ms | attempts | Note |',
+    '| --- | --- | --- | --- | --- | --- | --- |',
   )
   for (const record of run.records) {
     lines.push(
-      `| ${record.caseId} | ${record.variantId} | ${record.outcome} | ${number(record.totalMs)} | ${
-        record.attempts
-      } | ${record.failureReason ?? ''} |`,
+      `| ${cell(record.caseId)} | ${cell(record.variantId)} | ${record.cold ? 'first' : 'later'} | ${
+        record.outcome
+      } | ${number(record.totalMs)} | ${record.attempts} | ${cell(record.failureReason ?? '')} |`,
     )
   }
 
@@ -286,7 +350,7 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
   } else {
     lines.push('| Variant | Case | Reason |', '| --- | --- | --- |')
     for (const entry of run.notRun) {
-      lines.push(`| ${entry.variantId} | ${entry.caseId} | ${entry.reason} |`)
+      lines.push(`| ${cell(entry.variantId)} | ${cell(entry.caseId)} | ${cell(entry.reason)} |`)
     }
   }
 

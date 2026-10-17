@@ -96,6 +96,10 @@ function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/**
+ * Run every case through every variant, recording every attempt. A thrown variant, a
+ * not-run result and an empty set are all represented rather than dropped.
+ */
 export async function runComparison(
   input: { readonly variants: readonly Variant[]; readonly cases: readonly EvalCase[] },
   deps: ComparisonDeps,
