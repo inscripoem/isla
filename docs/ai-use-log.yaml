@@ -588,3 +588,93 @@ entries:
       DeadlineGate remain owner integration; VTS is later M1-02 work. Live Kokoro,
       acoustic output/timing and full product acceptance are not established.
       Issue 2 remains open with unfinished M1-01/M1-02 items unchecked.
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-sqlite
+    change: "Cross-backend integration: in-memory and SQLite agree end-to-end (state, export, history, payload rejection) (C-45)"
+    requirements: [FR-06]
+    invariants: [INV-04, INV-07]
+    cases: [C-45]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Integration validation requested after the payload-contract fix; ADR-004"
+  - date: 2026-10-15
+    task: M6-01
+    branch: m6-sqlite
+    change: "Migration 2 now refuses contradictory classification/outcome rows and a non-NULL legacy persona_version (preserving the DB), then drops persona_version once verified all-NULL; legacy attr preserved as NULL; C-48 + INV mapping recorded"
+    requirements: [FR-06]
+    invariants: [INV-11]
+    cases: [C-48]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "M5-Q4/Q5 answers; owner-approved"
+  - date: 2026-10-15
+    task: M6-01
+    branch: m6-sqlite
+    change: "append validates the complete RuntimeEvent before mutation (symmetric with the delivery boundary); residue-free rejection + corrected retry; C-49"
+    requirements: [FR-06]
+    invariants: [INV-04]
+    cases: [C-49]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "M5 agreed (append symmetry); owner-approved"
+  - date: 2026-10-15
+    task: M6-01
+    branch: m6-sqlite
+    change: "SQLite carries #22 delivery attribution: migration 2 adds segment_index/persona_profile_id/persona_profile_version (legacy NULL, re-runnable) + codec/insert mapping; M6 invariants renumbered INV-10..14"
+    requirements: [FR-06]
+    invariants: [INV-10, INV-11, INV-12]
+    cases: [C-25, C-29]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Owner-approved Phase 1 (base on #30, renumber +1); ADR-002 Step A + ADR-003; M5-Q4/Q5 pending"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-sqlite
+    change: "B1 SQLite foundation: config, database handle and versioned migration runner (sub-issue #10)"
+    requirements: [FR-06]
+    invariants: [INV-10, INV-11]
+    cases: [C-26, C-27]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Started after PR #9; ADR-003; branch m6-sqlite off m6-storage pending merge"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-sqlite
+    change: "B2 SQLite backend implementing StorageBackend; conformance over SQLite; persistence/reopen (sub-issue #11)"
+    requirements: [FR-06]
+    invariants: [INV-04, INV-05, INV-07, INV-08]
+    cases: [C-29, C-30]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Reproduces the in-memory store contract durably; ADR-004"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-sqlite
+    change: "B3 restart/recovery: recovery view (confirmed vs unresolved), terminal-outcome read-back (sub-issue #12)"
+    requirements: [FR-06]
+    invariants: [INV-12]
+    cases: [C-32, C-33]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Owner-approved B3 plan; ADR-005; M6 data, M5 lifecycle"
+  - date: 2026-10-14
+    task: M6-01
+    branch: m6-sqlite
+    change: "B2 follow-up: document and regression-test SQLite batch atomicity (one transaction + rollback on a later mutation failure) per the PR #9 review's 'equivalent rollback'"
+    requirements: [FR-06]
+    invariants: [INV-05]
+    cases: [C-42]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Self-review: the in-memory C-38 does not cover SQLite; ADR-004 D1"
+  - date: 2026-10-17
+    task: I1-01
+    branch: feat/i1-application-loop
+    change: "Integrated verified main a2ecb86 (PR26 SQLite) into the PR36 branch: resolved six documentation conflicts as unions preserving M6 SQLite coverage (INV-10..INV-12; C-29..C-33, C-45, C-48) and M5 INV-15/C-47 ordering; refreshed stale PR26/adoption statements, kept append validation on C-49, retained coordinated C-51 migration as pending M6 work, and adopted the expanded test:m6. Reviewed the merged backend seam (StoredDelivery/StorageMutation terminalOutcome, composite deliveryByKey) against the I1 and M4 adapters; no production-source or test compatibility failure surfaced."
+    requirements: [FR-05, FR-06]
+    invariants: [INV-15]
+    cases: [C-47, C-49]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Captain-authorized integration; OpenCode resolved six doc conflicts. Independent pnpm verify passed 695 tests / 37 files, typecheck, lint and build; muted fixed-WAV browser two-turn, Stop/Resume, reload and disconnect checks passed. Coordinator corrected current-state/allocation wording after review; publication and consumer acceptance remain pending."

@@ -39,14 +39,26 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-23 | implemented | `test/offline/m6-storage.test.ts` | event identity is session-scoped |
 | C-24 | implemented | `test/offline/m6-storage.test.ts` | committed records are isolated from caller mutation |
 | C-25 | implemented | `test/offline/m6-storage.test.ts` | confirmed history is ordered by the supporting event sequence |
+| C-26 | implemented | `test/offline/m6-sqlite.test.ts` | SQLite storage configuration is validated (fail-fast) |
+| C-27 | implemented | `test/offline/m6-sqlite.test.ts` | schema migrations are versioned, idempotent and recoverable |
+| C-28 | implemented | `test/offline/m6-sqlite.test.ts` | a failed migration rolls back and leaves the prior version intact |
+| C-29 | implemented | `test/offline/m6-sqlite-backend.test.ts` | SQLite backend passes the storage conformance suite |
+| C-30 | implemented | `test/offline/m6-sqlite-backend.test.ts` | SQLite persistence survives reopen with isolation and order |
+| C-31 | implemented | `test/offline/m6-sqlite-backend.test.ts` | SQLite persists the delivery terminal outcome for recovery |
+| C-32 | implemented | `test/offline/m6-recovery.test.ts` | recovery view separates confirmed history from unresolved records |
+| C-33 | implemented | `test/offline/m6-recovery.test.ts` | restart restores only confirmed history and keeps the rest unknown |
 | C-38 | implemented | `test/offline/m6-storage.test.ts` | a commit whose later mutation cannot be published leaves no partial state |
 | C-39 | implemented | `test/offline/m6-storage.test.ts` | a conflicting atomic commit reports the conflict cause on both sides |
 | C-40 | implemented | `test/offline/m6-storage.test.ts` | event content equality is insensitive to object key order |
 | C-41 | implemented | `test/offline/m6-storage.test.ts` | event content equality keeps array order significant |
+| C-42 | implemented | `test/offline/m6-sqlite-backend.test.ts` | the SQLite backend rolls back the whole batch when a later mutation fails |
 | C-43 | implemented | `test/offline/m6-storage.test.ts` | an event whose payload is not a JSON value is rejected before publication |
 | C-44 | implemented | `test/offline/m6-storage.test.ts` | a sparse array payload is not conflated with an empty array |
+| C-45 | implemented | `test/offline/m6-sqlite-backend.test.ts` | the in-memory and SQLite backends agree end-to-end on accepted and rejected payloads |
 | C-46 | implemented | `test/offline/m5-attribution.test.ts` | M6 delivery attribution persistence: strict fields, nulls, ordering and conflicts |
 | C-47 | implemented | `test/offline/m5-attribution.test.ts` | M5 delivery attribution capture and reconstruction: normal, request mutation, Stop, late receipt, shared sessions, explicit indices and stable within-turn ordering (INV-15) |
+| C-48 | implemented | `test/offline/m6-sqlite.test.ts` | legacy delivery attribution migrates safely (NULL preserved; unsafe legacy data refused) |
+| C-49 | implemented | `test/offline/m6-storage.test.ts` | an event is validated against the schema before append mutates storage |
 
 ## Requirement trace
 
@@ -57,7 +69,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | FR-03 | M1 | C-06, C-11 | — |
 | FR-04 | M1 | C-01, C-04, C-10 | — |
 | FR-05 | M5 | C-03, C-04 | C-08 |
-| FR-06 | M6 | C-12, C-17, C-21, C-22, C-46, C-47 | durable restart/SQLite recovery (M6 #25); lifecycle reconstruction is local evidence only |
+| FR-06 | M6 | C-12, C-17, C-21, C-22, C-29, C-30, C-31, C-32, C-33, C-45, C-46, C-47 | application startup/selected-history recovery integration; M6 SQLite module recovery is implemented in merged PR26 |
 | NFR-01 | M5 | — | metric baseline |
 | NFR-02 | M5 | C-10, C-17 | C-05, C-09, recovery duration |
 | NFR-03 | M3 | — | C-16, human rubric |
@@ -67,12 +79,15 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-01 | M5 | C-03, C-04 | — |
 | INV-02 | M5 | C-06 | — |
 | INV-03 | M5 | C-07 | — |
-| INV-04 | M6 | C-18, C-23, C-39, C-40, C-41, C-43, C-44 | — |
-| INV-05 | M6 | C-19, C-38 | — |
+| INV-04 | M6 | C-18, C-23, C-39, C-40, C-41, C-43, C-44, C-49 | — |
+| INV-05 | M6 | C-19, C-38, C-42 | — |
 | INV-06 | M6 | C-20 | — |
 | INV-07 | M6 | C-24 | — |
 | INV-08 | M6 | C-25 | — |
 | INV-09 | M5 | C-46, C-47 | M4/SQLite consumer rollout |
+| INV-10 | M6 | C-26, C-27 | — |
+| INV-11 | M6 | C-27, C-28, C-48 | — |
+| INV-12 | M6 | C-32, C-33 | — |
 | INV-15 | M5 | C-47 (existing turn reconstruction ordering regression) | M4/M6 consumer acceptance |
 
 ## Ordering trace correction (2026-10-15)
@@ -82,10 +97,11 @@ The [issue #25 coordination](https://github.com/inscripoem/isla/issues/25#issuec
 | Coordinated mapping | Owner / state |
 | --- | --- |
 | M5 helper header: INV-08 → INV-15 | Local correction under review; not a renumbering of the M6 invariant |
-| M6 config / migration / recovery: INV-09 / INV-10 / INV-11 → INV-10 / INV-11 / INV-12 | M6 follow-up; pending adoption |
+| M6 config / migration / recovery: INV-09 / INV-10 / INV-11 → INV-10 / INV-11 / INV-12 | Adopted with PR26; merged into main `a2ecb86` |
 | M6 trace gate / log gate: INV-12 / INV-13 → INV-13 / INV-14 | M6 follow-up; pending adoption |
-| C-48 | M6 legacy-null migration/reopen; implemented in draft PR26, adoption pending |
-| C-49 / C-50 / C-51 | C-49/C-50 allocated to M4 guards; C-51 to M6 append validation in #25; registry/code synchronization pending |
+| C-48 | M6 legacy-null migration/reopen; implemented in PR26 and merged into main `a2ecb86` |
+| C-49 | Currently M6 append validation in merged PR26; reserved for M4 after M6 migrates active append references to C-51 |
+| C-49 / C-50 / C-51 allocation | C-49/C-50 remain allocated to M4; C-51 to M6 append validation. Active-reference migration is pending M6 work in [Issue25](https://github.com/inscripoem/isla/issues/25#issuecomment-6220210333) |
 
 ## Approval record
 

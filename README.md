@@ -2,7 +2,7 @@
 
 Isla is a planned AI VTuber framework: a configurable character runtime with replaceable decision, dialogue, speech and avatar adapters, plus a local console.
 
-This checkout contains the diagnostic foundation, shared contracts, M5 coordinator, M1 fixed synthesis/mapped rendering/browser player and M6 in-memory storage. The local I1 increment connects these through a separate interactive demo, under review (2026-10-15). The standard console still provides diagnostics; real M4 is now integrated locally with a deterministic text provider. The product console, M3, live dialogue/TTS/VTube Studio and SQLite remain owner deliverables.
+This checkout contains the diagnostic foundation, shared contracts, M5 coordinator, M1 fixed synthesis/mapped rendering/browser player, M4 dialogue context and M6 in-memory/SQLite storage. The local I1 increment connects these through a separate interactive demo, under review (2026-10-17). Its main integration passes 695 tests / 37 files and remains unpublished. The standard console still provides diagnostics; the demo uses deterministic dialogue text and fixed audio. The product console, M3, live dialogue/TTS/VTube Studio and application recovery integration remain owner deliverables.
 
 ## Run locally
 
@@ -69,7 +69,7 @@ Start with [the team development index](docs/team/README.md). The [work plan](do
 | M3 response decisions | `src/decision/` | Planned |
 | M4 dialogue/memory | `src/dialogue/` | PR23/PR30 merged; live provider pending |
 | M5 runtime — CHANG Xuben | `src/runtime/` | Application loop and selected-history reconstruction under review; [handoff](docs/team/HANDOFF-M5-RECONSTRUCTION.en.md) |
-| M6 storage/evaluation/CI | `src/storage/`, `src/evaluation/`, `.github/workflows/` | In-memory storage, requirements tooling and CI exist; SQLite pending |
+| M6 storage/evaluation/CI | `src/storage/`, `src/evaluation/`, `.github/workflows/` | In-memory and SQLite storage, requirements tooling and CI exist; application recovery integration pending |
 
 Shared contracts use `src/contracts/` (application schemas and ports under `src/contracts/app/`); tests use `test/offline/` and, when implemented, `test/live/`. The [architecture blueprint](architecture-blueprint.md) defines editing boundaries. Planned directories are not empty substitute implementations. Each owner can begin against the shared contracts and explicit fixtures; see [readiness kits](docs/team/READINESS-KITS.en.md).
 

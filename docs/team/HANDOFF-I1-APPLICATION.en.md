@@ -1,16 +1,13 @@
 # I1 application transport handoff (protocol 0.2)
 
-Status: under review · 2026-10-17.1 · Owner: M5 (runtime) · Consumer: M2 (console)
+Status: under review · 2026-10-17.2 · Owner: M5 (runtime) · Consumer: M2 (console)
 
 PR36 publishes the repaired I1 slice at `191f58b`; [M1 approved this head](https://github.com/inscripoem/isla/pull/36#pullrequestreview-5548740603) within the fixed-audio consumer/interface scope. M2 review remains requested. The repair described under [Physical status, send
 provenance and cached terminals](#physical-status-send-provenance-and-cached-terminals)
 is published, with 653 tests / 31 files independently verified and passing CI.
-Remote main is now `a2ecb86` after PR26 merged; PR36 conflicts with main as of October 17, 00:25 HKT. Consumer acceptance and the final human merge remain open. M2/M3 ownership is
-unchanged. The [delivery plan](DELIVERY-PLAN.en.md) records the now-implemented local follow-up
-to M4's later comments: application diagnostics and ordering/cache regressions.
-Independent verification passed 667 tests / 34 files, typecheck, lint and build,
-plus browser two-turn/reload/Stop/Resume/disconnect observations. This follow-up
-is uncommitted and unpublished; it is not covered by M1’s published-head approval. Consumer acceptance remains pending. Preserve status-before-receipt, identity correlation and reload-safe IDs; production extraction must remain browser-safe and must not import test code.
+Remote main `a2ecb86` (PR26 SQLite) has now been integrated locally after checkpoint `f25ab81`; six documentation conflicts were resolved without additional production-code changes. The published PR36 head remains `191f58b` until a separately approved push. M2/M3 ownership is unchanged.
+
+The local diagnostics and ordering/cache follow-up passed 667 tests before integration. The combined tree independently passes 695 tests / 37 files, typecheck, lint and build. Muted fixed-WAV browser checks passed two turns, Stop after started, Resume/new turn, reload without replay then a new turn, and socket closure followed by local cancellation. These are media-API observations, not acoustic or full SQLite application recovery acceptance. Publication and consumer review of the combined revision remain pending; M1's existing approval covers only the published head. Preserve status-before-receipt, identity correlation and reload-safe IDs; production extraction must remain browser-safe and must not import test code.
 
 This note describes the browser-facing transport the first interactive loop
 uses so M2 can connect the product console without reverse-engineering the
