@@ -129,3 +129,23 @@ bug: **symptom, reproduction, classification, root cause, fix, and the invariant
   back to `merge-base(origin/main, HEAD)`; if neither resolves and a parent exists, still report
   **unavailable** (`d87a08a`-series fix).
 - Invariant gap: a missing starting point is *unknown*, not an empty diff and not a pass.
+
+## BUG-015 — A restored frozen blueprint failed the push gate
+- Symptom: after the PR36 integration restored `architecture-blueprint.md` byte for byte to main's
+  copy, the push run's `trace` gate reported `frozen-modified`; the pull-request run (`main..HEAD`)
+  did not, because only the push diff (`before..HEAD`) still contained the path.
+- Reproduction: on a branch whose earlier commit edited the frozen blueprint and whose later commit
+  restored it to main's blob, run `pnpm test:trace` with `CHANGED_FILES_FILE` over `before..HEAD`.
+- Classification: governance / gate correctness (false positive).
+- Root cause: the frozen check rejected any frozen path in the changed-file list; it could not
+  distinguish a restoration to the trusted baseline from a change against it.
+- Fix: `src/evaluation/frozen-restoration.ts` proves, per changed frozen path and only for a
+  feature-branch push, that a canonical pinned default-branch commit is an ancestor of the
+  checked head, differs from that head, and already freezes the path. The committed blob/mode
+  and the actual regular file contents/mode must match the baseline. Strict decoding retains
+  BOMs and rejects malformed UTF-8. Dirty files, symlinks, deletion and unavailable evidence
+  still fail; default-branch pushes, tags, PRs and manual runs receive no exception. CI retains
+  the full event diff and logs the pinned baseline and per-path verdict (C-34/C-35, INV-13).
+- Status: local repair under review; the original failed push run remains historical until a
+  separately authorized publication produces new CI evidence.
+- Invariant gap: an exception that is not itself verified turns a strict gate into a whitelist.

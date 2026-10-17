@@ -871,3 +871,38 @@ entries:
     commits: []
     agent: Codex
     human_review: "Captain explicitly authorized local fetch, merge, full-file staging and a signed integration commit. This records direct documentation and integration work, not a new OpenCode implementation session. Preservation and final verification are recorded in the delivery plan and external evidence; original browser observations remain tied to 4c42126. Publication requires separate approval."
+  - date: 2026-10-17
+    task: M6-01-PR36-frozen-restoration
+    branch: feat/i1-application-loop
+    change: >-
+      Repair the frozen-path false positive when a feature push restores the main version.
+      Retain the complete event diff for every gate. The restoration proof requires a
+      canonical full default-branch commit, verified ancestry, a baseline frozen declaration,
+      matching committed blob/mode, and matching actual regular-file contents/mode. Strict
+      UTF-8 decoding preserves BOMs and rejects malformed bytes. Missing proof, symbolic refs,
+      dirty files, symlinks and non-feature events retain strict enforcement. Add regression
+      tests, CI baseline wiring and governance references without changing application code.
+    requirements: [FR-06]
+    invariants: [INV-13]
+    cases: [C-34, C-35]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    human_review: >-
+      Captain approved the local coordinator-proposed repair for M6 review. OpenCode v2.0.32
+      session ses_eb6090f71ffentiYa7qBgQaODr used native build and xhigh. Coordinator probes
+      found and corrected dirty-file and symbolic-baseline acceptance, then required strict
+      decoding. Mixed standalone/background continuation caused overlapping execution and a
+      duplicate declaration; both executions were interrupted and the source reconciled.
+      Genuine session history and intermediate failures are retained externally. The coordinator
+      completed documentation and independent verification. No commit, push, GitHub message,
+      review or merge was performed; the repair remains unpublished and under review.
+    verification:
+      targeted: "Coordinator typecheck, lint and 41 trace tests passed."
+      full_suite: "Coordinator pnpm verify: 791 passed / 44 files; typecheck, lint and build passed."
+      scope: >-
+        Tests cover committed and checked-file content/mode changes, deleted or unreadable
+        files, symlinks, missing/non-ancestor/unresolvable baselines, aliases and self-approval,
+        strict UTF-8/BOM handling, non-feature events, and read-only production Git adapters.
+        The frozen list and complete event diff semantics are unchanged. Tests do not mutate Git.

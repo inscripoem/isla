@@ -70,7 +70,7 @@ The CI pipeline implements the six blocking gates plus the traceability fitness 
 | G4 — semantic evaluation | `pnpm gate:eval` — reports **not run** without an evaluation set + provider access (never a pass), and fails an evaluation table that omits the fixed conditions NFR-01 requires |
 | G5 — regression | `pnpm test` (all offline suites) |
 | G6 — AI-use log | `pnpm gate:ai-use-log` over the pull-request diff |
-| traceability | `pnpm test:trace` (INV-12: the chain is machine-checked) |
+| traceability | `pnpm test:trace` (INV-13: the chain is machine-checked; a changed frozen path passes only on a verified default-branch restoration for a feature-branch push) |
 
 **Branch protection** — requiring passing CI to merge, with human review on safety-critical paths — is
 a repository setting applied by a human maintainer; this workflow does not assert it. Gaps are reported
