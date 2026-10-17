@@ -299,7 +299,9 @@ cases:
       file: test/offline/m6-sqlite.test.ts
       test: "preserves legacy NULL attribution across the v2 migration, and drops the legacy column"
 
-  - id: C-49
+  # Moved from C-49 (2026-10-17) to free that id for M4's admission-divergence guard;
+  # historical AI-use log entries keep the original id and are not rewritten.
+  - id: C-51
     status: implemented
     title: An event is validated against the schema before append mutates storage
     verifier:

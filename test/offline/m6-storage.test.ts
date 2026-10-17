@@ -1320,7 +1320,7 @@ describe('M6 delivery attribution and ordering (Step A)', () => {
   })
 })
 
-describe('M6 event validation on append (C-49)', () => {
+describe('M6 event validation on append (C-51)', () => {
   it('rejects a malformed event before mutation and lets a corrected retry apply', async () => {
     const backend = createInMemoryBackend()
     const store = createEventStore(backend)

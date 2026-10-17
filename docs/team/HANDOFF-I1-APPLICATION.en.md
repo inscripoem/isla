@@ -1,13 +1,13 @@
 # I1 application transport handoff (protocol 0.2)
 
-Status: under review · 2026-10-17.2 · Owner: M5 (runtime) · Consumer: M2 (console)
+Status: under review · 2026-10-17.3 · Owner: M5 (runtime) · Consumer: M2 (console)
 
 PR36 publishes the repaired I1 slice at `191f58b`; [M1 approved this head](https://github.com/inscripoem/isla/pull/36#pullrequestreview-5548740603) within the fixed-audio consumer/interface scope. M2 review remains requested. The repair described under [Physical status, send
 provenance and cached terminals](#physical-status-send-provenance-and-cached-terminals)
 is published, with 653 tests / 31 files independently verified and passing CI.
-Remote main `a2ecb86` (PR26 SQLite) has now been integrated locally after checkpoint `f25ab81`; six documentation conflicts were resolved without additional production-code changes. The published PR36 head remains `191f58b` until a separately approved push. M2/M3 ownership is unchanged.
+The earlier integration at `4c42126` adopted main `a2ecb86` (PR26 SQLite) after checkpoint `f25ab81`. The local branch now adopts main `8937f7d` (PR42 evidence and C-51 migration); only an appended-log conflict required resolution, and production/browser source remains unchanged. The published PR36 head remains `191f58b` until a separately approved push. M2/M3 ownership is unchanged.
 
-The local diagnostics and ordering/cache follow-up passed 667 tests before integration. The combined tree independently passes 695 tests / 37 files, typecheck, lint and build. Muted fixed-WAV browser checks passed two turns, Stop after started, Resume/new turn, reload without replay then a new turn, and socket closure followed by local cancellation. These are media-API observations, not acoustic or full SQLite application recovery acceptance. Publication and consumer review of the combined revision remain pending; M1's existing approval covers only the published head. Preserve status-before-receipt, identity correlation and reload-safe IDs; production extraction must remain browser-safe and must not import test code.
+The local diagnostics and ordering/cache follow-up passed 667 tests before integration. The earlier combined tree at `4c42126` independently passed 695 tests / 37 files, typecheck, lint and build; current combined validation is recorded in [the delivery plan](DELIVERY-PLAN.en.md). Muted fixed-WAV browser checks at `4c42126` passed two turns, Stop after started, Resume/new turn, reload without replay then a new turn, and socket closure followed by local cancellation. These are media-API observations, not acoustic or full SQLite application recovery acceptance. Publication and consumer review of the combined revision remain pending; M1's existing approval covers only the published head. Preserve status-before-receipt, identity correlation and reload-safe IDs; production extraction must remain browser-safe and must not import test code.
 
 This note describes the browser-facing transport the first interactive loop
 uses so M2 can connect the product console without reverse-engineering the
@@ -298,8 +298,8 @@ After the final code, the focused suites pass and `pnpm verify` passed 653 tests
 in 31 files, typecheck, lint and build (all prior quarantine/unsent/cached-terminal
 repairs retained). The repair was subsequently published as `191f58b`; both
 current-head CI runs passed. M1 subsequently approved this published head within
-the fixed-audio consumer/interface scope; M2 review and conflict resolution against
-current main remain pending.
+the fixed-audio consumer/interface scope; M2 review and publication of the locally
+reconciled branch remain pending.
 OpenCode authored the repair and ran the automated checks;
 the supervisor independently repeated verification and the browser checks below.
 Real loopback tests cover two turns, delivery attribution,

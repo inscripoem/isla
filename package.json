@@ -18,7 +18,7 @@
     "test:m3": "vitest run test/offline/m3-decision.test.ts",
     "test:m4": "vitest run test/offline/m4-dialogue.test.ts test/offline/m4-storage-integration.test.ts",
     "test:m5": "vitest run test/offline/m5-runtime.test.ts test/offline/m5-coordinator.test.ts",
-    "test:m6": "vitest run test/offline/m6-storage.test.ts test/offline/m6-sqlite.test.ts test/offline/m6-sqlite-backend.test.ts test/offline/m6-recovery.test.ts",
+    "test:m6": "vitest run test/offline/m6-storage.test.ts test/offline/m6-storage-properties.test.ts test/offline/m6-sqlite.test.ts test/offline/m6-sqlite-backend.test.ts test/offline/m6-recovery.test.ts test/offline/m6-durability.test.ts",
     "test:composition": "vitest run test/offline/composition.test.ts",
     "test:readiness": "vitest run test/offline/contracts.test.ts test/offline/requirements.test.ts test/offline/boundaries.test.ts",
     "req:schema": "tsx src/evaluation/emit-req-schema.ts",

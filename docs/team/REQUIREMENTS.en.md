@@ -1,6 +1,6 @@
 # Isla — Candidate Requirements
 
-Revision: 2026-10-17.1 · Status: under review
+Revision: 2026-10-17.2 · Status: under review
 
 Team requirements under review; English engineering requirements may be promoted to formal D1 after acceptance. This Markdown table does not replace the required YAML/schema. These are proposed acceptance obligations, not implemented capabilities or an approved D1 registry. Stable IDs are retained from the archived candidate draft; FR-01 now explicitly includes reply intent, FR-02 includes dialogue generation, and NFR-06 covers the selected adapter boundaries.
 
@@ -56,7 +56,7 @@ Every final entry requires metric + threshold + verification. TBD means not read
 | INV-12 | On restart only confirmed history is restored; unresolved outputs remain unknown and are never replayed. FR-06; C7, C-17. | M6 storage (`recovery-view`) + M5 lifecycle | Cases C-32/C-33; the recovery view separates confirmed from unresolved; no fabricated completion. |
 | INV-15 | Within one (sessionId, turnId), known segmentIndex values sort ascending before unknowns; ties and unknowns retain input order, with null indices preserved and other sessions/turns excluded. FR-06; issue #25. | M5 reconstruction (`src/runtime/delivery-order.ts`) | C-47 ordering regression; preserve the input history order and never infer an unknown index. INV-08 remains the M6 history-port read order. |
 
-INV-13 and INV-14 remain M6 trace/log-gate follow-ups. INV-10 through INV-12 and C-48 are implemented in merged PR26 (main `a2ecb86`). C-49 currently maps to M6 append validation on main. The agreed allocation remains C-49/C-50 for M4 and C-51 for M6; M6 must migrate active append references to C-51 before the coordinated M4 rows are adopted. See [Issue25](https://github.com/inscripoem/isla/issues/25#issuecomment-6220210333).
+INV-13 and INV-14 remain M6 trace/log-gate follow-ups in PR27. INV-10 through INV-12 and C-48 are implemented in merged PR26. Main `8937f7d` includes PR42 and registers M6 append validation as C-51. M4 has registered its allocated C-49/C-50 on PR35 `b6c078d`, not on main. [M5 reserved INV-16 and C-52–C-55 for M6](https://github.com/inscripoem/isla/issues/25#issuecomment-6231858718); these are pending registration, not rows in this branch's register. Existing M5 INV-15/C-47 remains unchanged.
 
 ## Promotion to D1
 

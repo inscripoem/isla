@@ -678,3 +678,33 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Captain-authorized integration; OpenCode resolved six doc conflicts. Independent pnpm verify passed 695 tests / 37 files, typecheck, lint and build; muted fixed-WAV browser two-turn, Stop/Resume, reload and disconnect checks passed. Coordinator corrected current-state/allocation wording after review; publication and consumer acceptance remain pending."
+  - date: 2026-10-16
+    task: M6-01
+    branch: m6-storage-evidence
+    change: "M6-01 evidence: a seeded property suite asserting INV-04/07/08 over many operation sequences applied OUT of sequence order, plus the same sequence replayed over in-memory and SQLite (generalising C-45); and a durability suite recovering committed rows from a crash-state copy of the database files whose non-empty -wal is asserted and copied, plus a committed row read without a clean close. Uncommitted-tail recovery is explicitly NOT covered (SQLite keeps a small uncommitted transaction in the page cache). Both mutation-checked."
+    requirements: [FR-06]
+    invariants: [INV-04, INV-07, INV-08, INV-12]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Targets the two claims marked unproven: durable recovery beyond a clean reopen, and universality of the invariants. Case ids pending allocation per structural-constraints.md section 3."
+  - date: 2026-10-17
+    task: M6-01
+    branch: m6-storage-evidence
+    change: "Case-id migration by team agreement (M5 #25 6220210333 item 3): M6's append-validation case moves C-49 -> C-51 to free C-49 for M4's admission-divergence guard (C-49 admission divergence, C-50 ordering agreement, C-51 M6 append validation). Updated together: case-registry, INV-04 acceptance cases, trace.en, trace-matrix, verification-constraints and the test's describe label. No production or test behaviour changed. Historical entries keep C-49 and are not rewritten; this entry is the migration record."
+    requirements: [FR-06]
+    invariants: [INV-04]
+    cases: [C-51]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Awaiting review in #42; M4 drops its local copy of the same migration once this lands on main."
+  - date: 2026-10-17
+    task: I1-01
+    branch: feat/i1-application-loop
+    change: "Adopted main 8937f7d (merged PR42) into the local PR36 integration: retained both log histories, adopted C-51 append-validation references and the two added storage suites, and refreshed current team coordination documents. No new production or test implementation was authored."
+    requirements: [FR-05, FR-06]
+    invariants: [INV-04, INV-12, INV-15]
+    cases: [C-47, C-51]
+    commits: []
+    agent: Codex
+    human_review: "Captain explicitly authorized local fetch, merge, full-file staging and signed commit. This entry records direct documentation/integration work, not a new OpenCode development session. Combined verification is recorded in the delivery plan; prior browser evidence remains bound to 4c42126. Publication and consumer review are separate."
