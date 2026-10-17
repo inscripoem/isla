@@ -65,10 +65,14 @@ jobs:
           # NUL-separated all the way to the gates, so a path containing a space or a
           # newline stays one path.
           # The base copy of the log, so G6 can require the change to ADD an entry
-          # rather than edit an existing one. A log that did not exist at the base is
-          # an empty file: every entry is new.
-          if git cat-file -e "$BASE:docs/ai-use-log.yaml" 2>/dev/null; then
-            git show "$BASE:docs/ai-use-log.yaml" > .cache/ai-use-log.base.yaml
+          # rather than edit an existing one. The comparison is against where this
+          # branch diverged, not the base branch tip: entries added to main after the
+          # branch point are not this change's, and counting them could tie the count.
+          # A log that did not exist at the base is an empty file: every entry is new.
+          LOG_BASE="$(git merge-base "$BASE" HEAD || true)"
+          if [ -z "$LOG_BASE" ]; then LOG_BASE="$BASE"; fi
+          if git cat-file -e "$LOG_BASE:docs/ai-use-log.yaml" 2>/dev/null; then
+            git show "$LOG_BASE:docs/ai-use-log.yaml" > .cache/ai-use-log.base.yaml
           else
             : > .cache/ai-use-log.base.yaml
           fi
