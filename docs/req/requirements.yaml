@@ -249,7 +249,7 @@ requirements:
         cases: [C-43, C-44]
       - kind: deterministic
         description: An event is validated against the RuntimeEvent schema before publication on both append and the atomic delivery path; a malformed event (for example a null or non-string versions member) is rejected without record or sequence residue and a corrected retry reusing the identity/sequence applies, while legacy versions:null or absent persona keys remain valid (FR-06).
-        cases: [C-49]
+        cases: [C-51]
 
   - id: INV-05
     title: A delivery and its supporting event commit atomically
