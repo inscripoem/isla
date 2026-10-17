@@ -48,3 +48,8 @@ opencode.json
 /research/
 /evidence/
 **/*.zh-CN.*
+
+# Local-only workspace material: credential files and the editor's Chinese
+# working rules/plans must never reach the checkout.
+/.token/
+/.trae/

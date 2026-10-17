@@ -30,6 +30,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "animal-island-ui": "^2.2.1",
+    "classnames": "^2.5.1",
+    "naive-icons": "1.6.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "ws": "^8.22.0",

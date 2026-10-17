@@ -1,12 +1,122 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { DIAGNOSTICS_PROTOCOL_VERSION, type DiagnosticReply } from '../contracts'
+import classNames from 'classnames'
+import {
+  Badge,
+  Button,
+  Card,
+  CodeBlock,
+  Collapse,
+  Divider,
+  Input,
+  Select,
+  Tabs,
+  Tag,
+  Title,
+  notificationOpen,
+} from 'animal-island-ui'
+import { PlayIcon, RefreshIcon, SendIcon, StopIcon } from 'naive-icons'
+import {
+  APPLICATION_CONTRACT_VERSION,
+  DIAGNOSTICS_PROTOCOL_VERSION,
+  INPUT_SOURCES,
+  type BootstrapSnapshot,
+  type ConsoleTransportPort,
+  type DiagnosticReply,
+  type InputSource,
+  type ServerMessage,
+} from '../contracts'
+import { ConsoleTransportError } from './app-transport'
+import type { PlaybackBinding, PlaybackCallbacks, PlaybackFactory } from './player-binding'
+import {
+  canDispatch,
+  createInitialConsoleState,
+  reduceControlAck,
+  reduceInputAck,
+  reduceServerMessage,
+  withBootstrap,
+  withConnection,
+  withControlFailure,
+  withError,
+  withFault,
+  withInputFailure,
+  withPendingControl,
+  withPendingInput,
+  withPlaybackStatus,
+  withReceipt,
+  withSubtitle,
+  type ConnectionStatus,
+  type ConsoleState,
+  type RequestOutcome,
+} from './console-state'
 import './console.css'
 
 const HEALTH_PATH = '/health'
 const DIAGNOSTICS_PATH = '/diag'
 const PING_KIND = 'ping'
 
-type SocketState = 'connecting' | 'open' | 'closed' | 'error'
+type StatusColor = 'app-green' | 'app-teal' | 'app-yellow' | 'app-orange' | 'app-red'
+
+const CONNECTION_COLORS: Record<ConnectionStatus, StatusColor> = {
+  connecting: 'app-yellow',
+  open: 'app-green',
+  closed: 'app-orange',
+  error: 'app-red',
+}
+
+const OUTCOME_COLORS: Record<RequestOutcome, StatusColor> = {
+  pending: 'app-yellow',
+  unknown: 'app-orange',
+  accepted: 'app-green',
+  applied: 'app-green',
+  duplicate: 'app-teal',
+  rejected: 'app-red',
+  refused: 'app-red',
+}
+
+const SOURCE_OPTIONS = INPUT_SOURCES.map((value) => ({ key: value, label: value }))
+
+/**
+ * A status channel the console needs but the transport port does not declare:
+ * the port has no way to report a socket that closes while idle. The composer
+ * that builds the transport supplies this reporter.
+ */
+export interface TransportStatusReporter {
+  onStatus(connection: ConnectionStatus, detail: string | null): void
+  onProtocolViolation(detail: string): void
+}
+
+export type TransportFactory = (reporter: TransportStatusReporter) => ConsoleTransportPort
+
+export interface ConsoleAppProps {
+  readonly transportFactory: TransportFactory
+  /** Mounted after bootstrap so the local player knows the session identity. */
+  readonly playbackFactory?: PlaybackFactory
+}
+
+function identify(error: unknown): string {
+  if (error instanceof ConsoleTransportError) return `${error.reason}: ${error.message}`
+  return error instanceof Error ? error.message : String(error)
+}
+
+function isInputSource(value: string): value is InputSource {
+  return (INPUT_SOURCES as readonly string[]).includes(value)
+}
+
+function Facts({ rows }: { readonly rows: readonly (readonly [string, string])[] }) {
+  return (
+    <dl className="facts">
+      {rows.flatMap(([label, value]) => [
+        <dt key={`${label}-label`}>{label}</dt>,
+        <dd key={`${label}-value`}>{value}</dd>,
+      ])}
+    </dl>
+  )
+}
+
+/* ------------------------------------------------------------------ *
+ * Diagnostics protocol 1 panel. It stays a separate tab so protocol 1
+ * traffic is never mixed with application protocol 0.2 behaviour.
+ * ------------------------------------------------------------------ */
 
 interface HealthView {
   service: string
@@ -18,6 +128,8 @@ interface HealthView {
   capabilities: string[]
   uptimeSec: number
 }
+
+type SocketState = 'connecting' | 'open' | 'closed' | 'error'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -57,22 +169,15 @@ function parseReply(value: unknown): DiagnosticReply | null {
   return value as unknown as DiagnosticReply
 }
 
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
-function diagnosticsSocketUrl(): string {
-  const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  return `${scheme}://${window.location.host}${DIAGNOSTICS_PATH}`
-}
-
-export function ConsoleApp() {
+function DiagnosticsPanel() {
   const [health, setHealth] = useState<HealthView | null>(null)
   const [healthError, setHealthError] = useState<string | null>(null)
   const [healthLoading, setHealthLoading] = useState(true)
   const [socketState, setSocketState] = useState<SocketState>('connecting')
   const [socketError, setSocketError] = useState<string | null>(null)
   const [lastReply, setLastReply] = useState<string | null>(null)
+  const [showHealth, setShowHealth] = useState(true)
+  const [showSocket, setShowSocket] = useState(true)
 
   const socketRef = useRef<WebSocket | null>(null)
   const healthAbortRef = useRef<AbortController | null>(null)
@@ -98,25 +203,16 @@ export function ConsoleApp() {
     } catch (error) {
       if (!isCurrent()) return
       setHealth(null)
-      setHealthError(messageOf(error))
+      setHealthError(error instanceof Error ? error.message : String(error))
     } finally {
       if (isCurrent()) setHealthLoading(false)
     }
   }, [])
 
-  const refreshHealthFromButton = useCallback(() => {
-    setHealthLoading(true)
-    setHealthError(null)
-    void refreshHealth()
-  }, [refreshHealth])
-
-  useEffect(() => {
-    activeRef.current = true
-    const initialFetchTimer = setTimeout(() => {
-      void refreshHealth()
-    }, 0)
-
-    const socket = new WebSocket(diagnosticsSocketUrl())
+  const startSocket = useCallback(() => {
+    if (socketRef.current !== null) return
+    const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    const socket = new WebSocket(`${scheme}://${window.location.host}${DIAGNOSTICS_PATH}`)
     socketRef.current = socket
     socket.onopen = () => {
       setSocketState('open')
@@ -150,19 +246,28 @@ export function ConsoleApp() {
         setLastReply('Unrecognised reply from diagnostics server')
       }
     }
+  }, [])
 
+  useEffect(() => {
+    activeRef.current = true
+    const initialFetchTimer = setTimeout(() => {
+      void refreshHealth()
+    }, 0)
     return () => {
       activeRef.current = false
       clearTimeout(initialFetchTimer)
       healthAbortRef.current?.abort()
-      socket.onopen = null
-      socket.onclose = null
-      socket.onerror = null
-      socket.onmessage = null
-      if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
-        socket.close(1000, 'console unmounting')
-      }
+      const socket = socketRef.current
       socketRef.current = null
+      if (socket !== null) {
+        socket.onopen = null
+        socket.onclose = null
+        socket.onerror = null
+        socket.onmessage = null
+        if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+          socket.close(1000, 'console unmounting')
+        }
+      }
     }
   }, [refreshHealth])
 
@@ -172,73 +277,513 @@ export function ConsoleApp() {
     socket.send(JSON.stringify({ v: DIAGNOSTICS_PROTOCOL_VERSION, id: `console-${Date.now()}`, kind: PING_KIND }))
   }, [])
 
-  const clearMessages = useCallback(() => {
-    setHealthError(null)
-    setSocketError(null)
-    setLastReply(null)
+  const socketColor: StatusColor =
+    socketState === 'open' ? 'app-green' : socketState === 'error' ? 'app-red' : 'app-yellow'
+
+  const healthRows: readonly (readonly [string, string])[] =
+    health === null
+      ? []
+      : [
+          ['Service', health.service],
+          ['Version', health.version],
+          ['Role', health.role],
+          ['Loopback only', health.loopbackOnly ? 'yes' : 'no'],
+          ['Diagnostics protocol', String(health.diagnosticsVersion)],
+          ['Application protocol', health.applicationVersion === null ? 'not implemented' : String(health.applicationVersion)],
+          ['Capabilities', health.capabilities.join(', ')],
+          ['Uptime', `${health.uptimeSec.toFixed(1)} s`],
+        ]
+
+  return (
+    <div className="console__stack">
+      <Card>
+        <div className="console__card-head">
+          <Title size="middle">Diagnostics backend health</Title>
+          <Tag variant="soft" color={health !== null ? 'app-green' : healthError !== null ? 'app-red' : 'app-yellow'}>
+            {health !== null ? 'ok' : healthError !== null ? 'unavailable' : 'unknown'}
+          </Tag>
+        </div>
+        <div className="console__actions">
+          <Button
+            size="small"
+            icon={<RefreshIcon size={18} />}
+            loading={healthLoading}
+            onClick={() => {
+              setHealthLoading(true)
+              setHealthError(null)
+              void refreshHealth()
+            }}
+          >
+            Refresh health
+          </Button>
+          <Button size="small" onClick={() => setShowHealth((value) => !value)} aria-expanded={showHealth}>
+            {showHealth ? 'Hide details' : 'Show details'}
+          </Button>
+        </div>
+        {healthError !== null && <p className="console__alert">{healthError}</p>}
+        {showHealth && health !== null && <Facts rows={healthRows} />}
+      </Card>
+
+      <Card>
+        <div className="console__card-head">
+          <Title size="middle">Diagnostics socket</Title>
+          <Tag variant="soft" color={socketColor}>
+            {socketState}
+          </Tag>
+        </div>
+        <div className="console__actions">
+          <Button size="small" onClick={startSocket} disabled={socketState === 'open'}>
+            {DIAGNOSTICS_PATH} {socketState === 'open' ? 'connected' : 'not connected'}
+          </Button>
+          <Button size="small" onClick={sendPing} disabled={socketState !== 'open'}>
+            Ping diagnostics
+          </Button>
+          <Button size="small" onClick={() => setShowSocket((value) => !value)} aria-expanded={showSocket}>
+            {showSocket ? 'Hide reply' : 'Show reply'}
+          </Button>
+        </div>
+        {socketError !== null && <p className="console__alert">{socketError}</p>}
+        {showSocket && lastReply !== null && <CodeBlock code={lastReply} />}
+        {showSocket && lastReply === null && <p className="console__hint">No diagnostics reply yet.</p>}
+      </Card>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ *
+ * Application console. Everything rendered here comes from pure view
+ * state; dispatch, playback and receipt observation live in their own
+ * modules and are injected.
+ * ------------------------------------------------------------------ */
+
+export function ConsoleApp({ transportFactory, playbackFactory }: ConsoleAppProps) {
+  const [state, setState] = useState<ConsoleState>(createInitialConsoleState)
+  const [source, setSource] = useState<InputSource>('local-audience')
+  const [draft, setDraft] = useState('')
+  const [playbackMounted, setPlaybackMounted] = useState(false)
+
+  const transportRef = useRef<ConsoleTransportPort | null>(null)
+  const playbackRef = useRef<PlaybackBinding | null>(null)
+  const stateRef = useRef(state)
+  const counterRef = useRef(0)
+
+  // Mirror the latest view state for event handlers, which must read it outside
+  // render. Writing the ref during render is not allowed.
+  useEffect(() => {
+    stateRef.current = state
+  }, [state])
+
+  const nextId = useCallback((prefix: string): string => {
+    counterRef.current += 1
+    return `${prefix}-${counterRef.current}-${Date.now().toString(36)}`
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const applyStatus = (connection: ConnectionStatus, detail: string | null): void => {
+      if (cancelled) return
+      setState((current) => withConnection(current, connection, detail))
+      // Uncertain or lost transport: stop local playback and stay non-dispatching.
+      if (connection !== 'open') playbackRef.current?.cancelLocal()
+    }
+    const transport = transportFactory({
+      onStatus: applyStatus,
+      onProtocolViolation: (detail) => {
+        if (cancelled) return
+        setState((current) => withError(current, { requestId: null, code: 'invalid_field', message: detail }))
+      },
+    })
+    transportRef.current = transport
+
+    const unsubscribe = transport.onServerMessage((message: ServerMessage) => {
+      setState((current) => reduceServerMessage(current, message))
+      playbackRef.current?.handleServerMessage(message)
+    })
+
+    void (async () => {
+      try {
+        const bootstrap: BootstrapSnapshot = await transport.bootstrap()
+        if (cancelled) return
+        setState((current) => withBootstrap(current, bootstrap))
+        if (playbackFactory === undefined) return
+        const callbacks: PlaybackCallbacks = {
+          onReceipt: (receipt) => setState((current) => withReceipt(current, receipt)),
+          onStatus: (status) => setState((current) => withPlaybackStatus(current, status)),
+          onSubtitle: (subtitleText) => setState((current) => withSubtitle(current, subtitleText)),
+          onFault: (message) => setState((current) => withFault(current, message)),
+        }
+        playbackRef.current = playbackFactory(bootstrap, callbacks)
+        setPlaybackMounted(true)
+      } catch (error) {
+        if (cancelled) return
+        setState((current) => withConnection(current, 'error', identify(error)))
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      unsubscribe()
+      playbackRef.current?.dispose()
+      playbackRef.current = null
+      transportRef.current = null
+      transport.close()
+    }
+  }, [transportFactory, playbackFactory])
+
+  const dispatchable = canDispatch(state)
+
+  const submitInput = useCallback(async () => {
+    const current = stateRef.current
+    const session = current.session
+    const text = draft.trim()
+    const transport = transportRef.current
+    if (transport === null || session === null || !canDispatch(current) || text.length === 0) return
+    const message = {
+      protocolVersion: APPLICATION_CONTRACT_VERSION,
+      messageId: nextId('input'),
+      sessionId: session.sessionId,
+      epoch: session.epoch,
+      kind: 'input.submit' as const,
+      payload: { source, text },
+    }
+    setState((previous) => withPendingInput(previous, message))
+    setDraft('')
+    try {
+      const ack = await transport.sendInput(message)
+      setState((previous) => reduceInputAck(previous, ack))
+      if (ack.status === 'rejected') {
+        notificationOpen({
+          type: 'error',
+          message: 'Input rejected',
+          description: `${ack.code}: ${ack.message}`,
+          duration: 4,
+        })
+      } else {
+        notificationOpen({
+          type: ack.status === 'accepted' ? 'success' : 'info',
+          message: `Input ${ack.status}`,
+          description: `${ack.eventId} at sequence ${ack.seq}`,
+          duration: 3,
+        })
+      }
+    } catch (error) {
+      setState((previous) => withInputFailure(previous, message.messageId, identify(error)))
+      notificationOpen({ type: 'error', message: 'Input dispatch failed', description: identify(error) })
+    }
+  }, [draft, nextId, source])
+
+  const sendControl = useCallback(
+    async (action: 'stop' | 'resume') => {
+      const current = stateRef.current
+      const session = current.session
+      const transport = transportRef.current
+      if (transport === null || session === null || !canDispatch(current)) return
+      const requestId = nextId(`control-${action}`)
+      const message =
+        action === 'stop'
+          ? ({
+              protocolVersion: APPLICATION_CONTRACT_VERSION,
+              messageId: nextId('control'),
+              sessionId: session.sessionId,
+              epoch: session.epoch,
+              kind: 'control.stop' as const,
+              payload: { requestId },
+            } as const)
+          : ({
+              protocolVersion: APPLICATION_CONTRACT_VERSION,
+              messageId: nextId('control'),
+              sessionId: session.sessionId,
+              epoch: session.epoch,
+              kind: 'control.resume' as const,
+              payload: { requestId },
+            } as const)
+      setState((previous) => withPendingControl(previous, message))
+      try {
+        const ack = await transport.sendControl(message)
+        setState((previous) => reduceControlAck(previous, ack))
+        notificationOpen({
+          type: ack.status === 'applied' ? 'success' : ack.status === 'refused' ? 'error' : 'info',
+          message: `Control ${action} ${ack.status}`,
+          description: `epoch ${ack.previousEpoch} -> ${ack.epoch} · lifecycle ${ack.lifecycle}`,
+        })
+      } catch (error) {
+        setState((previous) => withControlFailure(previous, requestId, identify(error)))
+        notificationOpen({ type: 'error', message: `Control ${action} failed`, description: identify(error) })
+      }
+    },
+    [nextId],
+  )
+
+  const session = state.session
+  const connectionSummary =
+    session === null
+      ? 'no session snapshot yet'
+      : `session ${session.sessionId} · epoch ${session.epoch} · lifecycle ${session.lifecycle}`
+  const dispatchSummary =
+    session === null
+      ? 'unknown'
+      : `${session.activeTurnId === null ? 'no active turn' : `turn ${session.activeTurnId}`} · performer ${session.performerStatus}`
+
+  const inputRows: readonly (readonly [string, string])[] = [
+    ['Session', session === null ? 'unknown' : session.sessionId],
+    ['Epoch', session === null ? 'unknown' : String(session.epoch)],
+    ['Lifecycle', session === null ? 'unknown' : session.lifecycle],
+    ['Active turn', session === null ? 'unknown' : (session.activeTurnId ?? 'none')],
+    ['Performer', session === null ? 'unknown' : session.performerStatus],
+    ['Output confirmation', session === null ? 'unknown' : session.outputConfirmation],
+    ['Capability revision', session === null ? 'unknown' : String(session.capabilityRevision)],
+    ['Accepted sequence', session === null ? 'unknown' : String(session.lastSeq)],
+  ]
+
+  const playbackRows: readonly (readonly [string, string])[] = [
+    ['Idle', String(state.playback.idle)],
+    ['Active output', state.playback.activeOutputId ?? 'none'],
+    ['Last stage', state.playback.lastStage ?? 'none'],
+    ['Last subtitle', state.playback.subtitleText ?? 'none'],
+  ]
+
+  const sessionView = (
+    <div className="console__stack">
+      <Card>
+        <div className="console__card-head">
+          <Title size="middle">Session</Title>
+          <Tag variant="soft" color={session === null ? 'app-orange' : 'app-teal'}>
+            {dispatchable ? 'dispatching' : 'non-dispatching'}
+          </Tag>
+        </div>
+        <Facts rows={inputRows} />
+        <p className="console__hint">{dispatchSummary}</p>
+      </Card>
+
+      <Card>
+        <Title size="middle">Input</Title>
+        <form
+          className="console__form"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void submitInput()
+          }}
+        >
+          <div className="console__field">
+            <span className="console__label" id="console-source-label">
+              Input source
+            </span>
+            <Select
+              aria-labelledby="console-source-label"
+              options={SOURCE_OPTIONS}
+              value={source}
+              disabled={!dispatchable}
+              onChange={(key) => {
+                if (isInputSource(key)) setSource(key)
+              }}
+            />
+          </div>
+          <div className="console__field">
+            <label className="console__label" htmlFor="console-text">
+              Message text
+            </label>
+            <Input
+              id="console-text"
+              value={draft}
+              disabled={!dispatchable}
+              placeholder="Type an audience message"
+              allowClear
+              onClear={() => setDraft('')}
+              onChange={(event) => setDraft(event.target.value)}
+            />
+          </div>
+          <Button
+            type="primary"
+            htmlType="submit"
+            icon={<SendIcon size={20} />}
+            disabled={!dispatchable || draft.trim().length === 0}
+          >
+            Submit input
+          </Button>
+        </form>
+        {state.inputs.length === 0 ? (
+          <p className="console__hint">No input requests yet.</p>
+        ) : (
+          <ul className="console__list">
+            {[...state.inputs].reverse().map((input) => (
+              <li
+                key={input.messageId}
+                className={classNames('console__list-item', {
+                  'console__list-item--pending': input.outcome === 'pending',
+                })}
+              >
+                <Tag size="small" variant="soft" color={OUTCOME_COLORS[input.outcome]}>
+                  {input.outcome}
+                </Tag>
+                <span className="console__list-text">{input.text}</span>
+                <span className="console__list-meta">
+                  {input.source}
+                  {input.eventId === null ? '' : ` · ${input.eventId}`}
+                  {input.seq === null ? '' : ` · seq ${input.seq}`}
+                </span>
+                {input.detail !== null && <span className="console__list-detail">{input.detail}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card>
+        <Title size="middle">Control</Title>
+        <div className="console__actions">
+          <Button danger icon={<StopIcon size={20} />} disabled={!dispatchable} onClick={() => void sendControl('stop')}>
+            Stop
+          </Button>
+          <Button icon={<PlayIcon size={20} />} disabled={!dispatchable} onClick={() => void sendControl('resume')}>
+            Resume
+          </Button>
+        </div>
+        <p className="console__hint">
+          Stop and Resume are the only authorized controls. They are dispatched as requests; the runtime decides the
+          resulting epoch and lifecycle.
+        </p>
+        {state.controls.length === 0 ? (
+          <p className="console__hint">No control requests yet.</p>
+        ) : (
+          <ul className="console__list">
+            {[...state.controls].reverse().map((control) => (
+              <li
+                key={control.messageId}
+                className={classNames('console__list-item', {
+                  'console__list-item--pending': control.outcome === 'pending',
+                })}
+              >
+                <Tag size="small" variant="soft" color={OUTCOME_COLORS[control.outcome]}>
+                  {control.outcome}
+                </Tag>
+                <span className="console__list-text">{control.action}</span>
+                <span className="console__list-meta">
+                  {control.previousEpoch === null || control.epoch === null
+                    ? control.requestId
+                    : `epoch ${control.previousEpoch} -> ${control.epoch}`}
+                </span>
+                {control.detail !== null && <span className="console__list-detail">{control.detail}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card>
+        <div className="console__card-head">
+          <Title size="middle">Playback and receipts</Title>
+          <Tag variant="outlined" color="app-yellow">
+            local evidence only
+          </Tag>
+        </div>
+        <Facts rows={playbackRows} />
+        <p className="console__hint">
+          {playbackMounted
+            ? 'Receipts are observed in this browser. The console has no player-to-runtime channel yet, so this panel never claims the runtime confirmed delivery.'
+            : 'No local player is mounted for this console; playback cannot be observed here.'}
+        </p>
+        {state.playback.receipts.length === 0 ? (
+          <p className="console__hint">No receipts observed.</p>
+        ) : (
+          <ul className="console__list">
+            {[...state.playback.receipts].reverse().map((receipt) => (
+              <li key={receipt.receiptId} className="console__list-item">
+                <Tag size="small" variant="soft" color="app-teal">
+                  {receipt.stage}
+                </Tag>
+                <span className="console__list-text">{receipt.outputId}</span>
+                <span className="console__list-meta">
+                  {receipt.modality}
+                  {receipt.reasonCode === null ? '' : ` · ${receipt.reasonCode}`}
+                  {receipt.localTimeMs === null ? '' : ` · ${receipt.localTimeMs} ms`}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {state.playback.faults.length > 0 && (
+          <>
+            <Divider type="hairline" />
+            <ul className="console__list">
+              {[...state.playback.faults].reverse().map((fault, index) => (
+                <li key={`${index}-${fault}`} className="console__list-item">
+                  <Tag size="small" variant="soft" color="app-red">
+                    fault
+                  </Tag>
+                  <span className="console__list-detail">{fault}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </Card>
+
+      <Card>
+        <Title size="middle">Events and errors</Title>
+        <p className="console__hint">Only events above the accepted sequence are shown; replayed history is never rendered.</p>
+        {state.events.length === 0 ? (
+          <p className="console__hint">No new events.</p>
+        ) : (
+          [...state.events]
+            .reverse()
+            .map((event) => (
+              <Collapse
+                key={event.seq}
+                question={`#${event.seq} ${event.type}`}
+                answer={<CodeBlock code={JSON.stringify(event.data, null, 2)} />}
+              />
+            ))
+        )}
+        {state.errors.length > 0 && (
+          <>
+            <Divider type="hairline" />
+            <ul className="console__list">
+              {[...state.errors].reverse().map((error, index) => (
+                <li key={`${index}-${error.code}-${error.message}`} className="console__list-item">
+                  <Tag size="small" variant="soft" color="app-red">
+                    {error.code}
+                  </Tag>
+                  <span className="console__list-detail">{error.message}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </Card>
+    </div>
+  )
 
   return (
     <main className="console">
       <header className="console__header">
-        <h1>Isla runtime console</h1>
+        <Title size="large">Isla runtime console</Title>
         <p className="console__subtitle">
-          Local diagnostics boundary. Health and protocol checks only; no dialogue, audio or rendering controls.
+          Local control surface for application contract {APPLICATION_CONTRACT_VERSION}. Input, control and playback
+          evidence only; diagnostics stay on their own protocol.
         </p>
-        <div className="console__actions">
-          <button type="button" onClick={refreshHealthFromButton} disabled={healthLoading}>
-            {healthLoading ? 'Refreshing...' : 'Refresh health'}
-          </button>
-          <button type="button" onClick={sendPing} disabled={socketState !== 'open'}>
-            Ping diagnostics
-          </button>
-          <button type="button" onClick={clearMessages}>
-            Clear messages
-          </button>
+        <div className="console__connection" role="status" aria-atomic="true">
+          <Badge dot color={CONNECTION_COLORS[state.connection]} />
+          <span className="console__connection-label">{state.connection}</span>
+          <span className="console__connection-detail">{connectionSummary}</span>
         </div>
+        {state.connectionDetail !== null && <p className="console__hint">{state.connectionDetail}</p>}
       </header>
 
-      <section className="panel" aria-labelledby="health-heading">
-        <div className="panel__heading">
-          <h2 id="health-heading">Backend health</h2>
-          <span className={`badge badge--${health !== null ? 'ok' : healthError !== null ? 'error' : 'idle'}`}>
-            {health !== null ? 'ok' : healthError !== null ? 'unavailable' : 'unknown'}
-          </span>
-        </div>
-        {healthError !== null && <p className="message message--error">{healthError}</p>}
-        {health !== null && (
-          <dl className="facts">
-            <dt>Service</dt>
-            <dd>{health.service}</dd>
-            <dt>Version</dt>
-            <dd>{health.version}</dd>
-            <dt>Role</dt>
-            <dd>{health.role}</dd>
-            <dt>Loopback only</dt>
-            <dd>{health.loopbackOnly ? 'yes' : 'no'}</dd>
-            <dt>Diagnostics protocol</dt>
-            <dd>{health.diagnosticsVersion}</dd>
-            <dt>Application protocol</dt>
-            <dd>{health.applicationVersion ?? 'not implemented'}</dd>
-            <dt>Capabilities</dt>
-            <dd>{health.capabilities.join(', ')}</dd>
-            <dt>Uptime</dt>
-            <dd>{health.uptimeSec.toFixed(1)} s</dd>
-          </dl>
-        )}
-      </section>
+      <Divider type="dashed-brown" />
 
-      <section className="panel" aria-labelledby="socket-heading">
-        <div className="panel__heading">
-          <h2 id="socket-heading">Diagnostics socket</h2>
-          <span className={`badge badge--${socketState === 'open' ? 'ok' : socketState === 'error' ? 'error' : 'idle'}`}>
-            {socketState}
-          </span>
-        </div>
-        <p className="message">{DIAGNOSTICS_PATH} {socketState === 'open' ? 'connected' : 'not connected'}</p>
-        {socketError !== null && <p className="message message--error">{socketError}</p>}
-        <pre className="reply">{lastReply ?? 'No diagnostics reply yet.'}</pre>
-      </section>
+      <Tabs
+        aria-label="Console sections"
+        defaultActiveKey="session"
+        items={[
+          { key: 'session', label: 'Session', children: sessionView },
+          { key: 'diagnostics', label: 'Diagnostics', children: <DiagnosticsPanel /> },
+        ]}
+      />
+
+      <p className="console__footnote">
+        Diagnostic protocol {DIAGNOSTICS_PROTOCOL_VERSION} is deliberately separate from application contract{' '}
+        {APPLICATION_CONTRACT_VERSION}; the diagnostics tab never drives session behaviour.
+      </p>
     </main>
   )
 }

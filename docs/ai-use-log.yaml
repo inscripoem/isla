@@ -665,4 +665,133 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Owner-approved fix after the push-event CI failure on the rebased #27. Mutation: trusting a missing `before` turns two range tests red."
+  - date: 2026-10-17
+    task: M2-01
+    branch: feat/m2-01-console
+    change: >-
+      Fill the last empty product module with the M2 console for application
+      protocol 0.2. Add a browser-safe WebSocket ConsoleTransportPort
+      (app-transport.ts) that validates every inbound frame against
+      serverMessageSchema and correlates acknowledgements by messageId; an explicit
+      pure-function state machine (console-state.ts) that accepts only session
+      events beyond the bootstrap snapshot seq, tracks lifecycle, epoch,
+      activeTurnId, performerStatus and outputConfirmation, and keeps pending
+      requests and unknown outcomes visible; and an M1 player binding
+      (player-binding.ts) that maps performance.execute/performance.cancel onto the
+      browser playback controller and returns receipts through an injected sink.
+      Rewrite ConsoleApp.tsx as a view over that state and rebuild the interface
+      with animal-island-ui, keeping the diagnostic protocol 1 panel separate from
+      the application view. Add 16 offline cases in test/offline/m2-console.test.ts
+      and a manual browser demo under test/browser/.
+    requirements: [FR-01, FR-04, FR-05]
+    invariants: [INV-01, INV-12]
+    cases: []
+    commits: []
+    agent: traecode/deepseek-v4.1-flash
+    provider: trae-cn
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      Governance deviation, recorded rather than concealed. AGENTS.md requires
+      application code to be authored through genuine OpenCode sessions with the
+      configured DeepSeek-V4-Flash provider; this M2-01 change was authored in a
+      TraeCode session under a Captain-approved plan (.trae/documents/m2-01-console-implementation-plan.md),
+      so no OpenCode session identifier exists for it. The agent field therefore
+      names the actual authoring agent and no ses_ identifier is asserted. The
+      Captain approved the scope, the animal-island-ui dependency and this
+      publication, and directed that the deviation be declared instead of
+      papered over.
+    verification:
+      role: "pnpm test:m2: 20 passed (the 16 first-slice cases plus 4 review regressions)."
+      full_suite: "pnpm verify on the merged origin/main (c2f9b38): 651 tests in 29 files; typecheck, lint and build passed."
+      readiness: "pnpm test:readiness: 41 passed."
+      trace: "pnpm test:trace: 15 passed."
+    scope: >-
+      The console drives an injected ConsoleTransportPort; the offline suite and
+      the browser demo use a fixture transport, so no server route, live provider
+      or real audio output is claimed. Three integration gaps are reported to M5
+      and not resolved here: ConsoleTransportPort has no player-to-runtime channel
+      for receipts, PerformanceCommand carries no bytes or URL, and the root Vite
+      config has no application-protocol proxy. Application protocol 0.2 and
+      diagnostic protocol 1 are unchanged.
+    human_review: >-
+      The Captain approved the scope, the dependency and this publication, and
+      directed that the provenance deviation be recorded truthfully. Consumer
+      review by M5 (shared transport port, player-to-runtime channel) and by M1
+      (the browser mount boundary) is requested and remains pending; publication is
+      not acceptance, and the tests-approved label is a human action.
+  - date: 2026-10-17
+    task: M2-01
+    branch: feat/m2-01-console
+    change: >-
+      Resolve the two P2 findings from M5's review of PR #43 without changing
+      application protocol 0.2. player-binding.ts now offers each performance
+      command over the current caller signal and supersedes the operation holding
+      the single admission slot only on an explicit `busy` conflict, so a
+      duplicate, a stale or invalid command and a rejected cancel preserve the
+      operation that is playing; console-state.ts keeps session state monotonic by
+      rejecting an older-epoch control acknowledgement for session state and
+      dropping a same-session older-epoch snapshot. Add four offline regressions in
+      test/offline/m2-console.test.ts.
+    requirements: [FR-01, FR-04, FR-05]
+    invariants: [INV-01, INV-12]
+    cases: []
+    commits: [377d8535777f94f0ba832e41409e304893dd9a4b]
+    agent: traecode/deepseek-v4.1-flash
+    provider: trae-cn
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      The same recorded governance deviation as the M2-01 console entry above:
+      this review-fix increment was authored in a TraeCode session under the
+      Captain-approved plan, so no OpenCode session identifier exists or is
+      asserted.
+    verification:
+      role: "pnpm test:m2: 20 passed."
+      full_suite: "pnpm verify: 655 tests in 29 files; typecheck, lint and build passed."
+      regressions: >-
+        The four new cases were confirmed to fail against the pre-fix source (the
+        two source edits temporarily stashed) and to pass with the fix.
+    human_review: >-
+      Requested: renewed M5 consumer review of the two corrected findings and their
+      four regressions. Merge remains a human action; no merge or auto-merge was
+      requested or performed.
+  - date: 2026-10-17
+    task: M2-01
+    branch: feat/m2-01-console
+    change: >-
+      Resolve the second M5 review of PR #43 (three P2 findings plus one
+      conditional finding) without changing application protocol 0.2.
+      console-state.ts drops a same-session snapshot that is at the same epoch but
+      behind the accepted sequence, so the accepted identity, turn, confirmation,
+      capability and sequence stay monotonic. player-binding.ts validates the
+      envelope session of a performance.cancel before it reaches M1, because
+      PerformanceCancel carries no session id; shows a command's subtitle only
+      once M1 admits it, read from a synchronous active-output transition, so a
+      duplicate, stale or rejected command cannot replace the playing subtitle;
+      and no longer aborts the caller signal on an accepted cancel, so a
+      synchronous cancel -> execute does not cancel a newer output. Add four
+      offline regressions in test/offline/m2-console.test.ts (24 total).
+    requirements: [FR-01, FR-04, FR-05]
+    invariants: [INV-01, INV-12]
+    cases: []
+    commits: [a63de25b17e6880d663072eeed040eff18917735]
+    agent: traecode/deepseek-v4.1-flash
+    provider: trae-cn
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      The same recorded governance deviation as the M2-01 console entries above:
+      this review-fix increment was authored in a TraeCode session under the
+      Captain-approved plan, so no OpenCode session identifier exists or is
+      asserted.
+    verification:
+      role: "pnpm test:m2: 24 passed (the 20 previous cases plus 4 new regressions)."
+      full_suite: "pnpm verify: 659 tests in 29 files; typecheck, lint and build passed."
+      regressions: >-
+        The four new cases were confirmed to fail against the pre-fix source (the
+        two source edits temporarily stashed, 4 failed and 20 passed) and to pass
+        with the fix restored.
+    human_review: >-
+      Requested: renewed M5 consumer review of the three corrected P2 findings,
+      the conditional cancellation-ownership fix and their four regressions.
+      Merge remains a human action; no merge or auto-merge was requested or
+      performed.
 
