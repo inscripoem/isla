@@ -754,4 +754,44 @@ entries:
       Requested: renewed M5 consumer review of the two corrected findings and their
       four regressions. Merge remains a human action; no merge or auto-merge was
       requested or performed.
+  - date: 2026-10-17
+    task: M2-01
+    branch: feat/m2-01-console
+    change: >-
+      Resolve the second M5 review of PR #43 (three P2 findings plus one
+      conditional finding) without changing application protocol 0.2.
+      console-state.ts drops a same-session snapshot that is at the same epoch but
+      behind the accepted sequence, so the accepted identity, turn, confirmation,
+      capability and sequence stay monotonic. player-binding.ts validates the
+      envelope session of a performance.cancel before it reaches M1, because
+      PerformanceCancel carries no session id; shows a command's subtitle only
+      once M1 admits it, read from a synchronous active-output transition, so a
+      duplicate, stale or rejected command cannot replace the playing subtitle;
+      and no longer aborts the caller signal on an accepted cancel, so a
+      synchronous cancel -> execute does not cancel a newer output. Add four
+      offline regressions in test/offline/m2-console.test.ts (24 total).
+    requirements: [FR-01, FR-04, FR-05]
+    invariants: [INV-01, INV-12]
+    cases: []
+    commits: [a63de25b17e6880d663072eeed040eff18917735]
+    agent: traecode/deepseek-v4.1-flash
+    provider: trae-cn
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      The same recorded governance deviation as the M2-01 console entries above:
+      this review-fix increment was authored in a TraeCode session under the
+      Captain-approved plan, so no OpenCode session identifier exists or is
+      asserted.
+    verification:
+      role: "pnpm test:m2: 24 passed (the 20 previous cases plus 4 new regressions)."
+      full_suite: "pnpm verify: 659 tests in 29 files; typecheck, lint and build passed."
+      regressions: >-
+        The four new cases were confirmed to fail against the pre-fix source (the
+        two source edits temporarily stashed, 4 failed and 20 passed) and to pass
+        with the fix restored.
+    human_review: >-
+      Requested: renewed M5 consumer review of the three corrected P2 findings,
+      the conditional cancellation-ownership fix and their four regressions.
+      Merge remains a human action; no merge or auto-merge was requested or
+      performed.
 
