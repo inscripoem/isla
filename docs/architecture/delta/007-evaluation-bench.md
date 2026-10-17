@@ -89,3 +89,19 @@ Once the id convention is agreed (PR #32), the rows are added to `docs/req/requi
 - `npx vitest run test/offline/m6-02-report.test.ts` → **12 passed**.
 - `pnpm verify` → clean (re-measured on this head; see the PR body).
 
+---
+
+## Slice 5 — the case shape (issue #41 Q3a)
+
+- **Changed** `src/evaluation/comparison.ts` — `EvalCase` gains optional `replyIntent` and `heldOut`
+  (ADR-007 D8). Absent stays absent; the runner passes the case through unchanged and does not default it.
+- **Added** a case in `test/offline/m6-02-comparison.test.ts` — the variant receives the exact declared
+  object, a bare case has no invented fields, and duplicate field definitions do not appear because run-wide
+  conditions live in `FixedConditions` (D7).
+- Mutation-checked: defaulting a missing `replyIntent` turns the test red.
+
+### Verification (slice 5)
+
+- `npx vitest run test/offline/m6-02-comparison.test.ts` → **9 passed**.
+- `pnpm verify` → re-measured on this head (see the PR body).
+

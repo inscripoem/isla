@@ -134,6 +134,31 @@ describe('runComparison — every attempt is accounted for', () => {
   })
 })
 
+describe('runComparison — the case shape from issue #41 Q3a', () => {
+  it('hands each case to the variant unchanged and invents no missing field', async () => {
+    const crafted: readonly EvalCase[] = [
+      { id: 'with-intent', input: 'hello', replyIntent: 'greeting', heldOut: true },
+      { id: 'bare', input: 'hello' },
+    ]
+    const seen: EvalCase[] = []
+    await runComparison(
+      { variants: [VARIANT], cases: crafted },
+      {
+        runVariant: async (_variant, evalCase) => {
+          seen.push(evalCase)
+          return { ran: true, record: completedRecord() }
+        },
+      },
+    )
+
+    // The variant sees exactly what the case declared: no defaults, no dropped fields.
+    expect(seen).toEqual(crafted)
+    expect(Object.keys(seen[1] ?? {})).toEqual(['id', 'input'])
+    expect(seen[1]).not.toHaveProperty('replyIntent')
+    expect(seen[1]).not.toHaveProperty('heldOut')
+  })
+})
+
 describe('runComparison — module boundary', () => {
   it('does not import the pipeline: the bench aggregates, it does not compose', () => {
     const source = readFileSync('src/evaluation/comparison.ts', 'utf8')
