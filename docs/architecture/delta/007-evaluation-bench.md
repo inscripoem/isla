@@ -116,3 +116,23 @@ Once the id convention is agreed (PR #32), the rows are added to `docs/req/requi
 - `npx vitest run test/offline/m6-02-comparison.test.ts` → **9 passed**.
 - `pnpm verify` → **601 passed / 25 files**.
 
+---
+
+## Slice 6 — the writer, the role baseline, and the label boundary
+
+- **Added** `writeEvaluationReport` in `src/evaluation/report.ts` — validates first, writes through a
+  temporary file and renames; a refused run writes nothing and leaves an existing table untouched.
+- **Added** a two-variant report test — separate rows, usage cells and first/later percentiles, so one
+  aggregate can no longer be printed for every variant.
+- **Changed** `package.json` — `pnpm test:m6` now runs the three bench suites (**128 tests / 7 files**).
+- **Recorded** in ADR-007 D8 that `EvalCase.labels` is stored but **not scored**; the rubric is M3's and no
+  label-aware comparison exists until it is adopted.
+
+### Verification (slice 6)
+
+- `npx vitest run test/offline/m6-02-report.test.ts` → **21 passed**.
+- `pnpm test:m6` → **128 passed / 7 files**.
+- `pnpm verify` → **607 passed / 25 files**.
+- Mutations: ignoring the writer's violations turns three tests red; one aggregate for every variant turns
+  the multi-variant test red.
+

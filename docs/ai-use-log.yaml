@@ -726,4 +726,24 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Found by the requested second pass; each fix mutation-checked (one decimal fails the cost test, removing the run-id guard fails its test)."
+  - date: 2026-10-17
+    task: M6-02
+    branch: m6-02-bench
+    change: "M6-02 writer and baseline: writeEvaluationReport validates before touching the filesystem, writes through a temporary file and renames, and refuses a fixture/injected-clock run; a two-variant report test proves per-variant usage and percentiles do not leak; pnpm test:m6 now runs the three bench suites (128 tests / 7 files) instead of omitting them. No refusal rule changed."
+    requirements: [NFR-01, NFR-03, NFR-04]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Owner-approved tasks 1-3. Mutations: ignoring writer violations kills three tests; one aggregate for every variant kills the multi-variant test."
+  - date: 2026-10-17
+    task: M6-02
+    branch: m6-02-bench
+    change: "M6-02 label boundary: recorded in ADR-007 D8 that EvalCase.labels is stored for NFR-03 but is not scored or compared; the quality rubric is M3's and is not adopted, so a label-aware comparison would invent a semantic rule. Recorded deferral, not an omission."
+    requirements: [NFR-03]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Choice between a label-aware comparison and a recorded deferral put to the owner; deferral chosen because M3 owns the rubric."
 

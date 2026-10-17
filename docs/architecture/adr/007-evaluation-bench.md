@@ -86,6 +86,11 @@ Conditions that hold for the **whole run** — persona id and version, model and
 history source and record set, text source, clock domain — live in the report's `FixedConditions` (D7), not
 on each case. Duplicating them per case would let one run contain two different "fixed" conditions.
 
+**Labels are recorded, not scored.** `EvalCase.labels` is carried for NFR-03, but the report deliberately
+does not derive a quality number from it, and the bench does not compare labels. The rubric belongs to
+**M3** (NFR-03, `rubric TBD`); until it is supplied and adopted, a label-aware comparison would be an
+invented semantic rule. This is a recorded deferral, not an omission: `labels` has no consumer today.
+
 ## Alternatives considered
 
 - **A statistics dependency** (`simple-statistics`, `d3-array`, `ml-matrix`). Rejected: this is one
