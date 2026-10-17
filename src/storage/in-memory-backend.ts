@@ -1,4 +1,4 @@
-import type { ConfirmedDelivery, RuntimeEvent } from '../contracts'
+import type { CommitDelivery, ConfirmedDelivery, RuntimeEvent } from '../contracts'
 import {
   deliveryKey,
   type StorageBackend,
@@ -56,6 +56,7 @@ type PreparedMutation =
       readonly kind: 'delivery'
       readonly record: ConfirmedDelivery
       readonly eventSeq: number
+      readonly terminalOutcome: CommitDelivery['terminalOutcome']
     }
 
 /** Deep-copy a mutation (fallible). No backend state is touched. */
@@ -63,7 +64,12 @@ function prepare(mutation: StorageMutation): PreparedMutation {
   if (mutation.kind === 'event') {
     return { kind: 'event', event: copy(mutation.event) }
   }
-  return { kind: 'delivery', record: copy(mutation.record), eventSeq: mutation.eventSeq }
+  return {
+    kind: 'delivery',
+    record: copy(mutation.record),
+    eventSeq: mutation.eventSeq,
+    terminalOutcome: mutation.terminalOutcome,
+  }
 }
 
 export function createInMemoryBackend(): StorageBackend {
@@ -85,7 +91,11 @@ export function createInMemoryBackend(): StorageBackend {
       return
     }
     deliveriesByKey.set(deliveryKey(mutation.record), mutation.record)
-    storedDeliveries.push({ record: mutation.record, eventSeq: mutation.eventSeq })
+    storedDeliveries.push({
+      record: mutation.record,
+      eventSeq: mutation.eventSeq,
+      terminalOutcome: mutation.terminalOutcome,
+    })
   }
 
   return {
@@ -95,12 +105,16 @@ export function createInMemoryBackend(): StorageBackend {
     },
     sequenceOwner: (sessionId, seq) => sequenceOwners.get(`${sessionId}:${seq}`),
     sessionEvents: (sessionId) => (eventsBySession.get(sessionId) ?? []).map(copy),
-    deliveryByKey: (key) => {
-      const record = deliveriesByKey.get(key)
+    deliveryByKey: (sessionId, turnId, segmentId, modality) => {
+      const record = deliveriesByKey.get(deliveryKey({ sessionId, turnId, segmentId, modality }))
       return record === undefined ? undefined : copy(record)
     },
     storedDeliveries: () =>
-      storedDeliveries.map((entry) => ({ record: copy(entry.record), eventSeq: entry.eventSeq })),
+      storedDeliveries.map((entry) => ({
+        record: copy(entry.record),
+        eventSeq: entry.eventSeq,
+        terminalOutcome: entry.terminalOutcome,
+      })),
     commit: (mutations) => {
       // Fallible preparation of the whole batch completes before any mutation is
       // published, so a failure leaves every index and history view unchanged.

@@ -124,6 +124,8 @@ describe('M6 storage conformance', () => {
     expect(codes).toContain('atomic-failure-reported')
     expect(codes).toContain('projection-no-gap-claim')
     expect(codes).toContain('history-fully-delivered-only')
+    expect(codes).toContain('read-isolation')
+    expect(codes).toContain('history-ordered')
   })
 
   it('detects session-blind, mutable and unordered storage faults', async () => {
@@ -1315,6 +1317,56 @@ describe('M6 delivery attribution and ordering (Step A)', () => {
       .filter((record) => record.turnId === 'turn-recon')
       .sort((a, b) => (a.segmentIndex ?? 0) - (b.segmentIndex ?? 0))
     expect(reconstructed.map((record) => record.segmentId)).toEqual(['segment-1', 'segment-9'])
+  })
+})
+
+describe('M6 event validation on append (C-51)', () => {
+  it('rejects a malformed event before mutation and lets a corrected retry apply', async () => {
+    const backend = createInMemoryBackend()
+    const store = createEventStore(backend)
+
+    // A `versions` member that is null passes the loose object type but not the
+    // RuntimeEvent schema, so the durable boundary must reject it.
+    const malformed = fixtureRuntimeEvent({
+      eventId: 'v-1',
+      seq: 1,
+      versions: { persona: null } as unknown as Record<string, string>,
+    })
+    const ack = await store.append(malformed)
+    expect(ack.outcome).toBe('failed')
+    if (ack.outcome === 'failed') expect(ack.reasonCode).toBe('invalid_event')
+
+    // No residue: no record, and the identity/sequence are still free.
+    expect(await store.readSession(FIXTURE_SESSION_ID)).toHaveLength(0)
+    expect(backend.sequenceOwner(FIXTURE_SESSION_ID, 1)).toBeUndefined()
+
+    // A corrected retry reusing the same identity/sequence applies.
+    const corrected = fixtureRuntimeEvent({ eventId: 'v-1', seq: 1, versions: { persona: 'p@1' } })
+    expect((await store.append(corrected)).outcome).toBe('stored')
+  })
+
+  it('rejects a non-string versions member', async () => {
+    const store = createEventStore()
+    const ack = await store.append(
+      fixtureRuntimeEvent({
+        eventId: 'v-2',
+        seq: 1,
+        versions: { persona: 123 } as unknown as Record<string, string>,
+      }),
+    )
+    expect(ack.outcome).toBe('failed')
+    if (ack.outcome === 'failed') expect(ack.reasonCode).toBe('invalid_event')
+  })
+
+  it('accepts legacy versions: null and absent persona keys', async () => {
+    const store = createEventStore()
+    expect(
+      (await store.append(fixtureRuntimeEvent({ eventId: 'v-3', seq: 1, versions: null }))).outcome,
+    ).toBe('stored')
+    expect(
+      (await store.append(fixtureRuntimeEvent({ eventId: 'v-4', seq: 2, versions: { other: 'x@1' } })))
+        .outcome,
+    ).toBe('stored')
   })
 })
 

@@ -16,6 +16,8 @@ defined response and operational fallback.
 | Interrupted atomic commit | Backend failure mid-commit | `commit` is atomic — no partial state | Resume from last committed state; unresolved outputs stay `unknown` | M6 |
 | Projection gap | `event.seq > appliedSeq + 1` | Do not advance `appliedSeq` | Projection must not claim current history until it catches up | M6 |
 | Restart with unresolved output | Startup reconciliation | Begin stopped; restore only confirmed history | Unresolved outputs remain `unknown`; no automatic replay | M6 / M5 |
+| Migration failure (unsupported schema version, or apply error) | `migrate` rejects or rolls back | Refuse to open the database; keep the prior version | Restore from the pre-migration backup under `<dbDir>/backups/` | M6 |
+| Startup recovery (restart) | `recovery-view` reads committed deliveries | Restore only confirmed history; keep unresolved `unknown` | No replay; an unresolved segment is never quoted as spoken | M6 / M5 |
 
 Non-storage failure paths (decision timeout, synthesis failure, renderer disconnect) are owned by
 M3/M1/M5 and are pending their entries here.

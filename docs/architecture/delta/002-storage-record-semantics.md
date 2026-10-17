@@ -42,6 +42,7 @@ Zero imports of the old signatures remain.
 | `test/offline/m6-storage.test.ts` | cross-session, isolation, ordering, batch-atomicity and payload-contract regressions |
 | `docs/architecture/{option-ledger,memory-design}.md` | record the rejected "keep patching the serializer" option (OL-005) and the JSON-payload write rule |
 | `docs/team/REQUIREMENTS.en.md` | INV-04 row: canonical equality + JSON payload contract |
+| M6 invariant renumbering | `INV-09..13 -> INV-10..14` (M5 keeps `INV-09` for delivery attribution): config `INV-10`, migration `INV-11`, recovery `INV-12`, trace-gate `INV-13`, log-gate `INV-14` — registries, traces, ADR/delta updated together |
 
 ## FROZEN
 
