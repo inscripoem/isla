@@ -27,6 +27,10 @@ Every attempt is recorded with its outcome — `completed`, `cancelled` or `fail
 **records why**. A failed attempt is a **measurement, not a gap**: dropping it would inflate the success
 picture and hide the tail NFR-01 asks about.
 
+The record's **provider-attempt count** is `number | null`. An adapter can throw before calling a provider,
+or after an unreported number of calls; in both cases the count is **unknown**, not `1` and not `0`. This
+field is distinct from the summary's count of bench records.
+
 ### D3 — Missing is unknown, never zero
 
 A measurement that was not observed is `null`. Usage is summed **only when every attempt reports it**;

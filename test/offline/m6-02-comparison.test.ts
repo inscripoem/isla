@@ -109,7 +109,34 @@ describe('runComparison — every attempt is accounted for', () => {
     expect(record.failureReason).toBe('provider exploded')
     expect(record.usage.usageMissing).toBe(true)
     expect(record.totalMs).toBeNull()
+    // The adapter threw before reporting a provider-attempt count: unknown, never 1 or 0.
+    expect(record.attempts).toBeNull()
     expect(run.summary.outcomes.failed).toBe(1)
+  })
+
+  it('does not infer a provider-attempt count when an adapter throws after making calls', async () => {
+    let calls = 0
+    const run = await runComparison(
+      { variants: [VARIANT], cases: [CASE] },
+      {
+        runVariant: async () => {
+          calls += 2
+          throw new Error('provider failed after two calls')
+        },
+      },
+    )
+    expect(calls).toBe(2)
+    // The runner cannot observe the provider from here: the count is unknown, not 2.
+    expect(run.records[0]!.attempts).toBeNull()
+    expect(run.records[0]!.failureReason).toBe('provider failed after two calls')
+  })
+
+  it('preserves a known provider-attempt count from the variant', async () => {
+    const run = await runComparison(
+      { variants: [VARIANT], cases: [CASE] },
+      { runVariant: async () => ({ ran: true, record: { ...completedRecord(), attempts: 2 } }) },
+    )
+    expect(run.records[0]!.attempts).toBe(2)
   })
 
   it('records a deliberately not-run case as notRun and claims no attempt for it', async () => {

@@ -154,3 +154,18 @@ Once the id convention is agreed (PR #32), the rows are added to `docs/req/requi
 - Mutations: ignoring the writer's violations turns three tests red; one aggregate for every variant turns
   the multi-variant test red.
 
+---
+
+## Slice 7 — provider-attempt honesty (M5 review P2)
+
+- **Changed** `AttemptRecord.attempts` to `number | null`; the runner's catch branch (a thrown adapter) now
+  records `null`, because the adapter may have failed before any provider call or after an unreported number
+  of calls. The failed record, its reason, its unknown usage and its cold-slot behaviour are unchanged.
+- **Changed** report validation to accept `null` and still reject negative or fractional counts; the
+  every-attempt table prints `—` with a legend, never `0`.
+- **Added** regressions: a pre-provider exception leaves the count unknown; an adapter that throws after
+  making calls does not have its count inferred; a known count survives; `null` renders as `—`; negative and
+  fractional counts are refused.
+- **Amended** ADR-007 D2: the provider-attempt count is a different field from the number of bench records.
+- No new invariant or case id was allocated.
+
