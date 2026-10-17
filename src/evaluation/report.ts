@@ -1,5 +1,6 @@
 import { renameSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
+import { EVALUATION_TABLE_PATH } from './artifacts'
 import type { ComparisonRun, Variant } from './comparison'
 import {
   TIMING_STAGES,
@@ -376,9 +377,6 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
 
   return { ok: true, markdown: `${lines.join('\n')}\n` }
 }
-
-/** The artifact gate G4 reads. */
-const EVALUATION_TABLE_PATH = 'docs/architecture/evaluation-table.md'
 
 export type WriteReportResult =
   | { readonly ok: true; readonly path: string }

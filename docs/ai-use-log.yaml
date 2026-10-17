@@ -776,4 +776,14 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Owner-approved S5 registration after M5's allocation; readiness and trace re-run on this head."
+  - date: 2026-10-17
+    task: M6-02
+    branch: m6-02-bench
+    change: "Design-review fix X2: one EVALUATION_TABLE_PATH constant in src/evaluation/artifacts.ts, imported by the report writer and by gate G4. Before this, report.ts and eval-gate.ts each declared the path, so a change in one could make the gate read a file nobody writes."
+    requirements: [NFR-01]
+    invariants: [INV-16]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Design review on #40 found the duplication; recorded as debt with the trigger 'after #27 merges', which has now fired."
 
