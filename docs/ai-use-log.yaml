@@ -498,7 +498,7 @@ entries:
   - date: 2026-10-16
     task: M6-01
     branch: m6-storage-evidence
-    change: "M6-01 evidence: a seeded property suite asserting INV-04/07/08 over many operation sequences applied OUT of sequence order, plus the same sequence replayed over in-memory and SQLite (generalising C-45); and a durability suite recovering from a crash-state copy of the database files (committed rows recovered, uncommitted discarded, schema version intact) and reading a committed row without a clean close. Both mutation-checked."
+    change: "M6-01 evidence: a seeded property suite asserting INV-04/07/08 over many operation sequences applied OUT of sequence order, plus the same sequence replayed over in-memory and SQLite (generalising C-45); and a durability suite recovering committed rows from a crash-state copy of the database files whose non-empty -wal is asserted and copied, plus a committed row read without a clean close. Uncommitted-tail recovery is explicitly NOT covered (SQLite keeps a small uncommitted transaction in the page cache). Both mutation-checked."
     requirements: [FR-06]
     invariants: [INV-04, INV-07, INV-08, INV-12]
     cases: []

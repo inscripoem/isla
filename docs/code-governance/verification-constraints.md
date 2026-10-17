@@ -48,9 +48,14 @@ Generated and durability suites (same invariants, wider evidence):
   the same sequence replayed over the in-memory and SQLite backends with identical export and history
   (generalising the single cross-backend case C-45). Runnable: `npx vitest run test/offline/m6-storage-properties.test.ts`.
 - `test/offline/m6-durability.test.ts` — INV-12 / FR-06: recovery from a **crash-state copy** of the
-  database files (every committed row recovered, an uncommitted one discarded, the schema version
+  database files that carries a non-empty `-wal` (every committed row recovered, the schema version
   intact), and a committed row visible to a second handle **without a clean close**. Both suites are
   mutation-checked: dropping the `-wal` copy and letting arrival order stand in for `seq` each fail.
+  Both run in `pnpm test:m6`.
+  **Not covered:** an uncommitted WAL tail. SQLite keeps a small uncommitted transaction's dirty pages
+  in the page cache and only writes frames at COMMIT or on a cache spill, so a one-row `BEGIN`/`INSERT`
+  leaves the `-wal` byte-identical (measured: same size, same SHA-256). Proving that case needs a
+  cache-spill fixture or a killed subprocess; neither is asserted here.
 - Case ids for these suites are **pending allocation** (see `structural-constraints.md` §3).
 
 `docs/req/case-registry.yaml` links each implemented case to its verifier file and test string; the
