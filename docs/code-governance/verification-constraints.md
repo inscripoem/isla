@@ -24,7 +24,7 @@ The rules the verification agent applies and the QA records the team maintains.
 
 | Invariant / requirement | Case | Test that would fail if violated |
 | --- | --- | --- |
-| INV-04 (session-scoped identity/sequence uniqueness) | C-18, C-23, C-39, C-40, C-41, C-43, C-44, C-49 | `m6-storage.test.ts`; conformance `append-duplicate`, `append-changed-content`, `append-seq-unique`, `append-session-scoped-identity`; conflicting commit reports `conflict` on both sides; canonical content equality (key order irrelevant, array order significant); a non-JSON payload is rejected with `unsupported_payload` (incl. sparse arrays) |
+| INV-04 (session-scoped identity/sequence uniqueness) | C-18, C-23, C-39, C-40, C-41, C-43, C-44, C-51 | `m6-storage.test.ts`; conformance `append-duplicate`, `append-changed-content`, `append-seq-unique`, `append-session-scoped-identity`; conflicting commit reports `conflict` on both sides; canonical content equality (key order irrelevant, array order significant); a non-JSON payload is rejected with `unsupported_payload` (incl. sparse arrays) |
 | INV-05 (atomic delivery + event) | C-19, C-38, C-42 | `m6-storage.test.ts::INV-05` (failed commit persists nothing; a later unpublishable mutation leaves no partial state); `m6-sqlite-backend.test.ts` (batch rollback); conformance `atomic-failure-reported`, `atomic-no-partial-mutation` |
 | INV-06 (projection no gap / idempotent) | C-20 | `m6-storage.test.ts::INV-06`; conformance `projection-no-gap-claim`, `projection-idempotent` |
 | INV-07 (record isolation) | C-24, C-29 | `m6-storage.test.ts` (isolation tests); conformance `input-isolation`, `read-isolation` → runs over **both** in-memory and SQLite |
@@ -54,8 +54,9 @@ Generated and durability suites (same invariants, wider evidence):
   Both run in `pnpm test:m6`.
   **Not covered:** an uncommitted WAL tail. SQLite keeps a small uncommitted transaction's dirty pages
   in the page cache and only writes frames at COMMIT or on a cache spill, so a one-row `BEGIN`/`INSERT`
-  leaves the `-wal` byte-identical (measured: same size, same SHA-256). Proving that case needs a
-  cache-spill fixture or a killed subprocess; neither is asserted here.
+  leaves the `-wal` byte-identical (review #42 verified the same size and SHA-256 on this
+  fixture). Proving that case needs a cache-spill fixture or a killed subprocess; neither
+  is asserted here.
 - Case ids for these suites are **pending allocation** (see `structural-constraints.md` §3).
 
 `docs/req/case-registry.yaml` links each implemented case to its verifier file and test string; the
