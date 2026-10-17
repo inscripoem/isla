@@ -299,6 +299,8 @@ cases:
       file: test/offline/m6-sqlite.test.ts
       test: "preserves legacy NULL attribution across the v2 migration, and drops the legacy column"
 
+  # Moved from C-49 (2026-10-17) to free that id for M4's admission-divergence guard;
+  # historical AI-use log entries keep the original id and are not rewritten.
   - id: C-51
     status: implemented
     title: An event is validated against the schema before append mutates storage
@@ -306,11 +308,9 @@ cases:
       file: test/offline/m6-storage.test.ts
       test: "rejects a malformed event before mutation and lets a corrected retry apply"
 
-  # C-49 and C-50 are M4's cases, allocated in #25. M6's append-validation case
-  # was published as C-49 by #26 before the agreed migration landed, so it is
-  # migrated here to C-51 and all of its references are updated with it
-  # (requirement INV-04, trace records and the test label). If M6 lands the same
-  # migration on main first, this copy is identical and drops out on merge.
+  # C-49 and C-50 are M4's cases, allocated in #25 and adopted here once M6's
+  # append-validation case had been migrated to C-51 on main (#42, 8937f7d), so
+  # neither id is claimed before the register can prove it is free.
   - id: C-49
     status: implemented
     title: M4 admission divergence — a receiptless delivery is confirmed history for the durable store but stays out of spoken memory

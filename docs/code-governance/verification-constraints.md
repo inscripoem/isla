@@ -41,6 +41,24 @@ The rules the verification agent applies and the QA records the team maintains.
 | FR-06 (in-memory vs SQLite agreement) | C-45 | `m6-sqlite-backend.test.ts` (cross-backend integration: state, export, history, payload rejection) |
 | FR-06 / C-12 (replay isolation) | C-12 | `m6-storage.test.ts` (replay-isolation test) |
 
+Generated and durability suites (same invariants, wider evidence):
+
+- `test/offline/m6-storage-properties.test.ts` — INV-04/07/08 across many **seeded** operation
+  sequences applied **out of sequence order**, so insertion order cannot stand in for the sequence; then
+  the same sequence replayed over the in-memory and SQLite backends with identical export and history
+  (generalising the single cross-backend case C-45). Runnable: `npx vitest run test/offline/m6-storage-properties.test.ts`.
+- `test/offline/m6-durability.test.ts` — INV-12 / FR-06: recovery from a **crash-state copy** of the
+  database files that carries a non-empty `-wal` (every committed row recovered, the schema version
+  intact), and a committed row visible to a second handle **without a clean close**. Both suites are
+  mutation-checked: dropping the `-wal` copy and letting arrival order stand in for `seq` each fail.
+  Both run in `pnpm test:m6`.
+  **Not covered:** an uncommitted WAL tail. SQLite keeps a small uncommitted transaction's dirty pages
+  in the page cache and only writes frames at COMMIT or on a cache spill, so a one-row `BEGIN`/`INSERT`
+  leaves the `-wal` byte-identical (review #42 verified the same size and SHA-256 on this
+  fixture). Proving that case needs a cache-spill fixture or a killed subprocess; neither
+  is asserted here.
+- Case ids for these suites are **pending allocation** (see `structural-constraints.md` §3).
+
 `docs/req/case-registry.yaml` links each implemented case to its verifier file and test string; the
 readiness suite (`src/evaluation/requirements-registry.ts` via `test/offline/requirements.test.ts`)
 rejects a missing file or absent test string.
