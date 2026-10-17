@@ -111,20 +111,33 @@ Blocks are zero-churn (`C-\d+` still matches) but only **shrink** the collision 
 a cross-owner allocation step, cap each owner at 100 IDs, need a lookup table to read ownership, and do
 not compose with per-owner fragments. Acceptable only while each module has a single writer.
 
-### 3.5 Adoption, and who reserves the global ADR numbers
+### 3.5 Adoption, registration, and the global ADR numbers
 
-**ADR numbers are global, not per-owner.** They are allocated sequentially (`ADR-0NN`) and `001…007` are
-taken. **Which role reserves them is not yet assigned — that is the one gap in this convention.** Proposed:
-the **coordination thread (#25) acts as the registrar** (M5 coordinates architecture and scope), the
-`docs/architecture/adr/` index is the record, and a new number is announced there **before** the file is
-written. Until that is agreed, an author proposing an ADR announces its number in #25 first and takes the
-next free one only after that.
+**ADR numbers are global, not per-owner.** They are allocated sequentially (`ADR-0NN`); `001…007` are
+taken. **M5 coordinates global ADR reservations in the coordination thread (#25)** — a responsibility
+already assigned, not a proposal — and the `docs/architecture/adr/` index is the record. A number is
+reserved in #25 **before** its numbered file is created; an author proposing an ADR does not announce a
+number and self-select it.
 
-**When this becomes an operative instruction.** It **already is**. The `AGENTS.md` rule added by this PR
-tells every coding agent to take its id from §3, and that rule is deliberately scheme-agnostic. What awaits
-the team is the **scheme inside §3** (owner-prefixed ids, with the numeric block as the fallback) — not
-whether agents follow §3. If the team chooses the block fallback, `AGENTS.md` needs no change at all; only
-§3.1 and §3.4 would.
+**An allocation is not an ID until its row is registered.** A number agreed in the thread is a
+**reservation**. It takes effect when the row exists in the register that owns it
+(`docs/req/case-registry.yaml`, `docs/req/requirements.yaml`, `docs/architecture/invariants.md`). The
+register's duplicate-id check — not the thread — is what proves an ID is real; two owners holding the same
+reservation at merge time is exactly the collision class this section exists to prevent. A reservation that
+is never registered may be released by the registrar (M5).
+
+**When the owner-prefixed scheme becomes operative.** Not yet. It becomes operative only when all three
+hold, and the third is what records the decision:
+
+1. this document, corrected, and the `AGENTS.md` rule are merged;
+2. the supporting ID validation is merged — the `CASE_ID` recogniser and the owner check that land with the
+   R3 tooling (#27);
+3. an **adoption revision** is recorded here naming that decision.
+
+Until then, new IDs are **reserved in the coordination thread (#25)**. No prefixed ID is operative merely
+because this document exists, and the ADR reservation responsibility is not open: M5 coordinates it in #25,
+as above. The `AGENTS.md` rule is deliberately scheme-agnostic — it says to take the ID from §3, which stays
+true if the team adopts the numeric-block fallback (§3.4) instead — so it needs no change in that case.
 
 ## 4. Rules and their enforcement
 
