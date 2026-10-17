@@ -18,6 +18,9 @@ import { pathToFileURL } from 'node:url'
  * than the push. The one exception is a repository whose first push creates the root
  * commit: there is no parent and no merge base, so every path is new and the empty
  * tree is the honest base.
+ *
+ * Git is consulted only when the range actually needs it: a pull request and an
+ * ordinary push are answered from the event payload alone.
  */
 
 export type ChangeBaseSource =
@@ -88,39 +91,64 @@ export function resolveChangeBase(input: ChangeBaseInput): ChangeBase {
   return { kind: 'range', base: input.emptyTree, source: 'empty-tree' }
 }
 
-/** The git facts `resolveChangeBase` needs, read in `cwd` (the checkout by default). */
-export function collectGitFacts(cwd?: string): Pick<ChangeBaseInput, 'mergeBase' | 'parent' | 'emptyTree'> {
-  const git = (args: readonly string[], input?: string): string | null => {
-    try {
-      const output = execFileSync('git', [...args], {
-        cwd,
-        encoding: 'utf8',
-        stdio: input === undefined ? ['ignore', 'pipe', 'ignore'] : ['pipe', 'pipe', 'ignore'],
-        input,
-      })
-      return output.trim()
-    } catch {
-      return null
-    }
-  }
-
-  const emptyTree = git(['hash-object', '-t', 'tree', '--stdin'], '')
-  if (emptyTree === null || emptyTree.length === 0) {
-    throw new Error('git could not compute the empty tree for a root-commit range')
-  }
-  return {
-    mergeBase: git(['merge-base', 'origin/main', 'HEAD']),
-    parent: git(['rev-parse', '--verify', '--quiet', 'HEAD^']),
-    emptyTree,
+/** Run git, returning trimmed stdout or null when it fails. */
+function git(cwd: string | undefined, args: readonly string[], input?: string): string | null {
+  try {
+    const output = execFileSync('git', [...args], {
+      cwd,
+      encoding: 'utf8',
+      stdio: input === undefined ? ['ignore', 'pipe', 'ignore'] : ['pipe', 'pipe', 'ignore'],
+      input,
+    })
+    return output.trim()
+  } catch {
+    return null
   }
 }
 
+function emptyTree(cwd: string | undefined): string {
+  const tree = git(cwd, ['hash-object', '-t', 'tree', '--stdin'], '')
+  if (tree === null || tree.length === 0) {
+    throw new Error('git could not compute the empty tree for a root-commit range')
+  }
+  return tree
+}
+
 export function resolveFromEnvironment(env: NodeJS.ProcessEnv = process.env, cwd?: string): ChangeBase {
+  const event = env.EVENT_NAME ?? ''
+  const pullRequestBase = env.PR_BASE_SHA ?? null
+  const before = env.PUSH_BEFORE ?? null
+
+  // The common cases need no git at all.
+  if (event === 'pull_request' || (event === 'push' && present(before))) {
+    return resolveChangeBase({ event, pullRequestBase, before, emptyTree: '' })
+  }
+
+  if (event === 'push') {
+    const mergeBase = git(cwd, ['merge-base', 'origin/main', 'HEAD'])
+    if (mergeBase !== null) {
+      return resolveChangeBase({ event, pullRequestBase, before, mergeBase, emptyTree: '' })
+    }
+    // No merge base: either the repository's first push (no parent) or a range that
+    // cannot be established — never the tip's parent.
+    const parent = git(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD^'])
+    return resolveChangeBase({
+      event,
+      pullRequestBase,
+      before,
+      mergeBase: null,
+      parent,
+      emptyTree: parent === null ? emptyTree(cwd) : '',
+    })
+  }
+
+  const parent = git(cwd, ['rev-parse', '--verify', '--quiet', 'HEAD^'])
   return resolveChangeBase({
-    event: env.EVENT_NAME ?? '',
-    pullRequestBase: env.PR_BASE_SHA ?? null,
-    before: env.PUSH_BEFORE ?? null,
-    ...collectGitFacts(cwd),
+    event,
+    pullRequestBase,
+    before,
+    parent,
+    emptyTree: parent === null ? emptyTree(cwd) : '',
   })
 }
 

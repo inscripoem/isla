@@ -5,7 +5,6 @@ import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   type ChangeBaseInput,
-  collectGitFacts,
   resolveChangeBase,
   resolveFromEnvironment,
 } from '../../src/evaluation/change-range'
@@ -116,10 +115,7 @@ describe('change range resolution against a real repository', () => {
 
     git(directory, ['update-ref', 'refs/remotes/origin/main', baseCommit])
 
-    const resolved = resolveChangeBase({
-      ...facts({ before: ZERO }),
-      ...collectGitFacts(directory),
-    })
+    const resolved = resolveFromEnvironment({ EVENT_NAME: 'push', PUSH_BEFORE: ZERO }, directory)
     expect(resolved).toEqual({ kind: 'range', base: baseCommit, source: 'merge-base' })
 
     const wholeRange = git(directory, ['diff', '--name-only', baseCommit, 'HEAD'])
@@ -135,7 +131,7 @@ describe('change range resolution against a real repository', () => {
     const directory = repo()
     commit(directory, 'src/root.ts', 'export const root = true\n', 'root commit')
 
-    const resolved = resolveChangeBase({ ...facts({ before: ZERO }), ...collectGitFacts(directory) })
+    const resolved = resolveFromEnvironment({ EVENT_NAME: 'push', PUSH_BEFORE: ZERO }, directory)
     expect(resolved.kind).toBe('range')
     if (resolved.kind !== 'range') throw new Error('unreachable')
     expect(resolved.source).toBe('empty-tree')
