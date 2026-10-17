@@ -645,3 +645,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Addresses M5 review finding 2 on #27 (P2). Mutation-checked: accepting an unchanged count fails the edit reproduction."
+  - date: 2026-10-17
+    task: M6-01
+    branch: m6-r3-gates
+    change: "Self-audit after the R3 revisions: the diff-range resolver consults git only when the event does not already carry the base (a pull request's base or a push's before), and only for the fact the case needs; G6 compares the log against merge-base(base, HEAD), so entries added to main after the branch point cannot cancel this branch's own; ADR-006 records G6's added-entry rule. The gates' decisions are unchanged; only the cost and the base selection are."
+    requirements: [FR-06]
+    invariants: [INV-13, INV-14]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Found by post-review self-audit on #27; the push-event G6 failure is what surfaced the missing record."
