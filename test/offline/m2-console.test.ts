@@ -1,7 +1,43 @@
 import { describe, expect, it } from 'vitest'
+import {
+  bootstrapSnapshotSchema,
+  clientMessageSchema,
+  inputAckSchema,
+  serverMessageSchema,
+  type ControlAck,
+  type ControlResumeMessage,
+  type ControlStopMessage,
+  type InputAck,
+  type InputSubmitMessage,
+  type PerformanceReceipt,
+  type PlayerStatus,
+  type ServerMessage,
+} from '../../src/contracts'
+import {
+  canDispatch,
+  createInitialConsoleState,
+  reduceControlAck,
+  reduceInputAck,
+  reduceServerMessage,
+  withBootstrap,
+  withConnection,
+  withPendingControl,
+  withPendingInput,
+  type ConsoleState,
+  type ConnectionStatus,
+} from '../../src/console/console-state'
+import {
+  ConsoleTransportError,
+  createAppTransport,
+  type SocketCloseInfo,
+  type TransportSocket,
+} from '../../src/console/app-transport'
+import { createPlaybackBinding } from '../../src/console/player-binding'
 import { collectConsoleViolations } from '../conformance/console.conformance'
 import { createBootstrapOnlyRuntime, createFixtureConsoleTransport } from '../support/correct-ports'
 import { createFaultyConsoleTransport } from '../support/faulty-ports'
+import { createControlledMediaDriver, createControlledResolver } from '../support/m1-kit'
+import { FIXTURE_SESSION_ID, fixturePerformanceCommand } from '../support/fixture-data'
 
 describe('M2 console conformance', () => {
   it('accepts a transport built on a fixture runtime', async () => {
@@ -14,5 +50,481 @@ describe('M2 console conformance', () => {
   it('rejects a transport that replays stale history', async () => {
     const violations = await collectConsoleViolations(() => createFaultyConsoleTransport())
     expect(violations.map((violation) => violation.code)).toContain('no-history-autoplay')
+  })
+})
+
+/* ------------------------------------------------------------------ *
+ * Pure view state. No DOM, no transport, no timers.
+ * ------------------------------------------------------------------ */
+
+const SESSION = FIXTURE_SESSION_ID
+
+function bootstrap(epoch = 1, seq = 4) {
+  return bootstrapSnapshotSchema.parse({
+    protocolVersion: '0.2',
+    messageId: 'm-bootstrap',
+    sessionId: SESSION,
+    epoch,
+    seq,
+    lifecycle: 'running',
+    activeTurnId: 'turn-fixture-1',
+    performerStatus: 'idle',
+    outputConfirmation: 'confirmed',
+    capabilityRevision: 1,
+  })
+}
+
+function opened(): ConsoleState {
+  return withBootstrap(createInitialConsoleState(), bootstrap())
+}
+
+function inputSubmit(messageId: string): InputSubmitMessage {
+  return {
+    protocolVersion: '0.2',
+    messageId,
+    sessionId: SESSION,
+    epoch: 1,
+    kind: 'input.submit',
+    payload: { source: 'local-audience', text: 'hello runtime' },
+  }
+}
+
+function controlStop(requestId: string): ControlStopMessage {
+  return { protocolVersion: '0.2', messageId: 'control-message-1', sessionId: SESSION, epoch: 1, kind: 'control.stop', payload: { requestId } }
+}
+
+function controlResume(requestId: string): ControlResumeMessage {
+  return { protocolVersion: '0.2', messageId: 'control-message-1', sessionId: SESSION, epoch: 1, kind: 'control.resume', payload: { requestId } }
+}
+
+function sessionEvent(seq: number): ServerMessage {
+  return serverMessageSchema.parse({
+    protocolVersion: '0.2',
+    messageId: `m-event-${seq}`,
+    sessionId: SESSION,
+    epoch: 1,
+    kind: 'session.event',
+    payload: { seq, type: 'turn.started', data: { turnId: 'turn-fixture-1' } },
+  })
+}
+
+describe('console view state', () => {
+  it('dispatches only on an open transport with a live session', () => {
+    const initial = createInitialConsoleState()
+    expect(canDispatch(initial)).toBe(false)
+    expect(canDispatch(opened())).toBe(true)
+    expect(canDispatch(withConnection(opened(), 'closed'))).toBe(false)
+    expect(canDispatch(withConnection(opened(), 'error', 'socket failed'))).toBe(false)
+  })
+
+  it('treats a lost transport as uncertain instead of settled', () => {
+    const pending = withPendingInput(opened(), inputSubmit('req-1'))
+    const lost = withConnection(pending, 'closed', 'socket closed')
+
+    expect(lost.inputs[0]?.outcome).toBe('unknown')
+    expect(lost.inputs[0]?.detail).toBe('transport went down before acknowledgement')
+    expect(lost.session?.outputConfirmation).toBe('unknown')
+    expect(lost.connectionDetail).toBe('socket closed')
+  })
+
+  it('never renders replayed history at or below the accepted sequence', () => {
+    const state = opened()
+    expect(state.session?.lastSeq).toBe(4)
+
+    const replayed = reduceServerMessage(state, sessionEvent(3))
+    expect(replayed.events).toEqual([])
+    expect(replayed.session?.lastSeq).toBe(4)
+
+    const fresh = reduceServerMessage(state, sessionEvent(5))
+    expect(fresh.events.map((event) => event.seq)).toEqual([5])
+    expect(fresh.session?.lastSeq).toBe(5)
+  })
+
+  it('marks an acknowledgement from another session or epoch as unknown', () => {
+    const pending = withPendingInput(opened(), inputSubmit('req-1'))
+    const foreign: InputAck = inputAckSchema.parse({
+      status: 'accepted',
+      requestMessageId: 'req-1',
+      eventId: 'event-1',
+      sessionId: SESSION,
+      epoch: 2,
+      seq: 9,
+    })
+
+    const settled = reduceInputAck(pending, foreign)
+    expect(settled.inputs[0]?.outcome).toBe('unknown')
+    expect(settled.inputs[0]?.detail).toBe('acknowledgement references a different session or epoch')
+    expect(settled.session?.lastSeq).toBe(4)
+  })
+
+  it('keeps the server vocabulary for a rejected input request', () => {
+    const pending = withPendingInput(opened(), inputSubmit('req-1'))
+    const rejected: InputAck = inputAckSchema.parse({
+      status: 'rejected',
+      requestMessageId: 'req-1',
+      sessionId: SESSION,
+      epoch: 1,
+      code: 'invalid_field',
+      message: 'text must not be empty',
+      retryable: false,
+    })
+
+    const settled = reduceInputAck(pending, rejected)
+    expect(settled.inputs[0]?.outcome).toBe('rejected')
+    expect(settled.inputs[0]?.detail).toBe('invalid_field: text must not be empty')
+    expect(settled.session?.lastSeq).toBe(4)
+  })
+
+  it('correlates a control acknowledgement by requestId, not by message id', () => {
+    const pending = withPendingControl(opened(), controlStop('control-request-1'))
+    const ack: ControlAck = {
+      sessionId: SESSION,
+      requestId: 'control-request-1',
+      requestMessageId: 'a-different-message-id',
+      action: 'stop',
+      status: 'applied',
+      previousEpoch: 1,
+      epoch: 2,
+      lifecycle: 'stopped',
+      outputConfirmation: 'pending',
+      reasonCode: null,
+      message: 'stopped',
+    }
+
+    const settled = reduceControlAck(pending, ack)
+    expect(settled.controls[0]?.outcome).toBe('applied')
+    expect(settled.controls[0]?.epoch).toBe(2)
+    expect(settled.session?.epoch).toBe(2)
+    expect(settled.session?.lifecycle).toBe('stopped')
+    expect(settled.session?.outputConfirmation).toBe('pending')
+  })
+
+  it('records a request error and clears the matching pending control', () => {
+    const pending = withPendingControl(opened(), controlResume('control-request-1'))
+    const error = serverMessageSchema.parse({
+      protocolVersion: '0.2',
+      messageId: 'm-error',
+      sessionId: SESSION,
+      epoch: 1,
+      kind: 'request.error',
+      payload: { requestId: 'control-request-1', code: 'unauthorized', retryable: false, message: 'not authorized' },
+    })
+
+    const settled = reduceServerMessage(pending, error)
+    expect(settled.controls[0]?.outcome).toBe('unknown')
+    expect(settled.controls[0]?.detail).toBe('unauthorized: not authorized')
+    expect(settled.errors.map((entry) => entry.code)).toEqual(['unauthorized'])
+  })
+})
+
+/* ------------------------------------------------------------------ *
+ * Wire framing. A double replaces the platform WebSocket so the transport
+ * can be observed without a server or a browser.
+ * ------------------------------------------------------------------ */
+
+interface FakeSocket {
+  readonly socket: TransportSocket
+  readonly sent: string[]
+  open(): void
+  emit(payload: unknown): void
+  emitRaw(raw: string): void
+  disconnect(info: SocketCloseInfo): void
+}
+
+function createFakeSocket(): FakeSocket {
+  const openHandlers: Array<() => void> = []
+  const closeHandlers: Array<(info: SocketCloseInfo) => void> = []
+  const errorHandlers: Array<(detail: string) => void> = []
+  const messageHandlers: Array<(data: string) => void> = []
+  const sent: string[] = []
+  let readyState = 0
+
+  const socket: TransportSocket = {
+    readyState: () => readyState,
+    send(data) {
+      sent.push(data)
+    },
+    close() {
+      readyState = 3
+    },
+    onOpen(handler) {
+      openHandlers.push(handler)
+    },
+    onClose(handler) {
+      closeHandlers.push(handler)
+    },
+    onError(handler) {
+      errorHandlers.push(handler)
+    },
+    onMessage(handler) {
+      messageHandlers.push(handler)
+    },
+  }
+
+  return {
+    socket,
+    sent,
+    open() {
+      readyState = 1
+      for (const handler of openHandlers) handler()
+    },
+    emit(payload) {
+      const raw = JSON.stringify(payload)
+      for (const handler of messageHandlers) handler(raw)
+    },
+    emitRaw(raw) {
+      for (const handler of messageHandlers) handler(raw)
+    },
+    disconnect(info) {
+      readyState = 3
+      for (const handler of closeHandlers) handler(info)
+    },
+  }
+}
+
+function snapshotMessage(epoch = 1, lastSeq = 4): Record<string, unknown> {
+  return {
+    protocolVersion: '0.2',
+    messageId: 'm-snapshot',
+    sessionId: SESSION,
+    epoch,
+    kind: 'session.snapshot',
+    payload: {
+      lifecycle: 'running',
+      activeTurnId: 'turn-fixture-1',
+      performerStatus: 'idle',
+      outputConfirmation: 'confirmed',
+      capabilityRevision: 1,
+      lastSeq,
+    },
+  }
+}
+
+function inputAckMessage(ack: InputAck): Record<string, unknown> {
+  return {
+    protocolVersion: '0.2',
+    messageId: 'm-input-ack',
+    sessionId: SESSION,
+    epoch: 1,
+    kind: 'input.ack',
+    payload: ack,
+  }
+}
+
+async function asFailure(promise: Promise<unknown>): Promise<unknown> {
+  return promise.then(
+    () => null,
+    (error: unknown) => error,
+  )
+}
+
+describe('console transport framing', () => {
+  it('adopts the pushed bootstrap snapshot and reports connection transitions', async () => {
+    const fake = createFakeSocket()
+    const statuses: ConnectionStatus[] = []
+    const transport = createAppTransport({
+      url: 'ws://console.test/app',
+      createSocket: () => fake.socket,
+      onStatus: (connection) => statuses.push(connection),
+    })
+
+    const pending = transport.bootstrap()
+    fake.open()
+    fake.emit(snapshotMessage())
+    const snapshot = await pending
+
+    expect(snapshot.sessionId).toBe(SESSION)
+    expect(snapshot.epoch).toBe(1)
+    expect(snapshot.seq).toBe(4)
+    expect(snapshot.outputConfirmation).toBe('confirmed')
+    expect(statuses).toEqual(['connecting', 'open'])
+  })
+
+  it('reports an unusable inbound frame as a protocol violation and drops it', async () => {
+    const fake = createFakeSocket()
+    const violations: string[] = []
+    const delivered: ServerMessage[] = []
+    const transport = createAppTransport({
+      url: 'ws://console.test/app',
+      createSocket: () => fake.socket,
+      onProtocolViolation: (detail) => violations.push(detail),
+    })
+    transport.onServerMessage((message) => delivered.push(message))
+
+    const pending = transport.bootstrap()
+    fake.open()
+    fake.emitRaw('{ not json')
+    fake.emit({ protocolVersion: '0.2', messageId: 'm-x', sessionId: SESSION, epoch: 1, kind: 'unknown.kind' })
+    fake.emit(snapshotMessage())
+    await pending
+
+    expect(violations).toEqual([
+      'inbound frame is not valid JSON',
+      'inbound frame is not a valid v0.2 server message',
+    ])
+    expect(delivered.map((message) => message.kind)).toEqual(['session.snapshot'])
+  })
+
+  it('correlates an input acknowledgement by requestMessageId', async () => {
+    const fake = createFakeSocket()
+    const transport = createAppTransport({ url: 'ws://console.test/app', createSocket: () => fake.socket })
+    const booting = transport.bootstrap()
+    fake.open()
+    fake.emit(snapshotMessage())
+    await booting
+
+    const message = inputSubmit('req-1')
+    const pending = transport.sendInput(message)
+    const sentFrame = fake.sent[0]
+    expect(sentFrame).toBeDefined()
+    expect(clientMessageSchema.safeParse(JSON.parse(sentFrame ?? '{}')).success).toBe(true)
+
+    fake.emit(
+      inputAckMessage(
+        inputAckSchema.parse({
+          status: 'accepted',
+          requestMessageId: 'req-1',
+          eventId: 'event-1',
+          sessionId: SESSION,
+          epoch: 1,
+          seq: 5,
+        }),
+      ),
+    )
+    const ack = await pending
+    if (ack.status === 'rejected') throw new Error('expected an accepted acknowledgement')
+    expect(ack.status).toBe('accepted')
+    expect(ack.seq).toBe(5)
+  })
+
+  it('refuses to dispatch while the socket is not open', async () => {
+    const fake = createFakeSocket()
+    const transport = createAppTransport({ url: 'ws://console.test/app', createSocket: () => fake.socket })
+
+    const error = await asFailure(transport.sendInput(inputSubmit('req-never-opened')))
+    expect(error).toBeInstanceOf(ConsoleTransportError)
+    expect((error as ConsoleTransportError).reason).toBe('closed')
+  })
+
+  it('fails outstanding requests with one cause when the socket closes', async () => {
+    const fake = createFakeSocket()
+    const statuses: Array<[ConnectionStatus, string | null]> = []
+    const transport = createAppTransport({
+      url: 'ws://console.test/app',
+      createSocket: () => fake.socket,
+      onStatus: (connection, detail) => statuses.push([connection, detail]),
+    })
+    const booting = transport.bootstrap()
+    fake.open()
+    fake.emit(snapshotMessage())
+    await booting
+
+    const pending = transport.sendInput(inputSubmit('req-1'))
+    fake.disconnect({ wasClean: false, code: 1006 })
+    const error = await asFailure(pending)
+
+    expect((error as ConsoleTransportError).reason).toBe('closed')
+    expect(statuses[statuses.length - 1]?.[0]).toBe('closed')
+    expect(statuses[statuses.length - 1]?.[1]).toContain('code 1006')
+  })
+
+  it('gives up on an acknowledgement that never arrives', async () => {
+    const fake = createFakeSocket()
+    const transport = createAppTransport({
+      url: 'ws://console.test/app',
+      createSocket: () => fake.socket,
+      ackTimeoutMs: 5,
+    })
+    const booting = transport.bootstrap()
+    fake.open()
+    fake.emit(snapshotMessage())
+    await booting
+
+    const error = await asFailure(transport.sendInput(inputSubmit('req-slow')))
+    expect((error as ConsoleTransportError).reason).toBe('timeout')
+  })
+})
+
+/* ------------------------------------------------------------------ *
+ * The M1 player mount. Playback is pure JS here: a controlled resolver and a
+ * controlled media driver stand in for audio and the DOM.
+ * ------------------------------------------------------------------ */
+
+async function waitFor(check: () => boolean, turns = 50): Promise<void> {
+  for (let index = 0; index < turns; index += 1) {
+    if (check()) return
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+  throw new Error('waitFor: the condition was never met')
+}
+
+describe('console playback binding', () => {
+  it('mounts the M1 player and cancels locally without revoking the epoch', async () => {
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const media = createControlledMediaDriver()
+    const receipts: PerformanceReceipt[] = []
+    const statuses: PlayerStatus[] = []
+    const subtitles: string[] = []
+    const faults: string[] = []
+    let receiptCount = 0
+
+    const binding = createPlaybackBinding({
+      bootstrap: bootstrap(),
+      resolver,
+      media,
+      newReceiptId: () => {
+        receiptCount += 1
+        return `console-receipt-${receiptCount}`
+      },
+      localNowMs: () => 12,
+      onReceipt: (receipt) => receipts.push(receipt),
+      onStatus: (status) => statuses.push(status),
+      onSubtitle: (subtitleText) => subtitles.push(subtitleText),
+      onFault: (message) => faults.push(message),
+    })
+
+    const command = fixturePerformanceCommand()
+    binding.handleServerMessage(
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId: 'm-execute',
+        sessionId: command.sessionId,
+        epoch: command.epoch,
+        kind: 'performance.execute',
+        payload: command,
+      }),
+    )
+
+    await waitFor(() => resolver.leases().length === 1)
+    expect(subtitles).toEqual([command.subtitleText])
+    expect(binding.status().activeOutputId).toBe(command.outputId)
+
+    binding.cancelLocal()
+    await waitFor(() => receipts.some((receipt) => receipt.stage === 'cancelled'))
+
+    expect(receipts.map((receipt) => receipt.stage)).toContain('cancelled')
+    expect(binding.status().idle).toBe(true)
+    expect(resolver.leases()[0]?.releaseCount()).toBe(1)
+    expect(faults).toEqual([])
+
+    // The local abort never touched the server's epoch sequence, so a command
+    // for the same epoch is still admitted.
+    binding.handleServerMessage(
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId: 'm-execute-2',
+        sessionId: command.sessionId,
+        epoch: command.epoch,
+        kind: 'performance.execute',
+        payload: { ...command, outputId: 'output-fixture-2' },
+      }),
+    )
+    await waitFor(() => resolver.leases().length === 2)
+
+    expect(faults).toEqual([])
+    expect(binding.status().activeOutputId).toBe('output-fixture-2')
+    expect(statuses.length).toBeGreaterThan(1)
+    binding.dispose()
   })
 })
