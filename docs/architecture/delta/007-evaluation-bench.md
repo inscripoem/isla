@@ -67,3 +67,25 @@ Once the id convention is agreed (PR #32), the rows are added to `docs/req/requi
 
 - `npx vitest run test/offline/m6-02-comparison.test.ts test/offline/m6-02-metrics.test.ts` → **18 passed**.
 - `pnpm verify` → clean.
+
+---
+
+## Slice 4 — the report (S4)
+
+- **Added** `src/evaluation/report.ts` — `FixedConditions` (NFR-01's five plus #41 Q3's conditions),
+  `collectReportViolations` and `renderEvaluationReport`. It refuses a fixture text source, latency from an
+  injected clock, zero attempts, a mismatched declared sample size, blank conditions and undeclared
+  variants; an unobserved stage prints `—`, never `0`.
+- **Changed** `src/evaluation/metrics.ts` — `summariseWindow` exported, so the report reuses the same window
+  statistics instead of a second percentile implementation.
+- **Added** `test/offline/m6-02-report.test.ts` — 12 cases, including every refusal and the unknown rules.
+  Each refusal is mutation-checked (allowing a fixture source, allowing injected-clock latency, or printing
+  `0` for an unobserved value each turns the suite red).
+- `docs/architecture/evaluation-table.md` is **not** produced: there is no provider access, so gate G4
+  correctly stays **not run**.
+
+### Verification (slice 4)
+
+- `npx vitest run test/offline/m6-02-report.test.ts` → **12 passed**.
+- `pnpm verify` → clean (re-measured on this head; see the PR body).
+

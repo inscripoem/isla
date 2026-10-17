@@ -1495,3 +1495,14 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Found in the owner-requested double-check of slices 1-3; ids still pending allocation per structural-constraints.md section 3 (PR #32)."
+  - date: 2026-10-17
+    task: M6-02
+    branch: m6-02-bench
+    change: "M6-02 slice 4 (S4): the evaluation report. src/evaluation/report.ts renders a comparison run into the Markdown gate G4 reads, carrying NFR-01's five fixed conditions plus issue #41 Q3's (persona id/version, model and prompt versions, text budget and accounting, history source and record set, clock domain, maxTurns and recall port). It refuses a fixture text source, latency from an injected clock, zero attempts, a declared sample size that differs from the recorded attempts, blank conditions and undeclared variants. An unobserved stage prints — (never 0) and usage stays unknown. The runner's first-attempt window is labelled 'first attempt', not 'cold'. evaluation-table.md is deliberately not produced without provider access, so G4 stays not run."
+    requirements: [NFR-01, NFR-03, NFR-04]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Owner-approved slice. Ids remain pending allocation per structural-constraints.md section 3; the coverage row is in verification-constraints.md."
+
