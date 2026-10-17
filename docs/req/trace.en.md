@@ -67,7 +67,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-52 | implemented | `test/offline/m6-02-metrics.test.ts` | failed and cancelled attempts remain in the aggregate |
 | C-53 | implemented | `test/offline/m6-02-metrics.test.ts` | incomplete usage remains unknown rather than becoming a partial total |
 | C-54 | implemented | `test/offline/m6-02-comparison.test.ts` | a thrown variant is recorded as a failure with a reason |
-| C-55 | implemented | `test/offline/m6-02-report.test.ts` | the evaluation report rejects a fixture text source |
+| C-55 | implemented | `test/offline/m6-02-report.test.ts` | the evaluation report rejects a fixture text source (this case covers fixture-source rejection only, not every report validation rule) |
 
 ## Requirement trace
 
