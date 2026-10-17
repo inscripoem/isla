@@ -171,26 +171,31 @@ export function modalityRank(modality: Modality): number {
 /**
  * Trim classes, ordered from "dropped first" to "dropped last".
  *
- * Memory carries two kinds of version information, and both affect what survives
- * a tight budget:
+ * Memory carries three kinds of survival information:
  *   - persona version: the record knows which persona said it. Words from an
  *     older persona are still words the audience heard, so they are not deleted
  *     immediately; they give way first only under pressure, because continuity
  *     with the current persona matters more.
  *   - truncation: an interrupted fragment is less useful for continuity than a
  *     complete statement, so it is dropped before complete statements.
+ *   - salience: a turn the scorer in ./salience pinned (a promise, a stated
+ *     preference, an identity detail) outlives every unpinned candidate,
+ *     because importance is not a function of age. A pin is trim-order only:
+ *     it never exempts a turn from the character budget.
  */
 export type TrimClass =
   | 'stale-persona-truncated'
   | 'stale-persona'
   | 'truncated'
   | 'current-persona'
+  | 'pinned'
 
 export const TRIM_ORDER: readonly TrimClass[] = [
   'stale-persona-truncated',
   'stale-persona',
   'truncated',
   'current-persona',
+  'pinned',
 ]
 
 export interface TrimInput {
@@ -199,6 +204,8 @@ export interface TrimInput {
   /** Persona version of the turn currently being assembled. */
   activePersonaVersion: string | null
   truncated: boolean
+  /** True when salience scoring pinned this turn; pinned turns drop last. */
+  pinned: boolean
 }
 
 /**
@@ -207,6 +214,10 @@ export interface TrimInput {
  * character's memory of what was really said.
  */
 export function trimClassOf(input: TrimInput): TrimClass {
+  // A pin outranks staleness and truncation: importance is decided by what the
+  // turn contains, not by which persona said it or whether it completed.
+  if (input.pinned) return 'pinned'
+
   const stale =
     input.personaVersion !== null &&
     input.activePersonaVersion !== null &&

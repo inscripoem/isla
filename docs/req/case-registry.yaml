@@ -307,3 +307,20 @@ cases:
     verifier:
       file: test/offline/m6-storage.test.ts
       test: "rejects a malformed event before mutation and lets a corrected retry apply"
+
+  # C-49 and C-50 are M4's cases, allocated in #25 and adopted here once M6's
+  # append-validation case had been migrated to C-51 on main (#42, 8937f7d), so
+  # neither id is claimed before the register can prove it is free.
+  - id: C-49
+    status: implemented
+    title: M4 admission divergence — a receiptless delivery is confirmed history for the durable store but stays out of spoken memory
+    verifier:
+      file: test/offline/m4-storage-integration.test.ts
+      test: "lists a receiptless delivery as confirmed history while M4 keeps it out of spoken memory"
+
+  - id: C-50
+    status: implemented
+    title: M4 within-turn reconstruction agrees with the shared ordering helper
+    verifier:
+      file: test/offline/m4-storage-integration.test.ts
+      test: "produces the same segment order for known, tied and unknown indices"
