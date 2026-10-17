@@ -70,6 +70,15 @@ Two rules are structural rather than prose: an unobserved stage prints `—`, ne
 first-attempt window is labelled **"first attempt"**, not "cold", because it does not establish a cold
 process, provider, worker or cache (#41, M5). The declared cold/warm state is the run condition.
 
+**The writer is the only path to the artifact.** `writeEvaluationReport` validates first and writes nothing
+when the run is refused; on success it writes through a temporary file in the destination directory and
+renames, so a partial table cannot be mistaken for a complete one.
+
+Validation is stricter than rendering needs, because the artifact is evidence: a **negative or non-finite**
+duration or usage value, a **failed attempt with no reason**, an **impossible calendar date**, and a
+table-cell value containing a pipe or newline are all refused. The last one would silently break the
+Markdown table that G4 and a human read.
+
 The report names its run (`runId`) and generation date, so a reader can attribute the artifact; neither is
 inferred from the records. Without provider access the table stays absent and G4 keeps reporting **not
 run** — the correct answer, not a pass.

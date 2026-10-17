@@ -1545,4 +1545,14 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Choice between a label-aware comparison and a recorded deferral put to the owner; deferral chosen because M3 owns the rubric."
+  - date: 2026-10-17
+    task: M6-02
+    branch: m6-02-bench
+    change: "M6-02 deep-review hardening: the injected-clock guard now covers totalMs (a record with only a total passed before); negative or non-finite durations and usage, a failed attempt with no reason, and an impossible calendar date are refused; every Markdown table cell is escaped so a pipe or newline cannot break the table; the per-attempt table names the window; exported API carries JSDoc. No rendered claim changed."
+    requirements: [NFR-01, NFR-03, NFR-04]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Deep review requested by the owner. Mutations: dropping the total from the clock guard, the numeric check, the failed-reason check or the escaping each turns its test red."
 

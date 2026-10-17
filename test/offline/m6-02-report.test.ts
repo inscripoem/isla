@@ -134,6 +134,20 @@ describe('the evaluation report is a receipt for a real run', () => {
     }
   })
 
+  it('escapes a pipe or newline in a table cell instead of breaking the table', () => {
+    const run = sampleRun()
+    const withPipe = {
+      ...run,
+      notRun: [
+        ...run.notRun,
+        { variantId: VARIANT.id, caseId: 'case-pipe', reason: 'a | b\nc' },
+      ],
+    }
+    const table = renderEvaluationReport(input({ run: withPipe }))
+    if (!table.ok) throw new Error('unreachable')
+    expect(table.markdown).toContain('| rules-baseline | case-pipe | a \\| b c |')
+  })
+
   it('names the run it describes', () => {
     const result = renderEvaluationReport(input())
     if (!result.ok) throw new Error('unreachable')
@@ -162,6 +176,13 @@ describe('the evaluation report is a receipt for a real run', () => {
     if (!result.ok) throw new Error('unreachable')
     expect(result.markdown).toContain('| stop→silence (M1/M2) | 0 | — | — |')
     expect(result.markdown).toContain('| unknown |')
+  })
+
+  it('labels each attempt row as the first attempt or a later one', () => {
+    const result = renderEvaluationReport(input())
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.markdown).toContain('| case-normal | rules-baseline | first | completed |')
+    expect(result.markdown).toContain('| case-stop | rules-baseline | later | cancelled |')
   })
 
   it('lists a not-run case with its reason and does not count it as an attempt', () => {
@@ -234,6 +255,45 @@ describe('the report refuses a run it cannot honestly publish', () => {
   it('refuses a report that cannot be attributed', () => {
     expect(violationsOf({ meta: { runId: '   ', generatedAt: '2026-10-17' } }).join(' ')).toContain('run id is required')
     expect(violationsOf({ meta: { runId: 'run-1', generatedAt: '17/10/2026' } }).join(' ')).toContain('YYYY-MM-DD')
+  })
+
+  it('refuses injected-clock latency recorded only as a total', () => {
+    const run = sampleRun()
+    const records = run.records.map((entry) => ({
+      ...entry,
+      timing: {
+        submitMs: null,
+        planMs: null,
+        dialogueMs: null,
+        synthesisMs: null,
+        firstAudibleMs: null,
+        stopToSilenceMs: null,
+      },
+      totalMs: 245,
+    }))
+    const violations = violationsOf({ run: { ...run, records }, conditions: { clock: 'injected' } })
+    expect(violations.join(' ')).toContain('injected clock cannot measure latency')
+  })
+
+  it('refuses a negative or non-finite duration', () => {
+    const negative = sampleRun()
+    negative.records[0]!.timing.submitMs = -5
+    expect(violationsOf({ run: negative }).join(' ')).toContain('negative or not a finite number')
+    const notFinite = sampleRun()
+    notFinite.records[1]!.totalMs = Number.NaN
+    expect(violationsOf({ run: notFinite }).join(' ')).toContain('not a finite number')
+  })
+
+  it('refuses a failed attempt with no reason', () => {
+    const run = sampleRun()
+    run.records[2]!.failureReason = null
+    expect(violationsOf({ run }).join(' ')).toContain('failed attempt with no reason')
+  })
+
+  it('refuses an impossible calendar date', () => {
+    expect(violationsOf({ meta: { runId: 'run-1', generatedAt: '2026-02-31' } }).join(' ')).toContain(
+      'real YYYY-MM-DD calendar date',
+    )
   })
 
   it('refuses a record for a variant the run did not declare', () => {

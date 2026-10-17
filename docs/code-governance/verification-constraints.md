@@ -86,9 +86,12 @@ rejects a missing file or absent test string.
 ## M6-02 evaluation report (S4)
 
 - `test/offline/m6-02-report.test.ts` — the report refuses a fixture text source, latency from an injected
-  clock, zero attempts, a declared sample size that differs from the recorded attempts, a blank condition
-  and an undeclared variant. An unobserved stage prints `—`; usage stays `unknown`. Gate **G4** reads the
-  generated table, and the table is **not** produced without provider access.
+  clock (stage or total), zero attempts, a declared sample size that differs from the recorded attempts, a
+  blank condition, an undeclared variant, a negative/non-finite duration or usage, a failed attempt with no
+  reason, and an impossible calendar date. An unobserved stage prints `—`; usage stays `unknown`; table
+  cells are escaped. `writeEvaluationReport` is the only writer and validates before touching the
+  filesystem. Gate **G4** reads the generated table, and the table is **not** produced without provider
+  access.
 
 ## Honest limitations
 

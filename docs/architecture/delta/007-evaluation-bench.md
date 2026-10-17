@@ -128,11 +128,29 @@ Once the id convention is agreed (PR #32), the rows are added to `docs/req/requi
 - **Recorded** in ADR-007 D8 that `EvalCase.labels` is stored but **not scored**; the rubric is M3's and no
   label-aware comparison exists until it is adopted.
 
+### Hardening after the deep review (same slice)
+
+- **Injected clock:** the guard looked only at the six stage timings, so a record with only `totalMs` would
+  have passed. The check now covers the total as well.
+- **Numeric sanity:** negative or non-finite durations and usage values are refused, as is a failed attempt
+  with no reason — a failure without a reason is a gap in the evidence.
+- **Table safety:** a pipe or newline in a variant id, case id, reason or condition would break the Markdown
+  table; every cell is escaped.
+- **Calendar date:** `Date.parse` rolls `2026-02-31` into March, so the date is checked component by
+  component.
+- **Evidence column:** the per-attempt table now names the window (first attempt or later), so a row can be
+  matched to the percentile table.
+- Exported API (`FixedConditions`, `ReportInput`, `renderEvaluationReport`, `summariseWindow`,
+  `runComparison`) carries JSDoc.
+
 ### Verification (slice 6)
 
-- `npx vitest run test/offline/m6-02-report.test.ts` → **21 passed**.
-- `pnpm test:m6` → **128 passed / 7 files**.
-- `pnpm verify` → **607 passed / 25 files**.
+- `npx vitest run test/offline/m6-02-report.test.ts` → **27 passed**.
+- `pnpm test:m6` → **134 passed / 7 files**.
+- `pnpm verify` → **613 passed / 25 files**.
+- Mutations: ignoring the writer's violations kills three tests; one aggregate for every variant kills the
+  multi-variant test; dropping the total from the clock guard, the numeric check, the failed-reason check or
+  the cell escaping each kills its own test.
 - Mutations: ignoring the writer's violations turns three tests red; one aggregate for every variant turns
   the multi-variant test red.
 
