@@ -178,6 +178,24 @@ describe('the evaluation report is a receipt for a real run', () => {
     expect(result.markdown).toContain('| unknown |')
   })
 
+  it('distinguishes bench attempts from provider attempts', () => {
+    const result = renderEvaluationReport(input())
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.markdown).toContain('| Variant | Kind | Combined | Bench attempts |')
+    expect(result.markdown).toContain('| Case | Variant | Window | Outcome | total ms | Provider attempts |')
+  })
+
+  it('prints — when the provider-attempt count was not observed', () => {
+    const run = sampleRun()
+    run.records[2]!.attempts = null
+    const result = renderEvaluationReport(input({ run }))
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.markdown).toContain(
+      '| case-fail | rules-baseline | later | failed | — | — | sample provider rejection |',
+    )
+    expect(result.markdown).toContain('not observed, for example when an')
+  })
+
   it('labels each attempt row as the first attempt or a later one', () => {
     const result = renderEvaluationReport(input())
     if (!result.ok) throw new Error('unreachable')
@@ -284,6 +302,15 @@ describe('the report refuses a run it cannot honestly publish', () => {
     const notFinite = sampleRun()
     notFinite.records[1]!.totalMs = Number.NaN
     expect(violationsOf({ run: notFinite }).join(' ')).toContain('not a finite number')
+  })
+
+  it('refuses a negative or fractional provider-attempt count', () => {
+    const negative = sampleRun()
+    negative.records[0]!.attempts = -1
+    expect(violationsOf({ run: negative }).join(' ')).toContain('null or a whole number')
+    const fractional = sampleRun()
+    fractional.records[0]!.attempts = 1.5
+    expect(violationsOf({ run: fractional }).join(' ')).toContain('null or a whole number')
   })
 
   it('refuses a failed attempt with no reason', () => {

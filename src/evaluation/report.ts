@@ -192,8 +192,8 @@ function collectReportViolations(input: ReportInput): string[] {
     if (durationsOf(record).some(invalidNumber)) {
       violations.push(`${label} records a duration that is negative or not a finite number`)
     }
-    if (!Number.isInteger(record.attempts) || record.attempts < 0) {
-      violations.push(`${label} records ${record.attempts} attempts; a whole number >= 0 is required`)
+    if (record.attempts !== null && (!Number.isInteger(record.attempts) || record.attempts < 0)) {
+      violations.push(`${label} records ${record.attempts} attempts; null or a whole number >= 0 is required`)
     }
     if (
       [record.usage.inputTokens, record.usage.outputTokens, record.usage.costUsd].some(invalidNumber)
@@ -313,7 +313,7 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
     '',
     '## Results by variant',
     '',
-    '| Variant | Kind | Combined | Attempts | Completed | Cancelled | Failed | Failure rate | Usage |',
+    '| Variant | Kind | Combined | Bench attempts | Completed | Cancelled | Failed | Failure rate | Usage |',
     '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
   ]
 
@@ -354,18 +354,25 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
     '',
     '## Every attempt',
     '',
-    '| Case | Variant | Window | Outcome | total ms | attempts | Note |',
+    '| Case | Variant | Window | Outcome | total ms | Provider attempts | Note |',
     '| --- | --- | --- | --- | --- | --- | --- |',
   )
   for (const record of run.records) {
     lines.push(
       `| ${cell(record.caseId)} | ${cell(record.variantId)} | ${record.cold ? 'first' : 'later'} | ${
         record.outcome
-      } | ${ms(record.totalMs)} | ${record.attempts} | ${cell(record.failureReason ?? '')} |`,
+      } | ${ms(record.totalMs)} | ${count(record.attempts)} | ${cell(record.failureReason ?? '')} |`,
     )
   }
 
-  lines.push('', '## Not run', '')
+  lines.push(
+    '',
+    '> `—` in the attempts column means the provider-attempt count was not observed, for example when an',
+    '> adapter threw before reporting one. It is unknown, never zero.',
+    '',
+    '## Not run',
+    '',
+  )
   if (run.notRun.length === 0) {
     lines.push('No case was skipped: every case was attempted for every variant.')
   } else {

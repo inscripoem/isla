@@ -23,7 +23,9 @@ import { summarise, type AttemptRecord, type ComparisonSummary } from './metrics
  *    not-run case is not an attempt, so it does not consume the cold slot.
  *
  * Every other field — outcome, timing, totals, attempts, usage — comes from the
- * variant through `runVariant`; the runner does not invent a measurement.
+ * variant through `runVariant`, except in the catch path, where the runner records an
+ * **unknown** provider-attempt count (`null`): it cannot know how many calls the
+ * adapter made before it threw.
  */
 
 export interface Variant {
@@ -117,7 +119,9 @@ export async function runComparison(
         run = await deps.runVariant(variant, evalCase)
       } catch (error) {
         // A thrown variant is still an attempt. Record it as a failure so the case
-        // is accounted for rather than silently lost (ADR-007 D2).
+        // is accounted for rather than silently lost (ADR-007 D2). The provider-attempt
+        // count is unknown here: an adapter may throw before calling a provider, or after
+        // an unreported number of calls. Never fabricate 1, and do not substitute 0.
         records.push({
           caseId: evalCase.id,
           variantId: variant.id,
@@ -125,7 +129,7 @@ export async function runComparison(
           outcome: 'failed',
           timing: { ...NO_TIMING },
           totalMs: null,
-          attempts: 1,
+          attempts: null,
           usage: { inputTokens: null, outputTokens: null, costUsd: null, usageMissing: true },
           failureReason: describeError(error),
         })

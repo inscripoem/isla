@@ -1585,4 +1585,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Design review on #40 found the duplication; recorded as debt with the trigger 'after #27 merges', which has now fired."
-
+  - date: 2026-10-17
+    task: M6-02
+    branch: m6-02-bench
+    change: "M5 review P2: the runner no longer fabricates attempts=1 when an adapter throws. AttemptRecord.attempts is number|null; a thrown adapter records null because it may fail before any provider call or after an unreported number. Report validation accepts null, still rejects negative/fractional counts, and the every-attempt table prints — with a legend. Regressions cover a pre-provider exception, a post-call exception with no reliable count, a known count, null rendering and invalid counts; ADR-007 D2 and Delta-007 record the semantics."
+    requirements: [NFR-04]
+    invariants: [INV-16]
+    cases: [C-52, C-54]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Addresses M5 review pullrequestreview-5557266501 on #40. Mutations: attempts=1, null rendering, and rejecting null each turn a regression red."

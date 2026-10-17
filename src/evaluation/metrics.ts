@@ -70,8 +70,14 @@ export interface AttemptRecord {
   timing: StageTiming
   /** Input -> first audible output, or the terminal point for a non-completion. */
   totalMs: number | null
-  /** Response-provider attempts used for this opportunity (NFR-04 allows one). */
-  attempts: number
+  /**
+   * Response-provider attempts used for this opportunity (NFR-04 allows one).
+   *
+   * **`null` means unobserved**, not zero: an adapter can throw before calling a
+   * provider, or after an unreported number of calls. This is the provider-attempt
+   * count, distinct from the summary's count of bench records.
+   */
+  attempts: number | null
   usage: AttemptUsage
   /**
    * Why the attempt failed, or `null`. A failure with no reason is a gap in the
@@ -88,6 +94,7 @@ export interface Percentiles {
 }
 
 export interface WindowSummary {
+  /** Number of bench records in this window — not a provider-attempt count. */
   attempts: number
   stages: Record<TimingStage, Percentiles>
   totalMs: Percentiles
@@ -102,6 +109,7 @@ export interface UsageSummary {
 }
 
 export interface ComparisonSummary {
+  /** Number of bench records in the run — not a provider-attempt count. */
   attempts: number
   outcomes: Record<AttemptOutcome, number>
   /** failed / attempts; `0` when there are no attempts. */
