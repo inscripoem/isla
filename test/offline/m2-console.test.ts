@@ -215,6 +215,58 @@ describe('console view state', () => {
     expect(settled.controls[0]?.detail).toBe('unauthorized: not authorized')
     expect(settled.errors.map((entry) => entry.code)).toEqual(['unauthorized'])
   })
+
+  it('settles a late control acknowledgement without rolling the session back', () => {
+    const stopped = reduceControlAck(withPendingControl(opened(), controlStop('control-request-1')), {
+      sessionId: SESSION,
+      requestId: 'control-request-1',
+      requestMessageId: 'control-message-1',
+      action: 'stop',
+      status: 'applied',
+      previousEpoch: 1,
+      epoch: 2,
+      lifecycle: 'stopped',
+      outputConfirmation: 'pending',
+      reasonCode: null,
+      message: 'stopped',
+    })
+    expect(stopped.session?.epoch).toBe(2)
+    expect(stopped.session?.lifecycle).toBe('stopped')
+
+    const pendingResume = withPendingControl(stopped, controlResume('control-request-2'))
+    const lateResume: ControlAck = {
+      sessionId: SESSION,
+      requestId: 'control-request-2',
+      requestMessageId: 'control-message-2',
+      action: 'resume',
+      status: 'applied',
+      previousEpoch: 0,
+      epoch: 1,
+      lifecycle: 'running',
+      outputConfirmation: 'confirmed',
+      reasonCode: null,
+      message: 'resumed',
+    }
+
+    const settled = reduceControlAck(pendingResume, lateResume)
+    const resumed = settled.controls.find((view) => view.requestId === 'control-request-2')
+    // Its own request display is settled...
+    expect(resumed?.outcome).toBe('applied')
+    expect(resumed?.epoch).toBe(1)
+    // ...but an older epoch never restores older session state.
+    expect(settled.session?.epoch).toBe(2)
+    expect(settled.session?.lifecycle).toBe('stopped')
+  })
+
+  it('drops an out-of-order snapshot instead of rolling the session back', () => {
+    const fresh = reduceServerMessage(opened(), serverMessageSchema.parse(snapshotMessage(2, 10)))
+    expect(fresh.session?.epoch).toBe(2)
+    expect(fresh.session?.lastSeq).toBe(10)
+
+    const stale = reduceServerMessage(fresh, serverMessageSchema.parse(snapshotMessage(1, 3)))
+    expect(stale.session?.epoch).toBe(2)
+    expect(stale.session?.lastSeq).toBe(10)
+  })
 })
 
 /* ------------------------------------------------------------------ *
@@ -458,6 +510,11 @@ async function waitFor(check: () => boolean, turns = 50): Promise<void> {
   throw new Error('waitFor: the condition was never met')
 }
 
+/** Flush pending microtasks so an in-flight binding call can settle. */
+async function settleMicrotasks(turns = 8): Promise<void> {
+  for (let index = 0; index < turns; index += 1) await Promise.resolve()
+}
+
 describe('console playback binding', () => {
   it('mounts the M1 player and cancels locally without revoking the epoch', async () => {
     const resolver = createControlledResolver()
@@ -525,6 +582,108 @@ describe('console playback binding', () => {
     expect(faults).toEqual([])
     expect(binding.status().activeOutputId).toBe('output-fixture-2')
     expect(statuses.length).toBeGreaterThan(1)
+    binding.dispose()
+  })
+
+  it('keeps an identical output playing when a duplicate command arrives', async () => {
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const media = createControlledMediaDriver()
+    const receipts: PerformanceReceipt[] = []
+    const faults: string[] = []
+
+    const binding = createPlaybackBinding({
+      bootstrap: bootstrap(),
+      resolver,
+      media,
+      newReceiptId: () => 'console-receipt',
+      localNowMs: () => 12,
+      onReceipt: (receipt) => receipts.push(receipt),
+      onStatus: () => {},
+      onSubtitle: () => {},
+      onFault: (message) => faults.push(message),
+    })
+
+    const command = fixturePerformanceCommand()
+    const frame = (messageId: string, payload: typeof command) =>
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId,
+        sessionId: payload.sessionId,
+        epoch: payload.epoch,
+        kind: 'performance.execute',
+        payload,
+      })
+
+    binding.handleServerMessage(frame('m-execute-1', command))
+    await waitFor(() => media.createCount() === 1)
+    media.current()?.emitPlaying()
+    await waitFor(() => binding.status().lastStage === 'started')
+
+    // The identical command is a duplicate: M1 deduplicates against the retained
+    // operation, so the output that is playing must be preserved rather than
+    // aborted ahead of validation.
+    binding.handleServerMessage(frame('m-execute-2', command))
+    await settleMicrotasks()
+
+    expect(faults).toEqual([])
+    expect(receipts.some((receipt) => receipt.stage === 'cancelled')).toBe(false)
+    expect(binding.status().idle).toBe(false)
+    expect(binding.status().activeOutputId).toBe(command.outputId)
+    binding.dispose()
+  })
+
+  it('preserves newer playback when a stale cancel is rejected', async () => {
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const media = createControlledMediaDriver()
+    const receipts: PerformanceReceipt[] = []
+    const faults: string[] = []
+
+    const binding = createPlaybackBinding({
+      bootstrap: bootstrap(1),
+      resolver,
+      media,
+      newReceiptId: () => 'console-receipt',
+      localNowMs: () => 12,
+      onReceipt: (receipt) => receipts.push(receipt),
+      onStatus: () => {},
+      onSubtitle: () => {},
+      onFault: (message) => faults.push(message),
+    })
+
+    // Epoch 2 playback, admitted over the epoch 1 bootstrap.
+    const command = fixturePerformanceCommand({ epoch: 2 })
+    binding.handleServerMessage(
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId: 'm-execute',
+        sessionId: command.sessionId,
+        epoch: 2,
+        kind: 'performance.execute',
+        payload: command,
+      }),
+    )
+    await waitFor(() => media.createCount() === 1)
+
+    // An epoch 1 cancel is stale against the epoch 2 operation: M1 rejects it,
+    // so it must not release the signal bound to the newer playback.
+    binding.handleServerMessage(
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId: 'm-cancel',
+        sessionId: SESSION,
+        epoch: 2,
+        kind: 'performance.cancel',
+        payload: { requestId: 'cancel-1', revokedEpoch: 1, newEpoch: 2 },
+      }),
+    )
+    await waitFor(() => faults.length === 1)
+
+    expect(faults).toEqual(['cancel cancel-1: dispatch rejected (stale_cancel)'])
+    expect(receipts.some((receipt) => receipt.stage === 'cancelled')).toBe(false)
+    expect(binding.status().idle).toBe(false)
+    expect(binding.status().activeOutputId).toBe(command.outputId)
     binding.dispose()
   })
 })

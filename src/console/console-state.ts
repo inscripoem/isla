@@ -381,6 +381,9 @@ function applyControlAck(state: ConsoleState, ack: ControlAck): ConsoleState {
   }
   const session = settled.session
   if (session === null || ack.sessionId !== session.sessionId) return settled
+  // A late acknowledgement may settle its own request display (above), but it
+  // must not roll the session back: an older epoch never overwrites newer state.
+  if (ack.epoch < session.epoch) return settled
   return {
     ...settled,
     session: {
@@ -395,6 +398,12 @@ function applyControlAck(state: ConsoleState, ack: ControlAck): ConsoleState {
 function applySnapshot(state: ConsoleState, message: ServerMessage & { kind: 'session.snapshot' }): ConsoleState {
   const payload = message.payload
   const previous = state.session
+  // An out-of-order snapshot must not roll the session back. A snapshot for the
+  // same session at an older epoch is dropped outright rather than merged, so
+  // the accepted identity and sequence stay monotonic.
+  if (previous !== null && previous.sessionId === message.sessionId && message.epoch < previous.epoch) {
+    return state
+  }
   const sameSession = previous !== null && previous.sessionId === message.sessionId
   return {
     ...state,

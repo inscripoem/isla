@@ -701,7 +701,7 @@ entries:
       publication, and directed that the deviation be declared instead of
       papered over.
     verification:
-      role: "pnpm test:m2: 16 passed."
+      role: "pnpm test:m2: 20 passed (the 16 first-slice cases plus 4 review regressions)."
       full_suite: "pnpm verify on the merged origin/main (c2f9b38): 651 tests in 29 files; typecheck, lint and build passed."
       readiness: "pnpm test:readiness: 41 passed."
       trace: "pnpm test:trace: 15 passed."
@@ -718,5 +718,10 @@ entries:
       directed that the provenance deviation be recorded truthfully. Consumer
       review by M5 (shared transport port, player-to-runtime channel) and by M1
       (the browser mount boundary) is requested and remains pending; publication is
-      not acceptance, and the tests-approved label is a human action.
+      not acceptance, and the tests-approved label is a human action. M5 review on
+      PR #43 requested two P2 corrections — preserve the operation that is playing
+      across duplicates, stale or invalid commands and rejected cancels, and keep
+      session state monotonic across old acknowledgements and snapshots — and both
+      are fixed here with four new offline regressions (m2-console.test.ts: 20
+      passed, 655 in the full suite), so a renewed M5 consumer review is requested.
 

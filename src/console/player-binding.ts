@@ -62,7 +62,12 @@ function describe(error: unknown): string {
 
 export function createPlaybackBinding(options: PlaybackBindingOptions): PlaybackBinding {
   const ref: { current: PlaybackController | null } = { current: null }
-  let activeAbort: AbortController | null = null
+  // One caller-side controller owns the operation currently admitted by the
+  // player. Aborting it cancels that operation locally without revoking an
+  // epoch. It is renewed only when an operation is deliberately superseded or
+  // cancelled, so a duplicate, stale or invalid command never disturbs the
+  // signal that the operation actually playing is bound to.
+  let caller = new AbortController()
   let disposed = false
 
   const refreshStatus = (): void => {
@@ -84,41 +89,62 @@ export function createPlaybackBinding(options: PlaybackBindingOptions): Playback
   })
   ref.current = controller
 
+  /**
+   * Cancel the operation that currently owns the caller signal and hand back a
+   * fresh signal for the next admission. Aborting reaches only the operation
+   * bound to this signal; a controller that never admitted anything has no
+   * listener and the abort is a harmless no-op.
+   */
+  const supersede = (): AbortSignal => {
+    caller.abort()
+    caller = new AbortController()
+    return caller.signal
+  }
+
   const execute = async (command: PerformanceCommand): Promise<void> => {
     if (disposed) {
       options.onFault(`ignored ${command.outputId}: the local player is disposed`)
       return
     }
-    // A new output supersedes the previous one: abort it first so the controller
-    // has a free admission slot and the previous output settles honestly.
-    activeAbort?.abort()
-    const abort = new AbortController()
-    activeAbort = abort
     options.onSubtitle(command.subtitleText)
     refreshStatus()
+    // Offer the command over the current caller signal before disturbing
+    // anything. M1 validates identity, freshness and duplicates ahead of any
+    // effect and binds this signal only when it admits a new operation, so a
+    // duplicate, a stale command or a rejected session leaves the operation that
+    // is playing untouched. Only an explicit `busy` slot conflict — a different
+    // output already admitted — justifies superseding it.
     try {
-      await controller.execute(command, { signal: abort.signal })
+      await controller.execute(command, { signal: caller.signal })
     } catch (error) {
-      options.onFault(`${command.outputId}: ${describe(error)}`)
-    } finally {
-      if (activeAbort === abort) activeAbort = null
-      refreshStatus()
+      if (error instanceof PlayerDispatchError && error.code === 'busy') {
+        try {
+          await controller.execute(command, { signal: supersede() })
+        } catch (retryError) {
+          options.onFault(`${command.outputId}: ${describe(retryError)}`)
+        }
+      } else {
+        options.onFault(`${command.outputId}: ${describe(error)}`)
+      }
     }
+    refreshStatus()
   }
 
   const applyCancel = async (request: PerformanceCancel): Promise<void> => {
     try {
       await controller.cancel(request)
     } catch (error) {
+      // A rejected cancel (stale_cancel or invalid_command) must not disturb the
+      // operation that is playing, so the caller signal stays bound to it.
       options.onFault(`cancel ${request.requestId}: ${describe(error)}`)
-    } finally {
-      // Release the caller-side signal once the controller-owned revocation has
-      // committed. The controller removed its abort listener already, so this
-      // cannot select a second terminal.
-      activeAbort?.abort()
-      activeAbort = null
       refreshStatus()
+      return
     }
+    // Accepted: M1 revoked the epoch and settled the operation it owned, so the
+    // caller signal it was bound to is released and renewed for the next
+    // admission. Aborting it now only clears a listener M1 already removed.
+    supersede()
+    refreshStatus()
   }
 
   return {
@@ -132,17 +158,15 @@ export function createPlaybackBinding(options: PlaybackBindingOptions): Playback
       }
     },
     cancelLocal() {
-      const abort = activeAbort
-      activeAbort = null
-      if (abort === null) return
-      abort.abort()
+      // Abort local playback without revoking an epoch, then renew the caller
+      // signal so the binding stays usable after a disconnect.
+      supersede()
       refreshStatus()
     },
     dispose() {
       if (disposed) return
       disposed = true
-      activeAbort?.abort()
-      activeAbort = null
+      caller.abort()
       controller.dispose()
       refreshStatus()
     },
