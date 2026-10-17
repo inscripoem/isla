@@ -19,8 +19,8 @@ import { readChangedFiles } from './changed-files'
 
 export const AI_USE_LOG_PATH = 'docs/ai-use-log.yaml'
 
-/** File CI writes the log's own diff to, so the gate can inspect what was added. */
-export const AI_USE_LOG_PATCH_ENV = 'AI_USE_LOG_PATCH_FILE'
+/** File CI writes the **base** copy of the log to (the log as it was before the change). */
+export const AI_USE_LOG_BASE_ENV = 'AI_USE_LOG_BASE_FILE'
 
 const CODE_OR_PROMPT_PREFIXES = ['src/', 'prompts/']
 
@@ -85,64 +85,88 @@ export function collectAiUseLogShapeViolations(text: string): string[] {
 }
 
 /**
- * The change must **add a complete entry**, not merely touch the file. Only applied
- * when the update rule applies (a code or prompt change), so a documentation-only fix
- * to the log is not forced to invent an entry.
+ * The change must **add an entry**, not merely touch the file or edit an existing
+ * entry. Only applied when the update rule applies (a code or prompt change), so a
+ * documentation-only fix to the log is not forced to invent an entry.
  *
- * `patch` is the log's diff. A missing patch is not verified (a local run); a patch
- * that was expected and did not arrive fails, like the change-set file.
+ * The check compares the number of entries at the base with the head, rather than
+ * looking for added field lines: adding or rewording the fields of an existing entry
+ * produces exactly such lines, and the gate would pass without any record of the new
+ * work. `baseText` is the log at the base revision: `null` means the base was not
+ * acquired (a local run, not verified); an empty string means the log did not exist
+ * at the base, so every entry is new.
  */
 export function collectAiUseLogEntryViolations(
   changedFiles: readonly string[],
-  patch: string | null,
+  baseText: string | null,
+  headText: string,
 ): string[] {
   const touchesCodeOrPrompt = changedFiles.some((file) =>
     CODE_OR_PROMPT_PREFIXES.some((prefix) => file.startsWith(prefix)),
   )
   if (!touchesCodeOrPrompt || !changedFiles.includes(AI_USE_LOG_PATH)) return []
-  if (patch === null) return []
+  if (baseText === null) return []
 
-  const added = patch
-    .split('\n')
-    .filter((line) => line.startsWith('+') && !line.startsWith('+++'))
-    .map((line) => line.slice(1))
-  const startsAnEntry = added.some((line) => /^\s*-\s+date:/.test(line))
-  const carriesFields = ['task', 'change', 'agent'].every((field) =>
-    added.some((line) => new RegExp(`^\\s+${field}:`).test(line)),
-  )
-  if (startsAnEntry && carriesFields) return []
+  const base = countEntries(baseText)
+  if ('error' in base) return [`${AI_USE_LOG_PATH} at the base is not valid YAML: ${base.error}`]
+  const head = countEntries(headText)
+  if ('error' in head) return [] // the shape check reports the head's own problem
+  if (head.count > base.count) return []
+
   return [
-    `the ${AI_USE_LOG_PATH} change must add a complete entry; editing the file alone does not record what changed (gate G6)`,
+    `the ${AI_USE_LOG_PATH} change must add an entry; it has ${head.count} entries at both the base and the head, so an existing entry was edited rather than a new one recorded (gate G6)`,
   ]
 }
 
-/** The log's own diff, or null when the variable is unset. Set-but-missing throws. */
-function readLogPatch(env: NodeJS.ProcessEnv = process.env): string | null {
-  const path = env[AI_USE_LOG_PATCH_ENV]
-  if (path === undefined || path.trim().length === 0) return null
-  if (!existsSync(path)) {
-    throw new Error(`${AI_USE_LOG_PATCH_ENV} points at ${path}, which does not exist — the log diff was not acquired`)
+/** The number of entries in a log text, or the YAML error that prevents counting. */
+function countEntries(text: string): { count: number } | { error: string } {
+  if (text.trim().length === 0) return { count: 0 }
+  let parsed: unknown
+  try {
+    parsed = parseYaml(text)
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) }
   }
-  return readFileSync(path, 'utf8')
+  const entries = (parsed as { entries?: unknown } | null)?.entries
+  if (entries === undefined || entries === null) return { count: 0 }
+  if (!Array.isArray(entries)) return { error: 'entries is not a list' }
+  return { count: entries.length }
 }
 
-/** Read the log, or report its absence as a violation: the log is a required artifact. */
-function collectLogFileViolations(): string[] {
-  if (!existsSync(AI_USE_LOG_PATH)) return [`${AI_USE_LOG_PATH} is missing (gate G6)`]
-  return collectAiUseLogShapeViolations(readFileSync(AI_USE_LOG_PATH, 'utf8'))
+/** The log at the base revision, or null when the variable is unset. Set-but-missing throws. */
+function readLogBase(env: NodeJS.ProcessEnv = process.env): string | null {
+  const path = env[AI_USE_LOG_BASE_ENV]
+  if (path === undefined || path.trim().length === 0) return null
+  if (!existsSync(path)) {
+    throw new Error(`${AI_USE_LOG_BASE_ENV} points at ${path}, which does not exist — the base log was not acquired`)
+  }
+  try {
+    return readFileSync(path, 'utf8')
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
+    throw new Error(`${AI_USE_LOG_BASE_ENV} (${path}) could not be read: ${reason}`)
+  }
 }
 
 function runCli(changedFiles: readonly string[]): number {
-  const violations = [...collectLogFileViolations()]
+  const violations: string[] = []
+  let headText: string | null = null
+  if (!existsSync(AI_USE_LOG_PATH)) {
+    violations.push(`${AI_USE_LOG_PATH} is missing (gate G6)`)
+  } else {
+    headText = readFileSync(AI_USE_LOG_PATH, 'utf8')
+    violations.push(...collectAiUseLogShapeViolations(headText))
+  }
+
   if (changedFiles.length === 0) {
     process.stderr.write('G6: no changed files provided; the log-update rule is not verified\n')
   } else {
     violations.push(...collectAiUseLogViolations(changedFiles))
-    const patch = readLogPatch()
-    if (patch === null) {
-      process.stderr.write(`G6: no ${AI_USE_LOG_PATCH_ENV}; the entry rule is not verified\n`)
-    } else {
-      violations.push(...collectAiUseLogEntryViolations(changedFiles, patch))
+    const baseText = readLogBase()
+    if (baseText === null) {
+      process.stderr.write(`G6: no ${AI_USE_LOG_BASE_ENV}; the entry rule is not verified\n`)
+    } else if (headText !== null) {
+      violations.push(...collectAiUseLogEntryViolations(changedFiles, baseText, headText))
     }
   }
   if (violations.length === 0) {

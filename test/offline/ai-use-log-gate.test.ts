@@ -139,33 +139,61 @@ entries:
   })
 })
 
-describe('the log change must add a complete entry (not just touch the file)', () => {
-  const COMPLETE = [
-    'diff --git a/docs/ai-use-log.yaml b/docs/ai-use-log.yaml',
-    '+++ b/docs/ai-use-log.yaml',
-    '+  - date: 2026-10-16',
-    '+    task: R3',
-    '+    branch: m6-r3-gates',
-    '+    change: A real change.',
-    '+    agent: opencode/deepseek-v4-flash',
-  ].join('\n')
+describe('the log change must add an entry (not merely touch or edit one)', () => {
+  const entry = (date: string, change: string): string =>
+    [
+      `  - date: ${date}`,
+      '    task: R3',
+      '    branch: m6-r3-gates',
+      `    change: ${change}`,
+      '    requirements: [FR-06]',
+      '    invariants: [INV-13]',
+      '    commits: []',
+      '    agent: opencode/deepseek-v4-flash',
+      '',
+    ].join('\n')
+  const log = (...entries: string[]): string => `version: "1"\nentries:\n${entries.join('')}`
 
-  it('accepts a patch that adds a complete entry', () => {
-    expect(collectAiUseLogEntryViolations(['src/x.ts', AI_USE_LOG_PATH], COMPLETE)).toEqual([])
+  const BASE = log(entry('2026-10-15', 'First change.'))
+  const ADDED = log(entry('2026-10-15', 'First change.'), entry('2026-10-16', 'Second change.'))
+
+  it('accepts a change that adds an entry', () => {
+    expect(collectAiUseLogEntryViolations(['src/x.ts', AI_USE_LOG_PATH], BASE, ADDED)).toEqual([])
   })
 
-  it('rejects a patch that only edits the file', () => {
-    const trivial = '+++ b/docs/ai-use-log.yaml\n+\n'
-    expect(collectAiUseLogEntryViolations(['src/x.ts', AI_USE_LOG_PATH], trivial).join(' ')).toContain(
-      'must add a complete entry',
-    )
+  it('rejects a change that only edits an existing entry (the review reproduction)', () => {
+    const edited = log(entry('2026-10-16', 'First change, reworded.'))
+    const violations = collectAiUseLogEntryViolations(['src/x.ts', AI_USE_LOG_PATH], BASE, edited)
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toContain('edited rather than a new one recorded')
+    expect(violations[0]).toContain('1 entries at both')
+  })
+
+  it('rejects a change that adds one entry and removes another', () => {
+    const replaced = log(entry('2026-10-16', 'Replacement.'))
+    expect(collectAiUseLogEntryViolations(['src/x.ts', AI_USE_LOG_PATH], BASE, replaced)).not.toEqual([])
+  })
+
+  it('rejects a head with fewer entries than the base', () => {
+    expect(collectAiUseLogEntryViolations(['src/x.ts', AI_USE_LOG_PATH], ADDED, BASE)).not.toEqual([])
+  })
+
+  it('treats an absent base log as a log with no entries', () => {
+    expect(collectAiUseLogEntryViolations(['src/x.ts', AI_USE_LOG_PATH], '', BASE)).toEqual([])
+    expect(collectAiUseLogEntryViolations(['src/x.ts', AI_USE_LOG_PATH], '   \n', BASE)).toEqual([])
+  })
+
+  it('reports a base that is not valid YAML', () => {
+    expect(
+      collectAiUseLogEntryViolations(['src/x.ts', AI_USE_LOG_PATH], 'entries: [\n', ADDED).join(' '),
+    ).toContain('base is not valid YAML')
   })
 
   it('does not apply when no code or prompt changed (a documentation fix is free)', () => {
-    expect(collectAiUseLogEntryViolations(['docs/readme.md', AI_USE_LOG_PATH], '+++ x\n+\n')).toEqual([])
+    expect(collectAiUseLogEntryViolations(['docs/readme.md', AI_USE_LOG_PATH], BASE, BASE)).toEqual([])
   })
 
-  it('is not verified without a patch (a local run)', () => {
-    expect(collectAiUseLogEntryViolations(['src/x.ts', AI_USE_LOG_PATH], null)).toEqual([])
+  it('is not verified without a base copy (a local run)', () => {
+    expect(collectAiUseLogEntryViolations(['src/x.ts', AI_USE_LOG_PATH], null, BASE)).toEqual([])
   })
 })
