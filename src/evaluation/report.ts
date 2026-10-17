@@ -1,3 +1,5 @@
+import { renameSync, rmSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import type { ComparisonRun, Variant } from './comparison'
 import {
   TIMING_STAGES,
@@ -289,4 +291,36 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
   }
 
   return { ok: true, markdown: `${lines.join('\n')}\n` }
+}
+
+/** The artifact gate G4 reads. */
+export const EVALUATION_TABLE_PATH = 'docs/architecture/evaluation-table.md'
+
+export type WriteReportResult =
+  | { readonly ok: true; readonly path: string }
+  | { readonly ok: false; readonly violations: readonly string[] }
+
+/**
+ * Validate, then write the report — or write nothing.
+ *
+ * The table is the artifact G4 checks, so the writer is the one place allowed to create it. It refuses
+ * before touching the filesystem, writes through a temporary file in the destination directory and
+ * renames, so a partial table can never be mistaken for a complete one.
+ */
+export function writeEvaluationReport(
+  input: ReportInput,
+  path: string = EVALUATION_TABLE_PATH,
+): WriteReportResult {
+  const rendered = renderEvaluationReport(input)
+  if (!rendered.ok) return { ok: false, violations: rendered.violations }
+
+  const temporary = join(dirname(path), `.${basename(path)}.${process.pid}.tmp`)
+  try {
+    writeFileSync(temporary, rendered.markdown, 'utf8')
+    renameSync(temporary, path)
+  } catch (error) {
+    rmSync(temporary, { force: true })
+    throw error
+  }
+  return { ok: true, path }
 }

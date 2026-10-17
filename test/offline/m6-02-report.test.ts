@@ -1,9 +1,13 @@
-import { describe, expect, it } from 'vitest'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
 import type { ComparisonRun, Variant } from '../../src/evaluation/comparison'
 import { summarise, type AttemptRecord } from '../../src/evaluation/metrics'
 import {
   collectReportViolations,
   renderEvaluationReport,
+  writeEvaluationReport,
   type FixedConditions,
   type ReportInput,
 } from '../../src/evaluation/report'
@@ -231,5 +235,51 @@ describe('the report refuses a run it cannot honestly publish', () => {
         meta: META,
       }).join(' '),
     ).toContain('not declared in the run')
+  })
+})
+
+describe('the writer is the only path to the G4 artifact', () => {
+  const directories: string[] = []
+  afterEach(() => {
+    while (directories.length > 0) rmSync(directories.pop()!, { recursive: true, force: true })
+  })
+  const target = (): string => {
+    const directory = mkdtempSync(join(tmpdir(), 'm6-report-'))
+    directories.push(directory)
+    return join(directory, 'evaluation-table.md')
+  }
+
+  it('writes exactly the rendered report', () => {
+    const path = target()
+    const result = writeEvaluationReport(input(), path)
+    expect(result).toEqual({ ok: true, path })
+    const rendered = renderEvaluationReport(input())
+    if (!rendered.ok) throw new Error('unreachable')
+    expect(readFileSync(path, 'utf8')).toBe(rendered.markdown)
+    expect(existsSync(path.replace('evaluation-table.md', '.evaluation-table.md'))).toBe(false)
+  })
+
+  it('writes nothing when the run cannot be published', () => {
+    const path = target()
+    const result = writeEvaluationReport(input({ conditions: { textSource: 'fixture' } }), path)
+    expect(result.ok).toBe(false)
+    expect(existsSync(path)).toBe(false)
+  })
+
+  it('does not overwrite an existing table when the run is refused', () => {
+    const path = target()
+    writeFileSync(path, 'previous table\n', 'utf8')
+    const result = writeEvaluationReport(input({ conditions: { clock: 'injected' } }), path)
+    expect(result.ok).toBe(false)
+    expect(readFileSync(path, 'utf8')).toBe('previous table\n')
+  })
+
+  it('refuses a fixture source at the writer, with the reason', () => {
+    const path = target()
+    const result = writeEvaluationReport(input({ conditions: { textSource: 'fixture' } }), path)
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('unreachable')
+    expect(result.violations.join(' ')).toContain('fixture text source is not a benchmark')
+    expect(existsSync(path)).toBe(false)
   })
 })
