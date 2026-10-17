@@ -536,9 +536,14 @@ export async function assembleDialogueContext(
    * recalled turns share the same budget, charged after persona recall and
    * before history trimming, and are rendered in their own section so they
    * never blur into the recent chronological order.
+   *
+   * `maxTurns` is a bound on the turns that reach the prompt in total, not only
+   * on the recency window, so recall can never claim more slots than the caller
+   * allowed - with `maxTurns: 0` there is no allowance at all.
    */
+  const recallAllowance = Math.min(MAX_RECALLED_TURNS, Math.max(0, maxTurns))
   const deliveryRecallResult: readonly RecalledTurn[] =
-    input.deliveryRecall === undefined
+    maxTurns === 0 || input.deliveryRecall === undefined
       ? []
       : input.deliveryRecall.recall({
           inputText: request.selectedInput.text,
@@ -549,7 +554,7 @@ export async function assembleDialogueContext(
   const recalledTurns: RecalledTurn[] = []
   const deliveryRecallExclusions: TurnRecallExclusion[] = []
   let recalledTurnCharacters = 0
-  for (const entry of deliveryRecallResult.slice(0, MAX_RECALLED_TURNS)) {
+  for (const entry of deliveryRecallResult.slice(0, recallAllowance)) {
     const cost = renderRecalledTurnLine(entry.turn).length
     if (recalledCharacters + recalledTurnCharacters + cost > maxCharacters) {
       deliveryRecallExclusions.push({
@@ -563,13 +568,47 @@ export async function assembleDialogueContext(
     recalledTurnCharacters += cost
   }
 
+  /*
+   * A recalled older turn is still history, so it displaces a recent turn rather
+   * than adding to it. Without this, `maxTurns` would bound only the recency
+   * window and recall could exceed the caller's request limit - M5's probe with
+   * `maxTurns: 0` rendered recalled turns, which is not what the limit says.
+   *
+   * Displacement starts with the oldest unpinned turn so a pinned turn keeps the
+   * protection it was scored for; pinned turns are displaced oldest-first only
+   * when the quota cannot be met otherwise. Every displaced turn is recorded, so
+   * the loss is auditable rather than silent.
+   */
+  const recentQuota = Math.max(0, maxTurns - recalledTurns.length)
+  const displaced = new Set<string>()
+  for (const turn of recent) {
+    if (recent.length - displaced.size <= recentQuota) break
+    if (!turn.pinned) displaced.add(turn.turnId)
+  }
+  for (const turn of recent) {
+    if (recent.length - displaced.size <= recentQuota) break
+    displaced.add(turn.turnId)
+  }
+  const recentTurns = recent.filter((turn) => !displaced.has(turn.turnId))
+  for (const turn of recent) {
+    if (!displaced.has(turn.turnId)) continue
+    for (const segment of turn.segments) {
+      exclusions.push({
+        sessionId: turn.sessionId,
+        turnId: turn.turnId,
+        segmentId: segment.segmentId,
+        reason: 'turn-limit',
+      })
+    }
+  }
+
   const availableHistoryCharacters = Math.max(
     0,
     maxCharacters - recalledCharacters - recalledTurnCharacters,
   )
 
   const kept = trimToCharacterBudget({
-    turns: recent,
+    turns: recentTurns,
     maxCharacters: availableHistoryCharacters,
     activePersonaVersion: personaVersionKey(profile.profileId, profile.version),
     exclusions,
@@ -596,13 +635,13 @@ export async function assembleDialogueContext(
   if (deliveryRecallExclusions.length > 0) {
     warnings.push('some recalled older turns were dropped to stay within the character budget')
   }
-  if (recalledCharacters + recalledTurnCharacters >= maxCharacters && recent.length > 0) {
+  if (recalledCharacters + recalledTurnCharacters >= maxCharacters && recentTurns.length > 0) {
     warnings.push(
       'recalled content consumes the whole character budget, so no confirmed history is included',
     )
   }
 
-  const newestTurn = recent[recent.length - 1]
+  const newestTurn = recentTurns[recentTurns.length - 1]
   if (newestTurn !== undefined && kept.turns[kept.turns.length - 1]?.turnId !== newestTurn.turnId) {
     warnings.push(
       'the newest confirmed turn does not fit the character budget and was dropped from context',

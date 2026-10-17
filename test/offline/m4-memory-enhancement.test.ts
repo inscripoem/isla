@@ -262,13 +262,14 @@ describe('M4 delivery-memory recall', () => {
   async function memoryWithOldAndNew(): Promise<DeliveryMemoryStore> {
     const memory = createDeliveryMemoryStore()
     await commitTurn(memory, 'turn-old', 'The concert was loud and bright tonight.')
+    await commitTurn(memory, 'turn-mid', 'A plain remark about the weather today.')
     await commitTurn(memory, 'turn-new', 'A plain reply for today.')
     return memory
   }
 
   const RECALLING_REQUEST = fixtureDialogueRequest({
     selectedInput: { eventId: 'evt-recall', text: 'Tell me about the loud concert' },
-    contextLimits: { maxTurns: 1, maxCharacters: 2000 },
+    contextLimits: { maxTurns: 2, maxCharacters: 2000 },
   })
 
   it('recalls a turn-limit-dropped turn that matches the listener message', async () => {
@@ -278,11 +279,14 @@ describe('M4 delivery-memory recall', () => {
       deliveryRecall: createKeywordDeliveryRecall(),
     })
 
-    // The old turn aged out of the window (maxTurns: 1) but shares two content
-    // tokens with the message, which clears MIN_RECALL_SCORE.
+    // The old turn aged out of the window (maxTurns: 2) but shares two content
+    // tokens with the message, which clears MIN_RECALL_SCORE. It displaces the
+    // oldest recent turn rather than adding to the window, so the prompt still
+    // carries maxTurns turns in total.
     expect(MIN_RECALL_SCORE).toBe(2)
     expect(view.turns.map((turn) => turn.turnId)).toEqual(['turn-new'])
     expect(view.recalledTurns.map((entry) => entry.turn.turnId)).toEqual(['turn-old'])
+    expect(view.exclusions.some((entry) => entry.turnId === 'turn-mid')).toBe(true)
 
     const prompt = renderDialoguePrompt(view)
     expect(prompt).toContain('Earlier, confirmed:')
@@ -318,7 +322,13 @@ describe('M4 delivery-memory recall', () => {
     expect(view.warnings.some((warning) => warning.includes('recalled older turns'))).toBe(true)
   })
 
-  it('is byte-identical to the old behavior when no port is supplied', async () => {
+  // Opt-in equivalence, not a byte-for-byte claim against a previous
+  // implementation: both paths below run this implementation, and what the
+  // assertion establishes is that a caller who does not opt in - no port, or a
+  // port that returns nothing - gets a prompt that recall did not touch. The
+  // pre-recall behaviour itself is asserted against its own oracle in the next
+  // test rather than by comparing two current paths to each other.
+  it('leaves the prompt untouched when recall is not opted in', async () => {
     const memory = await memoryWithOldAndNew()
     const withoutPort = await assembleWith(memory, { request: RECALLING_REQUEST })
     const withEmptyPort = await assembleWith(memory, {
@@ -329,6 +339,29 @@ describe('M4 delivery-memory recall', () => {
     expect(withoutPort.recalledTurns).toEqual([])
     expect(withEmptyPort.recalledTurns).toEqual([])
     expect(renderDialoguePrompt(withoutPort)).toBe(renderDialoguePrompt(withEmptyPort))
+    expect(renderDialoguePrompt(withoutPort)).not.toContain('Earlier, confirmed:')
+  })
+
+  // The previous-behaviour oracle. Before delivery recall existed, `maxTurns`
+  // bounded the recency window and nothing else: a caller asking for two turns
+  // got the two newest delivered turns, nothing was resurrected from outside
+  // the window, and no recall section was rendered. That contract is stated
+  // here as an expected record set instead of a captured prompt string, so it
+  // stays true through unrelated prompt edits but still fails if recall starts
+  // leaking into a caller that never opted in.
+  it('reproduces the pre-recall window semantics when no recall port is supplied', async () => {
+    const memory = await memoryWithOldAndNew()
+    const view = await assembleWith(memory, { request: RECALLING_REQUEST })
+
+    expect(RECALLING_REQUEST.contextLimits.maxTurns).toBe(2)
+    // The two newest delivered turns, in order - the window is not displaced,
+    // because nothing was recalled to displace it.
+    expect(view.turns.map((turn) => turn.turnId)).toEqual(['turn-mid', 'turn-new'])
+    expect(view.recalledTurns).toEqual([])
+    expect(view.deliveryRecallExclusions).toEqual([])
+    // The window is the only thing that drops a turn here; no recall reason appears.
+    expect(new Set(view.exclusions.map((entry) => entry.reason))).toEqual(new Set(['turn-limit']))
+    expect(renderDialoguePrompt(view)).not.toContain('Earlier, confirmed:')
   })
 
   it('never exceeds the per-assembly cap on recalled turns', async () => {
@@ -339,10 +372,41 @@ describe('M4 delivery-memory recall', () => {
     await commitTurn(memory, 'turn-new', 'A plain reply for today.')
 
     const view = await assembleWith(memory, {
-      request: RECALLING_REQUEST,
+      request: fixtureDialogueRequest({
+        selectedInput: { eventId: 'evt-recall', text: 'Tell me about the loud concert' },
+        // maxTurns is also the recall allowance ceiling, so it has to leave room
+        // for MAX_RECALLED_TURNS candidates to reach the cap at all.
+        contextLimits: { maxTurns: MAX_RECALLED_TURNS, maxCharacters: 2000 },
+      }),
       deliveryRecall: createKeywordDeliveryRecall(),
     })
     expect(view.recalledTurns.length).toBeLessThanOrEqual(MAX_RECALLED_TURNS)
     expect(view.recalledTurns.length).toBe(MAX_RECALLED_TURNS)
+  })
+
+  it('keeps maxTurns a combined bound: recall displaces recent turns instead of adding', async () => {
+    const memory = await memoryWithOldAndNew()
+    const requestWith = (maxTurns: number) =>
+      fixtureDialogueRequest({
+        selectedInput: { eventId: 'evt-recall', text: 'Tell me about the loud concert' },
+        contextLimits: { maxTurns, maxCharacters: 2000 },
+      })
+
+    // maxTurns: 0 admits nothing at all - no recency window and no recalled turns.
+    const none = await assembleWith(memory, {
+      request: requestWith(0),
+      deliveryRecall: createKeywordDeliveryRecall(),
+    })
+    expect(none.turns).toEqual([])
+    expect(none.recalledTurns).toEqual([])
+
+    // Whatever the limit, the turns that reach the prompt never exceed it.
+    for (const maxTurns of [1, 2, 3]) {
+      const view = await assembleWith(memory, {
+        request: requestWith(maxTurns),
+        deliveryRecall: createKeywordDeliveryRecall(),
+      })
+      expect(view.turns.length + view.recalledTurns.length).toBeLessThanOrEqual(maxTurns)
+    }
   })
 })
