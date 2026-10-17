@@ -47,16 +47,17 @@ jobs:
       - name: changed files (the gate diff, acquired once)
         id: changed
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
         run: |
           set -euo pipefail
-          BASE="$BASE_SHA"
-          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
-            # A branch-creation push carries an all-zero `before`: diff the tip against
-            # its parent and say so, rather than silently reviewing nothing.
-            BASE="$(git rev-parse --verify --quiet HEAD~1 || git rev-parse HEAD)"
-          fi
           mkdir -p .cache
+          # Resolve the range the gates review: the PR base, a push's `before`, or the
+          # whole branch for a branch-creation push (merge-base with origin/main). An
+          # unresolvable range fails here rather than reviewing a narrower diff; see
+          # src/evaluation/change-range.ts.
+          BASE="$(pnpm -s gate:change-base)"
           if ! git diff --name-only -z "$BASE" HEAD > .cache/changed-files.nul; then
             echo "::error::could not acquire the changed-file list ($BASE..HEAD); the diff gates are not verified"
             exit 1
