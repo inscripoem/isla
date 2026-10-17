@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { WebSocket } from 'ws'
 import type { ClockPort, InputAck, ServerMessage, TrustedControlContext } from '../contracts'
@@ -38,6 +38,47 @@ export interface ApplicationEndpointOptions {
   maxSendBufferBytes?: number
   /** Concurrent non-control inbound messages allowed per connection. */
   maxInboundPerConnection?: number
+  /**
+   * Optional local sink for bounded application-internal failure records. It is
+   * not a wire message and carries no error text, stack, cause, thrown-object
+   * property, payload or frame. A throwing, rejecting, nonsettling or reentrant
+   * sink is isolated and never awaited.
+   */
+  onDiagnostic?: (diagnostic: ApplicationDiagnostic) => void
+}
+
+type ApplicationDiagnosticOperation =
+  | 'application.scheduler'
+  | 'application.request'
+  | 'application.snapshot'
+
+/**
+ * A bounded local diagnostic for an application-internal failure. Identifiers
+ * that may be externally influenced are recorded only as an opaque bounded
+ * digest (see `correlationRef`), so no arbitrary supplied text reaches the sink.
+ */
+export interface ApplicationDiagnostic {
+  level: 'warn'
+  service: 'isla-runtime'
+  operation: ApplicationDiagnosticOperation
+  outcome: 'error'
+  /** Opaque bounded digest of the runtime session id. */
+  sessionRef: string
+  epoch?: number
+  connectionId?: string
+  messageKind?: string
+  /** Opaque bounded digest of the client request id; omitted when absent. */
+  requestRef?: string
+}
+
+/**
+ * Opaque, bounded, stable correlation reference for a possibly externally
+ * influenced identifier: a truncated digest of fixed length. The same input
+ * always yields the same reference, so records still join, while the arbitrary
+ * supplied text is never emitted.
+ */
+function correlationRef(value: string): string {
+  return createHash('sha256').update(value, 'utf8').digest('hex').slice(0, 16)
 }
 
 export interface ApplicationEndpoint {
@@ -170,6 +211,39 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
   const bootstraps = createOperatorBootstrapStore(options.clock, bootstrapTtlMs)
 
   const connections = new Map<string, ConnectionState>()
+  const sessionRef = correlationRef(composition.sessionId)
+  let reporting = false
+
+  /** Reads the coordinator epoch defensively so reporting can never throw. */
+  const currentEpoch = (): number | undefined => {
+    try {
+      return composition.coordinator.epoch()
+    } catch {
+      return undefined
+    }
+  }
+
+  /**
+   * Delivers one bounded record to the optional sink, best-effort. A synchronous
+   * throw or a synchronous reentrant report is suppressed. A returned thenable is
+   * assimilated through Promise.resolve only (one safe `then` access, supporting
+   * object and function thenables and tolerating a throwing accessor) and its
+   * rejection consumed, so a hostile or nonsettling sink is neither awaited nor
+   * able to become an unhandled rejection.
+   */
+  const reportDiagnostic = (diagnostic: ApplicationDiagnostic): void => {
+    const sink = options.onDiagnostic
+    if (sink === undefined || reporting) return
+    reporting = true
+    try {
+      void Promise.resolve(sink(diagnostic)).then(undefined, () => {})
+    } catch {
+      // A synchronous sink throw or throwing `then` accessor is isolated.
+    } finally {
+      reporting = false
+    }
+  }
+
   let performerId: string | null = null
   let performerGeneration = 0
   let messageCounter = 0
@@ -287,6 +361,15 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
       }
     } catch {
       // A drain fault must not wedge the scheduler; a later wake retries.
+      const epoch = currentEpoch()
+      reportDiagnostic({
+        level: 'warn',
+        service: 'isla-runtime',
+        operation: 'application.scheduler',
+        outcome: 'error',
+        sessionRef,
+        ...(epoch !== undefined ? { epoch } : {}),
+      })
     } finally {
       draining = false
     }
@@ -322,6 +405,16 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
       })
     } catch {
       // A snapshot fault leaves the connection unbound; it may re-attach.
+      const epoch = currentEpoch()
+      reportDiagnostic({
+        level: 'warn',
+        service: 'isla-runtime',
+        operation: 'application.snapshot',
+        outcome: 'error',
+        sessionRef,
+        ...(epoch !== undefined ? { epoch } : {}),
+        connectionId: conn.id,
+      })
     }
   }
 
@@ -485,6 +578,18 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
         }
       }
     } catch {
+      const requestId = typeof message.messageId === 'string' ? message.messageId : null
+      reportDiagnostic({
+        level: 'warn',
+        service: 'isla-runtime',
+        operation: 'application.request',
+        outcome: 'error',
+        sessionRef,
+        epoch: message.epoch,
+        connectionId: conn.id,
+        messageKind: message.kind,
+        ...(requestId !== null ? { requestRef: correlationRef(requestId) } : {}),
+      })
       sendError(conn, 'internal', 'request failed while processing', null, true)
     } finally {
       conn.inFlight -= 1

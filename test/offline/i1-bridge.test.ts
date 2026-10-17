@@ -569,4 +569,71 @@ describe('performance bridge delayed-execution protocol', () => {
     })
     expect(sent.filter((message) => message.kind === 'performance.offer').length).toBe(offersBefore)
   })
+
+  it('preserves the latest grant and admits a fresh output beyond the retention limit', async () => {
+    const { bridge, sent, context } = setup()
+    for (let index = 0; index < 70; index += 1) {
+      const cmd = command({ outputId: `output-window-${index}` })
+      const execution = bridge.player.execute(cmd, context())
+      bridge.handleReady(ready(cmd))
+      // Each output reports its own trusted clean physical release before the
+      // next may be admitted.
+      expect(bridge.handlePhysicalStatus(statusMessage(cmd, idleStatus()))).toBe(true)
+      expect(await bridge.deliver(receiptMessage(cmd, { stage: 'completed' }))).toBe('consumed')
+      await execution
+    }
+    // Retiring old settled records must not lose the most recent grant's trusted
+    // physical status, so the bridge stays idle and admits fresh work.
+    expect(bridge.player.status().idle).toBe(true)
+    const offersBefore = sent.filter((message) => message.kind === 'performance.offer').length
+    bridge.player.execute(command({ outputId: 'output-after-window' }), context())
+    expect(sent.filter((message) => message.kind === 'performance.offer').length).toBe(offersBefore + 1)
+    expect(bridge.player.status()).toMatchObject({ idle: false })
+  })
+
+  it('returns the resolved terminal for a duplicate after unknown-to-terminal resolution', async () => {
+    const { bridge, sent, context } = setup()
+    const cmd = command({ outputId: 'output-unknown-resolve' })
+    const execution = bridge.player.execute(cmd, context())
+    bridge.handleReady(ready(cmd))
+    expect(await bridge.deliver(receiptMessage(cmd, { receiptId: 'unknown-1', stage: 'unknown' }))).toBe('consumed')
+    await expect(execution).resolves.toMatchObject({ stage: 'unknown' })
+    // A later correlated terminal resolves the retained unknown and is forwarded
+    // to the coordinator as historical evidence.
+    expect(await bridge.deliver(receiptMessage(cmd, { receiptId: 'done-1', stage: 'completed' }))).toBe('forward')
+    const offersBefore = sent.filter((message) => message.kind === 'performance.offer').length
+    // A duplicate of the resolved output returns the retained terminal without
+    // re-offering.
+    await expect(bridge.player.execute(cmd, context())).resolves.toMatchObject({ stage: 'completed' })
+    expect(sent.filter((message) => message.kind === 'performance.offer').length).toBe(offersBefore)
+  })
+
+  it('never loses an unresolved output under retention pressure and resolves it to terminal', async () => {
+    const { bridge, sent, context } = setup()
+    const cmd = command({ outputId: 'output-unresolved' })
+    const execution = bridge.player.execute(cmd, context())
+    bridge.handleReady(ready(cmd))
+    expect(await bridge.deliver(receiptMessage(cmd, { receiptId: 'unknown-u', stage: 'unknown' }))).toBe('consumed')
+    await expect(execution).resolves.toMatchObject({ stage: 'unknown' })
+
+    const offers = (): number => sent.filter((message) => message.kind === 'performance.offer').length
+    const before = offers()
+    // Many attempts must neither create operations nor evict the unresolved
+    // fact; the output stays unresolved and blocks admission.
+    for (let index = 0; index < 70; index += 1) {
+      await expect(bridge.player.execute(command({ outputId: `blocked-${index}` }), context())).resolves.toMatchObject({
+        stage: 'unknown',
+        reasonCode: 'unresolved_blocks_admission',
+      })
+    }
+    expect(offers()).toBe(before)
+
+    // A later correlated terminal still resolves the retained unresolved fact.
+    expect(await bridge.deliver(receiptMessage(cmd, { receiptId: 'done-u', stage: 'completed' }))).toBe('forward')
+    // The grant still requires a trusted clean physical release before fresh
+    // admission, so report it and confirm a new output is then admitted.
+    expect(bridge.handlePhysicalStatus(statusMessage(cmd, idleStatus()))).toBe(true)
+    bridge.player.execute(command({ outputId: 'output-after-unresolved' }), context())
+    expect(offers()).toBe(before + 1)
+  })
 })

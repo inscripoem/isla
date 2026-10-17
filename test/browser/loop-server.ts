@@ -105,6 +105,20 @@ async function main(): Promise<void> {
     composition,
     clock,
     allowedOrigins: ALLOWED_ORIGINS,
+    // Local structured diagnostics in the demo's log style. The record is
+    // already bounded and free of input content, credentials and payloads; the
+    // sink only re-labels the service.
+    onDiagnostic: (diagnostic) => {
+      log(diagnostic.operation, {
+        level: diagnostic.level,
+        outcome: diagnostic.outcome,
+        sessionRef: diagnostic.sessionRef,
+        ...(diagnostic.epoch !== undefined ? { epoch: diagnostic.epoch } : {}),
+        ...(diagnostic.connectionId !== undefined ? { connectionId: diagnostic.connectionId } : {}),
+        ...(diagnostic.messageKind !== undefined ? { messageKind: diagnostic.messageKind } : {}),
+        ...(diagnostic.requestRef !== undefined ? { requestRef: diagnostic.requestRef } : {}),
+      })
+    },
   })
   const server = new DiagnosticsServer({ host: '127.0.0.1', port: PORT, application })
   const bound = await server.start()

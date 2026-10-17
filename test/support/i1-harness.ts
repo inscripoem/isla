@@ -4,6 +4,7 @@ import type {
   ClockPort,
   ConfirmedDelivery,
   DialoguePort,
+  EventStorePort,
   HistoryQueryPort,
   MemoryCommitPort,
   ReactionPort,
@@ -11,6 +12,7 @@ import type {
 } from '../../src/contracts'
 import type { CapabilitySnapshot, PerformanceCommand } from '../../src/contracts/app'
 import { createApplicationEndpoint } from '../../src/runtime/application'
+import type { ApplicationDiagnostic } from '../../src/runtime/application'
 import {
   createDialogueComposition,
   createReconstructedRuntimeComposition,
@@ -19,7 +21,7 @@ import {
 import type { RuntimeComposition } from '../../src/runtime/composition'
 import { createMonotonicClock } from '../../src/runtime/clock'
 import { createRuntimeAuthorizer } from '../../src/runtime/control-policy'
-import type { CycleTimings, SessionProfileConfig } from '../../src/runtime/coordinator'
+import type { CycleTimings, RuntimeCoordinator, SessionProfileConfig } from '../../src/runtime/coordinator'
 import type { ArchiveSelectionConfig } from '../../src/runtime/session-archives'
 import { createDeadlineGate } from '../../src/runtime/deadline'
 import type { RuntimeDeadlineGate } from '../../src/runtime/deadline'
@@ -92,6 +94,12 @@ export interface LoopHarnessOptions {
   resolver?: AudioResolver
   beforeReady?: (command: PerformanceCommand) => Promise<void> | void
   maxPendingInputs?: number
+  /** Captures bounded application diagnostics emitted by the endpoint. */
+  onDiagnostic?: (diagnostic: ApplicationDiagnostic) => void
+  /** Replaces the store port (for controlled-persistence regressions). */
+  store?: EventStorePort
+  /** Wraps the composed coordinator (for fault-injection regressions). */
+  wrapCoordinator?: (coordinator: RuntimeCoordinator) => RuntimeCoordinator
   /** Use the real M4 dialogue composition instead of the fixture substitute. */
   realM4?: boolean
   /** Provider substitute for real M4; defaults to the deterministic catalog source. */
@@ -112,6 +120,8 @@ export interface LoopHarness {
   readonly composition: RuntimeComposition
   readonly backend: StorageBackend
   readonly gate: RuntimeDeadlineGate
+  /** The clock domain the runtime and gate use, for test-supplied deadlines. */
+  readonly clock: ClockPort
   readonly client: PerformerClient
   readonly resolver: AudioResolver
   readonly media: MediaDriver
@@ -143,7 +153,7 @@ function createBaseHistory(backend: StorageBackend, failingSession?: string): Hi
 export async function createLoopHarness(options: LoopHarnessOptions = {}): Promise<LoopHarness> {
   const clock = options.clock ?? createMonotonicClock()
   const backend = options.backend ?? createInMemoryBackend()
-  const store = createEventStore(backend)
+  const store = options.store ?? createEventStore(backend)
   const gate = createDeadlineGate(clock)
   const capabilities = fixedCapabilities()
   let receiptCounter = 0
@@ -246,10 +256,16 @@ export async function createLoopHarness(options: LoopHarnessOptions = {}): Promi
       ...(options.maxPendingInputs !== undefined ? { maxPendingInputs: options.maxPendingInputs } : {}),
     })
   }
+  if (options.wrapCoordinator !== undefined) {
+    // Test-only seam: a wrapped coordinator still exposes the real endpoint and
+    // bridge, so a fault is injected through the actual application path.
+    composition = { ...composition, coordinator: options.wrapCoordinator(composition.coordinator) }
+  }
   const endpoint = createApplicationEndpoint({
     composition,
     clock,
     allowedOrigins: options.allowedOrigins ?? [LOOP_ORIGIN],
+    ...(options.onDiagnostic !== undefined ? { onDiagnostic: options.onDiagnostic } : {}),
   })
   const server = new DiagnosticsServer({ port: 0, graceMs: 200, application: endpoint })
   await server.start()
@@ -318,6 +334,7 @@ export async function createLoopHarness(options: LoopHarnessOptions = {}): Promi
     composition,
     backend,
     gate,
+    clock,
     client,
     resolver,
     media,
