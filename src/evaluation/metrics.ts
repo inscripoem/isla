@@ -133,7 +133,7 @@ function percentilesOf(values: readonly number[]): Percentiles {
   return { n: values.length, p50: percentile(values, 0.5), p95: percentile(values, 0.95) }
 }
 
-function summariseWindow(records: readonly AttemptRecord[]): WindowSummary {
+export function summariseWindow(records: readonly AttemptRecord[]): WindowSummary {
   const stages = Object.fromEntries(
     TIMING_STAGES.map((stage) => [
       stage,

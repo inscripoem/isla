@@ -50,6 +50,29 @@ deliberately not-run case is **not** an attempt, so it does not consume a varian
 Running the bench against a real provider requires a provider. Without one, the run is reported as
 **not run** — never a fabricated pass. Gate G4 reads the same rule from the generated evaluation table.
 
+### D7 — The report is a receipt, and it refuses what it cannot support
+
+`src/evaluation/report.ts` renders a run into the Markdown that gate **G4** reads. It is not a pass/fail
+judgement: it records the fixed conditions (NFR-01's five, plus persona, model and prompt versions, the text
+budget, the history source and the clock domain — issue #41 Q3), the counts, the percentile table and every
+attempt.
+
+It **refuses** to render, naming the reasons, when the run cannot support the numbers it would print:
+
+- a **fixture** text source — it consumes no tokens and is not comparable to a provider run (#41, M4);
+- **latency from an injected clock** — a fixture clock returns a constant, so its durations are not
+  measurements (#41, M4);
+- **no attempts** — a report with no attempts claims nothing;
+- a **declared sample size** that differs from the attempts actually recorded;
+- a blank required condition, or a record for a variant the run did not declare.
+
+Two rules are structural rather than prose: an unobserved stage prints `—`, never `0`; and the runner's
+first-attempt window is labelled **"first attempt"**, not "cold", because it does not establish a cold
+process, provider, worker or cache (#41, M5). The declared cold/warm state is the run condition.
+
+Without provider access the table stays absent and G4 keeps reporting **not run** — the correct answer,
+not a pass.
+
 ## Alternatives considered
 
 - **A statistics dependency** (`simple-statistics`, `d3-array`, `ml-matrix`). Rejected: this is one
