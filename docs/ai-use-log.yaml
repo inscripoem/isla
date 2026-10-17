@@ -665,4 +665,58 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Owner-approved fix after the push-event CI failure on the rebased #27. Mutation: trusting a missing `before` turns two range tests red."
+  - date: 2026-10-17
+    task: M2-01
+    branch: feat/m2-01-console
+    change: >-
+      Fill the last empty product module with the M2 console for application
+      protocol 0.2. Add a browser-safe WebSocket ConsoleTransportPort
+      (app-transport.ts) that validates every inbound frame against
+      serverMessageSchema and correlates acknowledgements by messageId; an explicit
+      pure-function state machine (console-state.ts) that accepts only session
+      events beyond the bootstrap snapshot seq, tracks lifecycle, epoch,
+      activeTurnId, performerStatus and outputConfirmation, and keeps pending
+      requests and unknown outcomes visible; and an M1 player binding
+      (player-binding.ts) that maps performance.execute/performance.cancel onto the
+      browser playback controller and returns receipts through an injected sink.
+      Rewrite ConsoleApp.tsx as a view over that state and rebuild the interface
+      with animal-island-ui, keeping the diagnostic protocol 1 panel separate from
+      the application view. Add 16 offline cases in test/offline/m2-console.test.ts
+      and a manual browser demo under test/browser/.
+    requirements: [FR-01, FR-04, FR-05]
+    invariants: [INV-01, INV-12]
+    cases: []
+    commits: []
+    agent: traecode/deepseek-v4.1-flash
+    provider: trae-cn
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      Governance deviation, recorded rather than concealed. AGENTS.md requires
+      application code to be authored through genuine OpenCode sessions with the
+      configured DeepSeek-V4-Flash provider; this M2-01 change was authored in a
+      TraeCode session under a Captain-approved plan (.trae/documents/m2-01-console-implementation-plan.md),
+      so no OpenCode session identifier exists for it. The agent field therefore
+      names the actual authoring agent and no ses_ identifier is asserted. The
+      Captain approved the scope, the animal-island-ui dependency and this
+      publication, and directed that the deviation be declared instead of
+      papered over.
+    verification:
+      role: "pnpm test:m2: 16 passed."
+      full_suite: "pnpm verify on the merged origin/main (c2f9b38): 651 tests in 29 files; typecheck, lint and build passed."
+      readiness: "pnpm test:readiness: 41 passed."
+      trace: "pnpm test:trace: 15 passed."
+    scope: >-
+      The console drives an injected ConsoleTransportPort; the offline suite and
+      the browser demo use a fixture transport, so no server route, live provider
+      or real audio output is claimed. Three integration gaps are reported to M5
+      and not resolved here: ConsoleTransportPort has no player-to-runtime channel
+      for receipts, PerformanceCommand carries no bytes or URL, and the root Vite
+      config has no application-protocol proxy. Application protocol 0.2 and
+      diagnostic protocol 1 are unchanged.
+    human_review: >-
+      The Captain approved the scope, the dependency and this publication, and
+      directed that the provenance deviation be recorded truthfully. Consumer
+      review by M5 (shared transport port, player-to-runtime channel) and by M1
+      (the browser mount boundary) is requested and remains pending; publication is
+      not acceptance, and the tests-approved label is a human action.
 
