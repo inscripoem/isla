@@ -1,6 +1,6 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ComparisonRun, Variant } from '../../src/evaluation/comparison'
 import { summarise, type AttemptRecord } from '../../src/evaluation/metrics'
@@ -36,14 +36,7 @@ function record(overrides: Partial<AttemptRecord>): AttemptRecord {
     variantId: VARIANT.id,
     cold: false,
     outcome: 'completed',
-    timing: {
-      submitMs: 5,
-      planMs: 40,
-      dialogueMs: 120,
-      synthesisMs: 80,
-      firstAudibleMs: 245,
-      stopToSilenceMs: null,
-    },
+    timing: { ...FULL_TIMING },
     totalMs: 245,
     attempts: 1,
     usage: { inputTokens: 120, outputTokens: 60, costUsd: 0.002, usageMissing: false },
@@ -96,7 +89,7 @@ function sampleRun(): ComparisonRun {
 
 const META = { runId: 'run-2026-10-17-1', generatedAt: '2026-10-17' }
 
-const CONDITIONS_HINT = {
+const FULL_TIMING = {
   submitMs: 5,
   planMs: 40,
   dialogueMs: 120,
@@ -266,13 +259,13 @@ describe('two variants are reported side by side without leaking aggregates', ()
         caseId: 'case-a',
         variantId: 'rules-baseline',
         cold: false,
-        timing: { ...CONDITIONS_HINT, submitMs: 7, planMs: 44 },
+        timing: { ...FULL_TIMING, submitMs: 7, planMs: 44 },
       }),
       record({
         caseId: 'case-a',
         variantId: 'model-candidate',
         cold: true,
-        timing: { ...CONDITIONS_HINT, submitMs: 9, planMs: 80, dialogueMs: 200, synthesisMs: 120, firstAudibleMs: 420 },
+        timing: { ...FULL_TIMING, submitMs: 9, planMs: 80, dialogueMs: 200, synthesisMs: 120, firstAudibleMs: 420 },
         totalMs: 420,
         usage: { inputTokens: 150, outputTokens: 70, costUsd: 0.004, usageMissing: false },
       }),
@@ -330,7 +323,8 @@ describe('the writer is the only path to the G4 artifact', () => {
     const rendered = renderEvaluationReport(input())
     if (!rendered.ok) throw new Error('unreachable')
     expect(readFileSync(path, 'utf8')).toBe(rendered.markdown)
-    expect(existsSync(path.replace('evaluation-table.md', '.evaluation-table.md'))).toBe(false)
+    // The temporary file is renamed into place; the directory must hold only the table.
+    expect(readdirSync(dirname(path))).toEqual(['evaluation-table.md'])
   })
 
   it('writes nothing when the run cannot be published', () => {
