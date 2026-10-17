@@ -4,8 +4,8 @@ import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ComparisonRun, Variant } from '../../src/evaluation/comparison'
 import { summarise, type AttemptRecord } from '../../src/evaluation/metrics'
+import * as reportModule from '../../src/evaluation/report'
 import {
-  collectReportViolations,
   renderEvaluationReport,
   writeEvaluationReport,
   type FixedConditions,
@@ -232,8 +232,10 @@ describe('the report refuses a run it cannot honestly publish', () => {
       totalMs: null,
     }))
     expect(
-      collectReportViolations(input({ run: { ...noTiming, records, summary: summarise(records) }, conditions: { clock: 'injected' } })),
-    ).toEqual([])
+      renderEvaluationReport(
+        input({ run: { ...noTiming, records, summary: summarise(records) }, conditions: { clock: 'injected' } }),
+      ).ok,
+    ).toBe(true)
   })
 
   it('refuses a run with no attempts', () => {
@@ -298,14 +300,15 @@ describe('the report refuses a run it cannot honestly publish', () => {
 
   it('refuses a record for a variant the run did not declare', () => {
     const run = sampleRun()
-    expect(
-      collectReportViolations({
-        run,
-        variants: [{ ...VARIANT, id: 'other' }],
-        conditions: { ...CONDITIONS },
-        meta: META,
-      }).join(' '),
-    ).toContain('not declared in the run')
+    const result = renderEvaluationReport({
+      run,
+      variants: [{ ...VARIANT, id: 'other' }],
+      conditions: { ...CONDITIONS },
+      meta: META,
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('unreachable')
+    expect(result.violations.join(' ')).toContain('not declared in the run')
   })
 })
 
@@ -409,5 +412,76 @@ describe('the writer is the only path to the G4 artifact', () => {
     if (result.ok) throw new Error('unreachable')
     expect(result.violations.join(' ')).toContain('fixture text source is not a benchmark')
     expect(existsSync(path)).toBe(false)
+  })
+})
+
+describe('every condition the report prints is also validated', () => {
+  const rendered = renderEvaluationReport(input())
+  if (!rendered.ok) throw new Error('the fixture run must render')
+  const conditionSection = rendered.markdown.split('## Fixed conditions')[1]?.split('## ')[0] ?? ''
+  const labels = conditionSection
+    .split('\n')
+    .filter((line) => line.startsWith('| ') && !line.startsWith('| ---'))
+    .map((line) => line.split('|')[1]?.trim() ?? '')
+    .filter((label) => label.length > 0 && label !== 'Condition')
+
+  const checks: ReadonlyArray<{
+    label: string
+    mutate: (conditions: FixedConditions) => FixedConditions
+    expect: string
+  }> = [
+    { label: 'Hardware', mutate: (c) => ({ ...c, hardware: ' ' }), expect: 'hardware' },
+    { label: 'Providers', mutate: (c) => ({ ...c, providers: [] }), expect: 'provider' },
+    { label: 'Workload', mutate: (c) => ({ ...c, workload: '' }), expect: 'workload' },
+    { label: 'Sample size (attempts)', mutate: (c) => ({ ...c, sampleSize: 0 }), expect: 'sample size' },
+    {
+      label: 'Cold/warm state (declared)',
+      mutate: (c) => ({ ...c, coldWarm: 'lukewarm' as never }),
+      expect: 'cold/warm',
+    },
+    {
+      label: 'Persona profile',
+      mutate: (c) => ({ ...c, persona: { ...c.persona, version: '' } }),
+      expect: 'persona',
+    },
+    { label: 'Model version', mutate: (c) => ({ ...c, modelVersion: '' }), expect: 'model version' },
+    { label: 'Prompt version', mutate: (c) => ({ ...c, promptVersion: '' }), expect: 'prompt' },
+    {
+      label: 'Text budget',
+      mutate: (c) => ({ ...c, textBudget: { ...c.textBudget, accounting: '' } }),
+      expect: 'text-budget accounting',
+    },
+    {
+      label: 'History',
+      mutate: (c) => ({ ...c, history: { ...c.history, recordSet: '' } }),
+      expect: 'history',
+    },
+    { label: 'Text source', mutate: (c) => ({ ...c, textSource: 'fixture' }), expect: 'fixture text source' },
+    { label: 'Clock', mutate: (c) => ({ ...c, clock: 'injected' }), expect: 'injected clock' },
+    { label: 'maxTurns', mutate: (c) => ({ ...c, recall: { ...c.recall, maxTurns: -1 } }), expect: 'maxTurns' },
+    {
+      label: 'Recall port',
+      mutate: (c) => ({ ...c, recall: { ...c.recall, supplied: undefined as never } }),
+      expect: 'recall port',
+    },
+  ]
+
+  it('prints exactly the conditions that have a validation case', () => {
+    expect(labels).toEqual(checks.map((check) => check.label))
+  })
+
+  it('refuses the run when any printed condition is missing or invalid', () => {
+    for (const check of checks) {
+      const result = renderEvaluationReport({ ...input(), conditions: check.mutate(CONDITIONS) })
+      expect(result.ok, check.label).toBe(false)
+      if (result.ok) throw new Error('unreachable')
+      expect(result.violations.join(' '), check.label).toContain(check.expect)
+    }
+  })
+})
+
+describe('the module exposes only its documented surface', () => {
+  it('has exactly two runtime exports', () => {
+    expect(Object.keys(reportModule).sort()).toEqual(['renderEvaluationReport', 'writeEvaluationReport'])
   })
 })
