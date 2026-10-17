@@ -115,3 +115,17 @@ bug: **symptom, reproduction, classification, root cause, fix, and the invariant
   superseded). At PR scope the base is the merge base, so the rule proves the change added a record, not
   that every commit added one.
 - Invariant gap: INV-14 — the log must record new work, not restate old work.
+
+## BUG-014 — A force-push made the gate diff unacquirable
+- Symptom: after rebasing and force-pushing #27, the push-event CI run failed at the
+  `changed files` step with `fatal: bad object 2a791bf…`, so no gate could run.
+- Reproduction: force-push a branch whose rebase rewrites history; the push event carries the
+  **old tip** in `before`, which is unreachable and therefore absent from a fresh checkout.
+- Classification: governance / gate robustness.
+- Root cause: `src/evaluation/change-range.ts` trusted any non-zero `before` without checking that
+  the commit exists; `git diff <missing>..HEAD` then failed. Failing closed was correct, but the
+  gate could not run at all.
+- Fix: verify `git cat-file -e <before>^{commit}`; use `before` only when it exists, otherwise fall
+  back to `merge-base(origin/main, HEAD)`; if neither resolves and a parent exists, still report
+  **unavailable** (`d87a08a`-series fix).
+- Invariant gap: a missing starting point is *unknown*, not an empty diff and not a pass.

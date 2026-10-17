@@ -655,3 +655,14 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Found by post-review self-audit on #27; the push-event G6 failure is what surfaced the missing record."
+  - date: 2026-10-17
+    task: M6-01
+    branch: m6-r3-gates
+    change: "Gate-range robustness after a force-push: change-range.ts now verifies that a push's `before` commit exists before using it. A rebase rewrites history, so the old tip named by the push event is unreachable in a fresh checkout and `git diff` failed; the resolver now falls back to merge-base(origin/main, HEAD), and still reports unavailable when neither resolves and a parent exists."
+    requirements: [FR-06]
+    invariants: [INV-13]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Owner-approved fix after the push-event CI failure on the rebased #27. Mutation: trusting a missing `before` turns two range tests red."
+

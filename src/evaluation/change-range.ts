@@ -15,7 +15,11 @@ import { pathToFileURL } from 'node:url'
  * So a branch-creation push is reviewed as the **whole branch**:
  * `merge-base(origin/main, HEAD)..HEAD`. When that cannot be resolved the range is
  * reported **unavailable** and the caller fails; a gate is never silently narrower
- * than the push. The one exception is a repository whose first push creates the root
+ * than the push.
+ *
+ * A force-push names the **old tip** in `before`, and that commit may be unreachable and
+ * absent from a fresh checkout. `before` is therefore used only when the object exists;
+ * otherwise the range falls back to the merge base, exactly like a branch-creation push. The one exception is a repository whose first push creates the root
  * commit: there is no parent and no merge base, so every path is new and the empty
  * tree is the honest base.
  *
@@ -106,6 +110,11 @@ function git(cwd: string | undefined, args: readonly string[], input?: string): 
   }
 }
 
+/** Whether a commit exists in this checkout. A force-push can name one that does not. */
+function commitExists(cwd: string | undefined, sha: string): boolean {
+  return git(cwd, ['cat-file', '-e', `${sha}^{commit}`]) !== null
+}
+
 function emptyTree(cwd: string | undefined): string {
   const tree = git(cwd, ['hash-object', '-t', 'tree', '--stdin'], '')
   if (tree === null || tree.length === 0) {
@@ -119,15 +128,20 @@ export function resolveFromEnvironment(env: NodeJS.ProcessEnv = process.env, cwd
   const pullRequestBase = env.PR_BASE_SHA ?? null
   const before = env.PUSH_BEFORE ?? null
 
-  // The common cases need no git at all.
-  if (event === 'pull_request' || (event === 'push' && present(before))) {
+  // A pull request needs no git. A push `before` is used only when the object exists:
+  // after a force-push the old tip is unreachable, so a fresh checkout may not have it.
+  if (event === 'pull_request') {
     return resolveChangeBase({ event, pullRequestBase, before, emptyTree: '' })
   }
 
   if (event === 'push') {
+    if (present(before) && commitExists(cwd, before)) {
+      return resolveChangeBase({ event, pullRequestBase, before, emptyTree: '' })
+    }
+    // No usable `before`: review the whole branch (the push may have rewritten it).
     const mergeBase = git(cwd, ['merge-base', 'origin/main', 'HEAD'])
     if (mergeBase !== null) {
-      return resolveChangeBase({ event, pullRequestBase, before, mergeBase, emptyTree: '' })
+      return resolveChangeBase({ event, pullRequestBase, before: null, mergeBase, emptyTree: '' })
     }
     // No merge base: either the repository's first push (no parent) or a range that
     // cannot be established — never the tip's parent.
@@ -135,7 +149,7 @@ export function resolveFromEnvironment(env: NodeJS.ProcessEnv = process.env, cwd
     return resolveChangeBase({
       event,
       pullRequestBase,
-      before,
+      before: null,
       mergeBase: null,
       parent,
       emptyTree: parent === null ? emptyTree(cwd) : '',
