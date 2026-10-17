@@ -267,6 +267,37 @@ describe('console view state', () => {
     expect(stale.session?.epoch).toBe(2)
     expect(stale.session?.lastSeq).toBe(10)
   })
+
+  it('drops a same-epoch snapshot that is behind the accepted sequence', () => {
+    const fresh = reduceServerMessage(
+      opened(),
+      serverMessageSchema.parse(
+        snapshotWith(2, 10, { activeTurnId: 'turn-new', capabilityRevision: 2 }),
+      ),
+    )
+    expect(fresh.session?.epoch).toBe(2)
+    expect(fresh.session?.lastSeq).toBe(10)
+    expect(fresh.session?.activeTurnId).toBe('turn-new')
+    expect(fresh.session?.capabilityRevision).toBe(2)
+
+    // A schema-valid epoch-2 snapshot at a lower sequence must not replace the
+    // identity, turn, confirmation or capability of the epoch-2 view at seq 10.
+    const behind = reduceServerMessage(
+      fresh,
+      serverMessageSchema.parse(
+        snapshotWith(2, 5, {
+          activeTurnId: 'turn-old',
+          outputConfirmation: 'pending',
+          capabilityRevision: 1,
+        }),
+      ),
+    )
+    expect(behind.session).toEqual(fresh.session)
+    expect(behind.session?.activeTurnId).toBe('turn-new')
+    expect(behind.session?.outputConfirmation).toBe('confirmed')
+    expect(behind.session?.capabilityRevision).toBe(2)
+    expect(behind.session?.lastSeq).toBe(10)
+  })
 })
 
 /* ------------------------------------------------------------------ *
@@ -348,6 +379,29 @@ function snapshotMessage(epoch = 1, lastSeq = 4): Record<string, unknown> {
       outputConfirmation: 'confirmed',
       capabilityRevision: 1,
       lastSeq,
+    },
+  }
+}
+
+function snapshotWith(
+  epoch: number,
+  lastSeq: number,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    protocolVersion: '0.2',
+    messageId: 'm-snapshot',
+    sessionId: SESSION,
+    epoch,
+    kind: 'session.snapshot',
+    payload: {
+      lifecycle: 'running',
+      activeTurnId: 'turn-fixture-1',
+      performerStatus: 'idle',
+      outputConfirmation: 'confirmed',
+      capabilityRevision: 1,
+      lastSeq,
+      ...overrides,
     },
   }
 }
@@ -684,6 +738,193 @@ describe('console playback binding', () => {
     expect(receipts.some((receipt) => receipt.stage === 'cancelled')).toBe(false)
     expect(binding.status().idle).toBe(false)
     expect(binding.status().activeOutputId).toBe(command.outputId)
+    binding.dispose()
+  })
+
+  it('ignores a cancellation whose envelope names another session', async () => {
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const media = createControlledMediaDriver()
+    const receipts: PerformanceReceipt[] = []
+    const faults: string[] = []
+
+    const binding = createPlaybackBinding({
+      bootstrap: bootstrap(1),
+      resolver,
+      media,
+      newReceiptId: () => 'console-receipt',
+      localNowMs: () => 12,
+      onReceipt: (receipt) => receipts.push(receipt),
+      onStatus: () => {},
+      onSubtitle: () => {},
+      onFault: (message) => faults.push(message),
+    })
+
+    const command = fixturePerformanceCommand({ epoch: 2 })
+    binding.handleServerMessage(
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId: 'm-execute',
+        sessionId: command.sessionId,
+        epoch: 2,
+        kind: 'performance.execute',
+        payload: command,
+      }),
+    )
+    await waitFor(() => media.createCount() === 1)
+
+    // `PerformanceCancel` carries no sessionId, so a revoking cancel for another
+    // session is schema-valid on the envelope alone. It must not reach M1.
+    binding.handleServerMessage(
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId: 'm-cancel',
+        sessionId: 'session-other',
+        epoch: 2,
+        kind: 'performance.cancel',
+        payload: { requestId: 'cancel-1', revokedEpoch: 2, newEpoch: 3 },
+      }),
+    )
+    await waitFor(() => faults.length === 1)
+
+    expect(faults).toEqual(['cancel cancel-1: envelope names a different session'])
+    expect(receipts.some((receipt) => receipt.stage === 'cancelled')).toBe(false)
+    expect(binding.status().idle).toBe(false)
+    expect(binding.status().activeOutputId).toBe(command.outputId)
+    binding.dispose()
+  })
+
+  it('keeps the playing subtitle when a stale command is rejected', async () => {
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const media = createControlledMediaDriver()
+    const subtitles: string[] = []
+    const faults: string[] = []
+
+    const binding = createPlaybackBinding({
+      bootstrap: bootstrap(1),
+      resolver,
+      media,
+      newReceiptId: () => 'console-receipt',
+      localNowMs: () => 12,
+      onReceipt: () => {},
+      onStatus: () => {},
+      onSubtitle: (text) => subtitles.push(text),
+      onFault: (message) => faults.push(message),
+    })
+
+    const playing = fixturePerformanceCommand({ epoch: 2, subtitleText: 'now playing' })
+    binding.handleServerMessage(
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId: 'm-execute',
+        sessionId: playing.sessionId,
+        epoch: 2,
+        kind: 'performance.execute',
+        payload: playing,
+      }),
+    )
+    // The subtitle follows admission, not arrival: it is shown for the output M1
+    // accepted, synchronously.
+    expect(subtitles).toEqual(['now playing'])
+
+    // An epoch-1 command is stale against the epoch-2 operation: M1 rejects it
+    // before any effect, so it must not replace the playing subtitle.
+    const stale = fixturePerformanceCommand({
+      epoch: 1,
+      outputId: 'output-stale',
+      subtitleText: 'stale text',
+    })
+    binding.handleServerMessage(
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId: 'm-execute-stale',
+        sessionId: stale.sessionId,
+        epoch: 1,
+        kind: 'performance.execute',
+        payload: stale,
+      }),
+    )
+    await waitFor(() => faults.length === 1)
+
+    expect(faults).toEqual(['output-stale: dispatch rejected (stale)'])
+    expect(subtitles).toEqual(['now playing'])
+    expect(binding.status().activeOutputId).toBe(playing.outputId)
+    binding.dispose()
+  })
+
+  it('does not cancel a newer output admitted during an accepted cancel', async () => {
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const media = createControlledMediaDriver()
+    const receipts: PerformanceReceipt[] = []
+    const faults: string[] = []
+
+    const binding = createPlaybackBinding({
+      bootstrap: bootstrap(1),
+      resolver,
+      media,
+      newReceiptId: () => 'console-receipt',
+      localNowMs: () => 12,
+      onReceipt: (receipt) => receipts.push(receipt),
+      onStatus: () => {},
+      onSubtitle: () => {},
+      onFault: (message) => faults.push(message),
+    })
+
+    const first = fixturePerformanceCommand({ epoch: 2 })
+    binding.handleServerMessage(
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId: 'm-execute-1',
+        sessionId: first.sessionId,
+        epoch: 2,
+        kind: 'performance.execute',
+        payload: first,
+      }),
+    )
+    await waitFor(() => media.createCount() === 1)
+    media.current()?.emitPlaying()
+    await waitFor(() => binding.status().lastStage === 'started')
+
+    // A revoking cancel (2 → 3) and a newer epoch-3 execute are delivered
+    // synchronously, before the cancel's continuation resumes. Releasing the
+    // caller signal on the accepted cancel would abort the newly admitted output.
+    binding.handleServerMessage(
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId: 'm-cancel',
+        sessionId: SESSION,
+        epoch: 2,
+        kind: 'performance.cancel',
+        payload: { requestId: 'cancel-1', revokedEpoch: 2, newEpoch: 3 },
+      }),
+    )
+    const second = fixturePerformanceCommand({
+      epoch: 3,
+      outputId: 'output-fixture-3',
+      subtitleText: 'second',
+    })
+    binding.handleServerMessage(
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId: 'm-execute-3',
+        sessionId: second.sessionId,
+        epoch: 3,
+        kind: 'performance.execute',
+        payload: second,
+      }),
+    )
+
+    await settleMicrotasks()
+    await waitFor(() => resolver.leases().length === 2)
+
+    expect(
+      receipts.filter((receipt) => receipt.stage === 'cancelled').map((receipt) => receipt.outputId),
+    ).toEqual([first.outputId])
+    expect(faults).toEqual([])
+    expect(binding.status().idle).toBe(false)
+    expect(binding.status().activeOutputId).toBe(second.outputId)
     binding.dispose()
   })
 })

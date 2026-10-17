@@ -399,9 +399,16 @@ function applySnapshot(state: ConsoleState, message: ServerMessage & { kind: 'se
   const payload = message.payload
   const previous = state.session
   // An out-of-order snapshot must not roll the session back. A snapshot for the
-  // same session at an older epoch is dropped outright rather than merged, so
-  // the accepted identity and sequence stay monotonic.
-  if (previous !== null && previous.sessionId === message.sessionId && message.epoch < previous.epoch) {
+  // same session is dropped outright rather than merged when it is at an older
+  // epoch, or at the same epoch but behind the sequence already accepted, so the
+  // accepted identity, turn, confirmation, capability and sequence stay
+  // monotonic.
+  if (
+    previous !== null &&
+    previous.sessionId === message.sessionId &&
+    (message.epoch < previous.epoch ||
+      (message.epoch === previous.epoch && message.payload.lastSeq < previous.lastSeq))
+  ) {
     return state
   }
   const sameSession = previous !== null && previous.sessionId === message.sessionId

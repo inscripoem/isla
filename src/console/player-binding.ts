@@ -101,12 +101,31 @@ export function createPlaybackBinding(options: PlaybackBindingOptions): Playback
     return caller.signal
   }
 
+  /**
+   * Offer one command over a signal and show its subtitle only if M1 admits it.
+   * M1 validates identity, freshness and duplicates ahead of any effect, so a
+   * duplicate, stale or rejected command leaves the active output unchanged and
+   * must not replace the subtitle of the output that is playing. Admission is
+   * read synchronously from a change of the active output between two status
+   * reads: M1 emits its admission receipt on a later microtask and the
+   * `execute` promise settles only at the end of playback, so neither can be
+   * awaited to learn admission.
+   */
+  const offer = (command: PerformanceCommand, signal: AbortSignal): Promise<PerformanceReceipt> => {
+    const before = controller.status()
+    const promise = controller.execute(command, { signal })
+    const after = controller.status()
+    if (after.activeOutputId === command.outputId && after.activeOutputId !== before.activeOutputId) {
+      options.onSubtitle(command.subtitleText)
+    }
+    return promise
+  }
+
   const execute = async (command: PerformanceCommand): Promise<void> => {
     if (disposed) {
       options.onFault(`ignored ${command.outputId}: the local player is disposed`)
       return
     }
-    options.onSubtitle(command.subtitleText)
     refreshStatus()
     // Offer the command over the current caller signal before disturbing
     // anything. M1 validates identity, freshness and duplicates ahead of any
@@ -115,11 +134,11 @@ export function createPlaybackBinding(options: PlaybackBindingOptions): Playback
     // is playing untouched. Only an explicit `busy` slot conflict — a different
     // output already admitted — justifies superseding it.
     try {
-      await controller.execute(command, { signal: caller.signal })
+      await offer(command, caller.signal)
     } catch (error) {
       if (error instanceof PlayerDispatchError && error.code === 'busy') {
         try {
-          await controller.execute(command, { signal: supersede() })
+          await offer(command, supersede())
         } catch (retryError) {
           options.onFault(`${command.outputId}: ${describe(retryError)}`)
         }
@@ -140,10 +159,12 @@ export function createPlaybackBinding(options: PlaybackBindingOptions): Playback
       refreshStatus()
       return
     }
-    // Accepted: M1 revoked the epoch and settled the operation it owned, so the
-    // caller signal it was bound to is released and renewed for the next
-    // admission. Aborting it now only clears a listener M1 already removed.
-    supersede()
+    // An accepted cancel settles the operation M1 owned and removes its abort
+    // listener, so this binding must not abort the caller signal here. A newer
+    // operation may already be bound to it — a synchronous cancel → execute
+    // through an injected transport — and aborting would cancel that newer
+    // output. Ownership of the signal stays with whoever admits the next
+    // operation; `cancelLocal` and `dispose` still abort whatever is bound.
     refreshStatus()
   }
 
@@ -154,6 +175,13 @@ export function createPlaybackBinding(options: PlaybackBindingOptions): Playback
         return
       }
       if (message.kind === 'performance.cancel') {
+        // `PerformanceCancel` carries no sessionId, so the envelope's session is
+        // the only identity check before cancellation reaches M1. A cancel for a
+        // different session must not revoke this one's playing output.
+        if (message.sessionId !== options.bootstrap.sessionId) {
+          options.onFault(`cancel ${message.payload.requestId}: envelope names a different session`)
+          return
+        }
         void applyCancel(message.payload)
       }
     },
