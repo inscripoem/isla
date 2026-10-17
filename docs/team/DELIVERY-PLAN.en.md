@@ -1,34 +1,35 @@
 # Isla delivery plan
 
-Revision: 2026-10-17.9. Status: under review. Existing roles and workload ratings are unchanged. This snapshot follows the October 17 M5 reviews and numeric reservations; newer heads require renewed checks.
+Revision: 2026-10-17.10. Status: under review. Existing roles and workload ratings are unchanged. This snapshot follows the October 17 M5 reviews and numeric reservations; newer heads require renewed checks.
 
 ## Current baseline
 
-Main is `8937f7daed875b85839e91967dea5e72af210471`, including PR26 SQLite and PR42's storage evidence/C-51 migration. The local `feat/i1-application-loop` branch in `i1-main` adopts that main from the clean signed integration `4c42126`. Both log histories are retained; the package preserves `dev:loop` and runs all six M6 storage suites. No production/browser source or new test implementation was changed by this adoption.
+Main is `c2f9b389170a6790c1d9efbb3aa0f85f2310ace7`, including PR26 SQLite, PR42 storage evidence/C-51, PR27 gate tooling and PR32 governance documentation. The local `feat/i1-application-loop` branch adopts it from clean signed `c3611fb`. Six documentation conflicts are resolved, preserving both log histories and M5 INV-15/C-47. The new Owner columns keep INV-09 with M5 as already defined in the YAML register. The package retains `dev:loop` and all six M6 storage suites. Runtime/browser source remains unchanged; upstream evaluation tooling is adopted without implementation edits.
 
 Remote PR36 remains `191f58b`. [M1's approval](https://github.com/inscripoem/isla/pull/36#pullrequestreview-5548740603) covers that repaired fixed-audio consumer/interface scope only. M2 review and renewed review of the unpublished local increment remain pending.
 
 | PR / head | State at this snapshot | Evidence / next action |
 | --- | --- | --- |
 | [26](https://github.com/inscripoem/isla/pull/26) `68e38c4` | Merged | SQLite implementation on main; application recovery acceptance remains separate |
-| [27](https://github.com/inscripoem/isla/pull/27) `f926a71` | M5 approved | Independent 188 targeted tests / 12 files; push and PR CI pass; human merge decision pending |
-| [32](https://github.com/inscripoem/isla/pull/32) `f000a8e` | M1 approved | M5 interpretation confirmed; refresh the post-PR42 inventory and residual summary wording |
+| [27](https://github.com/inscripoem/isla/pull/27) `f926a71` | Merged | Gates adopted on main c2f9b38; G1 remains advisory; G4 has no real evaluation table |
+| [32](https://github.com/inscripoem/isla/pull/32) `f000a8e` | Merged | Governance adopted; future naming convention still requires a recorded adoption revision |
 | [33](https://github.com/inscripoem/isla/pull/33) `b70843c` | Approved; conflicts with main | Owner reconciliation pending; prior tests remain tied to their original revision |
 | [34](https://github.com/inscripoem/isla/pull/34) `cb91f53` | M5 approved; stacked on PR33 | Current approval does not establish integration with main |
 | [35](https://github.com/inscripoem/isla/pull/35) `b6c078d` | Changes requested | Combined maxTurns repair present; independent 83 M4 + 41 readiness checks pass, but a separate cross-session displacement probe loses a pinned record |
 | [36](https://github.com/inscripoem/isla/pull/36) `191f58b` | M1 old-scope approval; M2 requested | Local diagnostics/integration remain unpublished; current validation below |
-| [40](https://github.com/inscripoem/isla/pull/40) `7edc9b2` | Draft; conflicts with main | Independent 52 evaluation tests / 4 files; push CI passes; report writer, production adapter and real measurements pending |
+| [40](https://github.com/inscripoem/isla/pull/40) `d1a2139` | M5 changes requested | Adapter exception fabricates one provider attempt; independent 689-test verify passes but misses this defect; S5 registered on branch only |
 | [42](https://github.com/inscripoem/isla/pull/42) `a1cd5fc` | Merged as `8937f7d` | Independent 96 storage + 41 readiness checks before merge; committed-WAL claim narrowed, C-51 active on main |
 
-CI, independent tests, review approval, human merge and product acceptance are separate facts. PR27/35/40 were checked with targeted suites, not independently repeated full builds. The PR42 fixture proves committed-WAL recovery; uncommitted-tail recovery and an actual process kill remain unverified.
+CI, independent tests, review approval, human merge and product acceptance are separate facts. PR27/35 were checked with targeted suites; PR40 d1a2139 also passed an independent full verify with 689 tests / 33 files, typecheck, lint and build. The PR42 fixture proves committed-WAL recovery; uncommitted-tail recovery and an actual process kill remain unverified.
 
 ## Immediate coordination
 
-1. [PR27 approval at f926a71](https://github.com/inscripoem/isla/pull/27#pullrequestreview-5557051657) follows the C-51 adoption and unavailable-before-commit resolver fix. Human merge remains pending. G1 stays advisory.
-2. [PR35 changes requested at b6c078d](https://github.com/inscripoem/isla/pull/35#pullrequestreview-5557051916): recall displacement keys only by turnId, so two restored sessions sharing that ID can both be removed, including a pinned record. M4 must repair and publish the session-scoped behavior; retention-default wording also needs correction.
-3. [M4 acknowledged HistoryQueryPort](https://github.com/inscripoem/isla/issues/25#issuecomment-6231206974). C-49/C-50 are registered on PR35 after main's C-51 migration; they are not adopted in this branch. [M5 reserved INV-16 and C-52–C-55 for M6](https://github.com/inscripoem/isla/issues/25#issuecomment-6231858718); M6 registers the rows and validates references. Reservations do not establish merged coverage.
-4. The local PR36 adoption has passed verification; update its exact-revision publication package, then obtain publication approval and renewed consumer review. The existing M1 approval does not cover the local diagnostics increment.
-5. Continue [Issue41](https://github.com/inscripoem/isla/issues/41#issuecomment-6231056482) and the original M2/M3 deliveries. The production runVariant adapter remains M5 work; M6 can implement the report-writing command independently. M3 supplies the rubric/version and observe-versus-enforce caps decision. Metric start/end events, clock domains and observation methods remain provisional; actual audible/silence metrics remain unknown. [Issue37](https://github.com/inscripoem/isla/issues/37) remains open for browser-safe product extraction and coordinated status/decoder adoption.
+1. PR27/32 are merged. Adopt their gates on the actual feature change range; G1 stays advisory, and absent measurements leave G4 explicitly not run. Naming-scheme activation is separate from these merges.
+2. [PR35 changes requested at b6c078d](https://github.com/inscripoem/isla/pull/35#pullrequestreview-5557051916): recall displacement keys only by turnId, so restored sessions sharing that ID can lose a pinned record. M4 supplies the session-scoped fix; current-main trace/log checks and retention-default wording also need attention.
+3. [PR40 changes requested at d1a2139](https://github.com/inscripoem/isla/pull/40#pullrequestreview-5557266501): retain adapter failures but keep unobserved provider-attempt counts unknown. The existing writer function and INV-16/C-52–C-55 registration are present on that unmerged branch. The recorded-run command and S6 production run remain separate follow-ups.
+4. [Issue25 clarification](https://github.com/inscripoem/isla/issues/25#issuecomment-6232454938) keeps source-backed consumer acknowledgements, retains the thread for numeric/global-ADR reservations and assigns application SQLite acceptance to Issue6/I1-01 with M6 Issue7 and M4. S5 registration does not close application recovery. Record a successor/adoption revision before closing the coordination thread.
+5. Complete the authorized local PR36 reconciliation and its exact-commit publication package; publication and renewed M1/M2 consumer review remain separate. The existing approval covers published 191f58b only.
+6. Continue Issue41 and the M2/M3 deliveries. M5 owns the production runVariant adapter; M6 can implement the report-writing command independently. M3 supplies the rubric/version and observe-versus-enforce caps decision. Metric start/end events, clock domains and observation methods remain provisional; actual audible/silence metrics remain unknown. Issue37 remains open for browser-safe product extraction and coordinated status/decoder adoption.
 
 ## M5 local increment and verification
 
@@ -36,9 +37,11 @@ The diagnostics/order/cache increment was authored through genuine OpenCode work
 
 Historical validation: the pre-integration increment passed 667 tests / 34 files. At `4c42126`, independent full verification passed 695 tests / 37 files, typecheck, lint and build. Muted fixed-WAV browser checks at that revision covered two turns, Stop after started, Resume/new turn, reload without replay then a new turn, and socket closure followed by local cancellation. These are media-API observations, not acoustic, live-provider or full application SQLite recovery acceptance.
 
-Current C-51 adoption validation: independent `pnpm verify` passed 703 tests / 39 files, typecheck, lint and build. All local and main historical log entries are preserved; the three adopted storage test files match main exactly. This adoption directly maintains documentation and integrates already-authored upstream tests; it does not create a new OpenCode development session. Browser source is unchanged, so the historical browser observation remains explicitly tied to `4c42126`.
+Previous C-51 adoption validation at c3611fb: independent `pnpm verify` passed 703 tests / 39 files, typecheck, lint and build. All local and main historical log entries are preserved; the three adopted storage test files match main exactly. This adoption directly maintains documentation and integrates already-authored upstream tests; it does not create a new OpenCode development session. Browser source is unchanged, so the historical browser observation remains explicitly tied to `4c42126`.
 
-Preservation: signed `4c42126` and the external `pr36-c51-adoption-20261017` archive are the rollback anchors. Both historical log entry sets are retained; the new entry records this actual integration. No reset/clean or remote publication is included. Preserve later user edits before any restoration.
+Current c2f9b38 reconciliation: independent `pnpm verify` passed 765 tests / 44 files, typecheck, lint and build. Trace passed 15 tests with the actual main-to-feature file list; G6 passed with main's log as its base. G1 reports the missing `tests-approved` label in advisory mode, not process approval. G4 explicitly reports not run because the evaluation table is absent. The first run exposed two documentation compatibility issues: one historical log entry lacked an invariants list, and old progress edits touched the newly frozen blueprint. The list is now explicitly empty without inferred IDs; all original log fields and source evidence are retained. The blueprint matches main exactly, while this plan and the I1 handoff carry current behavior/status. A later full run encountered one unchanged CLI SIGINT exit assertion (130 versus 0); the isolated three-case CLI suite and subsequent full verify passed without implementation changes. Initial failures and rerun logs remain in external evidence. No new application implementation or browser observation was made.
+
+Preservation: signed `c3611fb` and external `pr36-main-c2f9b38-20261017` archives are the rollback anchors. Both historical log entry sets are retained; a new entry records the actual integration. No reset/clean or remote publication is included. Preserve later user edits before any restoration.
 
 ## Remaining delivery sequence
 
@@ -59,8 +62,8 @@ M5's Issue41 proposal retains the injected `VariantRun` seam and production asse
 
 ## Coordination and preservation
 
-Main now assigns C-51 to M6. C-49/C-50 remain M4 allocations on PR35; INV-16/C-52–C-55 remain M6 reservations until registered. M5 extends INV-15 to M4's path and C-50 after the reviewed rows and implementation are adopted. This branch retains its existing INV-15/C-47 coverage without importing unmerged module work.
+Main now assigns C-51 to M6. C-49/C-50 remain M4 allocations on PR35; INV-16/C-52–C-55 are registered on PR40 d1a2139, not imported here or merged on main. M5 extends INV-15 to M4's path and C-50 after the reviewed rows and implementation are adopted. This branch retains its existing INV-15/C-47 coverage without importing unmerged module work.
 
-The future owner-prefixed naming scheme requires corrected PR32 documentation, supporting ID validation and a recorded adoption revision. Until then use numeric reservations in Issue25; M5 coordinates global ADR reservations there. G1 enforcement still needs verified wiring and the recorded team activation decision; no enforcement or branch-setting change occurred.
+The future owner-prefixed naming scheme requires corrected documentation, supporting ID validation and a recorded adoption revision; merged PR27/32 provide tooling/documentation, not the adoption record. Until then use numeric reservations in Issue25; M5 coordinates global ADR reservations there. G1 enforcement still needs verified wiring and the recorded team activation decision; no enforcement or branch-setting change occurred.
 
 Issue22 closed with PR30; this does not complete I1 or durable recovery. Issues2–7/25/37/41 remain open. Preserve the PR30, i1-current and i1-integration worktrees and archives. Agents never merge GitHub PRs. Course deadlines were not re-audited.

@@ -1,11 +1,11 @@
 # I1 application transport handoff (protocol 0.2)
 
-Status: under review · 2026-10-17.3 · Owner: M5 (runtime) · Consumer: M2 (console)
+Status: under review · 2026-10-17.4 · Owner: M5 (runtime) · Consumer: M2 (console)
 
 PR36 publishes the repaired I1 slice at `191f58b`; [M1 approved this head](https://github.com/inscripoem/isla/pull/36#pullrequestreview-5548740603) within the fixed-audio consumer/interface scope. M2 review remains requested. The repair described under [Physical status, send
 provenance and cached terminals](#physical-status-send-provenance-and-cached-terminals)
 is published, with 653 tests / 31 files independently verified and passing CI.
-The earlier integration at `4c42126` adopted main `a2ecb86` (PR26 SQLite) after checkpoint `f25ab81`. The local branch now adopts main `8937f7d` (PR42 evidence and C-51 migration); only an appended-log conflict required resolution, and production/browser source remains unchanged. The published PR36 head remains `191f58b` until a separately approved push. M2/M3 ownership is unchanged.
+The earlier integration at `4c42126` adopted main `a2ecb86` (PR26 SQLite) after checkpoint `f25ab81`. The signed `c3611fb` integration adopted main `8937f7d` (PR42 evidence/C-51). This reconciliation adopts main `c2f9b38` (PR27 gates/PR32 governance): six document conflicts are resolved, both log histories and M5 INV-15/C-47 are preserved, and the new Owner columns retain M5 ownership of INV-09. Runtime and browser source remain unchanged; upstream evaluation tooling is adopted unchanged. The published PR36 head remains `191f58b` until a separately approved push. M2/M3 ownership is unchanged.
 
 The local diagnostics and ordering/cache follow-up passed 667 tests before integration. The earlier combined tree at `4c42126` independently passed 695 tests / 37 files, typecheck, lint and build; current combined validation is recorded in [the delivery plan](DELIVERY-PLAN.en.md). Muted fixed-WAV browser checks at `4c42126` passed two turns, Stop after started, Resume/new turn, reload without replay then a new turn, and socket closure followed by local cancellation. These are media-API observations, not acoustic or full SQLite application recovery acceptance. Publication and consumer review of the combined revision remain pending; M1's existing approval covers only the published head. Preserve status-before-receipt, identity correlation and reload-safe IDs; production extraction must remain browser-safe and must not import test code.
 

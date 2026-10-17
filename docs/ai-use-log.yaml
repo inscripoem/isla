@@ -100,6 +100,8 @@ entries:
       and start a fresh stopped live session without replay. Refresh the I1-only
       increment onto PR30 7297da4, retaining its ten-case M4/M6 consumption suite.
     requirements: [FR-04, FR-05, FR-06]
+    # Added for G6 schema compatibility; the original entry recorded no invariant list.
+    invariants: []
     commits: []
     agent: opencode/deepseek-v4-flash
     provider: self-api
@@ -708,3 +710,164 @@ entries:
     commits: []
     agent: Codex
     human_review: "Captain explicitly authorized local fetch, merge, full-file staging and signed commit. This entry records direct documentation/integration work, not a new OpenCode development session. Combined verification is recorded in the delivery plan; prior browser evidence remains bound to 4c42126. Publication and consumer review are separate."
+
+  - date: 2026-10-14
+    task: R3
+    branch: m6-r3-gates
+    change: "R3 commit 1: traceability fitness functions (chain checks) over the artifacts (sub-issue #17)"
+    requirements: [FR-06]
+    invariants: [INV-12]
+    cases: [C-34, C-35]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Caught real register gaps (INV-01..03, INV-11); ADR-006"
+  - date: 2026-10-14
+    task: R3
+    branch: m6-r3-gates
+    change: "R3 commit 2: named blocking CI gates (G2/G3/G5/G6 + trace) and the G6 AI-use-log gate (sub-issue #17)"
+    requirements: [FR-06]
+    invariants: [INV-13]
+    cases: [C-36]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Wired the gates into ci.yml; README documents the gate design; ADR-006 D2"
+  - date: 2026-10-14
+    task: R3
+    branch: m6-r3-gates
+    change: "R3 commit 3: frozen manifest, PR handoff template, D4 QA records (sub-issue #17)"
+    requirements: [FR-06]
+    invariants: [INV-12]
+    cases: [C-35]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Governance documents; ADR-006 D3"
+  - date: 2026-10-14
+    task: R3
+    branch: m6-r3-gates
+    change: "R3 commit 4: explicit Owner indicators on shared governed tables (invariants.md, trace-matrix.md) + trace-fitness enforcement; case C-37"
+    requirements: [FR-06]
+    invariants: [INV-12]
+    cases: [C-37]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Owner-approved Option A (mixed-artifact classification); ADR-006"
+  - date: 2026-10-16
+    task: R3
+    branch: m6-r3-gates
+    change: "R3 gate increment: enforce the owner-prefixed id convention in the traceability fitness function (accept C-M6-1 as well as C-12; reject a prefixed id whose Owner is not that module) and implement gate G4 as an honest non-blocking check (reports not run without an evaluation set, never a pass; fails a table that omits the fixed conditions NFR-01 requires); accuracy pass on README, ADR-006 and the debt register"
+    requirements: [FR-06]
+    invariants: [INV-12]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Pending owner review; the case id for the id-enforcement and the G4 gate follows the convention in docs/code-governance/structural-constraints.md (allocate before adding, never self-assign)"
+  - date: 2026-10-16
+    task: R3
+    branch: m6-g1-gate
+    change: "Proposal for gate G1 (tests approved before implementation): src/evaluation/test-approval-gate.ts reads the tests-approved pull-request label for a change under src/ or prompts/, run as an ADVISORY CI step that reports and never fails a run, with an enforce mode ready to switch on; the proposal document records the six decisions, the step-by-step behaviour and the traceability chain"
+    requirements: [FR-06]
+    invariants: [INV-12]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Awaiting the team's agreement (at least 3 of 6) before switching the step from advise to enforce; case id C-M6-1 is pending allocation per structural-constraints.md section 3"
+  - date: 2026-10-16
+    task: R3
+    branch: m6-r3-gates
+    change: "M5 review fixes on R3: the frozen-path check now runs against the real CI diff (changed-files.ts plus a negative case); one fail-closed, NUL-safe diff acquisition shared by G1, trace and G6; INV-01..03 Owner restored to M5; the pull_request trigger includes labeled/unlabeled and the docs name the real check (the G1 step inside verify); plus the five-question pre-review checklist in the PR template and verification-constraints."
+    requirements: [FR-06]
+    invariants: [INV-13, INV-14]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Addresses M5's CHANGES_REQUESTED on 92871c2. This entry itself was demanded by the newly wired G6 gate, which failed the push run for a src/ change without a log update - the gate catching its own author. No re-review requested yet; G1 remains advisory."
+  - date: 2026-10-16
+    task: R3
+    branch: m6-r3-gates
+    change: "R3 double-check corrections: the tooling now cites the renumbered invariants (trace -> INV-13, AI-use log -> INV-14) across trace-fitness, ai-use-log-gate, ci.yml and ADR-006; and the gate change-set file is written under .cache (gitignored) instead of the repository root. Found by running the new pre-review checklist over our own work."
+    requirements: [FR-06]
+    invariants: [INV-13, INV-14]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Same self-review pass as the M5 review fixes; no re-review requested yet."
+  - date: 2026-10-16
+    task: R3
+    branch: m6-r3-gates
+    change: "R3 deep-check hardening of the change-set acquisition: the list is NUL-separated end to end, so a path containing a space or a newline stays one path, and the reader is strict - an unset variable is a local run with no diff, but a set-but-missing or unreadable file FAILS the run with a named error instead of passing vacuously. Found by probing the gate CLIs with a directory, a missing file and a newline path."
+    requirements: [FR-06]
+    invariants: [INV-13, INV-14]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Same self-review pass; no re-review requested yet."
+  - date: 2026-10-16
+    task: R3
+    branch: m6-r3-gates
+    change: "Gate G6 now validates the AI-use log's shape, not only that the file changed: every entry must carry a non-empty date (YYYY-MM-DD), task, change and agent, with requirements/invariants/commits as lists, and the log must exist and parse. A one-line edit can no longer satisfy the gate. Proven against the committed log (0 violations) and by mutation (removing one agent field fails, naming the entry)."
+    requirements: [FR-06]
+    invariants: [INV-14]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Found while assessing whether the six gates are strong enough; no re-review requested yet."
+  - date: 2026-10-16
+    task: R3
+    branch: m6-r3-gates
+    change: "G6 now requires the log change to ADD a complete entry: the CI step records the log's own diff and the gate rejects a change that only edits the file (no new entry with task/change/agent). Applied only when a code or prompt change triggers the rule, so a documentation-only fix to the log is not forced to invent an entry; a patch that was expected and did not arrive fails closed. Closes the loophole the shape check left open."
+    requirements: [FR-06]
+    invariants: [INV-14]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Makes the previous commit's claim true; no re-review requested yet."
+  - date: 2026-10-17
+    task: M6-01
+    branch: m6-r3-gates
+    change: "R3 review finding 1: the gate diff no longer narrows to the tip parent on a branch-creation push. A new resolver uses the PR base, the push `before`, or merge-base(origin/main, HEAD) — the whole branch — and fails closed when the range is unavailable; a root commit uses the empty tree, a manual run the tip parent. Tested against real repositories: a three-commit push must include a file from its first commit, which the old range provably missed."
+    requirements: [FR-06]
+    invariants: [INV-13]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Addresses M5 review finding 1 on #27 (P1). Mutation-checked: restoring the tip-parent fallback fails the two range tests."
+  - date: 2026-10-17
+    task: M6-01
+    branch: m6-r3-gates
+    change: "R3 review finding 2: G6 now proves an entry was ADDED by comparing the entry count with the log at the base revision, instead of searching the diff for added field lines (an edit produced the same lines and passed). CI writes the base copy; a log absent at the base counts as empty."
+    requirements: [FR-06]
+    invariants: [INV-14]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Addresses M5 review finding 2 on #27 (P2). Mutation-checked: accepting an unchanged count fails the edit reproduction."
+  - date: 2026-10-17
+    task: M6-01
+    branch: m6-r3-gates
+    change: "Self-audit after the R3 revisions: the diff-range resolver consults git only when the event does not already carry the base (a pull request's base or a push's before), and only for the fact the case needs; G6 compares the log against merge-base(base, HEAD), so entries added to main after the branch point cannot cancel this branch's own; ADR-006 records G6's added-entry rule. The gates' decisions are unchanged; only the cost and the base selection are."
+    requirements: [FR-06]
+    invariants: [INV-13, INV-14]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Found by post-review self-audit on #27; the push-event G6 failure is what surfaced the missing record."
+  - date: 2026-10-17
+    task: M6-01
+    branch: m6-r3-gates
+    change: "Gate-range robustness after a force-push: change-range.ts now verifies that a push's `before` commit exists before using it. A rebase rewrites history, so the old tip named by the push event is unreachable in a fresh checkout and `git diff` failed; the resolver now falls back to merge-base(origin/main, HEAD), and still reports unavailable when neither resolves and a parent exists."
+    requirements: [FR-06]
+    invariants: [INV-13]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Owner-approved fix after the push-event CI failure on the rebased #27. Mutation: trusting a missing `before` turns two range tests red."
+  - date: 2026-10-17
+    task: I1-01
+    branch: feat/i1-application-loop
+    change: "Integrated main c2f9b38 (merged PR27 gate tooling and PR32 governance) into the local PR36 branch from signed c3611fb. Resolved six documentation conflicts, retained both log histories, adapted the M5 INV-15/C-47 rows to the upstream Owner columns, and kept INV-09 owned by M5 as already recorded in the requirements registry. Adopted upstream gates unchanged; refreshed current team documents without importing unmerged PR35/40 code or registrations. G6 exposed one historical entry without an invariants field; added an explicitly unrecorded empty list without inferring IDs or changing its original narrative. Trace exposed old progress-only edits to the newly frozen architecture blueprint; retained main's frozen blueprint and kept current progress in team documents. Original inputs and the initial failing checks are archived externally."
+    requirements: [FR-05, FR-06]
+    invariants: [INV-09, INV-13, INV-14, INV-15]
+    cases: [C-34, C-35, C-36, C-37, C-47, C-51]
+    commits: []
+    agent: Codex
+    human_review: "Captain explicitly authorized local fetch, merge, full-file staging and a signed integration commit. This records direct documentation and integration work, not a new OpenCode implementation session. Preservation and final verification are recorded in the delivery plan and external evidence; original browser observations remain tied to 4c42126. Publication requires separate approval."

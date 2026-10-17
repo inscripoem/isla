@@ -47,6 +47,10 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-31 | implemented | `test/offline/m6-sqlite-backend.test.ts` | SQLite persists the delivery terminal outcome for recovery |
 | C-32 | implemented | `test/offline/m6-recovery.test.ts` | recovery view separates confirmed history from unresolved records |
 | C-33 | implemented | `test/offline/m6-recovery.test.ts` | restart restores only confirmed history and keeps the rest unknown |
+| C-34 | implemented | `test/offline/trace-fitness.test.ts` | traceability fitness functions accept a valid repository |
+| C-35 | implemented | `test/offline/trace-fitness.test.ts` | traceability fitness functions reject a broken chain |
+| C-36 | implemented | `test/offline/ai-use-log-gate.test.ts` | gate G6 requires the AI-use log for code/prompt changes |
+| C-37 | implemented | `test/offline/trace-fitness.test.ts` | shared governed tables require an explicit owner per row |
 | C-38 | implemented | `test/offline/m6-storage.test.ts` | a commit whose later mutation cannot be published leaves no partial state |
 | C-39 | implemented | `test/offline/m6-storage.test.ts` | a conflicting atomic commit reports the conflict cause on both sides |
 | C-40 | implemented | `test/offline/m6-storage.test.ts` | event content equality is insensitive to object key order |
@@ -88,6 +92,8 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-10 | M6 | C-26, C-27 | — |
 | INV-11 | M6 | C-27, C-28, C-48 | — |
 | INV-12 | M6 | C-32, C-33 | — |
+| INV-13 | M6 | C-34, C-35, C-37 | — |
+| INV-14 | M6 | C-36 | — |
 | INV-15 | M5 | C-47 (existing turn reconstruction ordering regression) | M4/M6 consumer acceptance |
 
 ## Ordering trace correction (2026-10-15)
@@ -98,10 +104,10 @@ The [issue #25 coordination](https://github.com/inscripoem/isla/issues/25#issuec
 | --- | --- |
 | M5 helper header: INV-08 → INV-15 | Local correction under review; not a renumbering of the M6 invariant |
 | M6 config / migration / recovery: INV-09 / INV-10 / INV-11 → INV-10 / INV-11 / INV-12 | Adopted with PR26; merged into main `a2ecb86` |
-| M6 trace gate / log gate: INV-12 / INV-13 → INV-13 / INV-14 | M6 follow-up; pending adoption |
+| M6 trace gate / log gate: INV-12 / INV-13 → INV-13 / INV-14 | Adopted from merged PR27 on main `c2f9b38`; existing historical log entries retain their original IDs |
 | C-48 | M6 legacy-null migration/reopen; implemented in PR26 and merged into main `a2ecb86` |
-| C-49 | Currently M6 append validation in merged PR26; reserved for M4 after M6 migrates active append references to C-51 |
-| C-49 / C-50 / C-51 allocation | C-49/C-50 remain allocated to M4; C-51 to M6 append validation. Active-reference migration is pending M6 work in [Issue25](https://github.com/inscripoem/isla/issues/25#issuecomment-6220210333) |
+| C-49 | Allocated to M4 admission divergence; registered on PR35 `b6c078d`, not adopted in this branch |
+| C-49 / C-50 / C-51 allocation | PR42 merged the active M6 append-validation migration to C-51; C-49/C-50 remain M4 allocations on PR35. [Issue25](https://github.com/inscripoem/isla/issues/25#issuecomment-6232454938) remains the numeric/ADR coordination location |
 
 ## Approval record
 
