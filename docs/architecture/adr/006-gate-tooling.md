@@ -35,7 +35,8 @@ inside `pnpm test`, but are not named gates; G1/G4/G6 are absent). The course di
   `pnpm test:readiness`; **trace** `pnpm test:trace`; **G5** `pnpm test`; **G6** `pnpm gate:ai-use-log`
   over the pull-request diff; then `pnpm build`.
 - **G6** is `src/evaluation/ai-use-log-gate.ts` — a code/prompt change must also update
-  `docs/ai-use-log.yaml` (INV-14).
+  `docs/ai-use-log.yaml` (INV-14), and must **add** an entry: the log at the base revision is compared
+  with the head, so editing an existing entry does not satisfy it.
 - **G1** is an **advisory step inside the `verify` job**: it reads the `tests-approved` label on a
   pull request that changes code or prompts. It becomes blocking when the team agrees and branch
   protection requires `verify` — the check is the job, not a separately named check. **G4** is
