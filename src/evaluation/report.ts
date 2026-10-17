@@ -114,7 +114,7 @@ function invalidNumber(value: number | null): boolean {
  * negative duration, a failed attempt without a reason or a declared sample that differs
  * from the records is a defect even if it would print.
  */
-export function collectReportViolations(input: ReportInput): string[] {
+function collectReportViolations(input: ReportInput): string[] {
   const { run, variants, conditions, meta } = input
   const violations: string[] = []
 
@@ -142,10 +142,19 @@ export function collectReportViolations(input: ReportInput): string[] {
   if (blank(conditions.history.recordSet)) {
     violations.push('the history source and record set are required (they change the prompt)')
   }
+  if (!['durable', 'local', 'none'].includes(conditions.history.source)) {
+    violations.push('the history source must be durable, local or none')
+  }
+  if (!['cold', 'warm', 'mixed'].includes(conditions.coldWarm)) {
+    violations.push('the declared cold/warm state must be cold, warm or mixed')
+  }
   if (conditions.recall.maxTurns !== null) {
     if (!Number.isInteger(conditions.recall.maxTurns) || conditions.recall.maxTurns < 0) {
       violations.push('maxTurns must be a non-negative whole number, or null when the case does not fix it')
     }
+  }
+  if (typeof conditions.recall.supplied !== 'boolean') {
+    violations.push('whether a recall port was supplied must be recorded as true or false')
   }
 
   if (!Number.isInteger(conditions.sampleSize) || conditions.sampleSize <= 0) {
@@ -160,6 +169,12 @@ export function collectReportViolations(input: ReportInput): string[] {
     violations.push('no attempts were recorded; a report with no attempts claims nothing')
   }
 
+  if (!['provider', 'fixture'].includes(conditions.textSource)) {
+    violations.push('the text source must be provider or fixture')
+  }
+  if (!['wall', 'injected'].includes(conditions.clock)) {
+    violations.push('the clock must be wall or injected')
+  }
   if (conditions.textSource === 'fixture') {
     violations.push(
       'a fixture text source is not a benchmark: it consumes no tokens and is not comparable to a provider run',
@@ -207,8 +222,13 @@ function decimal(value: number, digits: number): string {
 }
 
 /** Milliseconds: one decimal is enough to read, and `—` means "not observed". */
-function number(value: number | null): string {
+function ms(value: number | null): string {
   return value === null ? '—' : decimal(value, 1)
+}
+
+/** A whole-number quantity — tokens, or a turn limit; `—` when unobserved. */
+function count(value: number | null): string {
+  return value === null ? '—' : decimal(value, 0)
 }
 
 /** Cost: six decimals, because a per-attempt cost of $0.002 must not print as $0.0. */
@@ -229,7 +249,7 @@ function rate(value: number): string {
 /** Tokens and cost, or `unknown` — never a partial total. */
 function usage(summary: UsageSummary): string {
   if (summary.unknown) return 'unknown'
-  return `${number(summary.inputTokens)} in / ${number(summary.outputTokens)} out / $${cost(summary.costUsd)}`
+  return `${count(summary.inputTokens)} in / ${count(summary.outputTokens)} out / $${cost(summary.costUsd)}`
 }
 
 const STAGE_LABEL: Record<(typeof TIMING_STAGES)[number], string> = {
@@ -245,9 +265,9 @@ const STAGE_LABEL: Record<(typeof TIMING_STAGES)[number], string> = {
 function latencyRows(variantId: string, window: string, summary: WindowSummary): string[] {
   return TIMING_STAGES.map((stage) => {
     const measured: Percentiles = summary.stages[stage]
-    return `| ${cell(variantId)} | ${window} | ${STAGE_LABEL[stage]} | ${measured.n} | ${number(
+    return `| ${cell(variantId)} | ${window} | ${STAGE_LABEL[stage]} | ${measured.n} | ${ms(
       measured.p50,
-    )} | ${number(measured.p95)} |`
+    )} | ${ms(measured.p95)} |`
   })
 }
 
@@ -287,7 +307,7 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
     `| History | ${conditions.history.source} / ${cell(conditions.history.recordSet)} |`,
     `| Text source | ${conditions.textSource} |`,
     `| Clock | ${conditions.clock} |`,
-    `| maxTurns | ${number(conditions.recall.maxTurns)} |`,
+    `| maxTurns | ${count(conditions.recall.maxTurns)} |`,
     `| Recall port | ${conditions.recall.supplied ? 'supplied' : 'not supplied'} |`,
     '',
     '## Results by variant',
@@ -340,7 +360,7 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
     lines.push(
       `| ${cell(record.caseId)} | ${cell(record.variantId)} | ${record.cold ? 'first' : 'later'} | ${
         record.outcome
-      } | ${number(record.totalMs)} | ${record.attempts} | ${cell(record.failureReason ?? '')} |`,
+      } | ${ms(record.totalMs)} | ${record.attempts} | ${cell(record.failureReason ?? '')} |`,
     )
   }
 
@@ -358,7 +378,7 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
 }
 
 /** The artifact gate G4 reads. */
-export const EVALUATION_TABLE_PATH = 'docs/architecture/evaluation-table.md'
+const EVALUATION_TABLE_PATH = 'docs/architecture/evaluation-table.md'
 
 export type WriteReportResult =
   | { readonly ok: true; readonly path: string }

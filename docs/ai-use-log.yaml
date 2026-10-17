@@ -1555,4 +1555,14 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Deep review requested by the owner. Mutations: dropping the total from the clock guard, the numeric check, the failed-reason check or the escaping each turns its test red."
+  - date: 2026-10-17
+    task: M6-02
+    branch: m6-02-bench
+    change: "M6-02 design remediation (D2-D6): the report module exposes only renderEvaluationReport and writeEvaluationReport; the validator and artifact path are internal; number() is split into ms() and count(); a two-way parity test requires every printed condition to have a validation case; and a new import-boundary test confines src/evaluation to Node builtins, yaml, its own files and the published contracts. Runtime enum checks were added for cold/warm state, history source, text source, clock and recall-supplied, so invalid runtime data cannot render. Debt recorded, not fixed: D1 (writer split) and X2 (shared artifact path with #27)."
+    requirements: [NFR-01, NFR-03, NFR-04]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Design-review remediation approved by the owner. Mutations: a forbidden import, a dropped condition check and a re-exported validator each turn a test red."
 
