@@ -1,6 +1,13 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { parse as parseYaml } from 'yaml'
+import {
+  FROZEN_MANIFEST,
+  decodeUtf8,
+  parseFrozenPaths,
+  type RestorationContext,
+  type RestorationFileView,
+  verifyFrozenRestoration,
+} from './frozen-restoration'
 import { columnIndex, parseTables } from './markdown'
 import {
   crossCheckRequirements,
@@ -25,8 +32,7 @@ export interface TraceViolation {
   readonly message: string
 }
 
-export interface TraceFs {
-  read(relative: string): string
+export interface TraceFs extends RestorationFileView {
   exists(relative: string): boolean
   list(relative: string): string[]
 }
@@ -34,18 +40,37 @@ export interface TraceFs {
 export interface TraceOptions {
   /** Files changed by the diff (CI); used by the frozen-path gate. */
   readonly changedFiles?: readonly string[]
+  /**
+   * A verified default-branch baseline for a feature-branch push. Absent (the default)
+   * keeps the frozen check strict; see `frozen-restoration.ts`.
+   */
+  readonly restoration?: RestorationContext
+  /** Where the provenance of a frozen-path decision is reported, when one is made. */
+  readonly onRestoration?: (message: string) => void
 }
 
 /** Filesystem view rooted at `root` (production use). */
 export function nodeTraceFs(root: string): TraceFs {
   return {
-    read: (relative) => readFileSync(join(root, relative), 'utf8'),
+    // Strict UTF-8: malformed bytes throw so the restoration proof denies rather than
+    // comparing a lossy replacement that could hide a real difference.
+    read: (relative) => decodeUtf8(readFileSync(join(root, relative))),
     exists: (relative) => existsSync(join(root, relative)),
     list: (relative) => {
       try {
         return readdirSync(join(root, relative))
       } catch {
         return []
+      }
+    },
+    stat: (relative) => {
+      try {
+        const stats = lstatSync(join(root, relative))
+        if (stats.isSymbolicLink()) return { mode: '120000', regular: false }
+        if (!stats.isFile()) return { mode: '40000', regular: false }
+        return { mode: (stats.mode & 0o111) !== 0 ? '100755' : '100644', regular: true }
+      } catch {
+        return null
       }
     },
   }
@@ -61,7 +86,6 @@ const ADR_ID = /ADR-(\d{3})/g
 // must be widened before the convention is adopted.
 const CASE_ID = /\bC-(?:M[1-6]-)?\d+\b/g
 const SRC_PATH = /`(src\/[^`]+)`/g
-const FROZEN_MANIFEST = `${ARCH}/frozen.yaml`
 /** Module named by an owner-prefixed id (`C-M6-1` / `INV-M6-1`), or nothing. */
 const OWNER_PREFIXED_ID = /^(?:C|INV)-(M[1-6])-\d+$/
 /** Modules named in an Owner cell (`M5`, `M6`, …). Captured so the id is read. */
@@ -256,16 +280,32 @@ export function collectTraceViolations(fs: TraceFs, options: TraceOptions = {}):
     }
   }
 
-  // 7. Frozen paths exist and are unmodified (CI passes the changed-file list).
+  // 7. Frozen paths exist and are unmodified (CI passes the changed-file list). A
+  //    changed frozen path is exempt only when a verified main-baseline restoration
+  //    proves the committed head *and* the actual checked file carry the pinned
+  //    default-branch revision's own blob, contents and mode; a real edit, a dirty
+  //    working tree, a mode change, a symlink, a deletion or a missing/unavailable
+  //    baseline still fails.
   if (fs.exists(FROZEN_MANIFEST)) {
-    const manifest = parseYaml(fs.read(FROZEN_MANIFEST)) as { frozen?: unknown } | null
-    const frozen = Array.isArray(manifest?.frozen) ? (manifest.frozen as unknown[]) : []
+    const frozen = parseFrozenPaths(fs.read(FROZEN_MANIFEST))
     for (const entry of frozen) {
-      if (typeof entry !== 'string') continue
       if (!fs.exists(entry)) add('frozen-path-missing', `frozen path does not exist: ${entry}`)
-      if (options.changedFiles !== undefined && options.changedFiles.includes(entry)) {
-        add('frozen-modified', `frozen path modified: ${entry}`)
+      if (!(options.changedFiles?.includes(entry) ?? false)) continue
+
+      const restoration = options.restoration
+      if (restoration !== undefined) {
+        const verdict = verifyFrozenRestoration(restoration, entry, fs)
+        if (verdict.restored) {
+          options.onRestoration?.(
+            `frozen path ${entry} restored to baseline ${restoration.baseline} (${verdict.proof})`,
+          )
+          continue
+        }
+        options.onRestoration?.(
+          `frozen path ${entry} modified; restoration denied: ${verdict.reason}`,
+        )
       }
+      add('frozen-modified', `frozen path modified: ${entry}`)
     }
   }
 
