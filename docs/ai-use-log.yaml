@@ -666,3 +666,134 @@ entries:
     agent: opencode/deepseek-v4-flash
     human_review: "Owner-approved fix after the push-event CI failure on the rebased #27. Mutation: trusting a missing `before` turns two range tests red."
 
+  - date: 2026-10-16
+    task: M6-02
+    branch: m6-02-bench
+    change: "M6-02 slice 1 (measurement record): src/evaluation/metrics.ts — AttemptRecord / StageTiming / AttemptUsage, a nearest-rank percentile with no dependency, and an honest summarise (failed and cancelled attempts are counted, a stage reports the sample it measured, usage is summed only when every attempt reports it). Plus ADR-007, Delta-007 and 10 tests. Additive only: no contract, register or behaviour change."
+    requirements: [NFR-01, NFR-03, NFR-04]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Owner-directed head start while PRs #26/#27/#32 await review. ADR-007 records the honesty rules; ids are pending allocation per structural-constraints.md section 3 (allocate before adding, never self-assign)."
+  - date: 2026-10-16
+    task: M6-02
+    branch: m6-02-bench
+    change: "M6-02 slices 2-3 (runner + offline end-to-end): src/evaluation/comparison.ts — runComparison over variants x cases with an injected runVariant, so the bench aggregates and does not compose; a thrown variant is recorded as a failure with a reason rather than losing the case; a deliberate not-run case yields a notRun entry and no attempt. Plus a synthetic case set / scripted variant (test/support/m6-02-synthetic.ts) and 7 tests. AttemptRecord gains failureReason. The planned now() dependency was dropped (timings already arrive in the record; the wall-clock stamp belongs to the report slice)."
+    requirements: [NFR-01, NFR-03, NFR-04]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Owner-directed; ids still pending allocation per structural-constraints.md section 3. Three cross-owner questions are open in issue #41."
+  - date: 2026-10-16
+    task: M6-02
+    branch: m6-02-bench
+    change: "M6-02 self-review fix: the runner consumed a variant's cold slot before running, so a deliberately not-run case marked the variant as warmed up and the next case - the first attempt actually made - was recorded as warm. Warm-up is now consumed only when an attempt is recorded. A regression test was written first and failed against the old code. ADR-007 D2/D4 and Delta-007 reconciled with the behaviour."
+    requirements: [NFR-01]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Found in the owner-requested double-check of slices 1-3; ids still pending allocation per structural-constraints.md section 3 (PR #32)."
+  - date: 2026-10-17
+    task: M6-02
+    branch: m6-02-bench
+    change: "M6-02 slice 4 (S4): the evaluation report. src/evaluation/report.ts renders a comparison run into the Markdown gate G4 reads, carrying NFR-01's five fixed conditions plus issue #41 Q3's (persona id/version, model and prompt versions, text budget and accounting, history source and record set, clock domain, maxTurns and recall port). It refuses a fixture text source, latency from an injected clock, zero attempts, a declared sample size that differs from the recorded attempts, blank conditions and undeclared variants. An unobserved stage prints — (never 0) and usage stays unknown. The runner's first-attempt window is labelled 'first attempt', not 'cold'. evaluation-table.md is deliberately not produced without provider access, so G4 stays not run."
+    requirements: [NFR-01, NFR-03, NFR-04]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Owner-approved slice. Ids remain pending allocation per structural-constraints.md section 3; the coverage row is in verification-constraints.md."
+  - date: 2026-10-17
+    task: M6-02
+    branch: m6-02-bench
+    change: "M6-02 slice 5: the case shape from issue #41 Q3a. EvalCase gains optional replyIntent (M3's actual intent, distinct from the human labels.intent) and heldOut (NFR-03). The runner passes the case through unchanged and never defaults an absent field; run-wide conditions stay in FixedConditions rather than being duplicated per case."
+    requirements: [NFR-01, NFR-03, NFR-04]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Owner-approved slice; ids remain pending allocation."
+  - date: 2026-10-17
+    task: M6-02
+    branch: m6-02-bench
+    change: "M6-02 S4 self-review corrections: the report's cost formatter rounded $0.002 to $0.0 (a non-zero cost shown as zero), so cost now prints up to six decimals with a regression test; the report requires and prints a run id and generation date; the per-variant row reuses one summarise call instead of re-implementing the partial-total rule, the counts and the failure rate; ADR-007 D7/D8 were out of order and are corrected. No change to the refusal rules."
+    requirements: [NFR-01, NFR-03, NFR-04]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Found by the requested second pass; each fix mutation-checked (one decimal fails the cost test, removing the run-id guard fails its test)."
+  - date: 2026-10-17
+    task: M6-02
+    branch: m6-02-bench
+    change: "M6-02 writer and baseline: writeEvaluationReport validates before touching the filesystem, writes through a temporary file and renames, and refuses a fixture/injected-clock run; a two-variant report test proves per-variant usage and percentiles do not leak; pnpm test:m6 now runs the three bench suites (128 tests / 7 files) instead of omitting them. No refusal rule changed."
+    requirements: [NFR-01, NFR-03, NFR-04]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Owner-approved tasks 1-3. Mutations: ignoring writer violations kills three tests; one aggregate for every variant kills the multi-variant test."
+  - date: 2026-10-17
+    task: M6-02
+    branch: m6-02-bench
+    change: "M6-02 label boundary: recorded in ADR-007 D8 that EvalCase.labels is stored for NFR-03 but is not scored or compared; the quality rubric is M3's and is not adopted, so a label-aware comparison would invent a semantic rule. Recorded deferral, not an omission."
+    requirements: [NFR-03]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Choice between a label-aware comparison and a recorded deferral put to the owner; deferral chosen because M3 owns the rubric."
+  - date: 2026-10-17
+    task: M6-02
+    branch: m6-02-bench
+    change: "M6-02 deep-review hardening: the injected-clock guard now covers totalMs (a record with only a total passed before); negative or non-finite durations and usage, a failed attempt with no reason, and an impossible calendar date are refused; every Markdown table cell is escaped so a pipe or newline cannot break the table; the per-attempt table names the window; exported API carries JSDoc. No rendered claim changed."
+    requirements: [NFR-01, NFR-03, NFR-04]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Deep review requested by the owner. Mutations: dropping the total from the clock guard, the numeric check, the failed-reason check or the escaping each turns its test red."
+  - date: 2026-10-17
+    task: M6-02
+    branch: m6-02-bench
+    change: "M6-02 design remediation (D2-D6): the report module exposes only renderEvaluationReport and writeEvaluationReport; the validator and artifact path are internal; number() is split into ms() and count(); a two-way parity test requires every printed condition to have a validation case; and a new import-boundary test confines src/evaluation to Node builtins, yaml, its own files and the published contracts. Runtime enum checks were added for cold/warm state, history source, text source, clock and recall-supplied, so invalid runtime data cannot render. Debt recorded, not fixed: D1 (writer split) and X2 (shared artifact path with #27)."
+    requirements: [NFR-01, NFR-03, NFR-04]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Design-review remediation approved by the owner. Mutations: a forbidden import, a dropped condition check and a re-exported validator each turn a test red."
+  - date: 2026-10-17
+    task: M6-02
+    branch: m6-02-bench
+    change: "S5 registration: M5 allocated INV-16 and C-52..C-55; the rows now exist with M6 ownership, the exact verifier strings, NFR-01/NFR-04 acceptance links, trace rows and coverage-map entries. No ids were self-assigned; the numbers came from the #25 allocation."
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: [C-52, C-53, C-54, C-55]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Owner-approved S5 registration after M5's allocation; readiness and trace re-run on this head."
+  - date: 2026-10-17
+    task: M6-02
+    branch: m6-02-bench
+    change: "Design-review fix X2: one EVALUATION_TABLE_PATH constant in src/evaluation/artifacts.ts, imported by the report writer and by gate G4. Before this, report.ts and eval-gate.ts each declared the path, so a change in one could make the gate read a file nobody writes."
+    requirements: [NFR-01]
+    invariants: [INV-16]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Design review on #40 found the duplication; recorded as debt with the trigger 'after #27 merges', which has now fired."
+  - date: 2026-10-17
+    task: M6-02
+    branch: m6-02-bench
+    change: "M5 review P2: the runner no longer fabricates attempts=1 when an adapter throws. AttemptRecord.attempts is number|null; a thrown adapter records null because it may fail before any provider call or after an unreported number. Report validation accepts null, still rejects negative/fractional counts, and the every-attempt table prints — with a legend. Regressions cover a pre-provider exception, a post-call exception with no reliable count, a known count, null rendering and invalid counts; ADR-007 D2 and Delta-007 record the semantics."
+    requirements: [NFR-04]
+    invariants: [INV-16]
+    cases: [C-52, C-54]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Addresses M5 review pullrequestreview-5557266501 on #40. Mutations: attempts=1, null rendering, and rejecting null each turn a regression red."
+

@@ -55,6 +55,7 @@ confirms; it does not discover.**
 | INV-12 (restart restores only confirmed history; no replay) | C-32, C-33 | `m6-recovery.test.ts` (recovery view; restart + isolation) |
 | INV-13 (traceability chain machine-checked) | C-34, C-35, C-37 | `trace-fitness.test.ts` (valid repo → no violations; injected defect or missing owner → violation); `pnpm test:trace` |
 | INV-14 (G6 AI-use log) | C-36 | `ai-use-log-gate.test.ts`; `pnpm gate:ai-use-log` over the PR diff |
+| INV-16 (every executed attempt accounted for; missing usage unknown) | C-52, C-53, C-54, C-55 | `m6-02-metrics.test.ts` (failed/cancelled counted; incomplete usage unknown, never a partial total); `m6-02-comparison.test.ts` (a thrown variant is a failure with a reason); `m6-02-report.test.ts` (a fixture source is refused; this case covers fixture-source rejection only, not every report rule) |
 | FR-06 (history excludes non-delivered) | C-17, C-21 | `m6-storage.test.ts` (confirmed-history tests); conformance `history-fully-delivered-only` |
 | FR-06 (JSONL export carries `versions`) | C-22 | `m6-storage.test.ts` (version attribution) |
 | FR-06 (in-memory vs SQLite agreement) | C-45 | `m6-sqlite-backend.test.ts` (cross-backend integration: state, export, history, payload rejection) |
@@ -81,6 +82,16 @@ Generated and durability suites (same invariants, wider evidence):
 `docs/req/case-registry.yaml` links each implemented case to its verifier file and test string; the
 readiness suite (`src/evaluation/requirements-registry.ts` via `test/offline/requirements.test.ts`)
 rejects a missing file or absent test string.
+
+## M6-02 evaluation report (S4)
+
+- `test/offline/m6-02-report.test.ts` — the report refuses a fixture text source, latency from an injected
+  clock (stage or total), zero attempts, a declared sample size that differs from the recorded attempts, a
+  blank condition, an undeclared variant, a negative/non-finite duration or usage, a failed attempt with no
+  reason, and an impossible calendar date. An unobserved stage prints `—`; usage stays `unknown`; table
+  cells are escaped. `writeEvaluationReport` is the only writer and validates before touching the
+  filesystem. Gate **G4** reads the generated table, and the table is **not** produced without provider
+  access.
 
 ## Honest limitations
 

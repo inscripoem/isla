@@ -64,6 +64,10 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-47 | implemented | `test/offline/m5-attribution.test.ts` | M5 delivery attribution capture: normal, request mutation, Stop, late receipt, shared sessions and explicit indices |
 | C-48 | implemented | `test/offline/m6-sqlite.test.ts` | legacy delivery attribution migrates safely (NULL preserved; unsafe legacy data refused) |
 | C-51 | implemented | `test/offline/m6-storage.test.ts` | an event is validated against the schema before append mutates storage |
+| C-52 | implemented | `test/offline/m6-02-metrics.test.ts` | failed and cancelled attempts remain in the aggregate |
+| C-53 | implemented | `test/offline/m6-02-metrics.test.ts` | incomplete usage remains unknown rather than becoming a partial total |
+| C-54 | implemented | `test/offline/m6-02-comparison.test.ts` | a thrown variant is recorded as a failure with a reason |
+| C-55 | implemented | `test/offline/m6-02-report.test.ts` | the evaluation report rejects a fixture text source (this case covers fixture-source rejection only, not every report validation rule) |
 
 ## Requirement trace
 
@@ -75,10 +79,10 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | FR-04 | M1 | C-01, C-04, C-10 | — |
 | FR-05 | M5 | C-03, C-04 | C-08 |
 | FR-06 | M6 | C-12, C-17, C-21, C-22, C-29, C-30, C-31, C-32, C-33, C-45, C-46, C-47 | — |
-| NFR-01 | M5 | — | metric baseline |
+| NFR-01 | M5 | C-52, C-54, C-55 | metric baseline |
 | NFR-02 | M5 | C-10, C-17 | C-05, C-09, recovery duration |
 | NFR-03 | M3 | — | C-16, human rubric |
-| NFR-04 | M3 | C-15 | cost/token caps |
+| NFR-04 | M3 | C-15, C-52, C-53 | cost/token caps |
 | NFR-05 | M5 | C-07 | retention/deletion |
 | NFR-06 | M1 | C-11 | — |
 | INV-01 | M5 | C-03, C-04 | — |

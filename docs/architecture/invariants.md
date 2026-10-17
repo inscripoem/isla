@@ -1,7 +1,7 @@
 # Invariant register
 
-Status: under review. Every invariant carries an explicit **Owner** (M5 owns INV-01..03; M6 owns
-INV-04..14). Shared document — M5 coordination pending. Updated: 2026-10-15.
+Status: under review. Every invariant carries an explicit **Owner** (M5 owns INV-01..03 and INV-15;
+M6 owns INV-04..14 and INV-16). Shared document — M5 coordination pending. Updated: 2026-10-17.
 
 An invariant is a rule that must NEVER be violated. Each entry states its owner, source requirement,
 the deterministic component that enforces it, how it is verified, and the operational fallback if it is
@@ -23,6 +23,7 @@ ever violated (a concrete action, not "fix the bug").
 | INV-12 | On restart, only confirmed history is restored; unresolved outputs remain unknown and are never replayed | FR-06; C7, C-17 | `src/storage/recovery-view.ts` + M5 lifecycle | C-32, C-33 → `m6-recovery.test.ts` (recovery view; restart) | No replay; an unresolved segment is never quoted as spoken (see ADR-005) | M6 |
 | INV-13 | The traceability chain is machine-checked; a broken link fails the gate | FR-06 | `src/evaluation/trace-fitness.ts` | C-34, C-35 → `trace-fitness.test.ts` | A broken link (unregistered invariant, unknown case, missing component/ADR, missing fallback) fails the trace gate (see ADR-006) | M6 |
 | INV-14 | A code or prompt change must update the AI-use log | Gate G6 | `src/evaluation/ai-use-log-gate.ts` | C-36 → `ai-use-log-gate.test.ts` | A code/prompt change without a log update fails gate G6 (see ADR-006) | M6 |
+| INV-16 | Every executed attempt is accounted for, including completed, cancelled and failed attempts; missing usage remains unknown. An explicit not-run result is not an executed attempt | NFR-01, NFR-04 | `src/evaluation/metrics.ts` (`summarise`) + `comparison.ts` + `report.ts` | C-52, C-53, C-54, C-55 → `m6-02-metrics.test.ts`, `m6-02-comparison.test.ts`, `m6-02-report.test.ts` | Report `unknown`/`—`; never count a not-run case as an attempt or convert missing usage to `0` | M6 |
 
 Related existing invariants (owned elsewhere): INV-01, INV-02, INV-03 in `docs/team/REQUIREMENTS.en.md`
 and `docs/req/requirements.yaml`.
