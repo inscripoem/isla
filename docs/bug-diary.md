@@ -65,6 +65,7 @@ bug: **symptom, reproduction, classification, root cause, fix, and the invariant
   was passed as unquoted argv, so a path containing a space split into two.
 - Fix: one acquisition step; explicit base resolution (an all-zero `before` diffs the tip against its
   parent); NUL-separated end to end; a failed acquisition fails the job (`a32cbec`, `f8da3b9`).
+  Superseded in part by BUG-012: the all-zero fallback reviewed only the tip.
 - Invariant gap: a missing value must be `unknown` or an error, never a silent pass.
 
 ## BUG-010 — The AI-use log rule could be satisfied without recording a run
@@ -73,7 +74,8 @@ bug: **symptom, reproduction, classification, root cause, fix, and the invariant
 - Classification: governance / gate strength.
 - Root cause: G6 required only that the file appear in the diff.
 - Fix: validate every entry's shape, then require the change to **add a complete entry** — the CI step
-  records the log's own diff (`100bc9f`, `688e0c1`).
+  records the log's own diff (`100bc9f`, `688e0c1`). Superseded by BUG-013: an edited entry produced the
+  same added lines.
 - Invariant gap: INV-14 — the log must record what changed, not merely change.
 
 ## BUG-011 — The Owner column re-owned three of M5's invariant rows
@@ -85,3 +87,31 @@ bug: **symptom, reproduction, classification, root cause, fix, and the invariant
 - Fix: INV-01..03 set to M5 (`c6508bf`); the register's own suites rejected the first attempt, which left a
   double pipe and an extra empty cell.
 - Invariant gap: a register must not contradict itself.
+
+## BUG-012 — A branch-creation push was reviewed as its last commit
+- Symptom: a push whose first commit changed code and whose last commit changed only documentation had
+  only the documentation commit reviewed; the trace and AI-use-log gates never saw the code.
+- Reproduction: push a new branch whose tip is a docs commit; read the `changed files` step — it diffed
+  `HEAD~1..HEAD`. The tip of #27 was such a push.
+- Classification: governance / gate correctness (M5 review finding 1 on #27).
+- Root cause: an all-zero `before` has no previous commit on the branch, and the code answered that by
+  narrowing the range instead of resolving it.
+- Fix: `src/evaluation/change-range.ts` resolves the intended range — PR base, push `before`, or
+  `merge-base(origin/main, HEAD)` for a branch-creation push — and reports **unavailable** (failing the
+  step) when it cannot. A root commit is reviewed against the empty tree; a manual run against the tip
+  parent, and says so (`7f512c8`).
+- Invariant gap: a gate whose range silently shrinks reports on a change nobody made.
+
+## BUG-013 — G6's entry rule was satisfied by editing an existing entry
+- Symptom: a code change plus an edit to an existing entry's date/task/change/agent passed G6; the entry
+  count stayed the same.
+- Reproduction: run `pnpm gate:ai-use-log` with a code file and the log in the change set, editing the
+  log's only entry; the gate exits 0.
+- Classification: governance / gate strength (M5 review finding 2 on #27).
+- Root cause: the check looked for added `- date:`/field lines anywhere in the diff, which an edit also
+  produces; it never established that an entry was **added**.
+- Fix: CI writes the log **at the base revision** and the gate requires the head to have **more entries**
+  than the base; the new entries' completeness is already covered by the shape check (`100bc9f` pattern
+  superseded). At PR scope the base is the merge base, so the rule proves the change added a record, not
+  that every commit added one.
+- Invariant gap: INV-14 — the log must record new work, not restate old work.

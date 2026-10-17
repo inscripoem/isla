@@ -64,8 +64,14 @@ jobs:
           fi
           # NUL-separated all the way to the gates, so a path containing a space or a
           # newline stays one path.
-          # The logs own diff, so G6 can require the change to ADD a complete entry.
-          git diff --unified=0 "$BASE" HEAD -- docs/ai-use-log.yaml > .cache/ai-use-log.patch
+          # The base copy of the log, so G6 can require the change to ADD an entry
+          # rather than edit an existing one. A log that did not exist at the base is
+          # an empty file: every entry is new.
+          if git cat-file -e "$BASE:docs/ai-use-log.yaml" 2>/dev/null; then
+            git show "$BASE:docs/ai-use-log.yaml" > .cache/ai-use-log.base.yaml
+          else
+            : > .cache/ai-use-log.base.yaml
+          fi
           COUNT="$(tr -cd '\0' < .cache/changed-files.nul | wc -c | tr -d ' ')"
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
           echo "changed files: $COUNT"
@@ -101,7 +107,7 @@ jobs:
         id: g6
         env:
           CHANGED_FILES_FILE: .cache/changed-files.nul
-          AI_USE_LOG_PATCH_FILE: .cache/ai-use-log.patch
+          AI_USE_LOG_BASE_FILE: .cache/ai-use-log.base.yaml
         run: pnpm gate:ai-use-log
 
       - name: G4 - semantic evaluation (reported not run without an evaluation set)

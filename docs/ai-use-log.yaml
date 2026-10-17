@@ -625,3 +625,23 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Makes the previous commit's claim true; no re-review requested yet."
+  - date: 2026-10-17
+    task: M6-01
+    branch: m6-r3-gates
+    change: "R3 review finding 1: the gate diff no longer narrows to the tip parent on a branch-creation push. A new resolver uses the PR base, the push `before`, or merge-base(origin/main, HEAD) — the whole branch — and fails closed when the range is unavailable; a root commit uses the empty tree, a manual run the tip parent. Tested against real repositories: a three-commit push must include a file from its first commit, which the old range provably missed."
+    requirements: [FR-06]
+    invariants: [INV-13]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Addresses M5 review finding 1 on #27 (P1). Mutation-checked: restoring the tip-parent fallback fails the two range tests."
+  - date: 2026-10-17
+    task: M6-01
+    branch: m6-r3-gates
+    change: "R3 review finding 2: G6 now proves an entry was ADDED by comparing the entry count with the log at the base revision, instead of searching the diff for added field lines (an edit produced the same lines and passed). CI writes the base copy; a log absent at the base counts as empty."
+    requirements: [FR-06]
+    invariants: [INV-14]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Addresses M5 review finding 2 on #27 (P2). Mutation-checked: accepting an unchanged count fails the edit reproduction."
