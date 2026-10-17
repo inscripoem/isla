@@ -96,6 +96,24 @@ function sampleRun(): ComparisonRun {
 
 const META = { runId: 'run-2026-10-17-1', generatedAt: '2026-10-17' }
 
+const CONDITIONS_HINT = {
+  submitMs: 5,
+  planMs: 40,
+  dialogueMs: 120,
+  synthesisMs: 80,
+  firstAudibleMs: 245,
+  stopToSilenceMs: null,
+} as const
+
+const NO_TIMING = {
+  submitMs: null,
+  planMs: null,
+  dialogueMs: null,
+  synthesisMs: null,
+  firstAudibleMs: null,
+  stopToSilenceMs: null,
+} as const
+
 function input(overrides: {
   run?: ComparisonRun
   conditions?: Partial<FixedConditions>
@@ -235,6 +253,62 @@ describe('the report refuses a run it cannot honestly publish', () => {
         meta: META,
       }).join(' '),
     ).toContain('not declared in the run')
+  })
+})
+
+describe('two variants are reported side by side without leaking aggregates', () => {
+  const MODEL: Variant = { id: 'model-candidate', kind: 'model', combined: true }
+
+  function twoVariantRun(): ComparisonRun {
+    const records = [
+      record({ caseId: 'case-a', variantId: 'rules-baseline', cold: true }),
+      record({
+        caseId: 'case-a',
+        variantId: 'rules-baseline',
+        cold: false,
+        timing: { ...CONDITIONS_HINT, submitMs: 7, planMs: 44 },
+      }),
+      record({
+        caseId: 'case-a',
+        variantId: 'model-candidate',
+        cold: true,
+        timing: { ...CONDITIONS_HINT, submitMs: 9, planMs: 80, dialogueMs: 200, synthesisMs: 120, firstAudibleMs: 420 },
+        totalMs: 420,
+        usage: { inputTokens: 150, outputTokens: 70, costUsd: 0.004, usageMissing: false },
+      }),
+      record({
+        caseId: 'case-a',
+        variantId: 'model-candidate',
+        cold: false,
+        outcome: 'failed',
+        timing: { ...NO_TIMING },
+        totalMs: null,
+        usage: { inputTokens: null, outputTokens: null, costUsd: null, usageMissing: true },
+        failureReason: 'sample rejection',
+      }),
+    ]
+    return { records, notRun: [], summary: summarise(records) }
+  }
+
+  const run = twoVariantRun()
+  const result = renderEvaluationReport({
+    run,
+    variants: [VARIANT, MODEL],
+    conditions: { ...CONDITIONS, sampleSize: 4 },
+    meta: META,
+  })
+  const text = result.ok ? result.markdown : ''
+
+  it('reports a separate row per variant, with separate usage', () => {
+    expect(result.ok).toBe(true)
+    expect(text).toContain('| rules-baseline | rules | no | 2 | 2 | 0 | 0 | 0.0% | 240 in / 120 out / $0.004 |')
+    expect(text).toContain('| model-candidate | model | yes | 2 | 1 | 0 | 1 | 50.0% | unknown |')
+  })
+
+  it('reports separate first-attempt and later-attempt percentiles per variant', () => {
+    expect(text).toContain('| rules-baseline | first attempt | submit (M5) | 1 | 5 | 5 |')
+    expect(text).toContain('| model-candidate | first attempt | submit (M5) | 1 | 9 | 9 |')
+    expect(text).toContain('| model-candidate | later attempts | submit (M5) | 0 | — | — |')
   })
 })
 
