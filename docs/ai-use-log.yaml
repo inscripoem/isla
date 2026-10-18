@@ -1255,6 +1255,7 @@ entries:
       historical live-verification status using actual recorded results.
     requirements:
       - NFR-06
+    invariants: []
     commits: []
     agent: opencode/deepseek-flash
     provider: deepseek
