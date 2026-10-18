@@ -794,4 +794,47 @@ entries:
       the conditional cancellation-ownership fix and their four regressions.
       Merge remains a human action; no merge or auto-merge was requested or
       performed.
+  - date: 2026-10-18
+    task: M2-01
+    branch: feat/m2-01-console
+    change: >-
+      Resolve the M1 mount-boundary review of PR #43 (one P1, one P2) without
+      changing application protocol 0.2. P1: console-state.ts adds
+      SessionFrontier and reduceSessionFrontier, the session projection of
+      reduceServerMessage without the view lists; player-binding.ts reduces
+      every decoded message onto that frontier and fences execute admission
+      against it, so a command behind the accepted epoch or for a stopped
+      session is refused before M1 sees it instead of being admitted on M1's
+      lagging bootstrap epoch. P2: player-binding.ts revalidates the owning
+      output and a caller generation before an awaited busy rejection retries,
+      so an old continuation cannot supersede and revoke a newer output admitted
+      meanwhile on the caller signal an accepted cancel deliberately left bound.
+      Add three offline cases in test/offline/m2-console.test.ts (27 total): the
+      Stop-boundary fence, the busy-continuation owner check, and a
+      frontier/session projection consistency guard.
+    requirements: [FR-04, FR-05]
+    invariants: [INV-01]
+    cases: []
+    commits: [cdfc3a4]
+    agent: traecode/deepseek-v4.1-flash
+    provider: trae-cn
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      The same recorded governance deviation as the M2-01 console entries above:
+      this review-fix increment was authored in a TraeCode session under the
+      Captain-approved plan, so no OpenCode session identifier exists or is
+      asserted.
+    verification:
+      role: "pnpm test:m2: 27 passed (the 24 previous cases plus 3 new regressions)."
+      full_suite: "pnpm verify: 662 tests in 29 files; typecheck, lint and build passed."
+      regressions: >-
+        The three new cases were confirmed to fail against the pre-fix source (the
+        two source edits temporarily stashed, 3 failed and 24 passed) and to pass
+        with the fix restored.
+    human_review: >-
+      Requested: renewed M1 consumer review of the two corrected findings and
+      their three regressions. The shared transport adoption, production client
+      extraction and routing remain with Issue #37, kept Open with unfinished
+      items unchecked. Merge remains a human action; no merge or auto-merge was
+      requested or performed.
 
