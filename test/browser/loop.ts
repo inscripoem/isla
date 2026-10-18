@@ -34,6 +34,11 @@ const resumeButton = element<HTMLButtonElement>('resume')
 const stopButton = element<HTMLButtonElement>('stop')
 const sendButton = element<HTMLButtonElement>('send')
 const inputText = element<HTMLInputElement>('input-text')
+const recoverButton = element<HTMLButtonElement>('recover')
+const recoverAck = element<HTMLInputElement>('recover-ack')
+const recoveryStatusEl = element<HTMLPreElement>('recovery-status')
+const recoveryInstructionEl = element<HTMLParagraphElement>('recovery-instruction')
+const reconnectButton = element<HTMLButtonElement>('reconnect')
 
 const events: string[] = []
 function log(message: string): void {
@@ -77,17 +82,29 @@ const machine: PerformerMachine = createPerformerMachine({
       log(`receipt ${receipt.stage} ${receipt.outputId}`)
     },
     onServiceError: (_raw, reason) => log(`message rejected: ${reason}`),
+    onRecovery: (message) => {
+      const payload = (message as { payload?: Record<string, unknown> }).payload
+      log(`recovery ${String(payload?.status ?? 'unknown')} -> ${String(payload?.successorSessionId ?? '?')}`)
+    },
     onStateChanged: () => render(),
   },
 })
 
 function render(): void {
   const state: PerformerState = machine.state()
+  // `retiring` is the server's explicit retirement state (never inferred from
+  // lifecycle): while it or a recovery request is pending, Send and Resume are
+  // disabled. An ordinary Stop, or a stale/unknown/unauthorized refusal that
+  // never retired the session, leaves normal Resume available.
+  const recoveryFailed = state.recovery.status === 'failed'
+  const recoveryApplied =
+    state.recovery.status === 'applied' || state.recovery.status === 'already_applied'
+  const retiredOrRetiring = state.retiring || state.recovery.status === 'requested'
   statusEl.textContent = [
     `socket: ${socket.readyState}`,
     `session: ${state.sessionId || '(none)'}`,
     `epoch: ${state.epoch}`,
-    `lifecycle: ${state.lifecycle}`,
+    `lifecycle: ${state.lifecycle}${state.retiring ? ' (retiring)' : ''}`,
     `last observed server confirmation: ${state.outputConfirmation}`,
     `local media stage (not proof): ${state.lastStage ?? '(none)'}`,
     `operator: ${state.operator}`,
@@ -101,13 +118,44 @@ function render(): void {
     state.display.reaction === null
       ? '(none)'
       : `${state.display.reaction} (display only; not completion evidence)`
+  recoveryStatusEl.textContent = [
+    `recovery: ${state.recovery.status}`,
+    `retired session: ${state.recovery.retiredSessionId ?? '(none)'}`,
+    `successor session: ${state.recovery.successorSessionId ?? '(none)'}`,
+    `recoveries: ${state.recovery.recoveries}`,
+    `remaining recoveries: ${state.recovery.remainingRecoveries ?? '(unknown)'}`,
+  ].join('\n')
+  if (recoveryApplied) {
+    recoveryInstructionEl.textContent =
+      `Recovered to ${state.recovery.successorSessionId ?? '(unknown)'}. This page keeps its old ` +
+      'session view; reconnect to attach to the successor, which starts stopped and needs a manual Resume.'
+  } else if (recoveryFailed) {
+    recoveryInstructionEl.textContent =
+      state.retiring
+        ? `Recovery failed (${state.error ?? 'unknown'}). The session was retired and is stopped; ` +
+          'retry recovery, or reconnect to reattach.'
+        : `Recovery failed (${state.error ?? 'unknown'}). The live session was not retired; retry ` +
+          'recovery, or reconnect to reattach.'
+  } else {
+    recoveryInstructionEl.textContent = ''
+  }
 
   const hasSession = state.sessionId.length > 0
   const connected = socket.readyState === WebSocket.OPEN
   startButton.disabled = !connected || !hasSession || (state.operator && state.performer)
-  resumeButton.disabled = !(connected && hasSession && state.operator && state.performer) || state.lifecycle === 'running'
-  stopButton.disabled = !(connected && hasSession && state.operator && state.performer) || state.lifecycle !== 'running'
-  sendButton.disabled = !(connected && hasSession && state.performer) || state.lifecycle !== 'running'
+  resumeButton.disabled =
+    !(connected && hasSession && state.operator && state.performer) ||
+    state.lifecycle === 'running' ||
+    retiredOrRetiring
+  stopButton.disabled =
+    !(connected && hasSession && state.operator && state.performer) ||
+    state.lifecycle !== 'running' ||
+    retiredOrRetiring
+  sendButton.disabled =
+    !(connected && hasSession && state.performer) || state.lifecycle !== 'running' || retiredOrRetiring
+  recoverButton.disabled =
+    !(connected && hasSession && state.operator && recoverAck.checked) || state.recovery.status === 'requested'
+  reconnectButton.disabled = !(recoveryApplied || recoveryFailed || (!connected && hasSession))
 }
 
 wireSocket(socket as unknown as SocketLike, machine, {
@@ -168,6 +216,24 @@ resumeButton.addEventListener('click', () => {
 })
 stopButton.addEventListener('click', () => {
   machine.stop()
+})
+recoverAck.addEventListener('change', () => render())
+reconnectButton.addEventListener('click', () => {
+  // A fresh navigation reattaches to the retained session's current snapshot. It
+  // never auto-resumes: the operator Resume remains an explicit decision.
+  window.location.reload()
+})
+recoverButton.addEventListener('click', () => {
+  if (!recoverAck.checked) {
+    log('recovery needs the acknowledgement that playback was ended')
+    return
+  }
+  const messageId = machine.recover()
+  if (messageId === null) {
+    log('recovery needs a session snapshot first')
+    return
+  }
+  log('recovery requested; the operator confirmed playback was ended')
 })
 element<HTMLFormElement>('input-form').addEventListener('submit', (event) => {
   event.preventDefault()

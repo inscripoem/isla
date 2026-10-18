@@ -175,6 +175,73 @@ export const performanceStatusMessageSchema = z.strictObject({
 })
 export type PerformanceStatusMessage = z.infer<typeof performanceStatusMessageSchema>
 
+/**
+ * Explicit operator recovery action for an interrupted session.
+ *
+ * Disconnecting after playback started leaves the retired session's output
+ * evidence unconfirmed and its physical occupancy unknown, so the retained
+ * session can accept input but cannot produce output. The operator may end that
+ * session and continue in a fresh successor that carries only confirmed history.
+ *
+ * The envelope `sessionId` is the session the operator intends to retire: a
+ * request against the current session retires it, and a request against a
+ * session already retired is answered idempotently. `acknowledgePlaybackEnded`
+ * is the operator's own decision that they have ended playback in the previous
+ * session. It is never measured media evidence and never a delivery fact, and
+ * it is deliberately a required literal so the acknowledgement cannot be
+ * omitted. This is an additive protocol-0.2 client kind: a strict decoder that
+ * predates it rejects it rather than ignoring it, so producers and consumers
+ * must be upgraded together.
+ */
+export const sessionRecoverMessageSchema = z.strictObject({
+  ...envelopeBase,
+  kind: z.literal('session.recover'),
+  payload: z.strictObject({ acknowledgePlaybackEnded: z.literal(true) }),
+})
+export type SessionRecoverMessage = z.infer<typeof sessionRecoverMessageSchema>
+
+/**
+ * Server acknowledgement of one recovery request. The envelope stays on the
+ * retiring session and the request's epoch so it correlates to the request; the
+ * successor identity is carried in the payload. `applied` means this request
+ * installed the successor; `already_applied` means an earlier (or concurrent)
+ * request already did, so no second successor was created.
+ */
+export const sessionRecoveryAckMessageSchema = z.strictObject({
+  ...envelopeBase,
+  kind: z.literal('session.recovery.ack'),
+  payload: z.strictObject({
+    status: z.enum(['applied', 'already_applied']),
+    requestMessageId: nonEmptyString,
+    retiredSessionId: nonEmptyString,
+    successorSessionId: nonEmptyString,
+    recoveries: counter,
+    remainingRecoveries: counter,
+  }),
+})
+export type SessionRecoveryAckMessage = z.infer<typeof sessionRecoveryAckMessageSchema>
+
+/**
+ * Explicit application retirement state, pushed by the server.
+ *
+ * `retiring: true` means the runtime has begun retiring the session carried by
+ * this envelope: the session is stopped and new input and Resume are refused
+ * until a retry installs a successor. It is published when valid retirement
+ * begins and to each newly connected client right after its snapshot, so a
+ * reload after a failed retirement still reflects the retired state. A refusal
+ * that never retires the live session (stale, unknown-session, unauthorized or
+ * already-retired) never sets it. The successor session reports `retiring:
+ * false` and remains stopped for a manual Resume. This is an additive
+ * protocol-0.2 server kind: a strict decoder that predates it rejects it rather
+ * than ignoring it, so producers and consumers must be upgraded together.
+ */
+export const sessionRecoveryStateMessageSchema = z.strictObject({
+  ...envelopeBase,
+  kind: z.literal('session.recovery.state'),
+  payload: z.strictObject({ retiring: z.boolean() }),
+})
+export type SessionRecoveryStateMessage = z.infer<typeof sessionRecoveryStateMessageSchema>
+
 /** Envelope for an offer; the command already carries its own identity. */
 export function performanceOffer(
   command: PerformanceCommand,
@@ -221,6 +288,7 @@ export const applicationClientMessageSchema = z.discriminatedUnion('kind', [
   performanceStatusMessageSchema,
   sessionAttachMessageSchema,
   operatorBootstrapMessageSchema,
+  sessionRecoverMessageSchema,
 ])
 export type ApplicationClientMessage = z.infer<typeof applicationClientMessageSchema>
 
@@ -230,6 +298,8 @@ export const applicationServerMessageSchema = z.union([
   operatorAckMessageSchema,
   performanceOfferMessageSchema,
   performanceGrantMessageSchema,
+  sessionRecoveryAckMessageSchema,
+  sessionRecoveryStateMessageSchema,
 ])
 export type ApplicationServerMessage = z.infer<typeof applicationServerMessageSchema>
 

@@ -906,3 +906,86 @@ entries:
         files, symlinks, missing/non-ancestor/unresolvable baselines, aliases and self-approval,
         strict UTF-8/BOM handling, non-feature events, and read-only production Git adapters.
         The frozen list and complete event diff semantics are unchanged. Tests do not mutate Git.
+  - date: "2026-10-18"
+    task: I1-01-session-recovery
+    branch: feat/i1-session-recovery
+    change: >-
+      Add explicit operator session recovery to the protocol-0.2 application endpoint
+      and the I1 loop. A `session.recover` client message (payload
+      `acknowledgePlaybackEnded: true`, the operator's own decision and never media
+      or delivery evidence) retires the old in-memory scheduling and every old
+      connection, installs a fresh stopped successor with a new epoch, its own
+      deadline gate and the same backing store, and carries forward only confirmed
+      history through the existing production reconstruction entry. A new
+      `SessionRecovery` controller owns the selection lineage and the
+      retire/install state machine; retries and concurrent requests resolve to a
+      single successor; unknown and partial outcomes are preserved but never
+      promoted to speech; the archive-source bound stays explicit; and a
+      successor-construction failure is a retryable refusal that leaves the retiring
+      session current without a second live runtime. The server also pushes an
+      explicit `session.recovery.state` (`retiring: true`) to every client,
+      including after a reload, so the page's retired state is server-authoritative
+      rather than inferred from lifecycle. The change is additive at protocol 0.2;
+      no shared register row or case id was added and the existing C-08 row stays
+      pending with no verifier.
+    requirements: [FR-05, FR-06]
+    invariants: [INV-07, INV-08, INV-12]
+    cases: [C-08]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    sessions: [ses_eb2014c63ffePhR2Ga1C7G7sxo, ses_eb180c970ffeoD5t6ywKvYKwFS]
+    human_review: >-
+      Captain approved the recovery slice and its plan. Initial implementation was
+      authored on the former I1 working copy; Captain then approved migration to
+      feat/i1-session-recovery, based on main 2d0459fd (the
+      squashed merge of PR36, whose old head 979f88d had the same tree). PR36 is
+      merged; this branch is a separate follow-up and is not covered by the
+      baseline M1 approval
+      (https://github.com/inscripoem/isla/pull/36#pullrequestreview-5561759957).
+      At completion of local verification, the result was unpublished and under
+      review. Captain subsequently authorized committing and pushing this task
+      branch and creating a new PR. Implementation approval does not replace
+      consumer review or human merge approval; no global configuration was changed.
+    transcript_record: >-
+      This entry records supervised OpenCode work: the initial implementation used
+      ses_eb2014c63ffePhR2Ga1C7G7sxo; the migration continuation used
+      ses_eb180c970ffeoD5t6ywKvYKwFS, with the configured provider; no native
+      transcript is copied into the checkout and none is fabricated; any genuine
+      private evidence remains outside the checkout.
+    verification:
+      focused: >-
+        Recovery suite passes (17 tests: schema strictness, interrupted-playback
+        recovery, fresh stopped successor, confirmed-only carry, partial/unknown
+        exclusion, repeated/concurrent/unauthorized/stale recovery, retryable build
+        failure, `session.recovery.state` handling and demo wiring). Three tests that
+        gated a Stop on any earlier `started` receipt now first capture the already
+        started outputs and wait for a NEWLY started output identity, so each Stop
+        provably acts on its own turn; the stopped-partial-turn test now asserts that
+        the matching cancelled evidence is retained and excluded from the carried
+        confirmed history instead of a timing-dependent refused-Resume premise
+        (recovery refusal stays covered by the disconnect and failed-retirement
+        tests). The twelve I1
+        offline suites pass 109 tests together (performer machine, protocol,
+        application, bridge, deadline, ordering, cache, diagnostics, reconnect
+        identity and the loop demo).
+      browser: >-
+        Genuine Playwright acceptance against the real loop page and runtime
+        (test/browser/recovery-acceptance.mjs) passed all ten scenarios twice on
+        fresh runtime+page servers: initial stopped session, manual Resume and a
+        full two-segment output; an ordinary Stop during a NEW natively playing
+        turn producing a new performance.cancel frame, a new cancelled receipt and
+        genuine local resource release, then a fresh authoritative server snapshot
+        (stopped/confirmed on the SAME session), exactly one applied manual Resume
+        and a new full output; a new playing turn closed at the real /app socket
+        with local release; reload of the SAME session unconfirmed and replay-free;
+        explicit recovery to a DIFFERENT stopped successor; reconnect/bootstrap/
+        attach/manual Resume and two complete fresh turns; and a second recovery
+        preserving lineage. Zero page errors; fixed WAV media-API observations, not
+        acoustic measurement.
+      full_suite: "OpenCode and independent supervisor pnpm verify: 809 passed / 46 files, exit 0; typecheck, lint and build passed. Independent browser: 10/10, zero page errors."
+    scope: >-
+      Lifecycle recovery over the existing in-memory I1 store only. SQLite restart
+      recovery, live dialogue/TTS/VTS, acoustic verification and full I1 acceptance
+      remain open; no new dependency was added and no peer module was implemented.
