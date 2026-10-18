@@ -9,6 +9,7 @@ import {
   type ControlStopMessage,
   type InputAck,
   type InputSubmitMessage,
+  type PerformanceCommand,
   type PerformanceReceipt,
   type PlayerStatus,
   type ServerMessage,
@@ -19,12 +20,14 @@ import {
   reduceControlAck,
   reduceInputAck,
   reduceServerMessage,
+  reduceSessionFrontier,
   withBootstrap,
   withConnection,
   withPendingControl,
   withPendingInput,
   type ConsoleState,
   type ConnectionStatus,
+  type SessionFrontier,
 } from '../../src/console/console-state'
 import {
   ConsoleTransportError,
@@ -297,6 +300,51 @@ describe('console view state', () => {
     expect(behind.session?.outputConfirmation).toBe('confirmed')
     expect(behind.session?.capabilityRevision).toBe(2)
     expect(behind.session?.lastSeq).toBe(10)
+  })
+
+  it('projects the session frontier exactly like the console session view', () => {
+    let state = opened()
+    let frontier: SessionFrontier = { sessionId: SESSION, epoch: 1, lifecycle: 'running', lastSeq: 4 }
+    const messages: ServerMessage[] = [
+      sessionEvent(6),
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId: 'm-stop-ack',
+        sessionId: SESSION,
+        epoch: 2,
+        kind: 'control.ack',
+        payload: {
+          sessionId: SESSION,
+          requestId: 'control-request-1',
+          requestMessageId: 'control-message-1',
+          action: 'stop',
+          status: 'applied',
+          previousEpoch: 1,
+          epoch: 2,
+          lifecycle: 'stopped',
+          outputConfirmation: 'pending',
+          reasonCode: null,
+          message: 'stopped',
+        },
+      }),
+      serverMessageSchema.parse(snapshotWith(3, 7, { lifecycle: 'running', capabilityRevision: 2 })),
+    ]
+
+    for (const message of messages) {
+      state = reduceServerMessage(state, message)
+      frontier = reduceSessionFrontier(frontier, message)
+    }
+
+    expect(state.session).not.toBeNull()
+    // The frontier the player binding reduces must project the same accepted
+    // session identity, epoch, lifecycle and sequence as the console view, so
+    // admission cannot drift from the state the console already accepted.
+    expect(frontier).toEqual({
+      sessionId: state.session!.sessionId,
+      epoch: state.session!.epoch,
+      lifecycle: state.session!.lifecycle,
+      lastSeq: state.session!.lastSeq,
+    })
   })
 })
 
@@ -925,6 +973,158 @@ describe('console playback binding', () => {
     expect(faults).toEqual([])
     expect(binding.status().idle).toBe(false)
     expect(binding.status().activeOutputId).toBe(second.outputId)
+    binding.dispose()
+  })
+
+  it('refuses a command the console has already superseded by an accepted Stop', async () => {
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const media = createControlledMediaDriver()
+    const receipts: PerformanceReceipt[] = []
+    const subtitles: string[] = []
+    const faults: string[] = []
+
+    const binding = createPlaybackBinding({
+      bootstrap: bootstrap(1),
+      resolver,
+      media,
+      newReceiptId: () => 'console-receipt',
+      localNowMs: () => 12,
+      onReceipt: (receipt) => receipts.push(receipt),
+      onStatus: () => {},
+      onSubtitle: (text) => subtitles.push(text),
+      onFault: (message) => faults.push(message),
+    })
+
+    // A correlated Stop acknowledgement the console accepts advances it to
+    // epoch 2 / stopped. The binding is never asked to perform it, so only the
+    // frontier it reduces from every decoded message keeps M1's epoch boundary
+    // in step with the accepted session.
+    binding.handleServerMessage(
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId: 'm-stop-ack',
+        sessionId: SESSION,
+        epoch: 2,
+        kind: 'control.ack',
+        payload: {
+          sessionId: SESSION,
+          requestId: 'control-request-1',
+          requestMessageId: 'control-message-1',
+          action: 'stop',
+          status: 'applied',
+          previousEpoch: 1,
+          epoch: 2,
+          lifecycle: 'stopped',
+          outputConfirmation: 'pending',
+          reasonCode: null,
+          message: 'stopped',
+        },
+      }),
+    )
+
+    // A late epoch-1 command the console has already superseded, and a command
+    // at the stopped epoch, must both be refused rather than admitted ahead of
+    // the boundary and replacing the subtitle.
+    const late = fixturePerformanceCommand({ epoch: 1, subtitleText: 'late' })
+    const stopped = fixturePerformanceCommand({ epoch: 2, subtitleText: 'stopped' })
+    binding.handleServerMessage(
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId: 'm-execute-late',
+        sessionId: SESSION,
+        epoch: 1,
+        kind: 'performance.execute',
+        payload: late,
+      }),
+    )
+    binding.handleServerMessage(
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId: 'm-execute-stopped',
+        sessionId: SESSION,
+        epoch: 2,
+        kind: 'performance.execute',
+        payload: stopped,
+      }),
+    )
+    await settleMicrotasks()
+
+    expect(faults).toEqual([
+      'ignored output-fixture-1: the command is behind the accepted epoch',
+      'ignored output-fixture-1: the accepted session is stopped',
+    ])
+    expect(subtitles).toEqual([])
+    expect(receipts).toEqual([])
+    expect(binding.status().idle).toBe(true)
+    binding.dispose()
+  })
+
+  it('does not let an old busy continuation revoke a newer output', async () => {
+    const resolver = createControlledResolver()
+    const media = createControlledMediaDriver()
+    const receipts: PerformanceReceipt[] = []
+    const faults: string[] = []
+
+    const binding = createPlaybackBinding({
+      bootstrap: bootstrap(1),
+      resolver,
+      media,
+      newReceiptId: () => 'console-receipt',
+      localNowMs: () => 12,
+      onReceipt: (receipt) => receipts.push(receipt),
+      onStatus: () => {},
+      onSubtitle: () => {},
+      onFault: (message) => faults.push(message),
+    })
+
+    const frame = (messageId: string, command: PerformanceCommand) =>
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId,
+        sessionId: command.sessionId,
+        epoch: command.epoch,
+        kind: 'performance.execute',
+        payload: command,
+      })
+
+    // A owns the slot at epoch 1.
+    const first = fixturePerformanceCommand({ outputId: 'output-a' })
+    binding.handleServerMessage(frame('m-execute-a', first))
+    expect(binding.status().activeOutputId).toBe(first.outputId)
+
+    // B is a different output at the same epoch: M1 rejects it busy, and its
+    // continuation is queued behind this synchronous delivery.
+    const busy = fixturePerformanceCommand({ outputId: 'output-b' })
+    binding.handleServerMessage(frame('m-execute-b', busy))
+
+    // Before that continuation resumes, an accepted cancel 1 → 2 and a newer
+    // epoch-2 output C are delivered. C reuses the caller signal the accepted
+    // cancel deliberately left bound, so an unconditional supersede by the old
+    // continuation would abort the newer output.
+    binding.handleServerMessage(
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId: 'm-cancel-1',
+        sessionId: SESSION,
+        epoch: 2,
+        kind: 'performance.cancel',
+        payload: { requestId: 'cancel-1', revokedEpoch: 1, newEpoch: 2 },
+      }),
+    )
+    const newer = fixturePerformanceCommand({ epoch: 2, outputId: 'output-c' })
+    binding.handleServerMessage(frame('m-execute-c', newer))
+
+    await settleMicrotasks()
+
+    // The resumed continuation revalidates the owner, re-offers on the current
+    // caller and is rejected as stale; it must not cancel the newer output.
+    expect(faults).toEqual(['output-b: dispatch rejected (stale)'])
+    expect(
+      receipts.filter((receipt) => receipt.stage === 'cancelled').map((receipt) => receipt.outputId),
+    ).toEqual([first.outputId])
+    expect(binding.status().idle).toBe(false)
+    expect(binding.status().activeOutputId).toBe(newer.outputId)
     binding.dispose()
   })
 })

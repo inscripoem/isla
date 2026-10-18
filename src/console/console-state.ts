@@ -486,3 +486,70 @@ export function reduceServerMessage(state: ConsoleState, message: ServerMessage)
       return state
   }
 }
+
+/**
+ * The accepted session frontier the console player binding fences admission
+ * against: the identity, epoch, lifecycle and highest accepted sequence already
+ * accepted from server messages.
+ *
+ * It is the session projection of {@link reduceServerMessage} without the view
+ * lists. The binding is never asked to perform a snapshot or a control
+ * acknowledgement, so M1's own epoch boundary only advances on the commands it
+ * was given directly and can lag the console. Reducing every decoded message
+ * through {@link reduceSessionFrontier} and refusing a command outside the
+ * result keeps an output the console has already superseded or stopped from
+ * ever being admitted.
+ */
+export interface SessionFrontier {
+  readonly sessionId: string
+  readonly epoch: number
+  readonly lifecycle: SessionLifecycle
+  readonly lastSeq: number
+}
+
+function advanceFrontierSeq(frontier: SessionFrontier, seq: number): SessionFrontier {
+  return seq > frontier.lastSeq ? { ...frontier, lastSeq: seq } : frontier
+}
+
+/** Project one inbound server message onto the accepted session frontier. */
+export function reduceSessionFrontier(frontier: SessionFrontier, message: ServerMessage): SessionFrontier {
+  switch (message.kind) {
+    case 'input.ack': {
+      const ack = message.payload
+      // A rejected request never advances the sequence, and an acknowledgement
+      // for another identity is not evidence about this session.
+      if (ack.status === 'rejected') return frontier
+      if (ack.sessionId !== frontier.sessionId || ack.epoch !== frontier.epoch) return frontier
+      return advanceFrontierSeq(frontier, ack.seq)
+    }
+    case 'control.ack': {
+      const ack = message.payload
+      if (ack.sessionId !== frontier.sessionId || ack.epoch < frontier.epoch) return frontier
+      return { ...frontier, epoch: ack.epoch, lifecycle: ack.lifecycle }
+    }
+    case 'session.snapshot': {
+      const payload = message.payload
+      const sameSession = message.sessionId === frontier.sessionId
+      // A snapshot behind the accepted epoch, or behind the accepted sequence at
+      // the same epoch, never rolls the session back.
+      if (
+        sameSession &&
+        (message.epoch < frontier.epoch ||
+          (message.epoch === frontier.epoch && payload.lastSeq < frontier.lastSeq))
+      ) {
+        return frontier
+      }
+      return {
+        sessionId: message.sessionId,
+        epoch: message.epoch,
+        lifecycle: payload.lifecycle,
+        lastSeq: sameSession ? Math.max(frontier.lastSeq, payload.lastSeq) : payload.lastSeq,
+      }
+    }
+    case 'session.event':
+      if (message.sessionId !== frontier.sessionId) return frontier
+      return advanceFrontierSeq(frontier, message.payload.seq)
+    default:
+      return frontier
+  }
+}

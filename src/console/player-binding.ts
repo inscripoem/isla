@@ -12,18 +12,26 @@ import type {
   PlaybackController,
 } from '../performance/browser'
 import { PlayerDispatchError, createPlaybackController } from '../performance/browser'
+import { reduceSessionFrontier, type SessionFrontier } from './console-state'
 
 /**
  * Adapter that mounts the M1 browser playback controller behind the M2 console.
  *
  * It translates the two inbound performance commands into local playback calls,
  * holds at most one caller-side abort signal per active output, and forwards
- * locally observed receipts and faults to the console. Two deliberate limits:
- *  - receipts go to a local sink only, because the console transport has no
- *    return channel for player messages yet, so nothing here claims that the
- *    runtime confirmed delivery;
+ * locally observed receipts and faults to the console. It also reduces every
+ * decoded message onto the accepted session frontier and refuses a command
+ * outside it, so an output the console has already superseded or stopped is
+ * never admitted even though M1 only advances its own epoch boundary on the
+ * commands it was given directly. Three deliberate limits:
+ *  - receipts go to a local sink only, because this console slice has no return
+ *    channel for player messages yet, so nothing here claims that the runtime
+ *    confirmed delivery;
  *  - only `performance.cancel` revokes an epoch. A disconnect aborts local
- *    playback without touching the server's epoch sequence.
+ *    playback without touching the server's epoch sequence;
+ *  - the frontier mirrors the console's accepted session view rather than
+ *    proving acoustic silence, so it fences admission without itself claiming
+ *    the runtime stopped delivering.
  */
 
 export interface PlaybackCallbacks {
@@ -69,6 +77,21 @@ export function createPlaybackBinding(options: PlaybackBindingOptions): Playback
   // signal that the operation actually playing is bound to.
   let caller = new AbortController()
   let disposed = false
+  // The accepted session frontier, seeded from the bootstrap identity and
+  // advanced by every decoded message. M1 is only told about performance
+  // commands, so its own epoch boundary can lag this frontier: the fence below
+  // is what keeps a command the console has already superseded out of M1.
+  let frontier: SessionFrontier = {
+    sessionId: options.bootstrap.sessionId,
+    epoch: options.bootstrap.epoch,
+    lifecycle: options.bootstrap.lifecycle,
+    lastSeq: options.bootstrap.seq,
+  }
+  // Bumped whenever the caller signal is deliberately renewed. A busy rejection
+  // resumes after unrelated messages may have been decoded, so a generational
+  // check distinguishes "nothing has superseded since this attempt started"
+  // from "a newer operation already owns the slot".
+  let generation = 0
 
   const refreshStatus = (): void => {
     const current = ref.current
@@ -96,9 +119,24 @@ export function createPlaybackBinding(options: PlaybackBindingOptions): Playback
    * listener and the abort is a harmless no-op.
    */
   const supersede = (): AbortSignal => {
+    generation += 1
     caller.abort()
     caller = new AbortController()
     return caller.signal
+  }
+
+  /**
+   * The frontier reason this command cannot be admitted, or null when it may be
+   * offered to M1. It mirrors the console's accepted identity, so a command the
+   * console has already superseded — a lower epoch after a snapshot or control
+   * acknowledgement advanced it — or one for a stopped session never reaches
+   * M1's admission and can never start or replace playback.
+   */
+  const refuse = (command: PerformanceCommand): string | null => {
+    if (command.sessionId !== frontier.sessionId) return 'the command names another session'
+    if (command.epoch < frontier.epoch) return 'the command is behind the accepted epoch'
+    if (frontier.lifecycle === 'stopped') return 'the accepted session is stopped'
+    return null
   }
 
   /**
@@ -126,7 +164,24 @@ export function createPlaybackBinding(options: PlaybackBindingOptions): Playback
       options.onFault(`ignored ${command.outputId}: the local player is disposed`)
       return
     }
+    // Fence against the accepted session frontier before M1 sees the command.
+    // The console accepts snapshots and control acknowledgements the binding is
+    // never asked to perform, so M1's epoch boundary can lag the console: a Stop
+    // acknowledgement advances the console to a newer epoch and stopped while M1
+    // still admits the epoch it was bootstrapped with. A command the console has
+    // already superseded or stopped must not start or replace playback.
+    const refusal = refuse(command)
+    if (refusal !== null) {
+      options.onFault(`ignored ${command.outputId}: ${refusal}`)
+      return
+    }
     refreshStatus()
+    // Capture the owning operation and generation before offering. A busy
+    // rejection resumes on a later microtask, after any messages decoded in
+    // between, so the retry must know whether the slot it wanted is still the
+    // one it saw.
+    const ownerAtStart = controller.status().activeOutputId
+    const generationAtStart = generation
     // Offer the command over the current caller signal before disturbing
     // anything. M1 validates identity, freshness and duplicates ahead of any
     // effect and binds this signal only when it admits a new operation, so a
@@ -137,8 +192,17 @@ export function createPlaybackBinding(options: PlaybackBindingOptions): Playback
       await offer(command, caller.signal)
     } catch (error) {
       if (error instanceof PlayerDispatchError && error.code === 'busy') {
+        // The slot conflict was only a conflict when this attempt started. A
+        // newer output may have been admitted during the await — possibly reusing
+        // the caller signal an accepted cancel deliberately left bound
+        // (cancel → a newer execute) — and an unconditional supersede would
+        // revoke that newer output. Revalidate the owning operation and the
+        // generation first; if either changed, re-offer on the current caller so
+        // M1 rejects the command on its own terms instead of aborting the owner.
+        const stillOwner =
+          generation === generationAtStart && controller.status().activeOutputId === ownerAtStart
         try {
-          await offer(command, supersede())
+          await offer(command, stillOwner ? supersede() : caller.signal)
         } catch (retryError) {
           options.onFault(`${command.outputId}: ${describe(retryError)}`)
         }
@@ -170,6 +234,11 @@ export function createPlaybackBinding(options: PlaybackBindingOptions): Playback
 
   return {
     handleServerMessage(message) {
+      // Reduce the accepted frontier first: the binding must know every epoch
+      // and lifecycle advancement the console accepted, including the snapshot
+      // and control acknowledgements M1 is never told about. Performance
+      // commands project no session change, so this is a no-op for them.
+      frontier = reduceSessionFrontier(frontier, message)
       if (message.kind === 'performance.execute') {
         void execute(message.payload)
         return
