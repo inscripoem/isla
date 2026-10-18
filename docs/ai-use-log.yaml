@@ -515,3 +515,13 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Awaiting review in #42; M4 drops its local copy of the same migration once this lands on main."
+  - date: 2026-10-18
+    task: M4-02
+    branch: feat/m4-02
+    change: "Dialogue retention beyond the recency window: salience pinning that protects a scored turn from character trimming, a rollup line reporting how many turns were omitted instead of dropping them silently, and opt-in delivery recall over the turns the window dropped. `maxTurns` becomes a bound on the turns that reach the prompt in total, so a recalled turn displaces a recent one instead of adding to it, displacement beginning with the oldest unpinned turn and every displaced turn recorded as a `turn-limit` exclusion. Displacement identifies a record by the session-and-turn pair, not by `turnId` alone: the turn counter is session-scoped, so a restored session reuses ids and the bare id dropped a pinned record belonging to another session. Also adds the C-50 agreement guard between M4's reconstruction and M5's `orderTurnDeliveries`, and registers C-49 (admission divergence) and C-50 (ordering agreement) after M6's C-49 -> C-51 migration reached main."
+    requirements: [FR-02]
+    invariants: [INV-15]
+    cases: [C-49, C-50]
+    commits: []
+    agent: workbuddy/claude
+    human_review: "Reviewed in #35 by M5 and M6; the session-scoped identity defect in recall displacement was found by M5's re-review and is fixed here with a regression over repeated turn ids across restored sessions."

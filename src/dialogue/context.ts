@@ -578,20 +578,28 @@ export async function assembleDialogueContext(
    * protection it was scored for; pinned turns are displaced oldest-first only
    * when the quota cannot be met otherwise. Every displaced turn is recorded, so
    * the loss is auditable rather than silent.
+   *
+   * Records are identified by the session-and-turn pair, never by `turnId`
+   * alone: the turn counter is session-scoped, so a restored session reuses ids
+   * that earlier sessions already used. Keying displacement by the bare id made
+   * an unrelated turn in another session disappear alongside the intended one —
+   * and it took a pinned turn first, which is the record the pin exists to keep.
    */
   const recentQuota = Math.max(0, maxTurns - recalledTurns.length)
   const displaced = new Set<string>()
+  const displacementKey = (turn: AssembledTurn): string =>
+    turnKey({ sessionId: turn.sessionId, turnId: turn.turnId })
   for (const turn of recent) {
     if (recent.length - displaced.size <= recentQuota) break
-    if (!turn.pinned) displaced.add(turn.turnId)
+    if (!turn.pinned) displaced.add(displacementKey(turn))
   }
   for (const turn of recent) {
     if (recent.length - displaced.size <= recentQuota) break
-    displaced.add(turn.turnId)
+    displaced.add(displacementKey(turn))
   }
-  const recentTurns = recent.filter((turn) => !displaced.has(turn.turnId))
+  const recentTurns = recent.filter((turn) => !displaced.has(displacementKey(turn)))
   for (const turn of recent) {
-    if (!displaced.has(turn.turnId)) continue
+    if (!displaced.has(displacementKey(turn))) continue
     for (const segment of turn.segments) {
       exclusions.push({
         sessionId: turn.sessionId,

@@ -29,6 +29,7 @@ import type {
   DialoguePort,
   DialogueRequest,
   DialogueSegment,
+  HistoryQueryPort,
 } from '../../src/contracts'
 
 /**
@@ -73,9 +74,11 @@ async function commitTurn(
   memory: DeliveryMemoryStore,
   turnId: string,
   text: string,
+  sessionId: string = FIXTURE_SESSION_ID,
 ): Promise<void> {
   await memory.commit(
     fixtureCommitDelivery({
+      sessionId,
       turnId,
       segmentId: `${turnId}-seg-0`,
       textHash: `hash-${turnId}`,
@@ -88,6 +91,7 @@ async function assembleWith(
   memory: DeliveryMemoryStore,
   options: {
     request?: DialogueRequest
+    history?: HistoryQueryPort
     deliveryRecall?: ReturnType<typeof createKeywordDeliveryRecall>
     personaRecall?: PersonaRecallPort
   } = {},
@@ -95,7 +99,7 @@ async function assembleWith(
   const capture = captureView()
   const port = createDialoguePort({
     clock: FIXTURE_CLOCK,
-    history: memory,
+    history: options.history ?? memory,
     textSource: capturingTextSource(capture),
     ...(options.deliveryRecall === undefined ? {} : { deliveryRecall: options.deliveryRecall }),
     ...(options.personaRecall === undefined ? {} : { personaRecall: options.personaRecall }),
@@ -408,5 +412,65 @@ describe('M4 delivery-memory recall', () => {
       })
       expect(view.turns.length + view.recalledTurns.length).toBeLessThanOrEqual(maxTurns)
     }
+  })
+
+  // The turn counter is session-scoped, so a restored session reuses turn ids
+  // that earlier sessions already used. Displacement has to count, filter and
+  // record by the session-and-turn pair: keyed by the bare id, dropping one
+  // turn also dropped every same-id turn in another session - and took the
+  // pinned one with it, which is the record the pin exists to keep.
+  it('displaces by the session-and-turn pair, not by the turn id alone', async () => {
+    const memory = createDeliveryMemoryStore()
+    // Dropped by the window and recalled back: it shares 'loud' and 'concert'.
+    await commitTurn(memory, 'old-concert', 'The loud concert was bright tonight.', 'archive-old')
+    await commitTurn(memory, 'shared', 'A plain remark about the weather today.', 'archive-a')
+    // Pinned - the promise and the digits clear SALIENCE_PIN_THRESHOLD.
+    await commitTurn(memory, 'shared', 'Remember this: my birthday is 0603.', 'archive-b')
+    await commitTurn(memory, 'new', 'A plain reply for today.', 'live')
+
+    // A history port that spans restored sessions, which is where the reuse
+    // comes from: the durable source is read for one session, but a session
+    // restored from an earlier archive carries ids the live session also uses.
+    const history: HistoryQueryPort = {
+      confirmedHistory: async () => [
+        ...(await memory.confirmedHistory('archive-old')),
+        ...(await memory.confirmedHistory('archive-a')),
+        ...(await memory.confirmedHistory('archive-b')),
+        ...(await memory.confirmedHistory('live')),
+      ],
+    }
+
+    const view = await assembleWith(memory, {
+      history,
+      request: fixtureDialogueRequest({
+        selectedInput: { eventId: 'evt-recall', text: 'Tell me about the loud concert' },
+        contextLimits: { maxTurns: 3, maxCharacters: 2000 },
+      }),
+      deliveryRecall: createKeywordDeliveryRecall(),
+    })
+
+    expect(view.recalledTurns.map((entry) => [entry.turn.sessionId, entry.turn.turnId])).toEqual([
+      ['archive-old', 'old-concert'],
+    ])
+    // One recalled turn leaves room for two recent ones, and the only turn
+    // displaced is the unpinned archive-a record - not its pinned namesake.
+    expect(view.turns.map((turn) => [turn.sessionId, turn.turnId])).toEqual([
+      ['archive-b', 'shared'],
+      ['live', 'new'],
+    ])
+    expect(view.turns.find((turn) => turn.sessionId === 'archive-b')?.pinned).toBe(true)
+    expect(view.turns.length + view.recalledTurns.length).toBe(3)
+
+    const displacedExclusions = view.exclusions.filter((entry) => entry.reason === 'turn-limit')
+    expect(
+      displacedExclusions.some(
+        (entry) => entry.sessionId === 'archive-a' && entry.turnId === 'shared',
+      ),
+    ).toBe(true)
+    expect(
+      displacedExclusions.some(
+        (entry) => entry.sessionId === 'archive-b' && entry.turnId === 'shared',
+      ),
+    ).toBe(false)
   })
 })
