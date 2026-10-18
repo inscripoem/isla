@@ -54,6 +54,8 @@ Every final entry requires metric + threshold + verification. TBD means not read
 | INV-10 | Storage configuration and schema version are validated before use; an empty override or an unsupported schema version is rejected. FR-06. | M6 storage (`config`, `sqlite/migrations`) | Cases C-26/C-27; fail-fast on empty override; reject unsupported version. |
 | INV-11 | A schema migration is recoverable: back up before apply; migrations and the version bump apply as one transaction. FR-06. | M6 storage (`sqlite/migrations`) | Cases C-27/C-28; a failure rolls back, leaves the prior version intact, and a backup exists. |
 | INV-12 | On restart only confirmed history is restored; unresolved outputs remain unknown and are never replayed. FR-06; C7, C-17. | M6 storage (`recovery-view`) + M5 lifecycle | Cases C-32/C-33; the recovery view separates confirmed from unresolved; no fabricated completion. |
+| INV-13 | The traceability chain is machine-checked; a broken link fails the gate. | M6 evaluation (`trace-fitness`) + CI | Cases C-34/C-35/C-37; valid repo → no violations; injected defect or missing owner → violation. |
+| INV-14 | A code or prompt change must update `docs/ai-use-log.yaml` (gate G6). | M6 evaluation (`ai-use-log-gate`) + CI | Case C-36; a code/prompt change without a log update fails. |
 
 ## Promotion to D1
 

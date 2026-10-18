@@ -20,6 +20,23 @@ The rules the verification agent applies and the QA records the team maintains.
 | 2 — Regression | all prior suites pass | `pnpm test` (all offline suites) |
 | 3 — Behavioral | quality thresholds (faithfulness/relevance; zero safety escapes) | pending (semantic eval; provider access required) — NFR-03 |
 
+## Reviewer's five questions (author first, then reviewer)
+
+These five checks are what a review actually looks for here. Each one caught a real defect in a change
+that was already CI-green — every one of them in the **wiring or the claims**, not in the core logic,
+which is exactly where the cheapest defects hide.
+
+| # | Question | What it prevents |
+| --- | --- | --- |
+| 1 | **Does each gate actually run in CI?** Which command, with which inputs, on which events? | A gate that passes because it never received the input it needs to fail. A unit test of a pure function is not the pipeline. |
+| 2 | **Does a failure go red?** No `\|\| true`, no swallowed error, no fallback that converts a broken check into a pass. | A fail-open check: an acquisition error silently yielding "no changes", and therefore a pass. |
+| 3 | **Do the claims match the facts?** Do the description's counts and commands equal this head's actual run? Does a file's prose agree with its data? | A stale test count; a register whose header and `Owner` cells disagree. |
+| 4 | **Does documented behaviour match the mechanism?** Is every promise in a document executable? | "CI re-runs when the label is added" set against a workflow trigger that does not include `labeled`. |
+| 5 | **Did you run it yourself?** Frozen install, the role command and `verify`, plus each gate CLI with a valid, an invalid and an empty input. | Approving a number or a behaviour that was never observed. |
+
+**Rule: the author runs all five before requesting review, and the reviewer repeats them. A review
+confirms; it does not discover.**
+
 ## M6 coverage map (requirement/invariant → case → test)
 
 | Invariant / requirement | Case | Test that would fail if violated |
@@ -36,6 +53,8 @@ The rules the verification agent applies and the QA records the team maintains.
 | FR-06 (SQLite persistence/reopen) | C-30 | `m6-sqlite-backend.test.ts` (reopen + isolation) |
 | FR-06 (delivery terminal outcome persisted) | C-31 | `m6-sqlite-backend.test.ts` (terminal outcome for recovery) |
 | INV-12 (restart restores only confirmed history; no replay) | C-32, C-33 | `m6-recovery.test.ts` (recovery view; restart + isolation) |
+| INV-13 (traceability chain machine-checked) | C-34, C-35, C-37 | `trace-fitness.test.ts` (valid repo → no violations; injected defect or missing owner → violation); `pnpm test:trace` |
+| INV-14 (G6 AI-use log) | C-36 | `ai-use-log-gate.test.ts`; `pnpm gate:ai-use-log` over the PR diff |
 | FR-06 (history excludes non-delivered) | C-17, C-21 | `m6-storage.test.ts` (confirmed-history tests); conformance `history-fully-delivered-only` |
 | FR-06 (JSONL export carries `versions`) | C-22 | `m6-storage.test.ts` (version attribution) |
 | FR-06 (in-memory vs SQLite agreement) | C-45 | `m6-sqlite-backend.test.ts` (cross-backend integration: state, export, history, payload rejection) |
