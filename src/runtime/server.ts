@@ -11,6 +11,7 @@ import {
 } from './config'
 import { createHealthResponse } from './health'
 import { processDiagnosticMessage } from './diagnostics'
+import type { ApplicationEndpoint } from './application'
 
 type ServerState = 'idle' | 'starting' | 'started' | 'stopping' | 'stopped'
 
@@ -51,6 +52,8 @@ function decodeMessage(data: RawData, isBinary: boolean): string | null {
 export class DiagnosticsServer {
   private readonly http
   private readonly wss: WebSocketServer
+  private readonly appWss: WebSocketServer | undefined
+  private readonly application: ApplicationEndpoint | undefined
   private readonly host: string
   private readonly path: string
   private readonly graceMs: number
@@ -65,6 +68,7 @@ export class DiagnosticsServer {
     path?: string
     maxPayload?: number
     graceMs?: number
+    application?: ApplicationEndpoint
   } = {}) {
     const config = normalizeRuntimeConfig({
       host: options.host,
@@ -76,11 +80,19 @@ export class DiagnosticsServer {
     this.configuredPort = config.port
     this.path = options.path ?? DIAGNOSTICS_PATH
     this.graceMs = config.graceMs
+    this.application = options.application
     this.http = createServer((req, res) => this.handleHttp(req, res))
     this.wss = new WebSocketServer({ noServer: true, maxPayload: config.maxPayload })
     this.http.on('upgrade', (req, socket, head) => this.handleUpgrade(req, socket, head))
     this.wss.on('connection', (ws) => this.handleConnection(ws))
     this.wss.on('error', (err) => this.logWsError('server', err))
+
+    if (this.application !== undefined) {
+      const application = this.application
+      this.appWss = new WebSocketServer({ noServer: true, maxPayload: config.maxPayload })
+      this.appWss.on('connection', (ws, req) => application.onConnection(ws, req))
+      this.appWss.on('error', (err) => this.logWsError('application', err))
+    }
   }
 
   get stateLabel(): ServerState {
@@ -155,7 +167,7 @@ export class DiagnosticsServer {
         })
       }
 
-      const clients = [...this.wss.clients]
+      const clients = [...this.wss.clients, ...(this.appWss?.clients ?? [])]
       if (clients.length === 0) {
         finish()
         return
@@ -173,7 +185,9 @@ export class DiagnosticsServer {
       }
 
       forceTimer = setTimeout(() => {
-        for (const client of this.wss.clients) client.terminate()
+        for (const client of [...this.wss.clients, ...(this.appWss?.clients ?? [])]) {
+          client.terminate()
+        }
         finish()
       }, this.graceMs)
       forceTimer.unref()
@@ -184,6 +198,12 @@ export class DiagnosticsServer {
     await new Promise<void>((resolve) => {
       this.wss.close(() => resolve())
     })
+    if (this.appWss !== undefined) {
+      this.application?.dispose()
+      await new Promise<void>((resolve) => {
+        this.appWss?.close(() => resolve())
+      })
+    }
     await new Promise<void>((resolve) => {
       if (!this.http.listening) {
         resolve()
@@ -206,6 +226,7 @@ export class DiagnosticsServer {
     }
 
     if (url.pathname !== HEALTH_PATH) {
+      if (this.application !== undefined && this.application.handleHttp(req, res)) return
       this.writeJson(res, 404, {
         ok: false,
         error: { code: 'not_found', path: url.pathname },
@@ -230,7 +251,27 @@ export class DiagnosticsServer {
       return
     }
     const url = parseRequestUrl(req.url)
-    if (url === null || url.pathname !== this.path) {
+    if (url === null) {
+      socket.write('HTTP/1.1 404 Not Found\r\n\r\n')
+      socket.destroy()
+      return
+    }
+    if (this.application !== undefined && url.pathname === this.application.path) {
+      const appWss = this.appWss
+      if (
+        appWss === undefined ||
+        !this.application.allowRequest(req.headers.origin, req.headers.host)
+      ) {
+        socket.write('HTTP/1.1 403 Forbidden\r\n\r\n')
+        socket.destroy()
+        return
+      }
+      appWss.handleUpgrade(req, socket, head, (ws) => {
+        appWss.emit('connection', ws, req)
+      })
+      return
+    }
+    if (url.pathname !== this.path) {
       socket.write('HTTP/1.1 404 Not Found\r\n\r\n')
       socket.destroy()
       return

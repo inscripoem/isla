@@ -1,6 +1,7 @@
 export * from './primitives'
 export * from './pipeline'
 export * from './wire'
+export * from './transport'
 export * from './storage'
 export * from './ports'
 export * from './validate'

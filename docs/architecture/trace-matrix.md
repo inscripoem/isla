@@ -1,7 +1,7 @@
 # Trace matrix
 
 Status: under review. M6 rows contributed here; other owners' rows pending. Shared document —
-Step A coordination under review. Updated: 2026-10-15.
+Step A and I1 coordination under review. Updated: 2026-10-17.
 
 Every requirement maps to its enforcing component, interface, test/evidence and runtime monitor.
 
@@ -16,7 +16,7 @@ Every requirement maps to its enforcing component, interface, test/evidence and 
 | INV-06 | A memory projection never advances across a gap | `src/storage/memory-projection.ts` | `MemoryProjectionPort` | C-20 | `m6-storage.test.ts::INV-06`; conformance `projection-no-gap-claim` | `appliedSeq` | — | in review | M6 |
 | INV-07 | Committed records are isolated from caller mutation | `src/storage/in-memory-backend.ts` | `StorageBackend` | C-24 | `m6-storage.test.ts` (isolation tests) | — | ADR-002 | in review | M6 |
 | INV-08 | Confirmed history is ordered by the supporting event seq | `src/storage/history-query.ts` | `HistoryQueryPort` | C-25 | `m6-storage.test.ts` (ordering test) | — | ADR-002 | in review | M6 |
-| INV-09 / FR-06 | Original index/persona survive delivery and history reads | `coordinator.ts`, `storage.ts`, `event-store.ts` | C6/C7 | C-46, C-47 | `m5-attribution.test.ts` (production M5 + in-memory M6) | delivery conflict acknowledgement | ADR-002 Step A amendment | under review | M6 |
+| INV-09 / FR-06 | Original index/persona survive delivery and history reads | `coordinator.ts`, `storage.ts`, `event-store.ts` | C6/C7 | C-46, C-47 | `m5-attribution.test.ts` (production M5 + in-memory M6) | delivery conflict acknowledgement | ADR-002 Step A amendment | under review | M5 |
 | INV-10 | Storage configuration and schema version are validated before use | `src/storage/config.ts`, `src/storage/sqlite/migrations.ts` | `StorageConfig` / migrations | C-26, C-27 | `m6-sqlite.test.ts` (config + migrations) | — | ADR-003 | in review | M6 |
 | INV-11 | A schema migration is recoverable (backup before apply; rollback) | `src/storage/sqlite/migrations.ts` | migrations | C-27, C-28, C-48 | `m6-sqlite.test.ts` (backup + rollback; legacy attribution) | — | ADR-003 | in review | M6 |
 | FR-06 | Durable SQLite persistence with the same store contract | `src/storage/sqlite/backend.ts` | `StorageBackend` | C-29 | `m6-sqlite-backend.test.ts` (conformance over SQLite) | — | ADR-004 | in review | M6 |
@@ -24,8 +24,9 @@ Every requirement maps to its enforcing component, interface, test/evidence and 
 | FR-06 | Delivery terminal outcome persisted for recovery | `src/storage/sqlite/backend.ts` | `StorageBackend` | C-31 | `m6-sqlite-backend.test.ts` (terminal outcome) | — | ADR-004 | in review | M6 |
 | FR-06 | In-memory and SQLite backends agree end-to-end (committed state, export, history, payload rejection) | `src/storage/sqlite/backend.ts` + `in-memory-backend.ts` | `StorageBackend` | C-45 | `m6-sqlite-backend.test.ts` (cross-backend integration) | — | ADR-004 | in review | M6 |
 | INV-12 | Restart restores only confirmed history; unresolved stays unknown, no replay | `src/storage/recovery-view.ts` | `RecoveryView` (M6 helper) | C-32, C-33 | `m6-recovery.test.ts` | — | ADR-005 | in review | M6 |
-| INV-13 | The traceability chain is machine-checked; a broken link fails the gate | `src/evaluation/trace-fitness.ts` | `collectTraceViolations` | C-34, C-35 | `trace-fitness.test.ts` | — | ADR-006 | in review | M6 |
+| INV-13 | The traceability chain is machine-checked; a broken link fails the gate | `src/evaluation/trace-fitness.ts`, `src/evaluation/frozen-restoration.ts` | `collectTraceViolations` | C-34, C-35 | `trace-fitness.test.ts` | — | ADR-006 | in review | M6 |
 | INV-14 | A code/prompt change updates the AI-use log (gate G6) | `src/evaluation/ai-use-log-gate.ts` | `collectAiUseLogViolations` | C-36 | `ai-use-log-gate.test.ts` | — | ADR-006 | in review | M6 |
+| INV-15 / FR-06 | Reconstruct one turn by explicit indices while preserving unknowns and stable ties | M5 `src/runtime/delivery-order.ts` | C6/C7 consumer reconstruction | C-47 | `m5-attribution.test.ts`, turn reconstruction ordering suite | — (pure helper; no new monitor) | [Issue #25 coordination](https://github.com/inscripoem/isla/issues/25#issuecomment-6188155358) | under review | M5 |
 
 Other requirements (FR-01..FR-05, NFR-01..NFR-06) remain governed by `docs/req/trace.en.md` and are
 pending their owners' rows here.

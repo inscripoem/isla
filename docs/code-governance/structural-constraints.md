@@ -220,7 +220,9 @@ truth.
 
 ## 7. Change policy
 
-- Paths in `docs/architecture/frozen.yaml` require an ADR and human review (fail-closed). *(The manifest and
+- Paths in `docs/architecture/frozen.yaml` require an ADR and human review (fail-closed).
+  ADR-006 permits only a verified feature-push restoration to an immutable main ancestor,
+  with matching committed and checked-file contents/mode; the full event diff remains checked. *(The manifest and
   its `frozen-modified` check land with the R3 tooling PR; see §4.)*
 - This document is **reviewer-managed**; changes go through a pull request with M5 coordination.
 

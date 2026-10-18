@@ -1,7 +1,7 @@
 import type { ConfirmedDelivery } from '../contracts'
 
 /**
- * M5 delivery-evidence ordering (INV-08, C6/C7).
+ * M5 delivery-evidence ordering (INV-15, C6/C7).
  *
  * `HistoryQueryPort.confirmedHistory` returns one session's records ordered by
  * the supporting event `seq` ascending; it is a read order, not a turn order.

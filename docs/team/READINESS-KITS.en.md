@@ -1,6 +1,6 @@
 # Parallel development: role kits
 
-Revision: 2026-10-15.2. Status: under review. These kits provide shared contracts, deterministic substitutes and executable examples. Main includes the production M5 coordinator, M1 fixed synthesis/mapped rendering/browser player, and M6 in-memory storage. The [M5 handoff](HANDOFF-M5-01.en.md) records original implementation evidence. PR23 dialogue is merged; PR30 attribution and the local M4 compatibility increment remain under review; the product console/business transport, live TTS/VTS, model quality and SQLite durability remain pending.
+Revision: 2026-10-15.3. Status: under review. These kits provide shared contracts, deterministic substitutes and executable examples. Main dbbbfcb includes M5 coordination, M4 dialogue/attribution, M1 fixed synthesis/rendering/browser playback and injectable synthesis/resources, and M6 memory storage. PR30 and PR31 are merged. Local I1 on this main passed 634 tests / 30 files, typecheck, lint and build; publication and consumer adoption remain pending. Product console, live provider composition, model quality and SQLite durability remain separate work. The M5-01 handoff retains historical implementation evidence.
 
 ## Run the prepared version
 
@@ -19,7 +19,7 @@ pnpm test:readiness
 pnpm verify
 ```
 
-Each role command runs its real test file, including correct and deliberately faulty adapters. The composition command runs the basic offline loop; `pnpm verify` also includes the held-dependency and late-result regressions. No model credentials are needed for these checks. The current browser page remains diagnostic-only.
+Each role command runs its real test file, including correct and deliberately faulty adapters. The composition command runs the basic offline loop; `pnpm verify` also includes the held-dependency and late-result regressions. No model credentials are needed for these checks. The standard browser page remains diagnostic-only. The separate local I1 demo runs the application transport and actual M1 player with fixed assets and explicit M3/dialogue-provider substitutes; see the [I1 handoff](HANDOFF-I1-APPLICATION.en.md). This increment is uncommitted and under review.
 
 ## First task and replacement point
 
@@ -32,7 +32,7 @@ All port types are exported from `src/contracts/app/`. In a test under `test/off
 | M1 / `src/performance/` | Implements SynthesisPort, RendererPort, PlayerPort | `collectPerformanceViolations`, `collectPlayerCancellationViolations` from `performance.conformance` | [m1-performance.test.ts](../../test/offline/m1-performance.test.ts): createFixtureSynthesisPort, createFixtureRendererPort, createFixturePlayer |
 | M2 / `src/console/` | Integrates ConsoleTransportPort and M1's player | `collectConsoleViolations` from `console.conformance` | [m2-console.test.ts](../../test/offline/m2-console.test.ts): createFixtureConsoleTransport(createBootstrapOnlyRuntime()) |
 | M3 / `src/decision/` | Implements SelectionPort, ReactionPort | `collectDecisionViolations` from `decision.conformance` | [m3-decision.test.ts](../../test/offline/m3-decision.test.ts): createFixtureSelectionPort, createFixtureReactionPort |
-| M4 / `src/dialogue/` | Implements DialoguePort, MemoryCommitPort; consumes M6 HistoryQueryPort | `collectDialogueViolations` from `dialogue.conformance` | [m4-dialogue.test.ts](../../test/offline/m4-dialogue.test.ts): real createDialoguePort/createDeliveryMemoryStore; m4-storage-integration.test.ts covers consumption of the real M6 memory backend; independent fixtures remain in correct-ports |
+| M4 / `src/dialogue/` | Implements DialoguePort, MemoryCommitPort; consumes M6 HistoryQueryPort | `collectDialogueViolations` from `dialogue.conformance` | [m4-dialogue.test.ts](../../test/offline/m4-dialogue.test.ts): real createDialoguePort/createDeliveryMemoryStore; m4-storage-integration.test.ts covers consumption of the real M6 memory backend; independent fixtures remain in correct-ports; M4 loopback/reconstruction suites cover production composition |
 | M5 / `src/runtime/` | Implements RuntimeEndpointPort; composes ClockPort, ControlAuthorizerPort and pipeline ports | `collectRuntimeViolations` from `runtime.conformance` | [m5-runtime.test.ts](../../test/offline/m5-runtime.test.ts): createFixtureRunner from `../support/runner-factories` |
 | M6 / `src/storage/`, `src/evaluation/`, CI | Implements EventStorePort, MemoryProjectionPort, ReplayReaderPort, HistoryQueryPort | `collectStorageViolations` from `storage.conformance` | [m6-storage.test.ts](../../test/offline/m6-storage.test.ts): createFixtureEventStore, createFixtureMemoryProjection, createFixtureHistoryQuery, createFixtureReplayReader; supply the failure-injection callback. History and replay assertions run when those ports are supplied; attribution conformance additionally requires at least one read view (a HistoryQueryPort or an inspection view) and reports `attribution-read-view-missing` when neither is present. |
 

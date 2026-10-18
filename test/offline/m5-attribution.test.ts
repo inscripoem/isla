@@ -645,7 +645,7 @@ describe('M6 delivery attribution persistence (C-46)', () => {
   })
 })
 
-describe('M5 turn reconstruction ordering', () => {
+describe('M5 delivery attribution capture (C-47) turn reconstruction ordering (INV-15)', () => {
   const record = (
     overrides: Partial<ConfirmedDelivery> & { segmentId: string; segmentIndex: number | null },
   ): ConfirmedDelivery =>
