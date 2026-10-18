@@ -159,6 +159,11 @@ export interface RuntimeCoordinator {
   runTurn(): Promise<CycleOutcome>
   lifecycle(): SessionLifecycle
   epoch(): number
+  /**
+   * Current output confirmation. Exposed so a caller (the application endpoint)
+   * can build a truthful lifecycle refusal without awaiting a snapshot.
+   */
+  outputConfirmation(): 'pending' | 'confirmed' | 'unknown'
   events(): RuntimeEvent[]
   deliveries(): CommitDelivery[]
   metrics(): RuntimeMetrics
@@ -2137,6 +2142,7 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
     runTurn,
     lifecycle: () => lifecycle,
     epoch: () => epoch,
+    outputConfirmation: () => outputConfirmation,
     events: () => events.map((event) => cloneRecord(event)),
     deliveries: () => deliveries.map((delivery) => cloneRecord(delivery)),
     metrics: () => ({

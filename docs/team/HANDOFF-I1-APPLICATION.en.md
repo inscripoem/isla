@@ -1,13 +1,12 @@
 # I1 application transport handoff (protocol 0.2)
 
-Status: under review · 2026-10-17.4 · Owner: M5 (runtime) · Consumer: M2 (console)
+Status: under review · 2026-10-18.3 · Owner: M5 (runtime) · Consumer: M2 (console)
 
-PR36 publishes the repaired I1 slice at `191f58b`; [M1 approved this head](https://github.com/inscripoem/isla/pull/36#pullrequestreview-5548740603) within the fixed-audio consumer/interface scope. M2 review remains requested. The repair described under [Physical status, send
-provenance and cached terminals](#physical-status-send-provenance-and-cached-terminals)
-is published, with 653 tests / 31 files independently verified and passing CI.
-The earlier integration at `4c42126` adopted main `a2ecb86` (PR26 SQLite) after checkpoint `f25ab81`. The signed `c3611fb` integration adopted main `8937f7d` (PR42 evidence/C-51). This reconciliation adopts main `c2f9b38` (PR27 gates/PR32 governance): six document conflicts are resolved, both log histories and M5 INV-15/C-47 are preserved, and the new Owner columns retain M5 ownership of INV-09. Runtime and browser source remain unchanged; upstream evaluation tooling is adopted unchanged. The published PR36 head remains `191f58b` until a separately approved push. M2/M3 ownership is unchanged.
+Explicit operator session recovery (`session.recover`) is implemented under review; see [Explicit session recovery](#explicit-session-recovery). The shared case registry is unchanged: the existing C-08 row stays pending and is not re-registered here.
 
-The local diagnostics and ordering/cache follow-up passed 667 tests before integration. The earlier combined tree at `4c42126` independently passed 695 tests / 37 files, typecheck, lint and build; current combined validation is recorded in [the delivery plan](DELIVERY-PLAN.en.md). Muted fixed-WAV browser checks at `4c42126` passed two turns, Stop after started, Resume/new turn, reload without replay then a new turn, and socket closure followed by local cancellation. These are media-API observations, not acoustic or full SQLite application recovery acceptance. Publication and consumer review of the combined revision remain pending; M1's existing approval covers only the published head. Preserve status-before-receipt, identity correlation and reload-safe IDs; production extraction must remain browser-safe and must not import test code.
+PR36 was merged as `2d0459fdc89b88992f383872c0674d7d1db1266f`, with the same tree as its reviewed head `979f88d81cc1d071f99a41112feb128658b5d561`. This follow-up is on `feat/i1-session-recovery`. [M1's baseline approval](https://github.com/inscripoem/isla/pull/36#pullrequestreview-5561759957) does not cover these changes; the new application messages require M2 consumer review.
+
+Independent validation passed `pnpm verify` (809 tests / 46 files, typecheck, lint and build) and all ten real-browser scenarios with zero page errors. See [current recovery verification](#current-recovery-verification). Earlier results below belong to their historical revisions. Full product, live-provider, acoustic and SQLite restart acceptance remain open; role ownership is unchanged.
 
 This note describes the browser-facing transport the first interactive loop
 uses so M2 can connect the product console without reverse-engineering the
@@ -195,6 +194,69 @@ requires the coordinator's committed output evidence: a Stop leaves
 itself restore `Resume`. That conservative recovery is documented here rather
 than replaced with an invented confirmation.
 
+## Explicit session recovery
+
+A disconnect after playback started leaves the retired session's output
+unconfirmed and its physical occupancy unknown, so the retained session can
+accept input but cannot produce new output. The operator can end that session
+explicitly and continue in a fresh successor over the same store.
+
+- A `session.recover` client message is the operator's own decision. The
+  envelope `sessionId` is the session the operator intends to retire; its
+  payload requires the literal `acknowledgePlaybackEnded: true`. The
+  acknowledgement is never measured media evidence and never a delivery fact. A
+  request against the current session must carry its current epoch; a request
+  against an already-retired session is answered idempotently rather than
+  creating a second successor.
+- The server answers `session.recovery.ack`. The envelope stays on the retiring
+  session and the request epoch; the payload carries `status` (`applied` or
+  `already_applied`), the correlated `requestMessageId`, the retiring and
+  successor session ids, and the `recoveries`/`remainingRecoveries` counters.
+- The server also pushes `session.recovery.state` (`retiring: true`) when valid
+  retirement begins and to each newly connected client right after its snapshot,
+  so the retired state is server-authoritative and a reload after a failed
+  retirement still reflects it rather than inferring retirement from a lifecycle
+  value. A refusal that never retires the live session (stale, unknown-session,
+  unauthorized or already-retired) never sets it, and the successor reports
+  `retiring: false`.
+- Recovery retires the old in-memory scheduling and every old connection,
+  installs a fresh, **stopped** successor with a new epoch and its own deadline
+  gate, and carries forward only confirmed history through the production
+  reconstruction entry. Unknown and partial outcomes are never promoted to
+  speech, and the retired session's own stored evidence and record are
+  preserved.
+- The successor starts stopped: there is no replay and no automatic Resume. The
+  client reconnects, receives the successor snapshot first, bootstraps operator
+  authority and attaches the performer through the existing flow, then a manual
+  `Resume` is required.
+- The archive-source bound remains explicit. Exceeding it is a non-retryable
+  `conflict` refusal that never silently drops an earlier selected source. A
+  successor-construction failure is a retryable `storage_unavailable`; the
+  retiring session stays current and a retry is possible without a second live
+  runtime. A request that is neither the current nor a retired session, and any
+  recovery without operator authority, are refused.
+- A late or superseded request cannot reach the successor: every old connection
+  is closed, the endpoint swaps its bridge binding and server-message
+  subscription, and the successor's fresh gate and generation reject stale
+  identities.
+
+```json
+{"protocolVersion":"0.2","messageId":"recover-1","sessionId":"session-loop-demo","epoch":1,
+ "kind":"session.recover","payload":{"acknowledgePlaybackEnded":true}}
+{"protocolVersion":"0.2","messageId":"app-9","sessionId":"session-loop-demo","epoch":1,
+ "kind":"session.recovery.ack","payload":{"status":"applied","requestMessageId":"recover-1",
+ "retiredSessionId":"session-loop-demo","successorSessionId":"session-<fresh>",
+ "recoveries":1,"remainingRecoveries":7}}
+{"protocolVersion":"0.2","messageId":"app-10","sessionId":"session-loop-demo","epoch":1,
+ "kind":"session.recovery.state","payload":{"retiring":true}}
+```
+
+`session.recover` is an additive protocol-0.2 client kind; `session.recovery.ack`
+and `session.recovery.state` are additive server kinds. A strict decoder that
+predates them rejects rather than ignores them, so producers and consumers must be
+upgraded together. This is lifecycle recovery over an existing (for example
+in-memory) store, not disk/process-crash recovery.
+
 ## Lifecycle rules relevant to M2
 
 - Startup is stopped; no replay and no automatic resume. Reconnect receives a
@@ -250,12 +312,14 @@ shared wire definitions are already in `src/contracts/app/transport.ts`.
 ## Known gaps
 
 M3 adoption, live dialogue/TTS/VTS, SQLite durability, full C-05/C-08/C-09/C-16
-and physical audio/silence verification remain pending. The automated loop uses
-a controlled media driver that emits synthetic media events, so its receipts are
-M1 controller logic evidence, not acoustic proof. This handoff validates the
-offline loop only.
+and physical audio/silence verification remain pending. Explicit operator
+session recovery is implemented for the in-memory I1 loop only; disk or
+process-crash restart recovery over the SQLite backend remains M6 work and is
+not claimed here. The automated loop uses a controlled media driver that emits
+synthetic media events, so its receipts are M1 controller logic evidence, not
+acoustic proof. This handoff validates the offline loop only.
 
-## Local verification and next handoff
+## Historical I1 verification and ownership
 
 The candidate rebuilt on main `dbbbfcb`, including merged PR30 and PR31,
 independently passed 634 tests in 30 files, typecheck, lint and build on
@@ -334,3 +398,45 @@ its compatible implementation; M4 retains merged PR30 adoption and supplies
 a live text provider and its separate follow-up guards. M6 supplies SQLite and recovery evidence. M2 and M3
 remain separate owners; this repair does not implement their modules. Replace one
 module at a time and rerun the same scenarios. Full I1 acceptance remains open.
+
+## Current recovery verification
+
+The recovery increment, implemented locally on 2026-10-18, added the
+explicit operator `session.recover` action over the in-memory I1 loop: the
+endpoint retires the old scheduling and every old connection, installs a fresh
+**stopped** successor with a new epoch and its own deadline gate over the same
+store, and carries forward only the confirmed history through the production
+reconstruction entry. The operator acknowledgement is a decision, never measured
+media or delivery evidence; unknown and partial outcomes are preserved but never
+promoted to speech, the archive-source bound stays explicit, and a
+successor-construction failure is a retryable refusal that leaves the retiring
+session current without a second live runtime. Focused suites pass and
+`pnpm verify` passed 809 tests in 46 files, typecheck, lint and build (the prior
+653/31 result predates this increment and the upstream tests present on the
+current integration base). New consuming regressions in
+`test/offline/i1-recovery.test.ts` cover interrupted-playback recovery, the fresh
+stopped successor, confirmed-only carry, partial/unknown exclusion, repeated and
+concurrent recovery, unauthorized and stale requests, a failed build retried, and
+normal Stop/Resume; the I1 demo UI and transport wiring are covered without
+labelling ordinary in-flight confirmation as a disconnect failure. Three of those
+tests capture the outputs already started before a Stop and wait for a NEWLY
+started output identity, so each Stop provably acts on its own turn; the
+stopped-partial-turn case asserts that the matching cancelled evidence is retained
+and excluded from the carried confirmed history rather than resting on a
+timing-dependent refused-Resume premise, since recovery refusal stays covered by
+the disconnect and failed-retirement tests. A genuine Playwright acceptance against
+the real loop page and runtime (`test/browser/recovery-acceptance.mjs`) passed all
+ten scenarios on two fresh runtime+page servers with zero page errors: initial
+stopped session, manual Resume and a full two-segment output; an ordinary Stop
+during a natively playing turn producing a new `performance.cancel` frame, a new
+cancelled receipt and genuine local media release, then a fresh authoritative
+snapshot (stopped/confirmed on the same session), exactly one applied manual
+Resume and a new full output; a new playing turn closed at the real `/app` socket
+with local release; reload of the same session unconfirmed and replay-free;
+explicit recovery to a different stopped successor; reconnect/bootstrap/attach/
+manual Resume and two complete fresh turns; and a second recovery preserving
+lineage. These are fixed-WAV media-API observations, not acoustic or full SQLite
+recovery. This is lifecycle recovery over the existing in-memory store, not SQLite
+restart recovery; no new shared register or case id was introduced and C-08 stays
+pending with no verifier. OpenCode authored the implementation in `ses_eb2014c63ffePhR2Ga1C7G7sxo` and continued after the approved branch migration in `ses_eb180c970ffeoD5t6ywKvYKwFS`. The supervisor independently repeated `pnpm verify` (809 / 46, exit 0) and all ten browser scenarios with zero page errors. The results remain
+under review. The checks above precede publication; Captain subsequently authorized the follow-up branch commit, push and new PR.
