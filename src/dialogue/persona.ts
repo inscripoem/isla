@@ -243,6 +243,167 @@ function hasPlaceholder(text: string): boolean {
  *
  * Once `PERSONA_AUTHORING_STATUS` is 'ready', the same checks become mandatory.
  */
+/**
+ * Rule IDs for the bible write guard. Stable strings, because tests assert on
+ * them and a reviewer scanning a CI log should be able to look one up here.
+ */
+export const BIBLE_LEAK_RULES = {
+  /** An identifier from a record was pasted into the persona bible. */
+  actorId: 'bible-actor-id',
+  /** A real listener was described or named inside the persona bible. */
+  audienceName: 'bible-audience-name',
+  /** Sensitive content from a session leaked into the persona bible. */
+  privateContent: 'bible-private-content',
+} as const
+
+export type BibleLeakRule = (typeof BIBLE_LEAK_RULES)[keyof typeof BIBLE_LEAK_RULES]
+
+export interface BibleLeakIssue {
+  rule: BibleLeakRule
+  /** The offending fragment, trimmed for a readable report. */
+  excerpt: string
+  /** 1-based line number in the bible. */
+  line: number
+}
+
+/**
+ * Identifier assignments that must never appear in the bible.
+ *
+ * `actorId`/`audienceId`/`listenerId` are record fields. A bible that mentions one
+ * by name is holding a piece of a specific person's session record, and because
+ * the bible renders EVERY turn, that value would be read out to every later
+ * listener. The pattern requires an assignment (`name:` / `name =`), so prose that
+ * merely discusses the word "audience" is unaffected.
+ */
+const BIBLE_ACTOR_ID_PATTERN =
+  /\b(?:actor|audience|listener|viewer|viewer|user|session|client)_?id\s*[:=]\s*\S+/gi
+
+/**
+ * Personal-data patterns that must never appear in the bible.
+ *
+ * The initial list is deliberately small and specific. A broad pattern such as
+ * "any long digit run" would reject a bible that innocently mentions a year or a
+ * stream number, and a guard that cries wolf gets switched off - which is worse
+ * than having no guard, because it creates the appearance of protection.
+ *
+ * These are matched against ASSERTED text only. See `isNegatedLine`: a boundary
+ * such as "Never claim that fictional magic can diagnose" names a sensitive topic
+ * in order to forbid it, and that is exactly what a bible SHOULD say.
+ */
+const BIBLE_PRIVATE_PATTERNS: readonly RegExp[] = [
+  // Contact details and credentials. These are the classic things that turn a
+  // persona document into an accidental contact list.
+  /[\w.+-]+@[\w-]+\.[\w.]+/, // email address
+  /\b(?:\+?\d[\d\s-]{7,}\d)\b/, // long digit run that can be a phone number
+  /\b(?:password|passwd|api[_-]?key|secret[_-]?key|credential)s?\b/i,
+  // Health and identity data. Present as content, not as a boundary rule.
+  /\b(?:diagnosis|diagnosed|medical record|prescription|medication|therapy appointment)\b/i,
+  /\b(?:passport|national id|social security|身份证号|病历|诊断书)\b/i,
+  // Precise residence.
+  /\b(?:lives? at|address(?:es|ed)? is|住址|门牌)\b/i,
+]
+
+/**
+ * Negative construction markers.
+ *
+ * A line that forbids something is not disclosing it. "Never pretend to know
+ * private facts" is required content, and reporting it would force the author to
+ * delete the very boundary the reviewer needs.
+ */
+const NEGATION_MARKERS: readonly string[] = [
+  'never',
+  'not ',
+  'no ',
+  'do not',
+  "don't",
+  'must not',
+  'cannot',
+  'refuse',
+  'forbid',
+  '禁止',
+  '不得',
+  '不要',
+  '绝不',
+  '不会',
+]
+
+function isNegatedLine(line: string): boolean {
+  const lower = line.toLowerCase()
+  return NEGATION_MARKERS.some((marker) => lower.includes(marker))
+}
+
+/**
+ * Guard what may be written into the character bible.
+ *
+ * Division of authority. This is a WRITE-TIME guard on one file, not a runtime
+ * filter: it runs in tests over `prompts/dialogue/character.md` and reports
+ * problems. It is deliberately independent of audience identity - an anonymous
+ * listener is exactly the case that must be protected hardest, and a guard that
+ * waited for an identity would be silent for every unlogged viewer.
+ *
+ * Why the bible specifically. `standingFactsFromBible` promotes `[S]` lines into
+ * the runtime prompt, and `renderPersonaBlock` renders the profile EVERY turn to
+ * EVERY listener. A record id or a listener's private detail written here is not
+ * stored in one place: it is re-read out loud, forever, to whoever connects next.
+ * Memories do not have that property - a session memory is scoped to its session,
+ * and this file is not.
+ *
+ * Only blockquoted lines are examined, matching `standingFactsFromBible`: prose
+ * in the bible is documentation about the bible and is not itself a persona
+ * claim.
+ */
+export function collectBibleLeakIssues(bible: string): readonly BibleLeakIssue[] {
+  const issues: BibleLeakIssue[] = []
+  const lines = bible.split(/\r?\n/)
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    if (line === undefined || !/^\s*>/.test(line)) continue
+    // Documentation about the format is not a claim. Section 7 explains that
+    // `MAX_STANDING_FACT_CHARACTERS` bounds each entry; that sentence mentions
+    // neither a person nor a secret, but the marker line would otherwise be
+    // scanned as content.
+    const text = line.replace(/^\s*>\s*/, '').trim()
+    if (text.length === 0) continue
+    if (text.startsWith('#') || text.startsWith('`')) continue
+
+    const actorMatch = text.match(BIBLE_ACTOR_ID_PATTERN)
+    if (actorMatch !== null && actorMatch[0] !== undefined) {
+      issues.push({ rule: BIBLE_LEAK_RULES.actorId, excerpt: actorMatch[0], line: index + 1 })
+    }
+
+    if (isNegatedLine(text)) continue
+
+    for (const pattern of BIBLE_PRIVATE_PATTERNS) {
+      const match = text.match(pattern)
+      if (match !== null && match[0] !== undefined) {
+        issues.push({
+          rule: BIBLE_LEAK_RULES.privateContent,
+          excerpt: match[0],
+          line: index + 1,
+        })
+      }
+    }
+  }
+
+  return issues
+}
+
+/**
+ * Private content that must stay out of the persona bible.
+ *
+ * The bible is authored, not generated from a session, so the correct home for
+ * anything a listener disclosed is that listener's memory - scoped to that
+ * audience, never rendered to anyone else. The bible is the one place where
+ * scoping cannot help, which is why this list exists.
+ */
+export const BIBLE_PRIVATE_CONTENT_EXAMPLES: readonly string[] = [
+  'A listener\'s real name or handle.',
+  'Any identifier copied out of a session record.',
+  'A disclosed address, contact detail or credential.',
+  'Disclosed health information presented as fact.',
+]
+
 export function collectPersonaContentIssues(content: PersonaContent): readonly string[] {
   const issues: string[] = []
 

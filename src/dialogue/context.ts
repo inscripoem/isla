@@ -16,6 +16,8 @@ import { turnKey, utteranceKey } from './delivery-key'
 import type { PersonaRecallPort } from './persona-recall'
 import { classifyMemoryBucket, isTruncatedSpeech, modalityRank, trimRank } from './memory-semantics'
 import type { MemoryBucketReason } from './memory-semantics'
+import { scopeFor } from './audience'
+import type { AudienceIdentity, MemoryKind, MemoryScope } from './audience'
 
 /**
  * Dialogue context assembly.
@@ -118,6 +120,13 @@ export interface MemoryEntry {
    * absence of evidence is not evidence that the memory is outdated.
    */
   personaVersion: string | null
+  /**
+   * How long this record may live. Defaults to `'utterance'` when the source
+   * does not classify it, because an unclassified confirmed record is still
+   * something the character said - and an unclassified record must never be
+   * treated as a durable one by accident.
+   */
+  kind?: MemoryKind
 }
 
 /**
@@ -187,6 +196,18 @@ export interface AssembledTurn {
   pinned: boolean
   /** Raw salience score, kept for the pin cap tie-break and for auditing. */
   salienceScore: number
+  /**
+   * How long this turn may be kept, decided from its kind and the current
+   * audience (./audience). Recomputed at every assembly; never persisted.
+   *
+   * A `'session-only'` turn is still rendered in this session - scope governs
+   * RETENTION, not visibility. It is recorded here so a later stage can refuse
+   * to carry the turn past this session instead of having to re-derive the
+   * audience to find out.
+   */
+  scope: MemoryScope
+  /** What the turn is about; defaults to `'utterance'`. See `MemoryEntry.kind`. */
+  kind: MemoryKind
   /** Which salience signals fired; empty for an unpinned turn. */
   salienceSignals: readonly SalienceSignal[]
   /** Rendered length of this turn inside the context block. */
@@ -200,6 +221,9 @@ export type ContextExclusionReason =
   | 'character-budget'
   | 'trim-stale-persona'
   | 'trim-truncated'
+  /** A candidate was dropped for crossing a session boundary without the
+   *  durable audience identity that crossing requires. See ./audience. */
+  | 'cross-session-scope'
 
 export interface ContextExclusion {
   sessionId: string
@@ -291,6 +315,15 @@ export interface AssembleDialogueContextInput {
    * recall and context is identical to running without the feature.
    */
   deliveryRecall?: DeliveryRecallPort
+  /**
+   * Who is listening (./audience). Omitted means anonymous, which is the safe
+   * direction: an unidentified listener never produces a durable memory.
+   *
+   * This does not change what is rendered in the current session. It decides how
+   * long the assembled turns may be KEPT, and it is the input that lets a later
+   * stage refuse a cross-session recall.
+   */
+  audience?: AudienceIdentity
 }
 
 /**
@@ -433,6 +466,8 @@ export async function assembleDialogueContext(
   const allTurns: AssembledTurn[] = [...grouped.values()].map((entries) => {
     const first = entries[0]
     if (first === undefined) throw new Error('grouped turn is empty')
+    const kind: MemoryKind = first.kind ?? 'utterance'
+    const scope = scopeFor(kind, input.audience).scope
     const segments = entries
       .map((entry, order) => ({ entry, order }))
       .sort(
@@ -453,6 +488,8 @@ export async function assembleDialogueContext(
       pinned: salience.score >= SALIENCE_PIN_THRESHOLD,
       salienceScore: salience.score,
       salienceSignals: salience.signals,
+      scope,
+      kind,
       characters: 0,
     }
     // Charged as rendered, so the budget matches what actually reaches the prompt.
@@ -549,6 +586,11 @@ export async function assembleDialogueContext(
           inputText: request.selectedInput.text,
           replyIntent: request.responsePlan.replyIntent,
           candidates: turnLimitDropped,
+          // The guard needs the requesting session to compare against; a
+          // candidate's own sessionId cannot supply both sides of the check.
+          sessionId: request.sessionId,
+          scope: scopeFor('utterance', input.audience).scope,
+          audience: input.audience,
         })
 
   const recalledTurns: RecalledTurn[] = []
@@ -642,6 +684,18 @@ export async function assembleDialogueContext(
   }
   if (deliveryRecallExclusions.length > 0) {
     warnings.push('some recalled older turns were dropped to stay within the character budget')
+  }
+  /*
+   * A candidate refused for crossing a session boundary is a different loss from
+   * one refused for budget: it happened even when there was room. Without this
+   * warning the absence would be silent, and a listener who remembers telling
+   * the character something would have no way to learn why it was forgotten.
+   */
+  const crossSessionDrops = input.deliveryRecall?.crossSessionDrops ?? 0
+  if (crossSessionDrops > 0) {
+    warnings.push(
+      `${crossSessionDrops} older turn(s) from other sessions were not recalled: no durable audience identity for this listener`,
+    )
   }
   if (recalledCharacters + recalledTurnCharacters >= maxCharacters && recentTurns.length > 0) {
     warnings.push(

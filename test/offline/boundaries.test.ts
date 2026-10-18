@@ -200,4 +200,16 @@ describe('import graph boundary checker', () => {
     }
     expect(offenders).toEqual([])
   })
+
+  it('keeps the I1 loop demo client free of Node, provider and runner imports', () => {
+    const entry = join(ROOT, 'test', 'browser', 'loop.ts')
+    const edges = collectEdges(entry, (file) => readFileSync(file, 'utf8'), isFile)
+    const offenders = edges.filter((edge) => consoleEdgeBlocked(edge.spec, edge.resolved))
+    expect(offenders).toEqual([])
+    // The demo may share the browser-safe performer machine, but must never
+    // reach Node-only test support or a fixture runner.
+    expect(
+      edges.some((edge) => edge.resolved !== null && /\/test\/support\//.test(norm(edge.resolved))),
+    ).toBe(false)
+  })
 })

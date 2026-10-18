@@ -1,6 +1,6 @@
 # Isla — Candidate Requirements
 
-Revision: 2026-10-15.1 · Status: under review
+Revision: 2026-10-17.3 · Status: under review
 
 Team requirements under review; English engineering requirements may be promoted to formal D1 after acceptance. This Markdown table does not replace the required YAML/schema. These are proposed acceptance obligations, not implemented capabilities or an approved D1 registry. Stable IDs are retained from the archived candidate draft; FR-01 now explicitly includes reply intent, FR-02 includes dialogue generation, and NFR-06 covers the selected adapter boundaries.
 
@@ -56,6 +56,9 @@ Every final entry requires metric + threshold + verification. TBD means not read
 | INV-12 | On restart only confirmed history is restored; unresolved outputs remain unknown and are never replayed. FR-06; C7, C-17. | M6 storage (`recovery-view`) + M5 lifecycle | Cases C-32/C-33; the recovery view separates confirmed from unresolved; no fabricated completion. |
 | INV-13 | The traceability chain is machine-checked; a broken link fails the gate. | M6 evaluation (`trace-fitness`) + CI | Cases C-34/C-35/C-37; valid repo → no violations; injected defect or missing owner → violation. |
 | INV-14 | A code or prompt change must update `docs/ai-use-log.yaml` (gate G6). | M6 evaluation (`ai-use-log-gate`) + CI | Case C-36; a code/prompt change without a log update fails. |
+| INV-15 | Within one (sessionId, turnId), known segmentIndex values sort ascending before unknowns; ties and unknowns retain input order, with null indices preserved and other sessions/turns excluded. FR-06; issue #25. | M5 reconstruction (`src/runtime/delivery-order.ts`) | C-47 ordering regression; preserve the input history order and never infer an unknown index. INV-08 remains the M6 history-port read order. |
+
+INV-13/INV-14 and their gate tooling are adopted from merged PR27; main `c2f9b38` also includes PR32 governance documentation and PR42/C-51. INV-09 remains M5-owned with M6 collaboration, consistent with the YAML register; INV-15/C-47 is retained. M4 C-49/C-50 are registered on unmerged PR35 `b6c078d`. M6 INV-16/C-52–C-55 are registered on unmerged PR40 `d1a2139`, which has a [requested provider-attempt-count correction](https://github.com/inscripoem/isla/pull/40#pullrequestreview-5557266501); those rows are not imported here. Numeric reservations continue in Issue25; no future naming-scheme adoption or application acceptance is implied.
 
 ## Promotion to D1
 

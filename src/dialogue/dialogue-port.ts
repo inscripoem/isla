@@ -14,6 +14,7 @@ import { assembleDialogueContext } from './context'
 import type { AssembledDialogueContext } from './context'
 import type { PersonaRecallPort } from './persona-recall'
 import type { DeliveryRecallPort } from './memory-recall'
+import type { AudienceIdentity } from './audience'
 import { createFinalizedSegmentRegistry, deriveSegmentId } from './segment-id'
 import { isSubstantiveSpeech, normalizeFinalText } from './text'
 import { buildDialogueUsage } from './usage'
@@ -98,6 +99,15 @@ export interface DialoguePortOptions {
    * model call; see ./memory-recall. Omitted means no delivery recall.
    */
   deliveryRecall?: DeliveryRecallPort
+  /**
+   * Who is listening (./audience). Omitted means anonymous.
+   *
+   * Anonymous is the safe default on purpose: an unidentified listener produces
+   * session-scoped memory only, so a caller that has not wired an identity yet
+   * gets the conservative behaviour rather than durable retention by accident.
+   * See `mayRecallCandidate` in ./memory-recall for what this gates.
+   */
+  audience?: AudienceIdentity
   textSource?: DialogueTextSource
   /** Clamped to MAX_DIALOGUE_SEGMENTS whatever value is passed. */
   maxSegments?: number
@@ -184,6 +194,7 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
         ...(options.memory === undefined ? {} : { memory: options.memory }),
         ...(options.personaRecall === undefined ? {} : { personaRecall: options.personaRecall }),
         ...(options.deliveryRecall === undefined ? {} : { deliveryRecall: options.deliveryRecall }),
+      ...(options.audience === undefined ? {} : { audience: options.audience }),
       })
 
       const candidates = (await source.compose(view, maxSegments)).slice(0, maxSegments)

@@ -1,3 +1,5 @@
+import { scopeFor } from './audience'
+import type { MemoryKind, MemoryScopeDecision } from './audience'
 import type { ConfirmedDelivery, DeliveryClassification, Modality } from '../contracts'
 import { isSubstantiveSpeech } from './text'
 
@@ -248,6 +250,59 @@ export function trimRank(input: TrimInput): number {
  * trimmed. See `trimToCharacterBudget` in ./context for the order and the
  * character-counting rule.
  */
+/* -------------------------------------------------------------------------- */
+/* Scope: how long a memory may live                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Scope admission, the second gate a record passes before it becomes a memory.
+ *
+ * `classifyMemoryBucket` answers "was this really said, and did it really play".
+ * This gate answers a different question: "how long may it be kept, and for
+ * whom". Both are needed. Delivery evidence says a record is TRUE; it says
+ * nothing about whether it belongs to one listener or to everybody forever.
+ *
+ * The signature is deliberately parallel to `classifyMemoryBucket` and does not
+ * replace it. `classifyMemoryBucket` stays the only answer to the delivery
+ * question, so no existing caller changes behaviour by gaining this one.
+ *
+ * Authority: the scope policy itself lives in ./audience (`scopeFor`), which owns
+ * the identity type. Re-exported here so a caller assembling context has one
+ * import for memory semantics.
+ */
+export type { MemoryKind, MemoryScope, MemoryScopeDecision, MemoryScopeReason } from './audience'
+export { mayRecallAcrossSessions, normalizeAudience, scopeFor } from './audience'
+
+export interface ScopeClassificationInput {
+  /** What the record is about; decides the scope floor. */
+  kind: MemoryKind
+  /** Who is listening; absent means anonymous. */
+  audience?: import('./audience').AudienceIdentity
+}
+
+/**
+ * Classify a record's scope, alongside (never instead of) its memory bucket.
+ *
+ * A record admitted as `spoken` can still be `session-only`: that is the normal
+ * case for an anonymous audience, and it is not a contradiction. Delivering a
+ * sentence and remembering it for good are two different permissions.
+ */
+export function classifyMemoryScope(input: ScopeClassificationInput): MemoryScopeDecision {
+  return scopeFor(input.kind, input.audience)
+}
+
+/**
+ * Guard on durable retention: may this record be kept beyond its session?
+ *
+ * Kept separate from `scopeFor` so callers that only have a record cannot
+ * accidentally treat `scope === 'audience-bound'` as permission to persist.
+ * `durable` is the single field that answers that, and it is false for every
+ * non-durable identity including a per-session temporary id.
+ */
+export function mayRetainDurably(decision: MemoryScopeDecision): boolean {
+  return decision.durable
+}
+
 export const MEMORY_TRIM_POLICY = {
   dropOrder: TRIM_ORDER,
   keepNewestWithinBudget: true,

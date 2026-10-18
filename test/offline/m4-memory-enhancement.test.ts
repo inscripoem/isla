@@ -18,6 +18,7 @@ import {
 } from '../../src/dialogue'
 import type {
   AssembledDialogueContext,
+  AudienceIdentity,
   DeliveryMemoryStore,
   DialogueTextSource,
   PersonaRecallPort,
@@ -94,6 +95,11 @@ async function assembleWith(
     history?: HistoryQueryPort
     deliveryRecall?: ReturnType<typeof createKeywordDeliveryRecall>
     personaRecall?: PersonaRecallPort
+    /**
+     * Who is listening. Omitted means anonymous, which forbids cross-session
+     * recall; tests that span sessions must say who is listening.
+     */
+    audience?: AudienceIdentity
   } = {},
 ): Promise<AssembledDialogueContext> {
   const capture = captureView()
@@ -103,6 +109,7 @@ async function assembleWith(
     textSource: capturingTextSource(capture),
     ...(options.deliveryRecall === undefined ? {} : { deliveryRecall: options.deliveryRecall }),
     ...(options.personaRecall === undefined ? {} : { personaRecall: options.personaRecall }),
+    ...(options.audience === undefined ? {} : { audience: options.audience }),
   })
   await generate(port, options.request ?? fixtureDialogueRequest())
   const view = capture.view
@@ -447,6 +454,11 @@ describe('M4 delivery-memory recall', () => {
         contextLimits: { maxTurns: 3, maxCharacters: 2000 },
       }),
       deliveryRecall: createKeywordDeliveryRecall(),
+      // This test spans restored sessions, so it needs an identified listener:
+      // without a durable audience identity the cross-session recall below is
+      // refused by design (see mayRecallCandidate), and the displacement this
+      // test is about would never happen.
+      audience: { kind: 'identified', audienceId: 'aud-restore' },
     })
 
     expect(view.recalledTurns.map((entry) => [entry.turn.sessionId, entry.turn.turnId])).toEqual([

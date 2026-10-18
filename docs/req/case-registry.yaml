@@ -315,7 +315,7 @@ cases:
 
   - id: C-47
     status: implemented
-    title: Original M5 delivery attribution across normal, Stop and late-receipt paths
+    title: Original M5 delivery attribution across normal, Stop and late-receipt paths, and within-turn reconstruction ordering
     verifier:
       file: test/offline/m5-attribution.test.ts
       test: "M5 delivery attribution capture (C-47)"

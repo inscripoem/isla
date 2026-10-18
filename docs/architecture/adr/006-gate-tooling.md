@@ -21,7 +21,13 @@ inside `pnpm test`, but are not named gates; G1/G4/G6 are absent). The course di
   4. every runtime-policy row has an operational fallback;
   5. every `ADR-00N` reference resolves, and every ADR file is referenced;
   6. the option ledger records ≥1 entry;
-  7. frozen paths are unmodified (CI supplies the changed-file list);
+  7. frozen paths are unmodified over the full event diff. A feature-branch push may
+     restore a path already frozen at a pinned default-branch commit only when that
+     canonical full commit ID resolves, is an ancestor of the checked head, and is not
+     the head itself. Both the committed blob/mode and the actual regular file's
+     contents/mode must match the baseline. Strict UTF-8 decoding preserves BOMs and
+     rejects malformed bytes. Missing evidence, dirty files, symlinks, deletion and
+     all other event types retain strict enforcement (`frozen-restoration.ts`; Delta-006);
   8. every governed shared table (`invariants.md`, `trace-matrix.md`) carries an explicit **Owner**
      column with a non-empty owner per row — so a row contributed by several roles stays classifiable
      when PRs are merged.
@@ -81,5 +87,5 @@ inside `pnpm test`, but are not named gates; G1/G4/G6 are absent). The course di
 
 ## References
 
-- `src/evaluation/{markdown,trace-fitness}.ts`, `test/offline/trace-fitness.test.ts`
+- `src/evaluation/{markdown,trace-fitness,frozen-restoration}.ts`, `test/offline/trace-fitness.test.ts`
 - `docs/code-governance/verification-constraints.md`, `.github/workflows/ci.yml`, `README.md`
