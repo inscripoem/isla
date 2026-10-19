@@ -1708,3 +1708,11 @@ entries:
       role: "test:m6 176/13; composition 12/1; readiness 42/3; trace 41/1."
       full_suite: "pnpm test 953/54; pnpm verify exit 0; typecheck, lint and build passed."
     human_review: "M6 self-review; M5 review pending. R2 case allocation remains deferred."
+    branch: m6-02-r1-recorded-run
+    change: "R1 schema sharing: export the frozen RecordedRunV1 interface from recorded-run.ts so R2 imports one producer/consumer type instead of duplicating it. No JSON shape or behavior change."
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: []
+    commits: [c66e018]
+    agent: opencode/deepseek-v4-flash
+    human_review: "M6 type-sharing change; M5 review pending. R1 case allocation remains deferred."
