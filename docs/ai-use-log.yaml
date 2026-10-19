@@ -656,7 +656,7 @@ entries:
     change: "B3 restart/recovery: recovery view (confirmed vs unresolved), terminal-outcome read-back (sub-issue #12)"
     requirements: [FR-06]
     invariants: [INV-12]
-    cases: [C-32, C-33]
+    cases: [C-32, C-33, C-68]
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Owner-approved B3 plan; ADR-005; M6 data, M5 lifecycle"
@@ -989,6 +989,21 @@ entries:
       Lifecycle recovery over the existing in-memory I1 store only. SQLite restart
       recovery, live dialogue/TTS/VTS, acoustic verification and full I1 acceptance
       remain open; no new dependency was added and no peer module was implemented.
+  - date: 2026-10-19
+    task: M6-01
+    branch: m6-01-sqlite-app-recovery
+    change: "M6-01 acceptance: add a coordinator + SQLite reopen test using createCoordinatorContractRunner with explicit real SQLite store/history/replay/projection ports and controlled non-storage peers. It covers a completed turn, an interrupted turn, an earlier completed segment, and empty history; closes and reopens SQLite; and restores only confirmed history while keeping interrupted output unresolved. The test registers C-68 and links C-32/C-33 and INV-12; it is storage-reopen evidence, not application/process restart or acoustic proof."
+    requirements: [FR-06]
+    invariants: [INV-12]
+    cases: [C-32, C-33, C-68]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    verification:
+      focused: "test/offline/m6-i1-storage-recovery.test.ts: 3/3 passed on the reviewed head."
+      role: "test:m6 99/7; composition 12/1; readiness 42/3; trace 41/1."
+      full_suite: "pnpm test 812/47; pnpm verify exit 0; typecheck, lint and build passed."
+      mutation: "Removing the fully-delivered filter from the confirmed-history query made the new test red; source restored and the focused/role/verify checks passed again."
+    human_review: "Test-only M6-01 acceptance slice; M5 review requested for harness use and storage assertions. No production code change; no real provider, speech or app/process recovery claim."
   - date: 2026-10-15
     task: M1-02-provider-ownership
     branch: fix/m1-02-provider-ownership
