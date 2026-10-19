@@ -36,6 +36,27 @@ export interface BenchSpec {
  * not-run cases remain explicit `notRun` entries; a thrown variant remains a
  * failed record through `runComparison`.
  */
+/**
+ * JSON.stringify converts NaN and Infinity to null, which would turn an invalid
+ * observation into a legitimate-looking unknown. Refuse non-finite numbers at
+ * the producer boundary and again before serialization. Null remains valid.
+ */
+export function assertFiniteRecordedRun(value: unknown, path = '$'): void {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error(`${path} must be a finite number`)
+    return
+  }
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => assertFiniteRecordedRun(entry, `${path}[${index}]`))
+    return
+  }
+  if (value !== null && typeof value === 'object') {
+    for (const [key, entry] of Object.entries(value)) {
+      assertFiniteRecordedRun(entry, `${path}.${key}`)
+    }
+  }
+}
+
 export async function runBench(
   spec: BenchSpec,
   deps: ComparisonDeps,
@@ -45,7 +66,7 @@ export async function runBench(
     deps,
   )
 
-  return {
+  const recorded: RecordedRunV1 = {
     schemaVersion: RECORDED_RUN_SCHEMA_VERSION,
     meta: spec.meta,
     variants: spec.variants,
@@ -56,9 +77,12 @@ export async function runBench(
     records: comparison.records,
     notRun: comparison.notRun,
   }
+  assertFiniteRecordedRun(recorded)
+  return recorded
 }
 
 /** Serialize a recorded run for the R1 file command. */
 export function serializeRecordedRun(run: RecordedRunV1): string {
+  assertFiniteRecordedRun(run)
   return `${JSON.stringify(run, null, 2)}\n`
 }

@@ -1718,3 +1718,18 @@ entries:
     commits: [c66e018]
     agent: opencode/deepseek-v4-flash
     human_review: "M6 type-sharing change; M5 review pending. R1 case allocation remains deferred."
+  - date: 2026-10-19
+    task: M6-02
+    branch: m6-02-r2-runbench
+    change: "R2 review fix: reject non-finite observations before JSON serialization (including the serializer guard), preserve legitimate nulls, and add C-71 producer-to-command integration over two variants with executed and not-run entries. Register C-69/C-70 and C-71 traceability rows. No schema-shape or provider change."
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: [C-69, C-70, C-71]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    verification:
+      focused: "test/offline/m6-02-bench.test.ts: 7/1 passed."
+      role: "test:m6 179/13; composition 12/1; readiness 42/3; trace 41/1."
+      full_suite: "pnpm test 956/54; pnpm verify exit 0; typecheck, lint and build passed."
+      mutation: "Non-finite guard rejects before serialization; valid two-variant C-71 path writes through the real R1 command."
+    human_review: "Addresses M5 P2; M5 re-review requested after push. C-71 verifier now exists and passes."
