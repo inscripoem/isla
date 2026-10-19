@@ -1,7 +1,6 @@
-import type { ComparisonDeps, EvalCase, NotRunEntry, Variant } from './comparison'
+import type { ComparisonDeps, EvalCase, Variant } from './comparison'
 import { runComparison } from './comparison'
-import type { AttemptRecord } from './metrics'
-import { RECORDED_RUN_SCHEMA_VERSION } from './recorded-run'
+import { RECORDED_RUN_SCHEMA_VERSION, type RecordedRunV1 } from './recorded-run'
 import type { FixedConditions, RunMeta } from './report'
 
 /**
@@ -29,14 +28,6 @@ export interface BenchSpec {
   readonly cases: readonly EvalCase[]
 }
 
-export interface RecordedRunV1 {
-  readonly schemaVersion: typeof RECORDED_RUN_SCHEMA_VERSION
-  readonly meta: RunMeta
-  readonly variants: readonly Variant[]
-  readonly conditions: FixedConditions
-  readonly records: readonly AttemptRecord[]
-  readonly notRun: readonly NotRunEntry[]
-}
 
 /**
  * Run the cases through the variants and return a JSON-serialisable recorded run.
