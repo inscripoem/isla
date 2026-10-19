@@ -113,5 +113,5 @@ rejects a missing file or absent test string.
 
 - `test/offline/m6-02-bench.test.ts` — `runBench` returns the frozen recorded-run v1 shape, recomputes the
   actual attempt sample size, preserves not-run entries and thrown failures, does not emit a trusted summary,
-  and does not mutate the supplied cases/variants. The test uses the synthetic runner; no provider or runtime
-  pipeline is imported.
+  and does not mutate the supplied cases/variants; `serializeRecordedRun` produces the JSON the R1 parser
+  consumes. The test uses the synthetic runner; no provider or runtime pipeline is imported.

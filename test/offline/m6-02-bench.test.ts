@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { runBench, type BenchConditions } from '../../src/evaluation/bench'
+import { runBench, serializeRecordedRun, type BenchConditions } from '../../src/evaluation/bench'
 import type { EvalCase, Variant } from '../../src/evaluation/comparison'
 import { parseRecordedRun } from '../../src/evaluation/recorded-run'
 import {
@@ -46,7 +46,9 @@ describe('M6-02 R2 runBench', () => {
     expect(run.records.map((record) => record.cold)).toEqual([true, false, false])
     expect('summary' in run).toBe(false)
 
-    const parsed = parseRecordedRun(JSON.stringify(run))
+    const serialized = serializeRecordedRun(run)
+    expect(serialized.endsWith('\n')).toBe(true)
+    const parsed = parseRecordedRun(serialized)
     expect(parsed.ok).toBe(true)
     if (!parsed.ok) throw new Error('unreachable')
     expect(parsed.input.run.summary.attempts).toBe(3)

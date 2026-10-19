@@ -127,7 +127,7 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
   Delta/verification notes; code commit `4b3de7e`. No provider, runtime composition or evaluation table.
 - Contract: returns the frozen `schemaVersion: 1` shape; no `summary`; `sampleSize` is the actual recorded
   attempt count; not-run cases and thrown variants remain explicit. R2 imports the shared `RecordedRunV1`
-  type from R1 (commit `761fa40`).
+  type from R1 (commit `761fa40`) and `serializeRecordedRun` emits the R1 file text.
 - Verification: `test:m6` **176/13**, composition **12/1**, readiness **42/3**, trace **41/1**, full
   **953/54**, `pnpm verify` exit 0. Mutation: cases-as-sample-size turned the not-run test red; restored.
 - Traceability: NFR-01/NFR-04, INV-16, ADR-007/Delta-007; R2 has **no case ID** yet. Case allocation is

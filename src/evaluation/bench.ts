@@ -57,3 +57,8 @@ export async function runBench(
     notRun: comparison.notRun,
   }
 }
+
+/** Serialize a recorded run for the R1 file command. */
+export function serializeRecordedRun(run: RecordedRunV1): string {
+  return `${JSON.stringify(run, null, 2)}\n`
+}

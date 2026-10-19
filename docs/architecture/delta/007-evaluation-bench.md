@@ -248,6 +248,7 @@ case/trace row has been invented.
 - **Added** `src/evaluation/bench.ts` — `runBench` wraps the existing `runComparison` with an injected
   `runVariant` and returns exactly the frozen `schemaVersion: 1` recorded-run shape. It emits no `summary`;
   the declared sample size is the number of attempts actually recorded, not the number of cases.
+  `serializeRecordedRun` provides the JSON text the R1 file command consumes.
 - **Added** `test/offline/m6-02-bench.test.ts` — 4 deterministic cases: shape/round-trip, not-run sample
   size, thrown-variant failure, and input immutability.
 - **Changed** `package.json` — the R2 suite is included in `test:m6`.

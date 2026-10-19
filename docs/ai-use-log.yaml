@@ -1694,3 +1694,17 @@ entries:
     commits: [761fa40]
     agent: opencode/deepseek-v4-flash
     human_review: "M6 type-sharing change; M5 review pending. R2 case allocation remains deferred."
+  - date: 2026-10-19
+    task: M6-02
+    branch: m6-02-r2-runbench
+    change: "R2 serialization bridge: add serializeRecordedRun so the harness returns JSON text the R1 file command consumes. No schema fields, runtime pipeline or provider changed."
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    verification:
+      focused: "test/offline/m6-02-bench.test.ts: 4/1 passed."
+      role: "test:m6 176/13; composition 12/1; readiness 42/3; trace 41/1."
+      full_suite: "pnpm test 953/54; pnpm verify exit 0; typecheck, lint and build passed."
+    human_review: "M6 self-review; M5 review pending. R2 case allocation remains deferred."
