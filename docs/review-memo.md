@@ -116,6 +116,6 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
   each turned tests red; restored.
 - Traceability: NFR-01/NFR-04, INV-16, ADR-007/Delta-007, C-52…C-55. R1 has **no case ID yet**; M5 allocation
   is required. No new ID was self-assigned.
-- Schema freeze: R1 `schemaVersion: 1` shape is frozen in Delta-007; R2/S6 must emit exactly that shape, and a change requires version 2.
+- Schema freeze: R1 `schemaVersion: 1` shape is frozen in Delta-007; R2/S6 must emit exactly that shape, and a change requires version 2. R1 exports the shared `RecordedRunV1` type (commit `c66e018`); R2 imports it.
 - Case allocation: **deferred debt**; no ID claimed and no case/trace row added.
 - Limits: no real provider run, no `evaluation-table.md`, G4 not run, no quality/latency/cost claim.

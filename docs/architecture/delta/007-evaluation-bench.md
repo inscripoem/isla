@@ -237,5 +237,5 @@ There is no trusted `summary`; R1 recomputes it with `summarise(records)`. Unkno
 and blank not-run reasons are refused. The CLI requires an explicit `--output`; a refused run writes
 nothing and preserves an existing output. The repository evaluation table is not created by R1 tests.
 
-The R1 module now exports the single `RecordedRunV1` interface; R2 imports that type instead of redefining it. The
+The R1 module now exports the single `RecordedRunV1` interface (commit `c66e018`); R2 imports that type instead of redefining it. The
 R1 case allocation is **deferred debt**: no case ID is claimed, and no case/trace row has been invented.
