@@ -111,8 +111,8 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
   Delta/verification notes; code commits `252dd7d` and `3512135`. No provider, runtime composition or evaluation table.
 - Contract: versioned schema; unknown fields and blank identifiers rejected; no trusted summary; report-level
   refusals preserved; explicit output; duplicate options rejected; atomic writer; refused input writes nothing.
-- Verification: `test:m6` **169/12**, composition **12/1**, readiness **42/3**, trace **41/1**, full
-  **946/53**, `pnpm verify` exit 0. Mutations: schema-version, blank-identifier and CLI validation removals
+- Verification: `test:m6` **172/12**, composition **12/1**, readiness **42/3**, trace **41/1**, full
+  **949/53**, `pnpm verify` exit 0. Mutations: schema-version, blank-identifier and CLI validation removals
   each turned tests red; restored.
 - Traceability: NFR-01/NFR-04, INV-16, ADR-007/Delta-007, C-52…C-55. R1 has **no case ID yet**; M5 allocation
   is required. No new ID was self-assigned.

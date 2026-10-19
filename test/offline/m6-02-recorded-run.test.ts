@@ -116,6 +116,33 @@ describe('recorded-run parser', () => {
     expect(blankNotRun.violations.join(' ')).toContain('must not be blank')
   })
 
+  it('accepts a valid not-run entry and lists it in the report', () => {
+    const parsed = parseRecordedRun(
+      JSON.stringify({
+        ...RUN,
+        notRun: [{ variantId: 'v1', caseId: 'case-skip', reason: 'not configured' }],
+      }),
+    )
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) throw new Error('unreachable')
+    const rendered = renderEvaluationReport(parsed.input)
+    expect(rendered.ok).toBe(true)
+    if (!rendered.ok) throw new Error('unreachable')
+    expect(rendered.markdown).toContain('| v1 | case-skip | not configured |')
+  })
+
+  it('rejects an unknown nested field', () => {
+    const parsed = parseRecordedRun(
+      JSON.stringify({
+        ...RUN,
+        records: [{ ...RECORD, timing: { ...TIMING, extraMs: 1 } }],
+      }),
+    )
+    expect(parsed.ok).toBe(false)
+    if (parsed.ok) throw new Error('unreachable')
+    expect(parsed.violations.join(' ')).toContain('timing.extraMs is not a recognised field')
+  })
+
   it('rejects malformed JSON and a wrong schema version', () => {
     const malformed = parseRecordedRun('{')
     expect(malformed.ok).toBe(false)
@@ -214,6 +241,15 @@ describe('evaluation:report command', () => {
       expect(runReportCommand(['--input', input, '--output', output]), entry.name).toBe(1)
       expect(existsSync(output), entry.name).toBe(false)
     }
+  })
+
+  it('returns an I/O error when the input cannot be read', () => {
+    const directory = tempDirectory()
+    const output = join(directory, 'table.md')
+    expect(
+      runReportCommand(['--input', join(directory, 'missing.json'), '--output', output]),
+    ).toBe(2)
+    expect(existsSync(output)).toBe(false)
   })
 
   it('preserves an existing output when the run is refused', () => {
