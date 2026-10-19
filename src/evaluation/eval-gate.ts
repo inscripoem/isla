@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
+import { EVALUATION_TABLE_PATH } from './artifacts'
 
 /**
  * M6 / R3 — gate G4: semantic evaluation (ADR-006).
@@ -16,8 +17,6 @@ import { pathToFileURL } from 'node:url'
  * evaluation set, and so the gate can be wired to a real evaluation report when
  * M6-02 produces one.
  */
-
-export const EVALUATION_TABLE_PATH = 'docs/architecture/evaluation-table.md'
 
 /**
  * The fixed conditions NFR-01 requires an evaluation report to document, matched
