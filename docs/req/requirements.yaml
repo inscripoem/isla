@@ -98,7 +98,7 @@ requirements:
         cases: [C-29, C-30, C-31]
       - kind: deterministic
         description: On restart only confirmed history is restored; unresolved records remain unknown with their outcome and are never replayed.
-        cases: [C-32, C-33]
+        cases: [C-32, C-33, C-68]
 
   - id: NFR-01
     title: Responsiveness and synchronization
@@ -386,3 +386,16 @@ requirements:
       - kind: deterministic
         description: A change under src/ or prompts/ without a matching change to docs/ai-use-log.yaml fails gate G6.
         cases: [C-36]
+
+  - id: INV-15
+    title: Within-turn reconstruction preserves explicit segment order and unknowns
+    category: invariant
+    priority: must
+    owner: M5
+    collaborators: [M4, M6]
+    source: docs/team/INTERFACES.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Filter records by the exact sessionId and turnId pair, order known segmentIndex values ascending before unknowns, retain input order for ties and unknowns, preserve null indices, and leave the input history order unchanged. The C-47 ordering regression is distinct from the INV-08 history-port read-order check.
+        cases: [C-47]

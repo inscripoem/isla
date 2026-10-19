@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Isla I1 interactive loop demo</title>
+  </head>
+  <body>
+    <main>
+      <h1>Isla first interactive loop</h1>
+      <p>
+        This isolated demo connects a browser performer to the real M5 runtime, plays the
+        registered fixed WAV assets through the real M1 <code>PlaybackController</code>, and
+        displays subtitles and a mapped reaction. All audio observations are media events, not
+        acoustic measurements.
+      </p>
+      <section>
+        <button id="start" type="button">Enable operator and attach performer</button>
+        <button id="resume" type="button" disabled>Resume</button>
+        <button id="stop" type="button" disabled>Stop</button>
+      </section>
+      <section>
+        <form id="input-form">
+          <input id="input-text" type="text" value="What did you say about the concert?" />
+          <button id="send" type="submit" disabled>Send input</button>
+        </form>
+      </section>
+      <section>
+        <h2>Recovery</h2>
+        <p>
+          If playback was interrupted, for example by a disconnect or a page reload, the retained
+          session can accept input but may be unable to produce new output. Recovery ends the current
+          session and starts a fresh one that carries only confirmed history. It never replays audio,
+          never clears unknown outcomes, and needs a manual Resume afterwards. This is your operator
+          decision that you have ended playback; it is not a measured media result.
+        </p>
+        <label>
+          <input id="recover-ack" type="checkbox" />
+          I confirm I have ended playback in the previous session
+        </label>
+        <button id="recover" type="button" disabled>End session and continue in a fresh one</button>
+        <p id="recovery-instruction"></p>
+        <button id="reconnect" type="button" disabled>Reconnect (reload this page)</button>
+        <pre id="recovery-status">recovery: idle</pre>
+      </section>
+      <section>
+        <h2>Subtitle</h2>
+        <pre id="subtitle">(none)</pre>
+        <h2>Reaction</h2>
+        <pre id="reaction">(none)</pre>
+      </section>
+      <section>
+        <h2>Session state</h2>
+        <pre id="status"></pre>
+      </section>
+      <section>
+        <h2>Events</h2>
+        <pre id="events">(no events yet)</pre>
+      </section>
+    </main>
+    <script type="module" src="./loop.ts"></script>
+  </body>
+</html>

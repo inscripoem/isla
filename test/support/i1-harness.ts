@@ -1,0 +1,513 @@
+import { request } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import type {
+  ClockPort,
+  ConfirmedDelivery,
+  DialoguePort,
+  EventStorePort,
+  HistoryQueryPort,
+  MemoryCommitPort,
+  ReactionPort,
+  SelectionPort,
+} from '../../src/contracts'
+import type { CapabilitySnapshot, PerformanceCommand } from '../../src/contracts/app'
+import { createApplicationEndpoint } from '../../src/runtime/application'
+import type { ApplicationDiagnostic } from '../../src/runtime/application'
+import {
+  createDialogueComposition,
+  createReconstructedRuntimeComposition,
+  createRuntimeComposition,
+} from '../../src/runtime/composition'
+import type { ReconstructedRuntimeComposition, RuntimeComposition } from '../../src/runtime/composition'
+import { createMonotonicClock } from '../../src/runtime/clock'
+import { createRuntimeAuthorizer } from '../../src/runtime/control-policy'
+import type { CycleTimings, RuntimeCoordinator, SessionProfileConfig } from '../../src/runtime/coordinator'
+import type { ArchiveSelectionConfig } from '../../src/runtime/session-archives'
+import { createSessionRecovery } from '../../src/runtime/session-recovery'
+import type { SessionRecovery } from '../../src/runtime/session-recovery'
+import { createDeadlineGate } from '../../src/runtime/deadline'
+import type { RuntimeDeadlineGate } from '../../src/runtime/deadline'
+import { DiagnosticsServer } from '../../src/runtime/server'
+import { createMappedRenderer } from '../../src/performance/mapped-renderer'
+import type { RendererDriver, RendererObservation } from '../../src/performance/mapped-renderer'
+import type { MediaDriver } from '../../src/performance/browser/types'
+import { createEventStore } from '../../src/storage/event-store'
+import { createHistoryQuery } from '../../src/storage/history-query'
+import { createInMemoryBackend } from '../../src/storage/in-memory-backend'
+import type { StorageBackend } from '../../src/storage/backend'
+import type { AssembledDialogueContext, DeliveryMemoryStore, DialogueTextSource } from '../../src/dialogue'
+import * as correct from './correct-ports'
+import {
+  createCatalogDialogueTextSource,
+  createCapturingCatalogDialogueTextSource,
+} from './m4-kit'
+import {
+  createM1ActualAssetEntries,
+  createM1ActualBlobMap,
+  createControlledMediaDriver,
+  createRegistryResolver,
+  M1_FIXTURE_VOICE_ID,
+  M1_FIXTURE_VOICE_VERSION,
+} from './m1-kit'
+import type { AudioResolver } from '../../src/performance/browser/types'
+import { createPerformerClient } from './performer-client'
+import type { PerformerClient } from './performer-client'
+import { FIXTURE_SESSION_ID } from './fixture-data'
+
+const LOOP_ORIGIN = 'http://127.0.0.1:4173'
+
+function fixedCapabilities(): CapabilitySnapshot {
+  return {
+    rendererId: 'renderer-i1',
+    characterId: 'character-i1',
+    capabilityRevision: 1,
+    actions: [
+      { actionId: 'neutral', description: 'neutral face', observability: 'observable', parameterBounds: [] },
+      { actionId: 'smile', description: 'smile', observability: 'observable', parameterBounds: [] },
+    ],
+  }
+}
+
+/**
+ * A renderer driver that reports only a local test acceptance. It fabricates no
+ * avatar completion and forwards nothing to the browser; the demo browser
+ * displays the reaction from the offer, separately.
+ */
+function createAcceptanceDriver(): RendererDriver {
+  return {
+    async dispatch(): Promise<RendererObservation> {
+      return { stage: 'accepted', reasonCode: 'local-test-acceptance', localTimeMs: null }
+    },
+  }
+}
+
+export interface LoopHarnessOptions {
+  selection?: SelectionPort
+  reaction?: ReactionPort
+  dialogue?: DialoguePort
+  commit?: MemoryCommitPort
+  backend?: StorageBackend
+  clock?: ClockPort
+  sessionId?: string
+  timings?: Partial<CycleTimings>
+  profile?: Partial<SessionProfileConfig>
+  allowedOrigins?: string[]
+  media?: MediaDriver
+  resolver?: AudioResolver
+  beforeReady?: (command: PerformanceCommand) => Promise<void> | void
+  maxPendingInputs?: number
+  /** Captures bounded application diagnostics emitted by the endpoint. */
+  onDiagnostic?: (diagnostic: ApplicationDiagnostic) => void
+  /** Replaces the store port (for controlled-persistence regressions). */
+  store?: EventStorePort
+  /** Wraps the composed coordinator (for fault-injection regressions). */
+  wrapCoordinator?: (coordinator: RuntimeCoordinator) => RuntimeCoordinator
+  /** Use the real M4 dialogue composition instead of the fixture substitute. */
+  realM4?: boolean
+  /** Provider substitute for real M4; defaults to the deterministic catalog source. */
+  dialogueTextSource?: DialogueTextSource
+  /** Records the assembled M4 context so a test can observe it. */
+  captureView?: { view: AssembledDialogueContext | null }
+  /** Cross-session reconstruction selection. Implies `realM4`. */
+  reconstruction?: ArchiveSelectionConfig
+  /** Injects a read failure for one session, to prove fail-closed reconstruction. */
+  reconstructionReadFailureSession?: string
+  /**
+   * Explicit operator-driven recovery. Requires `reconstruction` as the initial
+   * selection; a successor is built from confirmed history over the same store.
+   */
+  recovery?: {
+    maxSources?: number
+    nextSessionId?: () => string
+    /**
+     * Test-only seam awaited at the start of every composition build (initial and
+     * successor). A test can hold it open to make the overlap in a concurrent
+     * recovery deterministic, or to observe the endpoint mid-retirement.
+     */
+    onBuild?: (
+      selection: ArchiveSelectionConfig,
+      info: { initial: boolean; index: number },
+    ) => Promise<void> | void
+  }
+}
+
+/** Observable record of one composition the recovery factory built. */
+export interface BuiltComposition {
+  readonly sessionId: string
+  /** True once the composition's `dispose()` has been called. */
+  readonly disposed: boolean
+  /** True once the endpoint bound a bridge transport to this composition. */
+  readonly everBound: boolean
+}
+
+export interface LoopHarness {
+  readonly server: DiagnosticsServer
+  readonly port: number
+  readonly origin: string
+  readonly sessionId: string
+  readonly composition: RuntimeComposition
+  readonly backend: StorageBackend
+  readonly gate: RuntimeDeadlineGate
+  /** The clock domain the runtime and gate use, for test-supplied deadlines. */
+  readonly clock: ClockPort
+  readonly client: PerformerClient
+  readonly resolver: AudioResolver
+  readonly media: MediaDriver
+  /** Real M4 memory store when real M4 is composed; null for the fixture substitute. */
+  readonly m4Memory: DeliveryMemoryStore | null
+  /** The recovery controller when operator recovery is configured; null otherwise. */
+  readonly recovery: SessionRecovery | null
+  /** The live session id, reflecting a recovery when one has been applied. */
+  currentSessionId(): string
+  /** The live composition, reflecting a recovery when one has been applied. */
+  currentComposition(): RuntimeComposition
+  /** Test hook: make the next successor construction throw. */
+  setRecoveryBuildFailure(value: boolean): void
+  /** Test hook: fail (or stop failing) history reads for one session id. */
+  setHistoryReadFailure(sessionId: string | null): void
+  /** Every composition the recovery factory built, in build order. */
+  builtCompositions(): readonly BuiltComposition[]
+  bootstrapOperator(): Promise<string>
+  confirmedHistory(sessionId?: string): Promise<ConfirmedDelivery[]>
+  /** A fresh performer connection bound to the same loopback server. */
+  newClient(overrides?: {
+    beforeReady?: (command: PerformanceCommand) => Promise<void> | void
+    sessionId?: string
+  }): PerformerClient
+  close(): Promise<void>
+}
+
+/**
+ * Base M6 history reader. A set of session ids may be made to fail on demand, so
+ * a test can prove that an unavailable selected source fails the turn closed
+ * instead of silently falling back to empty history.
+ */
+function createBaseHistory(backend: StorageBackend, failingSessions: Set<string>): HistoryQueryPort {
+  const base = createHistoryQuery(backend)
+  return {
+    async confirmedHistory(sessionId: string): Promise<ConfirmedDelivery[]> {
+      if (failingSessions.has(sessionId)) {
+        throw new Error(`injected archive read failure for ${sessionId}`)
+      }
+      return base.confirmedHistory(sessionId)
+    },
+  }
+}
+
+export async function createLoopHarness(options: LoopHarnessOptions = {}): Promise<LoopHarness> {
+  const clock = options.clock ?? createMonotonicClock()
+  const backend = options.backend ?? createInMemoryBackend()
+  const store = options.store ?? createEventStore(backend)
+  const gate = createDeadlineGate(clock)
+  const capabilities = fixedCapabilities()
+  let receiptCounter = 0
+  // A fresh renderer per composition: a recovered successor owns its own gate, so
+  // the mapped renderer must be bound to that gate. Receipt identities stay
+  // unique across compositions through the shared counter.
+  const createRenderer = (deadlineGate: RuntimeDeadlineGate): ReturnType<typeof createMappedRenderer> =>
+    createMappedRenderer({
+      snapshot: capabilities,
+      bindings: [
+        { actionId: 'neutral', driverAction: 'browser:neutral' },
+        { actionId: 'smile', driverAction: 'browser:smile' },
+      ],
+      driver: createAcceptanceDriver(),
+      deadlineGate,
+      receipts: {
+        newReceiptId: () => `avatar-${(receiptCounter += 1)}`,
+        localNowMs: () => null,
+      },
+    })
+  const renderer = createRenderer(gate)
+
+  const reconstruction = options.reconstruction
+  const recoveryOption = options.recovery
+  const usesRecovery = recoveryOption !== undefined
+  const realM4 = options.realM4 === true || reconstruction !== undefined || usesRecovery
+  let sessionId = options.sessionId ?? reconstruction?.liveSessionId ?? FIXTURE_SESSION_ID
+
+  let m4Memory: DeliveryMemoryStore | null = null
+  let composition: RuntimeComposition
+  let recovery: SessionRecovery | null = null
+  let recoveryBuildFailure = false
+  const failingHistorySessions = new Set<string>(
+    options.reconstructionReadFailureSession !== undefined
+      ? [options.reconstructionReadFailureSession]
+      : [],
+  )
+  const builtCompositions: BuiltComposition[] = []
+
+  const dialogueTextSource = (): DialogueTextSource =>
+    options.dialogueTextSource ??
+    (options.captureView !== undefined
+      ? createCapturingCatalogDialogueTextSource(options.captureView)
+      : createCatalogDialogueTextSource())
+
+  if (usesRecovery) {
+    // Explicit operator recovery: the controller owns the selection lineage and
+    // builds each successor from confirmed history. The harness supplies the
+    // ports and a fresh gate/renderer per composition; it does not re-align the
+    // session id or the character identity itself.
+    const initialSelection: ArchiveSelectionConfig = reconstruction ?? {
+      liveSessionId: sessionId,
+      liveProfile: { profileId: 'character-fixture', profileVersion: '1' },
+      selectedSources: [],
+      catalogue: new Map(),
+    }
+    recovery = await createSessionRecovery({
+      initialSelection,
+      ...(recoveryOption.maxSources !== undefined ? { maxSources: recoveryOption.maxSources } : {}),
+      ...(recoveryOption.nextSessionId !== undefined ? { nextSessionId: recoveryOption.nextSessionId } : {}),
+      build: async (selection) => {
+        const index = builtCompositions.length
+        await recoveryOption.onBuild?.(selection, { initial: index === 0, index })
+        if (recoveryBuildFailure) throw new Error('injected recovery construction failure')
+        const compositionGate = createDeadlineGate(clock)
+        const built = await createReconstructedRuntimeComposition({
+          clock,
+          authorizer: createRuntimeAuthorizer(),
+          selection: options.selection ?? correct.createFixtureSelectionPort(),
+          reaction: options.reaction ?? correct.createFixtureReactionPort(),
+          store,
+          history: createBaseHistory(backend, failingHistorySessions),
+          renderer: createRenderer(compositionGate),
+          gate: compositionGate,
+          audioEntries: createM1ActualAssetEntries(),
+          reconstruction: selection,
+          textSource: dialogueTextSource(),
+          profile: {
+            voiceProfileId: M1_FIXTURE_VOICE_ID,
+            voiceProfileVersion: M1_FIXTURE_VOICE_VERSION,
+            ...(options.profile ?? {}),
+          },
+          ...(options.timings !== undefined ? { timings: options.timings } : {}),
+          ...(options.maxPendingInputs !== undefined
+            ? { maxPendingInputs: options.maxPendingInputs }
+            : {}),
+        })
+        // Observe disposal and bridge binding without changing behaviour: a test
+        // can assert a successor built during shutdown is released and never bound.
+        const record = { sessionId: built.sessionId, disposed: false, everBound: false }
+        const rawBridge = built.bridge
+        const wrapped: RuntimeComposition = {
+          ...built,
+          bridge: {
+            ...rawBridge,
+            bindTransport: (transport) => {
+              record.everBound = true
+              rawBridge.bindTransport(transport)
+            },
+          },
+          dispose: () => {
+            record.disposed = true
+            built.dispose()
+          },
+        }
+        builtCompositions.push(record)
+        return wrapped
+      },
+    })
+    const current = recovery.currentComposition() as ReconstructedRuntimeComposition
+    composition = current
+    m4Memory = current.memory
+    sessionId = recovery.currentSessionId()
+  } else if (reconstruction !== undefined) {
+    // The production reconstructed-runtime entry owns the binding between the
+    // reconstruction and the runtime session/profile, and preflights the fresh
+    // session id through the store before startup. The harness supplies the
+    // ports; it does not re-align the id or the character identity itself.
+    const textSource = dialogueTextSource()
+    const reconstructed = await createReconstructedRuntimeComposition({
+      clock,
+      authorizer: createRuntimeAuthorizer(),
+      selection: options.selection ?? correct.createFixtureSelectionPort(),
+      reaction: options.reaction ?? correct.createFixtureReactionPort(),
+      store,
+      history: createBaseHistory(backend, failingHistorySessions),
+      renderer,
+      gate,
+      audioEntries: createM1ActualAssetEntries(),
+      reconstruction,
+      textSource,
+      // Voice and any other non-character profile fields are supplied here; the
+      // production entry binds the character identity to the selection.
+      profile: {
+        voiceProfileId: M1_FIXTURE_VOICE_ID,
+        voiceProfileVersion: M1_FIXTURE_VOICE_VERSION,
+        ...(options.profile ?? {}),
+      },
+      ...(options.timings !== undefined ? { timings: options.timings } : {}),
+      ...(options.maxPendingInputs !== undefined
+        ? { maxPendingInputs: options.maxPendingInputs }
+        : {}),
+    })
+    composition = reconstructed
+    m4Memory = reconstructed.memory
+    sessionId = reconstructed.selection.liveSessionId
+  } else {
+    let dialoguePort = options.dialogue
+    let commitPort = options.commit
+    if (realM4) {
+      const textSource =
+        options.dialogueTextSource ??
+        (options.captureView !== undefined
+          ? createCapturingCatalogDialogueTextSource(options.captureView)
+          : createCatalogDialogueTextSource())
+      const composed = createDialogueComposition({
+        clock,
+        history: createBaseHistory(backend, failingHistorySessions),
+        textSource,
+      })
+      m4Memory = composed.memory
+      dialoguePort = dialoguePort ?? composed.dialogue
+      commitPort = commitPort ?? composed.memory
+    }
+    composition = createRuntimeComposition({
+      clock,
+      authorizer: createRuntimeAuthorizer(),
+      selection: options.selection ?? correct.createFixtureSelectionPort(),
+      reaction: options.reaction ?? correct.createFixtureReactionPort(),
+      dialogue: dialoguePort ?? correct.createFixtureDialoguePort(),
+      commit: commitPort ?? correct.createFixtureMemoryCommit(),
+      store,
+      renderer,
+      gate,
+      audioEntries: createM1ActualAssetEntries(),
+      sessionId,
+      profile: {
+        characterProfileId: realM4 ? 'character-fixture' : 'character-i1',
+        characterProfileVersion: '1',
+        voiceProfileId: M1_FIXTURE_VOICE_ID,
+        voiceProfileVersion: M1_FIXTURE_VOICE_VERSION,
+        ...(options.profile ?? {}),
+      },
+      ...(options.timings !== undefined ? { timings: options.timings } : {}),
+      ...(options.maxPendingInputs !== undefined ? { maxPendingInputs: options.maxPendingInputs } : {}),
+    })
+  }
+  if (options.wrapCoordinator !== undefined && recovery === null) {
+    // Test-only seam: a wrapped coordinator still exposes the real endpoint and
+    // bridge, so a fault is injected through the actual application path. It is
+    // not combined with recovery, which owns its own composition lineage.
+    composition = { ...composition, coordinator: options.wrapCoordinator(composition.coordinator) }
+  }
+  const endpoint = createApplicationEndpoint({
+    composition,
+    clock,
+    allowedOrigins: options.allowedOrigins ?? [LOOP_ORIGIN],
+    ...(options.onDiagnostic !== undefined ? { onDiagnostic: options.onDiagnostic } : {}),
+    ...(recovery !== null ? { recovery } : {}),
+  })
+  const server = new DiagnosticsServer({ port: 0, graceMs: 200, application: endpoint })
+  await server.start()
+  const address = server.addressInfo as AddressInfo | null
+  const port = address?.port ?? 0
+
+  const resolver = options.resolver ?? createRegistryResolver(createM1ActualBlobMap())
+  const media = options.media ?? createControlledMediaDriver({ autoEvents: true })
+  let counter = 0
+  const client = createPerformerClient({
+    url: `ws://127.0.0.1:${port}/app`,
+    origin: LOOP_ORIGIN,
+    sessionId,
+    resolver,
+    media,
+    receipts: {
+      newReceiptId: () => `player-${(counter += 1)}`,
+      localNowMs: () => null,
+    },
+    ...(options.beforeReady !== undefined ? { beforeReady: options.beforeReady } : {}),
+  })
+
+  const bootstrapOperator = (): Promise<string> =>
+    new Promise<string>((resolve, reject) => {
+      const req = request(
+        {
+          host: '127.0.0.1',
+          port,
+          path: '/operator/bootstrap',
+          method: 'POST',
+          headers: {
+            origin: LOOP_ORIGIN,
+            host: `127.0.0.1:${port}`,
+            'x-isla-operator-bootstrap': '1',
+            'content-length': '0',
+          },
+        },
+        (res) => {
+          let body = ''
+          res.setEncoding('utf8')
+          res.on('data', (chunk) => {
+            body += chunk
+          })
+          res.on('end', () => {
+            try {
+              const parsed = JSON.parse(body) as { ok?: boolean; token?: string }
+              if (parsed.ok === true && typeof parsed.token === 'string') resolve(parsed.token)
+              else reject(new Error(`bootstrap rejected: ${body}`))
+            } catch (error) {
+              reject(error)
+            }
+          })
+        },
+      )
+      req.on('error', reject)
+      req.end()
+    })
+
+  await client.snapshot
+
+  const resolveSessionId = (): string => (recovery !== null ? recovery.currentSessionId() : sessionId)
+
+  return {
+    server,
+    port,
+    origin: LOOP_ORIGIN,
+    sessionId,
+    composition,
+    backend,
+    gate,
+    clock,
+    client,
+    resolver,
+    media,
+    m4Memory,
+    recovery,
+    currentSessionId: resolveSessionId,
+    currentComposition: () => (recovery !== null ? recovery.currentComposition() : composition),
+    setRecoveryBuildFailure: (value: boolean) => {
+      recoveryBuildFailure = value
+    },
+    setHistoryReadFailure: (targetSessionId: string | null) => {
+      failingHistorySessions.clear()
+      if (targetSessionId !== null) failingHistorySessions.add(targetSessionId)
+    },
+    builtCompositions: () => builtCompositions.map((record) => ({ ...record })),
+    bootstrapOperator,
+    confirmedHistory: (targetSessionId?: string) =>
+      createHistoryQuery(backend).confirmedHistory(targetSessionId ?? resolveSessionId()),
+    newClient: (overrides = {}) => {
+      let localCounter = 0
+      return createPerformerClient({
+        url: `ws://127.0.0.1:${port}/app`,
+        origin: LOOP_ORIGIN,
+        resolver,
+        media,
+        receipts: {
+          newReceiptId: () => `player-alt-${(localCounter += 1)}`,
+          localNowMs: () => null,
+        },
+        sessionId: overrides.sessionId ?? resolveSessionId(),
+        ...overrides,
+      })
+    },
+    close: async () => {
+      await client.close().catch(() => {})
+      try {
+        await server.stop()
+      } catch {
+        // already disposed
+      }
+    },
+  }
+}

@@ -1,8 +1,9 @@
-import type { PerformanceReceipt, PlayerPort, SynthesisPort } from '../../src/contracts'
+import type { PerformanceReceipt, PlayerPort } from '../../src/contracts'
 import type {
   KokoroProvider,
   KokoroProviderInput,
   KokoroRawAudio,
+  KokoroSynthesis,
   KokoroVoiceProfile,
 } from '../../src/performance/kokoro-types'
 import type { AudioResourceRegistry } from '../../src/performance/audio-resources'
@@ -67,6 +68,10 @@ export interface KokoroProviderCall {
 export interface FakeKokoroProvider extends KokoroProvider {
   calls(): KokoroProviderCall[]
   pendingCount(): number
+  /** Generations whose returned Promise has not settled yet. */
+  inFlight(): number
+  /** Highest simultaneous {@link inFlight} observed over the provider lifetime. */
+  maxInFlight(): number
   setAutoResolve(audio?: KokoroRawAudio): void
   setAutoReject(error: unknown): void
   setAutoThrow(error: unknown): void
@@ -88,10 +93,36 @@ export function createFakeKokoroProvider(): FakeKokoroProvider {
   const calls: KokoroProviderCall[] = []
   const pending: Array<{ resolve: (audio: KokoroRawAudio) => void; reject: (error: unknown) => void }> = []
   let auto: FakeAuto | null = null
+  let inFlightCount = 0
+  let maxInFlightCount = 0
+
+  // Track real generation occupancy: a returned Promise counts as in flight
+  // until it settles, so tests can observe that a provider shared by adapters
+  // never overlaps physical work. A synchronous throw creates no Promise and
+  // therefore no occupancy.
+  const track = (promise: Promise<KokoroRawAudio>): Promise<KokoroRawAudio> => {
+    inFlightCount += 1
+    if (inFlightCount > maxInFlightCount) maxInFlightCount = inFlightCount
+    const settled = (): void => {
+      inFlightCount -= 1
+    }
+    return promise.then(
+      (audio) => {
+        settled()
+        return audio
+      },
+      (error) => {
+        settled()
+        throw error
+      },
+    )
+  }
 
   return {
     calls: () => calls.slice(),
     pendingCount: () => pending.length,
+    inFlight: () => inFlightCount,
+    maxInFlight: () => maxInFlightCount,
     setAutoResolve(audio) {
       auto = audio === undefined ? { kind: 'resolve' } : { kind: 'resolve', audio }
     },
@@ -113,17 +144,19 @@ export function createFakeKokoroProvider(): FakeKokoroProvider {
       calls.push({ text: input.text, voiceId: input.voiceId, speed: input.speed })
       if (auto !== null) {
         if (auto.kind === 'throw') throw auto.error
-        if (auto.kind === 'reject') return Promise.reject(auto.error)
+        if (auto.kind === 'reject') return track(Promise.reject(auto.error))
         // A configured resolve value is returned verbatim, including malformed
         // values used to exercise adapter validation; only an absent value
         // falls back to a default sample set.
         const configured = auto.audio
-        if (configured !== undefined) return Promise.resolve(configured)
-        return Promise.resolve(createKokoroRawAudio())
+        if (configured !== undefined) return track(Promise.resolve(configured))
+        return track(Promise.resolve(createKokoroRawAudio()))
       }
-      return new Promise<KokoroRawAudio>((resolve, reject) => {
-        pending.push({ resolve, reject })
-      })
+      return track(
+        new Promise<KokoroRawAudio>((resolve, reject) => {
+          pending.push({ resolve, reject })
+        }),
+      )
     },
   }
 }
@@ -219,7 +252,7 @@ export function createFixedRefFactory(ref: string): () => string {
 }
 
 export interface M1KokoroSynthesisKit {
-  readonly synthesis: SynthesisPort
+  readonly synthesis: KokoroSynthesis
   readonly provider: FakeKokoroProvider
   readonly registry: AudioResourceRegistry
   readonly clock: VirtualClock

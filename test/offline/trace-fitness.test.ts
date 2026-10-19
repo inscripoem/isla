@@ -4,6 +4,15 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { CHANGED_FILES_ENV, readChangedFiles } from '../../src/evaluation/changed-files'
 import {
+  nodeRestorationGit,
+  readRestorationContext,
+  type FileStat,
+  type GitCommand,
+  type PathEntry,
+  type RestorationContext,
+  type RestorationGit,
+} from '../../src/evaluation/frozen-restoration'
+import {
   collectTraceViolations,
   nodeTraceFs,
   type TraceFs,
@@ -17,6 +26,7 @@ function overridden(base: TraceFs, overrides: Record<string, string>): TraceFs {
     read: (path) => overrides[path] ?? base.read(path),
     exists: (path) => (path in overrides ? true : base.exists(path)),
     list: (path) => base.list(path),
+    stat: (path) => base.stat?.(path) ?? null,
   }
 }
 
@@ -26,7 +36,19 @@ function codes(base: TraceFs, overrides: Record<string, string>): string[] {
 
 describe('traceability fitness functions (C-34)', () => {
   it('reports no violations on the committed repository', () => {
-    expect(collectTraceViolations(nodeTraceFs(ROOT), { changedFiles: readChangedFiles() })).toEqual([])
+    // In CI the changed-file list spans the push range (`before..HEAD`) and the
+    // workflow pins the default-branch revision; the gate verifies it before any
+    // frozen path is exempted. Locally the context is absent and the check is strict.
+    const restoration = readRestorationContext()
+    if (restoration !== null) {
+      process.stderr.write(`trace: verified restoration baseline ${restoration.baseline}\n`)
+    }
+    const violations = collectTraceViolations(nodeTraceFs(ROOT), {
+      changedFiles: readChangedFiles(),
+      restoration: restoration ?? undefined,
+      onRestoration: (message) => process.stderr.write(`trace: ${message}\n`),
+    })
+    expect(violations).toEqual([])
   })
 
   it('enforces the frozen manifest against the changed-file list CI supplies', () => {
@@ -128,6 +150,288 @@ describe('traceability fitness functions reject defects (C-35)', () => {
       changedFiles: ['src/contracts/app/ports.ts'],
     }).map((violation) => violation.code)
     expect(found).toContain('frozen-modified')
+  })
+})
+
+describe('verified main-baseline restoration (C-34/C-35, INV-13)', () => {
+  const BLUEPRINT = 'architecture-blueprint.md'
+  const BASELINE = 'b'.repeat(40)
+  const HEAD = 'c'.repeat(40)
+  const HEX = /^[0-9a-f]{40}$|^[0-9a-f]{64}$/
+  const BASELINE_TEXT = nodeTraceFs(ROOT).read(BLUEPRINT)
+  const BASELINE_MANIFEST = [
+    'frozen:',
+    `  - ${BLUEPRINT}`,
+    '  - src/contracts/app/ports.ts',
+    '',
+  ].join('\n')
+  const BASE_ENTRY: PathEntry = { mode: '100644', oid: 'blob-baseline' }
+
+  interface GitSpec {
+    readonly head?: string | null
+    readonly ancestor?: boolean
+    readonly baseline?: string
+    readonly entries?: Readonly<Record<string, PathEntry | undefined>>
+    readonly files?: Readonly<Record<string, string | undefined>>
+    readonly resolves?: Readonly<Record<string, string | null>>
+  }
+
+  /**
+   * An injected git view: a valid restoration of `BLUEPRINT` unless a fact is
+   * overridden. No repository is created or mutated.
+   */
+  function git(spec: GitSpec = {}): RestorationGit {
+    const baseline = spec.baseline ?? BASELINE
+    const entries: Record<string, PathEntry | undefined> = {
+      [`${baseline}:${BLUEPRINT}`]: BASE_ENTRY,
+      [`${HEAD}:${BLUEPRINT}`]: BASE_ENTRY,
+      ...spec.entries,
+    }
+    const files: Record<string, string | undefined> = {
+      [`${baseline}:docs/architecture/frozen.yaml`]: BASELINE_MANIFEST,
+      [`${baseline}:${BLUEPRINT}`]: BASELINE_TEXT,
+      ...spec.files,
+    }
+    return {
+      head: () => (spec.head === undefined ? HEAD : spec.head),
+      resolve: (rev) => spec.resolves?.[rev] ?? (HEX.test(rev) ? rev : null),
+      isAncestor: () => spec.ancestor ?? true,
+      entry: (rev, path) => entries[`${rev}:${path}`] ?? null,
+      file: (rev, path) => files[`${rev}:${path}`] ?? null,
+    }
+  }
+
+  function context(spec: GitSpec = {}): RestorationContext {
+    return { baseline: spec.baseline ?? BASELINE, git: git(spec) }
+  }
+
+  function frozenCodes(spec: GitSpec = {}, view?: TraceFs): string[] {
+    return collectTraceViolations(view ?? nodeTraceFs(ROOT), {
+      changedFiles: [BLUEPRINT],
+      restoration: context(spec),
+    }).map((violation) => violation.code)
+  }
+
+  /** A view whose real checked file is `BLUEPRINT`, with facts overridden. */
+  function checkedFile(spec: { readonly stat?: FileStat | null; readonly readThrows?: boolean }): TraceFs {
+    const base = nodeTraceFs(ROOT)
+    const statFor = (): FileStat | null =>
+      spec.stat === undefined ? (base.stat?.(BLUEPRINT) ?? null) : spec.stat
+    return {
+      read: (path) => {
+        if (path === BLUEPRINT && spec.readThrows === true) throw new Error('EACCES: permission denied')
+        return base.read(path)
+      },
+      exists: (path) => (path === BLUEPRINT ? statFor() !== null : base.exists(path)),
+      list: (path) => base.list(path),
+      stat: (path) => (path === BLUEPRINT ? statFor() : (base.stat?.(path) ?? null)),
+    }
+  }
+
+  it('accepts an exact restoration of the baseline content and mode', () => {
+    expect(frozenCodes()).not.toContain('frozen-modified')
+  })
+
+  it('rejects a committed change whose blob differs from the baseline', () => {
+    expect(
+      frozenCodes({ entries: { [`${HEAD}:${BLUEPRINT}`]: { mode: '100644', oid: 'blob-edited' } } }),
+    ).toContain('frozen-modified')
+  })
+
+  it('rejects a committed change whose mode differs from the baseline', () => {
+    expect(
+      frozenCodes({ entries: { [`${HEAD}:${BLUEPRINT}`]: { mode: '100755', oid: BASE_ENTRY.oid } } }),
+    ).toContain('frozen-modified')
+  })
+
+  it('rejects a frozen path deleted at the checked head', () => {
+    expect(frozenCodes({ entries: { [`${HEAD}:${BLUEPRINT}`]: undefined } })).toContain('frozen-modified')
+  })
+
+  it('rejects a dirty checked file even though the committed head matches the baseline', () => {
+    // The coordinator's probe: the real git adapter says HEAD is the restored blob,
+    // but the file actually present in the checkout is an uncommitted edit.
+    const dirty = overridden(nodeTraceFs(ROOT), { [BLUEPRINT]: 'uncommitted local edit\n' })
+    expect(frozenCodes({}, dirty)).toContain('frozen-modified')
+  })
+
+  it('rejects a checked file whose filesystem mode differs from the baseline', () => {
+    expect(frozenCodes({}, checkedFile({ stat: { mode: '100755', regular: true } }))).toContain(
+      'frozen-modified',
+    )
+  })
+
+  it('rejects a symlink substituted at the checked path', () => {
+    expect(frozenCodes({}, checkedFile({ stat: { mode: '120000', regular: false } }))).toContain(
+      'frozen-modified',
+    )
+  })
+
+  it('rejects a checked file that is deleted', () => {
+    expect(frozenCodes({}, checkedFile({ stat: null }))).toContain('frozen-modified')
+  })
+
+  it('rejects a checked file that cannot be read', () => {
+    expect(
+      frozenCodes({}, checkedFile({ stat: { mode: '100644', regular: true }, readThrows: true })),
+    ).toContain('frozen-modified')
+  })
+
+  it('preserves the reverse case: a committed change fails even when the working tree matches', () => {
+    // The checked file equals the baseline text, but the committed head blob differs.
+    expect(
+      frozenCodes({ entries: { [`${HEAD}:${BLUEPRINT}`]: { mode: '100644', oid: 'blob-edited' } } }),
+    ).toContain('frozen-modified')
+  })
+
+  it('rejects a path that is not frozen at the baseline', () => {
+    expect(
+      frozenCodes({
+        files: { [`${BASELINE}:docs/architecture/frozen.yaml`]: 'frozen:\n  - src/contracts/app/ports.ts\n' },
+      }),
+    ).toContain('frozen-modified')
+  })
+
+  it('rejects a baseline whose frozen manifest is missing', () => {
+    expect(
+      frozenCodes({ files: { [`${BASELINE}:docs/architecture/frozen.yaml`]: undefined } }),
+    ).toContain('frozen-modified')
+  })
+
+  it('rejects a baseline that is not an ancestor of the checked head', () => {
+    expect(frozenCodes({ ancestor: false })).toContain('frozen-modified')
+  })
+
+  it('rejects an unresolvable checked head', () => {
+    expect(frozenCodes({ head: null })).toContain('frozen-modified')
+  })
+
+  it('never lets a run approve its own head', () => {
+    expect(frozenCodes({ baseline: HEAD })).toContain('frozen-modified')
+  })
+
+  it('denies a symbolic or abbreviated baseline even in a direct context', () => {
+    expect(frozenCodes({ baseline: 'origin/main', resolves: { 'origin/main': BASELINE } })).toContain(
+      'frozen-modified',
+    )
+    expect(frozenCodes({ baseline: 'HEAD' })).toContain('frozen-modified')
+    expect(frozenCodes({ baseline: 'HEAD', resolves: { HEAD } })).toContain('frozen-modified')
+    expect(frozenCodes({ baseline: 'c2f9b38' })).toContain('frozen-modified')
+    expect(frozenCodes({ baseline: 'not a commit' })).toContain('frozen-modified')
+  })
+
+  it('logs the provenance of an accepted and a denied restoration', () => {
+    const accepted: string[] = []
+    collectTraceViolations(nodeTraceFs(ROOT), {
+      changedFiles: [BLUEPRINT],
+      restoration: context(),
+      onRestoration: (message) => accepted.push(message),
+    })
+    expect(accepted).toEqual([expect.stringContaining(`restored to baseline ${BASELINE}`)])
+
+    const denied: string[] = []
+    collectTraceViolations(nodeTraceFs(ROOT), {
+      changedFiles: [BLUEPRINT],
+      restoration: context({ ancestor: false }),
+      onRestoration: (message) => denied.push(message),
+    })
+    expect(denied).toEqual([expect.stringContaining('restoration denied')])
+  })
+
+  it('offers the exception only for a feature-branch push with a full commit id', () => {
+    const push = {
+      GITHUB_EVENT_NAME: 'push',
+      GITHUB_REF_TYPE: 'branch',
+      GITHUB_REF_NAME: 'feat/i1-application-loop',
+      DEFAULT_BRANCH: 'main',
+      TRUSTED_BASELINE_SHA: BASELINE,
+    }
+    expect(readRestorationContext({ ...push })?.baseline).toBe(BASELINE)
+
+    expect(readRestorationContext({ ...push, GITHUB_REF_NAME: 'main' })).toBeNull()
+    expect(readRestorationContext({ ...push, GITHUB_REF_TYPE: 'tag', GITHUB_REF_NAME: 'v1' })).toBeNull()
+    expect(readRestorationContext({ ...push, GITHUB_EVENT_NAME: 'pull_request' })).toBeNull()
+    expect(readRestorationContext({ ...push, GITHUB_EVENT_NAME: 'workflow_dispatch' })).toBeNull()
+    expect(readRestorationContext({ ...push, TRUSTED_BASELINE_SHA: '' })).toBeNull()
+    expect(readRestorationContext({ ...push, TRUSTED_BASELINE_SHA: '0'.repeat(40) })).toBeNull()
+    expect(readRestorationContext({ ...push, DEFAULT_BRANCH: '' })).toBeNull()
+    expect(readRestorationContext({ ...push, TRUSTED_BASELINE_SHA: 'origin/main' })).toBeNull()
+    expect(readRestorationContext({ ...push, TRUSTED_BASELINE_SHA: 'c2f9b38' })).toBeNull()
+    expect(readRestorationContext({ ...push, TRUSTED_BASELINE_SHA: 'HEAD' })).toBeNull()
+  })
+
+  it('keeps the strict default when no restoration context is offered', () => {
+    const found = collectTraceViolations(nodeTraceFs(ROOT), {
+      changedFiles: [BLUEPRINT],
+    }).map((violation) => violation.code)
+    expect(found).toContain('frozen-modified')
+  })
+})
+
+describe('production restoration adapters (read-only facts, injected failures)', () => {
+  it('resolves canonical commit ids and reads the real repository facts', () => {
+    const git = nodeRestorationGit(ROOT)
+    const head = git.head()
+    expect(head).toMatch(/^[0-9a-f]{40}$/)
+    expect(git.resolve('HEAD')).toBe(head)
+    expect(git.resolve(head ?? '')).toBe(head)
+    expect(git.isAncestor(head ?? '', head ?? '')).toBe(true)
+    expect(git.entry(head ?? '', 'docs/architecture/frozen.yaml')).toEqual({
+      mode: '100644',
+      oid: expect.stringMatching(/^[0-9a-f]{40}$/),
+    })
+    expect(git.file(head ?? '', 'docs/architecture/frozen.yaml')).toContain('frozen:')
+    expect(git.entry(head ?? '', 'no/such/path.ts')).toBeNull()
+    expect(git.file(head ?? '', 'no/such/path.ts')).toBeNull()
+    expect(git.resolve('definitely-not-a-ref')).toBeNull()
+  })
+
+  it('reports no ancestry for an unresolvable revision', () => {
+    const git = nodeRestorationGit(ROOT)
+    expect(git.isAncestor('f'.repeat(40), git.head() ?? 'HEAD')).toBe(false)
+  })
+
+  it('degrades safely when a git command fails', () => {
+    const failing: GitCommand = () => ({ ok: false, stdout: new Uint8Array() })
+    const git = nodeRestorationGit(ROOT, failing)
+    expect(git.head()).toBeNull()
+    expect(git.resolve('HEAD')).toBeNull()
+    expect(git.isAncestor('a', 'b')).toBe(false)
+    expect(git.entry('HEAD', 'x')).toBeNull()
+    expect(git.file('HEAD', 'x')).toBeNull()
+  })
+
+  it('keeps exact file bytes for the content comparison (no trimming)', () => {
+    const git = nodeRestorationGit(ROOT, () => ({
+      ok: true,
+      stdout: Buffer.from('line one\nline two\n', 'utf8'),
+    }))
+    expect(git.file('rev', 'path')).toBe('line one\nline two\n')
+  })
+
+  it('denies a blob whose bytes are not valid UTF-8 instead of replacing them', () => {
+    const malformed: GitCommand = () => ({
+      ok: true,
+      stdout: Buffer.from([0x61, 0xff, 0xfe, 0x62]),
+    })
+    expect(nodeRestorationGit(ROOT, malformed).file('rev', 'path')).toBeNull()
+  })
+
+  it('reports the checked file mode and regularity, and null for an uninspectable path', () => {
+    const fs = nodeTraceFs(ROOT)
+    expect(fs.stat?.('architecture-blueprint.md')).toEqual({ mode: '100644', regular: true })
+    expect(fs.stat?.('docs')).toEqual({ mode: '40000', regular: false })
+    expect(fs.stat?.('no/such/path')).toBeNull()
+  })
+
+  it('denies a checked file whose bytes are not valid UTF-8 instead of replacing them', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'isla-trace-utf8-'))
+    try {
+      writeFileSync(join(dir, 'malformed.md'), Buffer.from([0x61, 0xff, 0xfe, 0x62]))
+      expect(() => nodeTraceFs(dir).read('malformed.md')).toThrow()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
 

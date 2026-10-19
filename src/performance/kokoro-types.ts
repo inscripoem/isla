@@ -7,6 +7,8 @@
  * parameter and the provider contract makes no claim that inference stops.
  */
 
+import type { SynthesisPort } from '../contracts/app'
+
 /** Raw mono audio returned by a provider, copied and validated by the adapter. */
 export interface KokoroRawAudio {
   readonly samples: Float32Array
@@ -46,6 +48,13 @@ export class KokoroProviderError extends Error {
  * fictitious abort signal and must not claim to stop inference. The returned
  * Promise represents the real in-flight generation that occupies the adapter's
  * single slot until it settles.
+ *
+ * The provider is a long-lived dependency. Composition retains exactly one
+ * `SynthesisPort` adapter per provider and reuses it; the returned Promise is the
+ * physical settlement signal, which the adapter exposes only through its private
+ * {@link KokoroSynthesis.whenIdle} observation, so an adapter-level `busy` result
+ * or a logical abort does not prove that this generation finished. See the
+ * performance README for the composition and replacement sequence.
  */
 export interface KokoroProvider {
   generate(input: KokoroProviderInput): Promise<KokoroRawAudio>
@@ -61,4 +70,25 @@ export interface KokoroVoiceProfile {
   readonly voiceProfileVersion: string
   readonly providerVoiceId: string
   readonly speed: number
+}
+
+/**
+ * The M1-only adapter returned by `createKokoroSynthesis`: the unchanged
+ * {@link SynthesisPort} plus one private, composition-only observation.
+ *
+ * `whenIdle()` observes the physical provider settlement of the generation that
+ * is active when it is called. It resolves when that generation's original
+ * provider Promise settles — fulfillment or rejection — and resolves promptly
+ * when no generation is active at call time. It never rejects with the
+ * generation's failure, and each generation owns an independent observation, so
+ * an earlier settlement never releases a later wait and a distinct later
+ * generation gets its own pending observation.
+ *
+ * This is deliberately not a global mutex, queue, cancellation API or general
+ * lifecycle framework. It does not lock admission, does not prove that a
+ * registry or playback resource was cleaned up, and is not a substitute for the
+ * owner's own replacement sequence. See the performance README.
+ */
+export interface KokoroSynthesis extends SynthesisPort {
+  whenIdle(): Promise<void>
 }

@@ -4,8 +4,9 @@
 # coordinated review by the affected owners (D3/D7; ADR-006). The traceability
 # fitness function fails a pull request that modifies a frozen path with the
 # `frozen-modified` violation, and fails if a listed path no longer exists
-# (`frozen-path-missing`). Frozen is fail-closed: to change one, add an ADR and
-# obtain human review.
+# (`frozen-path-missing`). ADR-006 permits a feature-push restoration only with
+# verified immutable main ancestry and matching committed and checked-file content/mode.
+# Other changes remain fail-closed: add an ADR and obtain human review.
 frozen:
   - architecture-blueprint.md
   - src/contracts/app/ports.ts

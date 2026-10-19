@@ -6,19 +6,22 @@ browser-safe public interface lives under [`browser/`](browser/) so M2 may
 import that subtree while its transitive imports stay browser-safe.
 
 Revision state: increments A and B, plus the M1-02 increment A offline
-Kokoro adapter. This checkout implements fixed-audio preparation, the mapped
-renderer, the single-output browser playback controller, its `PlayerPort`
-adapter, the `HTMLAudioElement` media driver, a real injected-provider
-`SynthesisPort` adapter and a controlled audio-resource registry. Concrete
-`kokoro-js` loading, the real guarded SDK/tokenizer smoke test, live VTS, the
-network receipt transport and product history integration remain later work.
+Kokoro adapter and the increment B guarded Node provider, pinned tokenizer
+facade, persistent single-worker host and live setup/smoke entrypoints. This
+checkout implements fixed-audio preparation, the mapped renderer, the
+single-output browser playback controller, its `PlayerPort` adapter, the
+`HTMLAudioElement` media driver, a real injected-provider `SynthesisPort`
+adapter, a controlled audio-resource registry, a synchronous no-truncation
+tokenizer guard over the real SDK boundary and an optional Node worker
+offload for the blocking CPU inference. Live VTS, the network receipt transport
+and product history integration remain later work.
 
 ## Public adapters
 
 | Module | Port | Behaviour |
 | --- | --- | --- |
 | [`fixed-synthesis.ts`](fixed-synthesis.ts) | `SynthesisPort` | An exact, unambiguous lookup over a fixed audio catalog. |
-| [`kokoro-synthesis.ts`](kokoro-synthesis.ts) | `SynthesisPort` | Injected raw-audio provider adapter registering generated WAV resources. |
+| [`kokoro-synthesis.ts`](kokoro-synthesis.ts) | `SynthesisPort` + private `whenIdle()` | Injected raw-audio provider adapter registering generated WAV resources. |
 | [`audio-resources.ts`](audio-resources.ts) | `AudioResolver` | Controlled opaque `audio://` registry with leases, retirement and a byte budget. |
 | [`mapped-renderer.ts`](mapped-renderer.ts) | `RendererPort` | Maps verified capability actions to low-level driver commands. |
 | [`browser/index.ts`](browser/index.ts) | — | Browser-safe public entry for M2 (types + player + DOM driver). |
@@ -97,6 +100,128 @@ Tokenizer-length and SDK truncation guards are **not** implemented or validated
 by this adapter; the injected provider must refuse an over-long input with
 `input_too_long` before inference. Concrete `kokoro-js` loading, dependency/model
 installation and a real-SDK smoke test are increment B work.
+
+#### Composition and provider ownership
+
+The factory returns a long-lived `KokoroSynthesis` (a `SynthesisPort` plus the
+private `whenIdle()` observation), and the surrounding composition owns the
+lifetime of both the provider and that adapter. The supported shape is
+**one provider plus one retained adapter**, initialized once and reused across
+turns and Stop/logical cancellation. Do **not** build a new adapter per turn, and
+do **not** share one provider across several adapters: the in-flight generation
+slot is local to one adapter instance, so two adapters over the same provider do
+not exclude each other and could start overlapping physical work. Multiple
+adapters would require a separately designed shared exclusion, which this module
+does not provide. The adapter reports `busy` only for a second concurrent call on
+the *same* adapter instance.
+
+A logical owner abort or expiry settles the returned `PreparedAudio` promptly,
+but that result is **not** evidence the physical provider generation stopped. The
+retained adapter stays `busy` for new work until the provider's original
+`generate` Promise settles; a late fulfillment publishes no reference and a late
+rejection is consumed. The retained adapter therefore exposes one private,
+composition-only observation: `whenIdle()`.
+
+`createKokoroSynthesis` returns a `KokoroSynthesis`, which is the unchanged
+`SynthesisPort` plus `whenIdle(): Promise<void>`. `whenIdle()` resolves when the
+generation that is active **at call time** physically settles — its original
+provider Promise fulfills or rejects — and resolves promptly when the adapter is
+idle. It never rejects with the generation's failure, and each generation owns an
+independent observation, so an earlier settlement never releases a later wait and
+a distinct later generation gets its own pending observation. The observation is
+reserved synchronously with the generation slot, so a provider that calls
+`whenIdle()` synchronously inside `generate` observes its own generation. A
+synchronous provider throw releases that generation's reserved observation — it
+settles rather than leaking — and clears the busy slot.
+
+`whenIdle()` is deliberately not a global mutex, queue, cancellation API or
+general lifecycle framework. It does not lock admission to the adapter, does not
+cancel or shorten provider inference, and does not prove that a registry resource
+or playback handle was cleaned up. The owner must **first stop admission to the
+old adapter**, then `await synthesis.whenIdle()`, and only then replace it; a
+premature replacement is still the caller's responsibility. There is no automatic
+guard against constructing a replacement, and this observation is not a
+substitute for the registry/playback cleanup the owner performs separately.
+
+```ts
+// One provider and one retained adapter for the whole composition lifetime.
+const provider: KokoroProvider = /* concrete kokoro-js facade, increment B */
+const synthesis: KokoroSynthesis = createKokoroSynthesis({
+  provider,
+  profiles,
+  registry,
+  clock,
+  deadlineGate,
+})
+
+// Reuse `synthesis` for every turn and across Stop. Before replacing it, stop
+// admission on the old adapter and await its physical-settlement observation:
+await synthesis.whenIdle()
+// Only now has the provider's original generation settled; construct the
+// replacement (or retry) under the owner's own exclusion policy.
+```
+
+No production composition exists in this checkout yet; installing it and
+accepting its ownership is M5 work. The offline tests in this module exercise the
+real adapter over a controlled provider and verify the caller's compliant
+sequence — they are not evidence that a production root is integrated.
+
+### Worker-isolated provider host (M1-02 increment B)
+
+`createKokoroWorkerProvider(config, options?)` (in
+[`kokoro-worker-provider.ts`](kokoro-worker-provider.ts)) implements the same
+`KokoroProvider` seam while running inference in one persistent Node worker, so
+the main event loop keeps serving timers and cancellation while the SDK's
+CPU-bound Promise is pending. It returns `{ provider, close }`, where `close()` is
+idempotent and owner-only.
+
+- The host snapshots and validates the same `KokoroProviderConfig` the in-process
+  factory uses, then loads the SDK and model **only** inside the worker from the
+  verified local-only revision cache. No HuggingFace environment is mutated on the
+  main process and no model is downloaded.
+- At most one physical generation is pending. A second `generate` fails `busy`
+  rather than queueing; there is no scheduler, pool, per-call worker, retry or
+  global lock.
+- Request scalars are validated before `postMessage`, so a malformed request
+  posts nothing. Each accepted job keeps a unique, non-reused id; only a matching
+  `result` settles it. Unknown, duplicate or old replies cannot settle another
+  job or clear its slot.
+- A logical caller abort belongs to the retained `SynthesisPort` adapter and never
+  settles the physical Promise or frees occupancy. Worker `error` (an uncaught
+  exception) and `exit` are distinct: an error closes admission but keeps the
+  pending slot until the real exit, when the original Promise is rejected. There
+  is no automatic respawn.
+- `close()` synchronously rejects new generation, drains the current physical job,
+  posts one `dispose` request that releases the loaded model through its public
+  `dispose()`, and resolves only after the actual worker exit. It is not Stop or
+  playback cancellation, and it never terminates a still-generating worker to
+  make Stop look prompt. The owner must `await close()` before replacing the host.
+
+The default transport is a real Node `Worker` created from a module-relative file
+URL to [`kokoro-worker-bootstrap.mjs`](kokoro-worker-bootstrap.mjs) with an
+explicit `execArgv: []`. That `.mjs` bootstrap registers the project's existing
+`tsx` development runtime (`tsx/esm/api` `register()`) and then imports the
+TypeScript worker entry [`kokoro-worker.ts`](kokoro-worker.ts); the registration
+stays active for the worker's lifetime. **This is a development/demo runtime
+dependency only.** A production install that omits development dependencies
+cannot be claimed supported, and moving or replacing `tsx`, or changing runtime
+packaging, requires M5/M6 review. No second product package or duplicated
+provider implementation is introduced to avoid that decision.
+
+`options.createWorker` is an embedding/test seam. The offline tests inject a
+small scripted Worker-like transport to exercise the host's real control logic
+deterministically without a subprocess or the SDK; the real bootstrap and real
+CPU timing are exercised only by the explicit live entrypoints.
+
+Initialization exposes **no internal timeout or cancellation API**:
+`createKokoroWorkerProvider` awaits the worker's own `ready` or `exit` and adds
+no timer of its own, so a hung worker initialization can remain pending
+indefinitely. A caller deadline bounds only the caller's logical wait; it neither
+settles, cancels nor replaces the initialization. An owner that stops waiting
+must still retain and observe the original initialization Promise and `close`
+any handle it eventually yields, awaiting the real worker exit before
+constructing a replacement. No `Promise.race` shortcut safely abandons that
+resource ownership or grants replacement permission.
 
 ### Audio resource registry (M1-02 increment A)
 
@@ -349,12 +474,133 @@ demo-local Vite configuration (`test/browser/vite.config.ts`) bound to
 separate from the automated pass, and its `playing`/`ended`/status values are API
 observations rather than acoustic measurements.
 
+### Live Kokoro setup and smoke (manual; not part of `pnpm test`)
+
+The M1-02 increment B live entrypoints exercise the real pinned model and SDK.
+They are explicit, isolated experiments:
+
+```sh
+# One explicit network acquisition step (the only entrypoint that may download):
+pnpm exec tsx test/live/kokoro-setup.ts
+
+# Local-only CPU smoke in the persistent worker (default; no network; fails
+# when the pinned cache is absent):
+pnpm exec tsx test/live/kokoro-smoke.ts
+
+# The historical in-process diagnostic baseline (expected to block the main
+# thread; responsiveness lag is the recorded baseline, not a probe failure):
+pnpm exec tsx test/live/kokoro-smoke.ts --main-thread
+```
+
+Both use the same repo id `onnx-community/Kokoro-82M-v1.0-ONNX`, fixed revision
+`1939ad2a8e416c0acfeecc08a694d14ef25f2231` and the checkout-relative
+`.cache/models` directory. Setup lets the SDK acquire and write its own
+revision-addressed FileCache, then asserts exactly one known-safe q8 binary by
+size and SHA-256; it never walks, lists or copies the model tree. The smoke runs
+with `allowRemoteModels=false` and `local_files_only=true`, verifies that same
+binary, then measures two fixed fixtures from the private
+`actual-boundary-fixtures.json` at the API level only: real `KokoroTTS`
+phonemization plus the real cached tokenizer with an apply-trapped probe model and
+a positive control (no weights). It then runs real CPU cold/warm inference, the
+accepted 512-token inference and the 513-token refusal through one long-lived
+provider, and a short accepted WAV plus a logical-cancellation sequence through
+one retained synthesis adapter. It reports a real `setInterval`/`AbortController`
+observation and the cancellation facts (physical settlement, busy-while-pending,
+zero registry bytes, reuse and reclaim) separately. The browser WAV fixture
+remains the short 3.65 s output; the 512-token audio is reported but not written
+to it.
+
+The report is printed before any hard gate fails. The gates require the fixed
+512/513 fixture texts to hash-match their provenance, the unrestricted tokenizer
+to measure exactly 512 and 513 full ids (`exactBoundaryVerified`), the guarded 512
+call to reach the trapped model and the guarded 513 call to be refused with a zero
+model-call delta; the over-limit provider refusal; a coherent mono IEEE-float32
+24 kHz WAV header/sample/duration; and the `cancelled_or_expired` reason with a
+pending physical job after the logical return, a maximum physical in-flight of
+one, physical settlement, zero registry bytes, successful reuse and zero bytes
+after the reuse retirement. In worker mode the smoke additionally gates the
+individual per-callback delay (`maxPendingTimerLagMs<=250`), the AbortController
+bound (`abortObservedMs<=250`) and at least one main-thread timer callback while
+the physical generation is still pending; these are local to this smoke, not a
+production SLA. The per-callback delay is
+`max(0, actualOffsetMs - previousActualOffsetMs - requestedIntervalMs)`; the
+cumulative cadence drift (a nominal interval firing slower than requested without
+any blocking) is reported separately as advisory only, with every raw callback
+timestamp and pending marker retained in the report for independent
+recomputation. The main-thread diagnostic reports the blocking baseline honestly
+and skips those responsiveness gates. Model-call-zero claims are API-only: the worker
+has no model spy and its model counters are `null`, while the main-thread
+diagnostic's counting loader can observe real model calls. These remain API and
+timing observations, not acoustic, physical-silence or product proof, and the
+exact 512/513 fixtures are checked at runtime rather than assumed.
+
+`test/live` is excluded from the root typecheck; check the entrypoints explicitly
+with a standalone `tsc --noEmit`. The live entrypoints import the shared
+`test/support` WAV decoder, so a standalone check must follow imports (a bare
+`pnpm exec tsc --noEmit --ignoreConfig ... test/live/kokoro-smoke.ts` works). The
+executed local-only setup, worker bootstrap and CPU smoke results are summarized
+under **Standalone verification** below.
+
+### Dependency build-script policy (M1-02 increment B)
+
+The pinned SDK runtime pulls packages with install scripts, so the project's
+`pnpm-workspace.yaml` `allowBuilds` map records every build decision explicitly.
+The existing `esbuild: true` approval is unchanged. The following exact resolved
+versions are explicitly **denied** (`false`) and therefore never run their build
+scripts: `onnxruntime-node@1.21.0`, `protobufjs@7.6.6` and `sharp@0.34.5`. The
+version-qualified matchers are deliberate: a different future version without its
+own entry remains unreviewed and fails a strict install rather than silently
+building.
+
+Ordinary offline CI and `pnpm test:m1` do not use SDK weights; the CPU live smoke
+uses the packaged runtime and the local-only model cache. CUDA, native
+build-from-source, or any production packaging change would need explicit M5/M6
+approval. This dependency/tooling proposal is submitted for their human review;
+it is not a claim that they have approved it.
+
+## Standalone verification (2026-10-15)
+
+The increment B provider, worker host and local-only smoke were executed against
+the pinned local q8 model at revision
+`1939ad2a8e416c0acfeecc08a694d14ef25f2231` (92,361,116-byte
+`model_quantized.onnx`, SHA-256
+`fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478`):
+
+- Worker CPU smoke (default mode): cold 1647.98 ms and warm 1540.77 ms; the
+  accepted 512-token inference produced 631,800 samples at 24 kHz (26,325 ms) and
+  the 513-token input was refused with `input_too_long`.
+- Real phonemizer/tokenizer API probe with no weights: the fixed fixture measured
+  512 and 513 full ids, the accepted 512 path reached the probe model once, and
+  the refused 513 path had a zero model-call delta. This is API-only; the worker
+  has no model spy and its internal model counters are `null`.
+- Same final smoke source, main-thread diagnostic versus worker: maximum
+  individual timer-callback delay 1571.37 ms versus 9.77 ms (106 callbacks while a
+  job was pending, pending maximum 6.57 ms). This is an event-loop observation,
+  not a TTS speedup or an SLA.
+- Logical cancellation kept the physical job pending with a maximum in-flight of
+  one until it actually settled, left zero registry bytes, and awaited the real
+  worker `close`/exit.
+- A real Chrome 155 run of the existing harness consumed the final generated
+  350,444-byte, 3650 ms WAV: 46/46 checks passed with zero console errors,
+  observed `playing`/`ended`/`Stop`, released both object URLs and both leases, and
+  cleared the DOM. This is muted media-API evidence only, not acoustic or full I2
+  proof.
+
+Rerun with the existing entrypoints:
+
+```sh
+# Local-only CPU smoke in the persistent worker (default):
+pnpm exec tsx test/live/kokoro-smoke.ts
+
+# Main-thread diagnostic baseline:
+pnpm exec tsx test/live/kokoro-smoke.ts --main-thread
+```
+
+The browser harness is served from the committed config
+`test/live/kokoro-browser.config.ts` and page `test/live/kokoro-browser.html`.
+
 ## Not yet implemented
 
-- Concrete `kokoro-js` model/dependency loading, the pinned tokenizer facade,
-  its no-truncation real-SDK smoke test and actual CPU inference (M1-02 increment
-  B). The increment A adapter only forwards a provider that already refuses an
-  over-long input with `input_too_long`; it does not itself guard token length.
 - Live VTube Studio avatar adapters (M1-02 increments C/D).
 - The authoritative `DeadlineGate` (M5) and the browser receipt transport (M2).
   The registry above is composed and invalidated by M5 later; it grants no

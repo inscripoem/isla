@@ -150,6 +150,8 @@ export interface RuntimeCoordinatorDeps {
   decisionDeadlineMs?: number
   /** Legacy alias for `timings.reactionMs`; prefer `timings`. */
   reactionDeadlineMs?: number
+  /** Upper bound on inputs admitted but not yet consumed by a turn. */
+  maxPendingInputs?: number
 }
 
 export interface RuntimeCoordinator {
@@ -157,9 +159,16 @@ export interface RuntimeCoordinator {
   runTurn(): Promise<CycleOutcome>
   lifecycle(): SessionLifecycle
   epoch(): number
+  /**
+   * Current output confirmation. Exposed so a caller (the application endpoint)
+   * can build a truthful lifecycle refusal without awaiting a snapshot.
+   */
+  outputConfirmation(): 'pending' | 'confirmed' | 'unknown'
   events(): RuntimeEvent[]
   deliveries(): CommitDelivery[]
   metrics(): RuntimeMetrics
+  /** Revokes all session work without operator authority; used on shutdown. */
+  dispose(): void
 }
 
 interface OutputRegistration {
@@ -551,6 +560,13 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
     ...(deps.decisionDeadlineMs !== undefined ? { decisionDeadlineMs: deps.decisionDeadlineMs } : {}),
     ...(deps.reactionDeadlineMs !== undefined ? { reactionDeadlineMs: deps.reactionDeadlineMs } : {}),
   })
+  const maxPendingInputs = (() => {
+    const value = deps.maxPendingInputs ?? 64
+    if (!Number.isInteger(value) || value < 1 || value > 1_000_000) {
+      throw new RangeError(`invalid maxPendingInputs: expected an integer between 1 and 1000000, got ${value}`)
+    }
+    return value
+  })()
 
   let epoch = 0
   let lifecycle: SessionLifecycle = 'stopped'
@@ -1045,6 +1061,11 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
     }
     if (lifecycle === 'degraded') {
       return Promise.resolve(reject('storage_unavailable', 'input rejected while the session is degraded', true))
+    }
+    // Bound admitted-but-unconsumed inputs so a stalled consumer cannot let the
+    // queue grow without limit. Stop/control handling is never blocked by this.
+    if (pending.length >= maxPendingInputs) {
+      return Promise.resolve(reject('conflict', 'too many pending inputs', true))
     }
     deferredKey = null
     const eventId = `event-${valid.messageId}`
@@ -2068,6 +2089,23 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
     }
   }
 
+  /**
+   * Revokes all session work without operator authority. Used on shutdown so a
+   * held selection/dialogue/synthesis cannot keep running after the server
+   * stops. It mirrors the Stop revocation and is safe to call repeatedly.
+   */
+  function disposeSession(): void {
+    running = false
+    lifecycle = 'stopped'
+    activeTurnId = null
+    performerStatus = 'idle'
+    pending = []
+    deferredKey = null
+    activeAbort?.abort()
+    activeAbort = null
+    stopGeneration += 1
+  }
+
   const endpoint: RuntimeEndpointPort = {
     snapshot: () => Promise.resolve(snapshot()),
     submitInput,
@@ -2104,6 +2142,7 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
     runTurn,
     lifecycle: () => lifecycle,
     epoch: () => epoch,
+    outputConfirmation: () => outputConfirmation,
     events: () => events.map((event) => cloneRecord(event)),
     deliveries: () => deliveries.map((delivery) => cloneRecord(delivery)),
     metrics: () => ({
@@ -2114,5 +2153,6 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
       rejectedReceipts,
       storageFailure,
     }),
+    dispose: disposeSession,
   }
 }

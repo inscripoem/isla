@@ -3,6 +3,185 @@
 # One entry per supervised change. English only.
 version: 1
 entries:
+  - date: "2026-10-16"
+    task: I1-01-PR36-consumer-repair
+    change: >-
+      Separate delivery facts from physical cleanup, preserve quarantine across
+      reconnect, distinguish known-unsent from ambiguous grants, reconcile cached
+      terminals once, and prevent client identity reuse across page reloads.
+    requirements: [FR-04, FR-05, FR-06]
+    invariants: [INV-15]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 1.19.0
+    launch_flags: [--pure, --agent, build, --variant, xhigh]
+    sessions: [ses_ebf7ec899ffegvCkI8v4kA9c1F]
+    supervision: >-
+      OpenCode authored code/tests in three supervised rounds. Codex reviewed
+      callers, repeated verification, ran browser checks, maintained paired
+      documentation and prepared unsent review drafts. Implementation preceded
+      temporary defect reintroduction for the first three regression proofs;
+      the page-reload defect was independently observed before its repair.
+    human_review: >-
+      Captain approved local repair and verification. The repair remains
+      unpublished and under review; PR36 at 08ff362 has changes requested.
+      No commit, push, GitHub message/review or merge was performed.
+    transcript_record: >-
+      Complete native loopback session and message API bodies are retained
+      privately with hashes (220 messages). Native CLI export/event captures
+      were output-limited and are marked partial; original messages are unchanged.
+    verification:
+      base: 08ff362299992e5d20a28a0305ab9acf8b21b5b5
+      independent: "653 passed / 31 files; typecheck, lint and build passed."
+      opencode: "653 passed / 31 files; typecheck, lint and build passed."
+      browser: >-
+        Two completed two-segment turns; fresh-page reload and another completed
+        turn with distinct identities; Stop after started; Resume then a full
+        turn; runtime closure after started and local cancellation. Fixed WAV
+        media-API observations only. Earlier inconclusive/mistimed attempts are
+        retained separately and not counted as successful checks.
+    scope: >-
+      Coordinated performance.status rollout is required. M2/M3 retain module
+      ownership. Live dialogue/TTS/VTS, acoustic measurement, SQLite restart and
+      full I1 acceptance remain open. PR34 was reviewed separately at 93846ab.
+
+  - date: "2026-10-15"
+    task: I1-01-main-rebuild-review
+    change: >-
+      Rebuild the existing I1-only candidate on main dbbbfcb after PR30/PR31 merge;
+      retain all original I1 source/test bodies and PR31 additions, merge existing
+      process records, verify and refresh current team status/publication drafts.
+    requirements: [FR-04, FR-05, FR-06]
+    invariants: [INV-15]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 1.19.0
+    launch_flags: [--pure, --agent, build, --variant, xhigh]
+    sessions: [ses_ec05f6f51ffep3B9Y8AwQCTu8r]
+    supervision: >-
+      Codex restored the existing authored overlay mechanically and merged its
+      inserted log entries without rewriting history. OpenCode independently
+      traced callers, reviewed compatibility and ran verification; no source
+      repair was needed or made. Codex independently ran verification and browser
+      observations, then updated documentation and factual metadata.
+    human_review: >-
+      Captain approved the local main-based rebuild and verification plan.
+      Publication and consumer acceptance remain pending. No agent merge.
+    transcript_record: >-
+      Complete OpenCode loopback session and message API response bodies are
+      retained privately with hashes, 21 messages and actual provider/model/agent
+      metadata. Native export and event-output captures hit the supervisor's
+      approximately 64 KiB output ceiling and are separately marked partial;
+      they are not represented as complete exports. This review did not author
+      new application code. Prior implementation records remain unchanged.
+    verification:
+      base: dbbbfcba203b7e3859fd6ce532ab76aea06e1a8d
+      independent: "634 passed / 30 files; typecheck, lint and build passed."
+      opencode: "634 passed / 30 files; typecheck, lint and build passed."
+      browser: >-
+        Orca media observations: two completed two-segment turns, cancellation
+        after playback started, a completed turn after Resume, and local playback
+        cancellation on socket closure. The first Stop observation script timed
+        out because it indexed a rolling text log; a state-based observation
+        succeeded. No acoustic or real-provider measurement is claimed.
+    scope: >-
+      Local unpublished I1 on main includes PR31 infrastructure but retains fixed
+      synthesis and explicit M3/text substitutes. PR33/34, production console,
+      live provider/resource composition and SQLite durability remain separate.
+
+  - date: "2026-10-15"
+    task: I1-01-application-and-selected-history
+    change: >-
+      Add the protocol-0.2 application transport, operator bootstrap, serialized
+      controls, deadline-bound performer bridge and fixed-audio browser loop.
+      Integrate real M4 context and delivery memory, validate selected archives,
+      and start a fresh stopped live session without replay. Refresh the I1-only
+      increment onto PR30 7297da4, retaining its ten-case M4/M6 consumption suite.
+    requirements: [FR-04, FR-05, FR-06]
+    # Added for G6 schema compatibility; the original entry recorded no invariant list.
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    launch_flags: [--pure, --agent, build, --variant, xhigh]
+    sessions:
+      - ses_ec4038bb0ffesjQNw66p78IhZq
+      - ses_ec2003d46ffeWe5CKFXJjTSatJ
+      - ses_ec16afef4ffeLu6VkoqZgKBhY5
+    supervision: >-
+      OpenCode authored application, test and package-script changes. Codex
+      reviewed and tested the increments, reconciled documentation and prepared
+      publication metadata. The refresh retained 33 source/test files byte for
+      byte; its only new code-related edit restored the dev:loop package script.
+    human_review: >-
+      Captain approved the local implementation and subsequent continuation.
+      Publication and owner acceptance remain pending when this entry is prepared.
+    transcript_record: >-
+      Genuine records are retained privately in i1-integration-20261015,
+      local-completion-20261015 and i1-current-20261015. The original integration
+      has a complete 276-message API export; later native exports contain 289
+      and 29 messages. Failed attempts and review corrections remain preserved.
+      The middle session also handled earlier contract work; listing it does not
+      add that already-published work to this I1 increment.
+    verification:
+      initial_integration: "478 tests / 24 files; typecheck, lint and build passed."
+      selected_history: "572 tests / 29 files; typecheck, lint and build passed."
+      refreshed_candidate: "582 tests / 30 files; typecheck, lint and build passed."
+      browser: >-
+        Observed two completed fixed-audio turns, Stop during playback, a fresh
+        completed turn after Resume and local cancellation on socket closure.
+        Last observed server confirmation remains separate from local media state.
+    scope: >-
+      M3 and the dialogue text provider remain test substitutes; M1 uses fixed
+      speech assets and M6 uses memory storage. Product-console adoption, live
+      providers, acoustic measurements, SQLite durability and complete course
+      acceptance are not established. This candidate does not include PR31.
+
+  - date: "2026-10-15"
+    task: M5-INV-15-trace-correction
+    change: >-
+      Correct the within-turn helper header from INV-08 to INV-15 and label its
+      existing regression with the C-47 verifier prefix. Synchronize requirement,
+      invariant, trace, interface and handoff records without changing runtime
+      behavior, test bodies, assertions or case identifiers.
+    requirements: [FR-06]
+    invariants: [INV-15]
+    cases: [C-47]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 1.19.0
+    launch_flags: [--pure, --agent, build, --variant, xhigh]
+    sessions: [ses_ec13fa10dffecscTinAWVYYdmC]
+    supervision: >-
+      Codex retained before-file snapshots, reviewed the two exact code/test label
+      substitutions, updated documentation and registries, and independently ran
+      the C-47 filter, attribution/registry tests and full verification. The C-47
+      filter executes six capture tests and one ordering test. Vitest filters are
+      regular expressions; literal parentheses in the full verifier must be escaped.
+    human_review: >-
+      Captain explicitly approved the local implementation plan. Results remain
+      under review; no commit, push, GitHub reply or review was authorized here.
+    transcript_record: >-
+      Genuine OpenCode CLI export and SHA-256 manifest are retained in private
+      evidence m5-ordering-trace-20261015, with original message and model metadata.
+    verification:
+      m5_baseline: "pnpm test:m5: 90 passed before modification."
+      focused: "Attribution and registry suites: 22 passed / 2 files."
+      case_filter: "C-47: 7 passed; 4 C-46 tests intentionally skipped."
+      full_suite: "pnpm verify: 582 passed / 30 files; typecheck, lint and build passed."
+    scope: >-
+      INV-08 stays M6 supporting-event read order. INV-10 through INV-14 and C-48
+      remain coordinated M6 follow-up work, not implemented by this correction.
+      Existing I1 changes are preserved. No new browser, live-provider or SQLite
+      durability evidence is claimed.
+
   - date: "2026-10-15"
     task: I1-01-Step-A
     change: >-
@@ -50,6 +229,7 @@ entries:
       pipeline dependencies remain explicit substitutes. SQLite migration/recovery,
       archived-session selection, live providers and full product acceptance remain
       separate. Application protocol 0.2 and diagnostic protocol 1 are unchanged.
+
   - date: 2026-10-12
     task: M6-01
     branch: m6-storage
@@ -59,6 +239,7 @@ entries:
     commits: [f6bfae0, 77791d5]
     agent: opencode/deepseek-v4-flash
     human_review: "Corrected a production fault-injection API leak; moved failure injection into the test adapter"
+
   - date: 2026-10-12
     task: M6-01
     branch: m6-storage
@@ -68,6 +249,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Directed by the M6 owner after reviewing AGENTS.md and READINESS-KITS"
+
   - date: 2026-10-13
     task: M6-01
     branch: m6-storage
@@ -78,6 +260,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "M5 review requested session scoping; implemented with ADR-002"
+
   - date: 2026-10-13
     task: M6-01
     branch: m6-storage
@@ -88,6 +271,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "M5 review requested an isolation boundary; implemented with ADR-002"
+
   - date: 2026-10-13
     task: M6-01
     branch: m6-storage
@@ -98,6 +282,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "M5 review required the documented ordering; implemented with ADR-002"
+
   - date: 2026-10-14
     task: M6-01
     branch: m6-storage
@@ -108,6 +293,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "M5 re-review (Medium): preserve atomicity when a later mutation fails; ADR-002 D4"
+
   - date: 2026-10-14
     task: M6-01
     branch: m6-storage
@@ -118,6 +304,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Self-review: the catalog promises a `conflict` response; ADR-002 D1"
+
   - date: 2026-10-14
     task: M6-01
     branch: m6-storage
@@ -128,6 +315,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Self-review: the documented decision is canonical equality; the code used JSON.stringify; ADR-002 D1"
+
   - date: 2026-10-14
     task: M6-01
     branch: m6-storage
@@ -138,6 +326,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Self-review (mock M5): the first canonical implementation flattened Date payloads to `{}`; ADR-002 D1"
+
   - date: 2026-10-14
     task: M6-01
     branch: m6-storage
@@ -148,6 +337,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "M5 re-review: sparse array conflated with empty array; ADR-002 D1"
+
   - date: "2026-10-13"
     task: M1-01-A
     branch: feat/m1-01-adapters
@@ -197,6 +387,7 @@ entries:
       Actual fixed synthesis and mapped renderer, with controlled test dependencies
       and the existing fixture player. Browser playback, real Stop/history integration,
       live Kokoro/VTS, durable recovery and complete product acceptance remain pending.
+
   - date: "2026-10-14"
     task: M1-01-A-review-fix
     branch: feat/m1-01-adapters
@@ -251,6 +442,7 @@ entries:
       release invocation. The fixture player remains identified. A production
       same-domain expiry-aborting DeadlineGate is a coordinated I1-01 requirement;
       browser increment B and other owners' modules are unchanged by this correction.
+
   - date: "2026-10-15"
     task: M1-01-B
     branch: feat/m1-01-player
@@ -332,6 +524,7 @@ entries:
       deadline/start-aware delivery-history integration remain pending. Live
       Kokoro/VTS, acoustic/network timing and complete product acceptance are not
       established. Issue 2 remains open with unfinished M1-01/M1-02 items unchecked.
+
   - date: "2026-10-15"
     task: M1-02-A
     branch: feat/m1-02-kokoro-adapter
@@ -415,6 +608,7 @@ entries:
       DeadlineGate remain owner integration; VTS is later M1-02 work. Live Kokoro,
       acoustic output/timing and full product acceptance are not established.
       Issue 2 remains open with unfinished M1-01/M1-02 items unchecked.
+
   - date: 2026-10-14
     task: M6-01
     branch: m6-sqlite
@@ -425,6 +619,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Integration validation requested after the payload-contract fix; ADR-004"
+
   - date: 2026-10-15
     task: M6-01
     branch: m6-sqlite
@@ -435,6 +630,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "M5-Q4/Q5 answers; owner-approved"
+
   - date: 2026-10-15
     task: M6-01
     branch: m6-sqlite
@@ -445,6 +641,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "M5 agreed (append symmetry); owner-approved"
+
   - date: 2026-10-15
     task: M6-01
     branch: m6-sqlite
@@ -455,6 +652,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Owner-approved Phase 1 (base on #30, renumber +1); ADR-002 Step A + ADR-003; M5-Q4/Q5 pending"
+
   - date: 2026-10-14
     task: M6-01
     branch: m6-sqlite
@@ -465,6 +663,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Started after PR #9; ADR-003; branch m6-sqlite off m6-storage pending merge"
+
   - date: 2026-10-14
     task: M6-01
     branch: m6-sqlite
@@ -475,16 +674,18 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Reproduces the in-memory store contract durably; ADR-004"
+
   - date: 2026-10-14
     task: M6-01
     branch: m6-sqlite
     change: "B3 restart/recovery: recovery view (confirmed vs unresolved), terminal-outcome read-back (sub-issue #12)"
     requirements: [FR-06]
     invariants: [INV-12]
-    cases: [C-32, C-33]
+    cases: [C-32, C-33, C-68]
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Owner-approved B3 plan; ADR-005; M6 data, M5 lifecycle"
+
   - date: 2026-10-14
     task: M6-01
     branch: m6-sqlite
@@ -495,6 +696,18 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Self-review: the in-memory C-38 does not cover SQLite; ADR-004 D1"
+
+  - date: 2026-10-17
+    task: I1-01
+    branch: feat/i1-application-loop
+    change: "Integrated verified main a2ecb86 (PR26 SQLite) into the PR36 branch: resolved six documentation conflicts as unions preserving M6 SQLite coverage (INV-10..INV-12; C-29..C-33, C-45, C-48) and M5 INV-15/C-47 ordering; refreshed stale PR26/adoption statements, kept append validation on C-49, retained coordinated C-51 migration as pending M6 work, and adopted the expanded test:m6. Reviewed the merged backend seam (StoredDelivery/StorageMutation terminalOutcome, composite deliveryByKey) against the I1 and M4 adapters; no production-source or test compatibility failure surfaced."
+    requirements: [FR-05, FR-06]
+    invariants: [INV-15]
+    cases: [C-47, C-49]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    human_review: "Captain-authorized integration; OpenCode resolved six doc conflicts. Independent pnpm verify passed 695 tests / 37 files, typecheck, lint and build; muted fixed-WAV browser two-turn, Stop/Resume, reload and disconnect checks passed. Coordinator corrected current-state/allocation wording after review; publication and consumer acceptance remain pending."
+
   - date: 2026-10-16
     task: M6-01
     branch: m6-storage-evidence
@@ -505,6 +718,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Targets the two claims marked unproven: durable recovery beyond a clean reopen, and universality of the invariants. Case ids pending allocation per structural-constraints.md section 3."
+
   - date: 2026-10-17
     task: M6-01
     branch: m6-storage-evidence
@@ -515,6 +729,18 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Awaiting review in #42; M4 drops its local copy of the same migration once this lands on main."
+
+  - date: 2026-10-17
+    task: I1-01
+    branch: feat/i1-application-loop
+    change: "Adopted main 8937f7d (merged PR42) into the local PR36 integration: retained both log histories, adopted C-51 append-validation references and the two added storage suites, and refreshed current team coordination documents. No new production or test implementation was authored."
+    requirements: [FR-05, FR-06]
+    invariants: [INV-04, INV-12, INV-15]
+    cases: [C-47, C-51]
+    commits: []
+    agent: Codex
+    human_review: "Captain explicitly authorized local fetch, merge, full-file staging and signed commit. This entry records direct documentation/integration work, not a new OpenCode development session. Combined verification is recorded in the delivery plan; prior browser evidence remains bound to 4c42126. Publication and consumer review are separate."
+
   - date: 2026-10-14
     task: R3
     branch: m6-r3-gates
@@ -525,6 +751,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Caught real register gaps (INV-01..03, INV-11); ADR-006"
+
   - date: 2026-10-14
     task: R3
     branch: m6-r3-gates
@@ -535,6 +762,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Wired the gates into ci.yml; README documents the gate design; ADR-006 D2"
+
   - date: 2026-10-14
     task: R3
     branch: m6-r3-gates
@@ -545,6 +773,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Governance documents; ADR-006 D3"
+
   - date: 2026-10-14
     task: R3
     branch: m6-r3-gates
@@ -555,6 +784,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Owner-approved Option A (mixed-artifact classification); ADR-006"
+
   - date: 2026-10-16
     task: R3
     branch: m6-r3-gates
@@ -565,6 +795,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Pending owner review; the case id for the id-enforcement and the G4 gate follows the convention in docs/code-governance/structural-constraints.md (allocate before adding, never self-assign)"
+
   - date: 2026-10-16
     task: R3
     branch: m6-g1-gate
@@ -575,6 +806,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Awaiting the team's agreement (at least 3 of 6) before switching the step from advise to enforce; case id C-M6-1 is pending allocation per structural-constraints.md section 3"
+
   - date: 2026-10-16
     task: R3
     branch: m6-r3-gates
@@ -585,6 +817,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Addresses M5's CHANGES_REQUESTED on 92871c2. This entry itself was demanded by the newly wired G6 gate, which failed the push run for a src/ change without a log update - the gate catching its own author. No re-review requested yet; G1 remains advisory."
+
   - date: 2026-10-16
     task: R3
     branch: m6-r3-gates
@@ -595,6 +828,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Same self-review pass as the M5 review fixes; no re-review requested yet."
+
   - date: 2026-10-16
     task: R3
     branch: m6-r3-gates
@@ -605,6 +839,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Same self-review pass; no re-review requested yet."
+
   - date: 2026-10-16
     task: R3
     branch: m6-r3-gates
@@ -615,6 +850,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Found while assessing whether the six gates are strong enough; no re-review requested yet."
+
   - date: 2026-10-16
     task: R3
     branch: m6-r3-gates
@@ -625,6 +861,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Makes the previous commit's claim true; no re-review requested yet."
+
   - date: 2026-10-17
     task: M6-01
     branch: m6-r3-gates
@@ -635,6 +872,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Addresses M5 review finding 1 on #27 (P1). Mutation-checked: restoring the tip-parent fallback fails the two range tests."
+
   - date: 2026-10-17
     task: M6-01
     branch: m6-r3-gates
@@ -645,6 +883,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Addresses M5 review finding 2 on #27 (P2). Mutation-checked: accepting an unchanged count fails the edit reproduction."
+
   - date: 2026-10-17
     task: M6-01
     branch: m6-r3-gates
@@ -655,6 +894,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Found by post-review self-audit on #27; the push-event G6 failure is what surfaced the missing record."
+
   - date: 2026-10-17
     task: M6-01
     branch: m6-r3-gates
@@ -665,6 +905,635 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Owner-approved fix after the push-event CI failure on the rebased #27. Mutation: trusting a missing `before` turns two range tests red."
+
+  - date: 2026-10-17
+    task: I1-01
+    branch: feat/i1-application-loop
+    change: "Integrated main c2f9b38 (merged PR27 gate tooling and PR32 governance) into the local PR36 branch from signed c3611fb. Resolved six documentation conflicts, retained both log histories, adapted the M5 INV-15/C-47 rows to the upstream Owner columns, and kept INV-09 owned by M5 as already recorded in the requirements registry. Adopted upstream gates unchanged; refreshed current team documents without importing unmerged PR35/40 code or registrations. G6 exposed one historical entry without an invariants field; added an explicitly unrecorded empty list without inferring IDs or changing its original narrative. Trace exposed old progress-only edits to the newly frozen architecture blueprint; retained main's frozen blueprint and kept current progress in team documents. Original inputs and the initial failing checks are archived externally."
+    requirements: [FR-05, FR-06]
+    invariants: [INV-09, INV-13, INV-14, INV-15]
+    cases: [C-34, C-35, C-36, C-37, C-47, C-51]
+    commits: []
+    agent: Codex
+    human_review: "Captain explicitly authorized local fetch, merge, full-file staging and a signed integration commit. This records direct documentation and integration work, not a new OpenCode implementation session. Preservation and final verification are recorded in the delivery plan and external evidence; original browser observations remain tied to 4c42126. Publication requires separate approval."
+
+  - date: 2026-10-17
+    task: M6-01-PR36-frozen-restoration
+    branch: feat/i1-application-loop
+    change: >-
+      Repair the frozen-path false positive when a feature push restores the main version.
+      Retain the complete event diff for every gate. The restoration proof requires a
+      canonical full default-branch commit, verified ancestry, a baseline frozen declaration,
+      matching committed blob/mode, and matching actual regular-file contents/mode. Strict
+      UTF-8 decoding preserves BOMs and rejects malformed bytes. Missing proof, symbolic refs,
+      dirty files, symlinks and non-feature events retain strict enforcement. Add regression
+      tests, CI baseline wiring and governance references without changing application code.
+    requirements: [FR-06]
+    invariants: [INV-13]
+    cases: [C-34, C-35]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    human_review: >-
+      Captain approved the local coordinator-proposed repair for M6 review. OpenCode v2.0.32
+      session ses_eb6090f71ffentiYa7qBgQaODr used native build and xhigh. Coordinator probes
+      found and corrected dirty-file and symbolic-baseline acceptance, then required strict
+      decoding. Mixed standalone/background continuation caused overlapping execution and a
+      duplicate declaration; both executions were interrupted and the source reconciled.
+      Genuine session history and intermediate failures are retained externally. The coordinator
+      completed documentation and independent verification. No commit, push, GitHub message,
+      review or merge was performed; the repair remains unpublished and under review.
+    verification:
+      targeted: "Coordinator typecheck, lint and 41 trace tests passed."
+      full_suite: "Coordinator pnpm verify: 791 passed / 44 files; typecheck, lint and build passed."
+      scope: >-
+        Tests cover committed and checked-file content/mode changes, deleted or unreadable
+        files, symlinks, missing/non-ancestor/unresolvable baselines, aliases and self-approval,
+        strict UTF-8/BOM handling, non-feature events, and read-only production Git adapters.
+        The frozen list and complete event diff semantics are unchanged. Tests do not mutate Git.
+
+  - date: "2026-10-18"
+    task: I1-01-session-recovery
+    branch: feat/i1-session-recovery
+    change: >-
+      Add explicit operator session recovery to the protocol-0.2 application endpoint
+      and the I1 loop. A `session.recover` client message (payload
+      `acknowledgePlaybackEnded: true`, the operator's own decision and never media
+      or delivery evidence) retires the old in-memory scheduling and every old
+      connection, installs a fresh stopped successor with a new epoch, its own
+      deadline gate and the same backing store, and carries forward only confirmed
+      history through the existing production reconstruction entry. A new
+      `SessionRecovery` controller owns the selection lineage and the
+      retire/install state machine; retries and concurrent requests resolve to a
+      single successor; unknown and partial outcomes are preserved but never
+      promoted to speech; the archive-source bound stays explicit; and a
+      successor-construction failure is a retryable refusal that leaves the retiring
+      session current without a second live runtime. The server also pushes an
+      explicit `session.recovery.state` (`retiring: true`) to every client,
+      including after a reload, so the page's retired state is server-authoritative
+      rather than inferred from lifecycle. The change is additive at protocol 0.2;
+      no shared register row or case id was added and the existing C-08 row stays
+      pending with no verifier.
+    requirements: [FR-05, FR-06]
+    invariants: [INV-07, INV-08, INV-12]
+    cases: [C-08]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    sessions: [ses_eb2014c63ffePhR2Ga1C7G7sxo, ses_eb180c970ffeoD5t6ywKvYKwFS]
+    human_review: >-
+      Captain approved the recovery slice and its plan. Initial implementation was
+      authored on the former I1 working copy; Captain then approved migration to
+      feat/i1-session-recovery, based on main 2d0459fd (the
+      squashed merge of PR36, whose old head 979f88d had the same tree). PR36 is
+      merged; this branch is a separate follow-up and is not covered by the
+      baseline M1 approval
+      (https://github.com/inscripoem/isla/pull/36#pullrequestreview-5561759957).
+      At completion of local verification, the result was unpublished and under
+      review. Captain subsequently authorized committing and pushing this task
+      branch and creating a new PR. Implementation approval does not replace
+      consumer review or human merge approval; no global configuration was changed.
+    transcript_record: >-
+      This entry records supervised OpenCode work: the initial implementation used
+      ses_eb2014c63ffePhR2Ga1C7G7sxo; the migration continuation used
+      ses_eb180c970ffeoD5t6ywKvYKwFS, with the configured provider; no native
+      transcript is copied into the checkout and none is fabricated; any genuine
+      private evidence remains outside the checkout.
+    verification:
+      focused: >-
+        Recovery suite passes (17 tests: schema strictness, interrupted-playback
+        recovery, fresh stopped successor, confirmed-only carry, partial/unknown
+        exclusion, repeated/concurrent/unauthorized/stale recovery, retryable build
+        failure, `session.recovery.state` handling and demo wiring). Three tests that
+        gated a Stop on any earlier `started` receipt now first capture the already
+        started outputs and wait for a NEWLY started output identity, so each Stop
+        provably acts on its own turn; the stopped-partial-turn test now asserts that
+        the matching cancelled evidence is retained and excluded from the carried
+        confirmed history instead of a timing-dependent refused-Resume premise
+        (recovery refusal stays covered by the disconnect and failed-retirement
+        tests). The twelve I1
+        offline suites pass 109 tests together (performer machine, protocol,
+        application, bridge, deadline, ordering, cache, diagnostics, reconnect
+        identity and the loop demo).
+      browser: >-
+        Genuine Playwright acceptance against the real loop page and runtime
+        (test/browser/recovery-acceptance.mjs) passed all ten scenarios twice on
+        fresh runtime+page servers: initial stopped session, manual Resume and a
+        full two-segment output; an ordinary Stop during a NEW natively playing
+        turn producing a new performance.cancel frame, a new cancelled receipt and
+        genuine local resource release, then a fresh authoritative server snapshot
+        (stopped/confirmed on the SAME session), exactly one applied manual Resume
+        and a new full output; a new playing turn closed at the real /app socket
+        with local release; reload of the SAME session unconfirmed and replay-free;
+        explicit recovery to a DIFFERENT stopped successor; reconnect/bootstrap/
+        attach/manual Resume and two complete fresh turns; and a second recovery
+        preserving lineage. Zero page errors; fixed WAV media-API observations, not
+        acoustic measurement.
+      full_suite: "OpenCode and independent supervisor pnpm verify: 809 passed / 46 files, exit 0; typecheck, lint and build passed. Independent browser: 10/10, zero page errors."
+    scope: >-
+      Lifecycle recovery over the existing in-memory I1 store only. SQLite restart
+      recovery, live dialogue/TTS/VTS, acoustic verification and full I1 acceptance
+      remain open; no new dependency was added and no peer module was implemented.
+
+  - date: 2026-10-19
+    task: M6-01
+    branch: m6-01-sqlite-app-recovery
+    change: "M6-01 acceptance: add a coordinator + SQLite reopen test using createCoordinatorContractRunner with explicit real SQLite store/history/replay/projection ports and controlled non-storage peers. It covers a completed turn, an interrupted turn, an earlier completed segment, and empty history; closes and reopens SQLite; and restores only confirmed history while keeping interrupted output unresolved. The test registers C-68 and links C-32/C-33 and INV-12; it is storage-reopen evidence, not application/process restart or acoustic proof."
+    requirements: [FR-06]
+    invariants: [INV-12]
+    cases: [C-32, C-33, C-68]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    verification:
+      focused: "test/offline/m6-i1-storage-recovery.test.ts: 3/3 passed on the reviewed head."
+      role: "test:m6 99/7; composition 12/1; readiness 42/3; trace 41/1."
+      full_suite: "pnpm test 812/47; pnpm verify exit 0; typecheck, lint and build passed."
+      mutation: "Removing the fully-delivered filter from the confirmed-history query made the new test red; source restored and the focused/role/verify checks passed again."
+    human_review: "Test-only M6-01 acceptance slice; M5 review requested for harness use and storage assertions. No production code change; no real provider, speech or app/process recovery claim."
+
+  - date: 2026-10-15
+    task: M1-02-provider-ownership
+    branch: fix/m1-02-provider-ownership
+    member: Pioneer141 (M1)
+    change: Clarify that the synthesis busy flag belongs to one adapter instance.
+      Document one retained adapter per provider across logical cancellation and
+      caller-owned replacement only after physical settlement; add three
+      actual-adapter lifecycle regressions.
+    requirements:
+      - FR-04
+      - FR-05
+      - NFR-06
+    invariants:
+      - INV-01
+    commits: []
+    agent: opencode/deepseek-flash
+    provider: deepseek
+    model: deepseek-flash
+    opencode_version: 1.18.34
+    launch_flags:
+      - --pure
+      - --agent
+      - build
+      - --variant
+      - xhigh
+      - --auto
+    sessions:
+      - ses_ec0cd5c61ffe1683Nll0jnLQSx
+    supervision: Codex coordinated genuine native OpenCode, independently ran
+      verification and arranged a separate AI review. OpenCode authored
+      comments, README, helper and tests; Codex prepared this factual metadata.
+      Historical entries remain unchanged.
+    human_review: The user authorized latest-main update, the M5 Issue 2 ownership
+      follow-up through OpenCode/official DeepSeek and full transcripts, then
+      P002 B after checks. Existing M1 publication and Issue synchronization
+      instructions apply. M5 consumer review of this follow-up will be
+      requested; independent AI review is separate. Agents never merge.
+    transcript_record: One actual official DeepSeek session, two rounds; round02
+      explicitly continues round01 for a test-label correction. Each run and
+      native export exited0; eight raw events/stderr/export/export-stderr
+      originals are preserved privately byte-for-byte and both
+      expected-provider/model/session audits passed. Separate annotations retain
+      actual sequence; raw transcripts are excluded from this repository.
+    verification:
+      platform: Windows
+      node: 24.14.1
+      pnpm: 12.12.0
+      base: c250e12e5062b16191db103e43af46d177549cac
+      baseline_m1: 150 passed on freshly updated main.
+      baseline_full_suite: 475 passed, six named Windows baseline failures and three
+        tsx ENOENT errors; typecheck/lint passed.
+      development_sequence: This is an ownership documentation and coverage
+        clarification; no production behavior was changed or failing-first
+        repair claimed. Three lifecycle regressions passed. Round02 only
+        corrects their K05 matrix label to K03 ownership.
+      m1: 153 passed; independently rerun after the final label correction.
+      typecheck: passed
+      lint: passed
+      build: passed
+      full_suite: 478 passed, the same six named baseline failures and three tsx
+        ENOENT errors. Windows full verify remains non-green. This full check
+        preceded only the round02 test-label correction; no
+        assertions/production logic changed and role checks passed afterward.
+      independent_review: PASS; three targeted lifecycle tests passed, original150
+        assertions preserved, final five source hashes bound. Label-only final
+        change independently verified.
+      ci: Pending at record creation; head-matched results are reported in the
+        PR/Issue.
+    scope: Controlled-provider tests verify actual single-adapter reuse through
+      logical cancellation and the caller-compliant sequence for replacement
+      after physical settlement. No cross-instance global exclusion, scheduler
+      or automatic replacement guard is added. M5 consuming production
+      composition acceptance remains pending. Real SDK/model, tokenizer guard
+      and CPU/browser evidence are separate P002 B work; no
+      live/acoustic/full-product acceptance is claimed. Issue2 remains open with
+      unfinished tasks unchecked.
+
+  - date: 2026-10-16
+    task: M1-02-M4-ownership-follow-up
+    branch: fix/m1-02-provider-ownership
+    member: Pioneer141 (M1)
+    change: Expose an adapter-local physical-settlement observation for safe
+      caller-owned replacement, including synchronous provider reentrancy; add
+      actual-adapter observation and unsupported shared-provider regressions.
+    requirements: [FR-04, FR-05, NFR-06]
+    invariants: [INV-01]
+    commits: []
+    agent: opencode/deepseek-flash
+    provider: deepseek
+    model: deepseek-flash
+    opencode_version: 1.18.34
+    launch_flags: [--pure, --agent, build, --variant, xhigh, --auto]
+    sessions: [ses_ebf49cfb3ffef7eWMfkw4MH5bC]
+    supervision: Codex scoped the human-authorized M4 follow-up, captured genuine
+      native OpenCode output, ran direct-process checks and arranged independent
+      AI review. OpenCode authored application code, tests and module docs;
+      Codex prepared this factual metadata. Human consumer review is separate.
+    human_review: The user explicitly authorized these fixes, full transcripts,
+      testing, commit/push, PR updates, Issue2 synchronization and M5/M6 review
+      requests. M5 ownership consumption remains pending. Agents never merge.
+    transcript_record: One genuine official DeepSeek session with two rounds;
+      each run/export exited0, all eight raw events/stderr/export/export-stderr
+      originals are archived privately byte-for-byte and both expected-model
+      audits passed. Round01 changed source before adding nine passing tests.
+      Independent probes then found a synchronous reentrancy defect. Round01b
+      added three tests first, observed two failed and one control passed,
+      fixed reservation timing and obtained twelve passing observation tests.
+      Raw history and separate annotations are retained, not reconstructed.
+    verification:
+      platform: Windows
+      starting_head: f7a0d3e5ceeb255438f415cee20969c9dfb6b34a
+      baseline_m1: 153 passed
+      m1: 165 passed by direct-process supervisor verification
+      typecheck: passed
+      lint: passed
+      build: passed
+      full_suite: 490 passed, the same six named baseline failures and three
+        tsx ENOENT errors, compared with 478/6/3 at the fresh baseline.
+        Local Windows full verification is not green.
+      independent_review: The original reentrancy probes now pass3/3, and
+        all12 observation tests pass independently; exact five source hashes
+        are bound. M4's maxInFlight nit was already satisfied by all three
+        original ownership tests and is not claimed as new coverage.
+      shell_capture: OpenCode PowerShell redirection reported some successful
+        native checks as exit1 due to stderr wrapping. These raw tool results
+        are preserved; the supervisor's direct executable capture confirms
+        role/type/lint/build outcomes without that redirection artifact.
+      ci: Pending for the follow-up commit at record creation; head-matched
+        results are reported separately in the PR and Issue progress comment.
+    scope: whenIdle observes the physical generation active at call time,
+      including synchronous provider callbacks, and never rejects with its
+      failure. The owner must stop old-adapter admission before awaiting it.
+      This adds no global exclusion, cancellation, registry/playback cleanup or
+      production composition. The two-adapter test characterizes an unsupported
+      hazard rather than supporting that shape. C5 is unchanged. Real SDK,
+      acoustic and whole-product/course acceptance are separate. Issue2 stays
+      open with unfinished tasks unchecked.
+
+  - date: 2026-10-15
+    task: M1-02-B-Kokoro-live
+    branch: feat/m1-02-kokoro-live
+    member: Pioneer141 (M1)
+    change: Add a pinned local-only Kokoro CPU provider, synchronous no-truncation
+      guard, one persistent worker with exit-governed physical lifecycle, and
+      explicit real-model/browser smoke entry points.
+    requirements:
+      - FR-03
+      - FR-04
+      - FR-05
+      - NFR-06
+    invariants:
+      - INV-01
+    commits: []
+    agent: opencode/deepseek-flash
+    provider: deepseek
+    model: deepseek-flash
+    opencode_version: 1.18.34
+    launch_flags:
+      - --pure
+      - --agent
+      - build
+      - --variant
+      - xhigh
+      - --auto
+    sessions:
+      - ses_ec0c33f26ffeV1ylf2cc0gb52X
+      - ses_ec0bca700ffe6RO53M9euSP2n4
+      - ses_ec0ac02c0ffeLieZ33wGz3rpWU
+      - ses_ec09bf832ffeNr1gX4UcpM63M9
+      - ses_ec0962eedffeCL8Dys6c9mr897
+    supervision: Genuine native OpenCode authored application source, tests,
+      SDK/lock changes and English READMEs. Codex supervised bounded runs,
+      arranged independent AI review, ran final offline/CPU/browser checks and
+      prepared factual public metadata. No original transcript was rewritten.
+    human_review: The user authorized latest main, the M5 ownership follow-up and
+      P002 B after checks. Existing M1 branch/commit/push/PR and Issue progress
+      instructions apply. M5 reviews provider/worker composition and dependency
+      acceptance; M6 reviews the dependency lock and tooling. AI review is
+      separate from human approval; agents never merge.
+    transcript_record: Five actual official DeepSeek sessions across twelve rounds,
+      forty-eight byte-preserved raw events/run-stderr/export/export-stderr
+      originals and twelve archive audits. Round01 was supervisor-stopped after
+      a protected-name public-SDK read; round02 was stopped at a material review
+      checkpoint. Round06 finished at the reasoning length limit with zero
+      output and no harness implementation; bounded continuations completed it.
+      Nonzero/length results and all failed checks remain in private originals
+      with separate annotations. Archive audits are not implementation
+      acceptance.
+    verification:
+      platform: Windows win32/x64
+      node: 24.14.1
+      pnpm: 12.12.0
+      typescript: 6.0.3
+      base: f7a0d3e5ceeb255438f415cee20969c9dfb6b34a
+      baseline_m1: 153 passed on the tested ownership commit; all original153 test
+        assertions preserved byte-for-byte.
+      development_sequence: "Initial implementation was followed by real red/green
+        repairs: SDK/config regressions7 failed/161 passed then171 passed;
+        worker lifecycle182 pass/1 fail then183; startup independent1 fail then1
+        pass; round08 repository regressions4 failed/185 passed then189 and192
+        passed. Independent fatal transport probes also failed before repair.
+        The first actual worker run exited1 on a cumulative-drift timer
+        statistic; per-callback delay was corrected with raw timestamps retained
+        and the250ms development-smoke threshold unchanged. Final real worker
+        smoke passed. This is not represented as uniformly test-first
+        development."
+      m1: 192 passed
+      typecheck: passed
+      lint: passed
+      build: passed
+      standalone_live_tsc: passed
+      full_suite: 517 passed, the same six named Windows baseline failures and three
+        tsx ENOENT errors; Windows full verify remains non-green. Failure names
+        were compared with fresh main/ownership baselines.
+      sdk: kokoro-js1.2.1, @huggingface/transformers3.5.1, phonemizer1.2.1,
+        onnxruntime-node1.21.0; dependency/lock proposal remains subject to
+        M5/M6 review.
+      model:
+        repo: onnx-community/Kokoro-82M-v1.0-ONNX
+        revision: 1939ad2a8e416c0acfeecc08a694d14ef25f2231
+        dtype: q8
+        bytes: 92361116
+        sha256: fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478
+        voice_fixture: af_heart
+        speed: 1
+      real_cpu: Actual local-only worker cold/warm and512-token weights inference
+        passed;513 was refused. Actual SDK phonemization/tokenization verified
+        full512/513 IDs, a positive model-spy control and zero over-limit model
+        calls in the API-only probe. Worker internal model-call counters remain
+        null.
+      worker_responsiveness:
+        pending_callback_delay_ms: 6.57
+        all_callback_delay_ms: 9.77
+        abort_observed_ms: 14.13
+        scope: Observed local development smoke only, not a production latency SLA or
+          proof of cancelling native inference.
+      logical_physical_lifecycle: One retained actual synthesis adapter remains busy
+        after logical cancellation until the physical worker generation settles;
+        max physical in-flight1, late publication suppressed, registry bytes0,
+        reuse only after settlement, owner close awaited actual worker exit.
+      browser: "Actual Chrome155 media-API run: all46 checks passed on the
+        same350444-byte/3650ms generated WAV; actual playing/ended and trusted
+        Stop observed, two object URLs revoked and two leases released, DOM
+        paused/src cleared/currentTime reset. Playback muted; no acoustic
+        claim."
+      independent_review: Final worker/timing and SDK/guard/resources AI reviews
+        passed with source hashes bound; no unresolved material findings.
+        Browser harness source/build and final actual run recorded separately.
+      ci: Pending for the new branch head at record creation; head-matched results are
+        reported in the PR and Issue.
+    scope: Independent Node CPU provider/development worker and generated-WAV
+      browser harness. Existing ports and browser public entry are unchanged; no
+      production HTTP/root/DeadlineGate/M2 bootstrap or single receipt transport
+      is installed. M5 consuming ownership/composition acceptance and M5/M6
+      dependency/production packaging review remain pending; tsx development
+      runtime is required for this worker bootstrap. English af_heart is a smoke
+      fixture, not a product voice/language choice. VTS C/D, acoustic quality
+      and full product I1/I2 acceptance remain open. Issue2 stays Open and
+      unfinished tasks unchecked.
+
+  - date: 2026-10-15
+    task: M1-02-B-CI-script-policy-and-verification-docs
+    branch: feat/m1-02-kokoro-live
+    member: Pioneer141 (M1)
+    change: Declare three exact dependency build scripts explicitly disabled so pnpm
+      strict frozen installation has no undecided scripts; correct the README
+      historical live-verification status using actual recorded results.
+    requirements:
+      - NFR-06
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-flash
+    provider: deepseek
+    model: deepseek-flash
+    opencode_version: 1.18.34
+    launch_flags:
+      - --pure
+      - --agent
+      - build
+      - --variant
+      - xhigh
+      - --auto
+    sessions:
+      - ses_ec09bf832ffeNr1gX4UcpM63M9
+    supervision: Genuine OpenCode continued the existing official DeepSeek session
+      for rounds09/10 and authored only the workspace script-policy delta and
+      English README correction. Codex diagnosed the real CI installation
+      failure, checked official pnpm semantics, independently reviewed the exact
+      delta and prepared factual metadata. Previous entries are unchanged.
+    human_review: Existing user M1 publication/Issue authorization applies; M5/M6
+      human review of dependency policy and production packaging remains
+      pending. No build scripts were newly approved and agents do not merge.
+    transcript_record: Two additional actual rounds in the existing worker session,
+      each native run/export exit0 with four raw originals and central archive
+      audit. The complete B record now comprises five actual sessions, fourteen
+      rounds and56 private raw originals. The earlier twelve-round snapshot,
+      both initial CI failures and all stopped/length-limited runs remain
+      preserved.
+    verification:
+      initial_ci: Both c695010 push and pull_request runs failed at pnpm install
+        --frozen-lockfile with ERR_PNPM_IGNORED_BUILDS for
+        onnxruntime-node1.21.0, protobufjs7.6.6 and sharp0.34.5; no test step
+        ran in those failed workflows.
+      policy: Exact-version allowBuilds false for those three packages; esbuild true,
+        strict defaults, store path, manifest/lock and all executable
+        application/test code unchanged. No blanket script approval or workflow
+        bypass.
+      policy_source: https://pnpm.io/settings/build#allowbuilds
+      local_checks: Round09 cached pnpm install --frozen-lockfile,192 M1 tests,
+        typecheck, lint and build passed. This local cached install is not a
+        clean Linux-install claim; new head-matched CI results are reported in
+        PR34/Issue2.
+      documentation_only: Round10 corrected the stale no-live-run bullet to the
+        observed standalone CPU/browser evidence. Only README changed in that
+        continuation; no tests, model or browser were rerun for the factual
+        documentation delta.
+      evidence_reuse: All executable source, test, manifest and lock hashes remain
+        identical to the final worker/browser/offline checks. Prior192
+        M1,517/same6Windows failures/3tsx errors,512/513 CPU/API checks, fair
+        timer comparison and46 browser checks retain their exact scope and
+        tested source bindings.
+      independent_review: Exact three false matchers and factual README delta
+        independently reviewed; source/dependency code unchanged. M5/M6 approval
+        remains separate.
+      ci: Pending for the correction commit at record creation; both initial failed
+        workflows remain in history.
+    scope: Project-local dependency script denial and factual English documentation
+      only. No new script execution permission, dependency version, shared
+      contract, product root/HTTP path, production packaging, VTS or
+      acoustic/full-product acceptance change. Issue2 stays Open with unfinished
+      tasks unchecked.
+
+  - date: 2026-10-16
+    task: M1-02-M4-worker-follow-up
+    branch: feat/m1-02-kokoro-live
+    member: Pioneer141 (M1)
+    change: Address M4 feedback on the independent verified token ceiling,
+      worker-side dispose draining, idempotent fatal termination requests,
+      owned-buffer transfer and initialization ownership; verify the actual
+      worker entry with native MessageChannel and safe test teardown.
+    requirements: [FR-04, FR-05, NFR-06]
+    invariants: [INV-01]
+    commits: []
+    agent: opencode/deepseek-flash
+    provider: deepseek
+    model: deepseek-flash
+    opencode_version: 1.18.34
+    launch_flags: [--pure, --agent, build, --variant, xhigh, --auto]
+    sessions: [ses_ebf3fb1d7ffeebLsZh69u6Yopn]
+    supervision: Codex scoped and captured genuine native OpenCode, ran direct
+      checks and the existing local-only real worker smoke, and arranged two
+      independent AI reviews. OpenCode authored all application/test changes;
+      Codex prepared factual public metadata and performed authorized Git work.
+    human_review: The user explicitly authorized the M4 follow-up, full raw
+      transcripts, checks, commits/pushes, PR updates, Issue2 synchronization and
+      M5/M6 review requests. Consumer acceptance remains pending; agents never
+      merge, enable auto-merge or enqueue.
+    transcript_record: Worker changes and test repair used one genuine official
+      DeepSeek session, two rounds, eight raw originals and two model/session
+      audits. The separately logged ownership portion used another session,
+      two rounds and eight originals; the complete current follow-up therefore
+      has two sessions, four rounds and sixteen raw originals, all preserved
+      privately unabridged. Earlier development history is unchanged.
+    development_sequence: Round02 implemented before the first green run, then
+      temporarily restored old host/worker behavior to demonstrate two and
+      three failing regressions before restoring the fixes. This was
+      retrospective verification, not test-first. Independent review then
+      reproduced a test-teardown race. Round02b added a safe failing regression
+      against that old cleanup, observed one failure, fixed sequencing and
+      obtained five passing entry tests. Failed optional tool calls remain in
+      the original transcript.
+    verification:
+      platform: Windows
+      node: 24.14.1
+      starting_head: 93846abcc1f9ad7a20c7568c89f133c58a807184
+      ownership_dependency: b70843c85970f5259a33e339ca21890953b48656
+      ordinary_merge: a9ca369c767e7542429c85c82589c1d4d3203dcf
+      baseline_m1: 192 passed; 204 after the ownership update was merged.
+      m1: 211 passed across two explicit offline test files.
+      typecheck: passed
+      lint: passed
+      build: passed
+      full_suite: 536 passed, the same six named baseline failures and three
+        tsx ENOENT errors, versus the fresh B baseline 517/6/3. Local Windows
+        full verification remains non-green; corresponding CI is separate.
+      independent_review: Production lifecycle review passed 22 targeted tests.
+        Entry tests passed 5/5, strict TypeScript passed, and a newly regenerated
+        probe against the final harness passed after the teardown repair.
+        Production hashes are unchanged by the test-only repair.
+      real_worker_smoke: Existing local-only pinned-q8 smoke exited0 with all
+        gates passed. Real 512 inference produced 631800 mono samples at 24 kHz;
+        513 was refused. Zero-model-call evidence is API-only; actual worker
+        counters are null. Logical cancellation retained physical occupancy,
+        settlement allowed reuse and registry bytes returned to 0. Close waited
+        for actual exit. The short WAV remains byte-identical to the prior
+        browser fixture. No setup/download command or new browser/acoustic
+        acceptance was claimed.
+      ci: Pending for the new follow-up commit at record creation; exact-head
+        results are reported in the PR and Issue progress comment.
+    scope: Native transport tests exercise the actual worker entry with a
+      controlled inference substitute; the local-only smoke separately runs
+      real weights. The verified ceiling remains 512, with lower configured
+      limits supported. Disposal closes admission and drains actual generation;
+      fatal error requests termination once but pending state settles only on
+      observed exit. Only an owned copy is transferred. Caller init deadlines
+      do not cancel initialization or permit unobserved replacement. C5 and
+      dependencies/lock/pnpm policy are unchanged; package.json only adds the
+      explicit entry test to test:m1. PR34 still depends on PR33. Production
+      M5/M2 integration, live VTS, PR36 fixes and full product/course acceptance
+      remain separate. Issue2 stays open with unfinished tasks unchecked.
+
+  - date: 2026-10-16
+    task: M1-02-M6-entry-coverage
+    branch: feat/m1-02-kokoro-live
+    member: Pioneer141 (M1)
+    change: Add the three worker-entry regressions requested by M6 review
+      5542951948 for busy admission, coded provider rejection and loaded-model
+      initialization failure; preserve the original five entry test bodies.
+    requirements: [FR-04, FR-05, NFR-06]
+    invariants: [INV-01]
+    commits: []
+    agent: opencode/deepseek-flash
+    provider: deepseek
+    model: deepseek-flash
+    opencode_version: 1.18.34
+    launch_flags: [--pure, --agent, build, --variant, xhigh, --auto]
+    sessions: [ses_ebaf70a05ffe7Bg2SToPGXS9fV]
+    supervision: OpenCode authored the actual-entry test and private harness
+      changes. Codex scoped and captured the genuine native session, ran fresh
+      baseline and final checks, arranged independent AI review and prepared
+      factual metadata and authorized GitHub publication.
+    human_review: The user explicitly authorized these three coverage cases,
+      full transcripts, commit/push, an English M6 reply, Issue2 synchronization
+      and M5/M6 re-review requests. The preceding head had M5 approval and M6
+      COMMENTED feedback; review of this new head remains pending.
+    transcript_record: One genuine official DeepSeek session, two rounds, eight
+      unabridged raw event/export/stderr originals and two passing central
+      model/session audits; source and archive bytes and hashes match.
+    development_sequence: Round01 added three cases over existing correct
+      production behavior and all eight entry cases passed on the first run.
+      Supervisor review then requested final settled message counts and no-ready
+      assertions. Round02 tightened those assertions and kept the same green
+      results. No failing production mutation or test-first red is claimed.
+    verification:
+      platform: Windows
+      node: 24.14.1
+      starting_head: 20cbd7eecd2dca56a01a1c78ce4950fb7b6b7303
+      baseline_entry: 5 passed
+      baseline_m1: 211 passed
+      baseline_full: 536 passed, six named Windows failures and three tsx ENOENT
+        errors; verify exited1 and the separate build passed.
+      entry: 8 passed, including the three new actual-entry branch cases.
+      m1: 214 passed across the two explicit offline files.
+      typecheck: passed
+      lint: passed
+      build: passed
+      full_suite: Final bounded rerun539 passed with the same six baseline
+        failure names and three tsx ENOENT errors; verify remains exit1.
+      intermediate_full_run: The first final full run536 passed with nine
+        failures and three tsx errors, including three unchanged HTTP health
+        tests failing fetch with bad port. The isolated server suite then passed
+        19/19 and the unchanged full rerun returned to the six-failure baseline.
+        The first result is retained; its intermittent port cause is not proven.
+      independent_review: Eight actual-entry cases passed independently and
+        final test/worker hashes are bound. Busy and final result counts, real
+        reset-module error-class identity, initialization failure and original
+        five test bodies were checked. Cleanup was statically reviewed; no new
+        deliberately failing teardown probe was run.
+      ci: Pending for this new coverage commit at record creation; exact-head
+        results are reported separately in PR34 and Issue2.
+    scope: Only the existing entry test and this append-only AI-use metadata
+      change. Native MessageChannel and controlled inference exercise the real
+      entry; no SDK/weights, production implementation, public API, package,
+      dependency, lock, CI policy or live smoke change. Existing safe teardown
+      waits for the controlled exit before closing ports and restoring mocks.
+      M6 minor malformed-message/null-parentPort/README-command notes remain
+      outside this three-branch slice. PR34 stays stacked on PR33. M2/M5
+      production adoption, dynamic audio HTTP/resolver integration, live VTS
+      and full product/course acceptance remain separate. Keep Issue2 Open
+      with unfinished tasks unchecked; agents never merge or enable auto-merge.
+
   - date: 2026-10-17
     task: M2-01
     branch: feat/m2-01-console
@@ -719,6 +1588,7 @@ entries:
       review by M5 (shared transport port, player-to-runtime channel) and by M1
       (the browser mount boundary) is requested and remains pending; publication is
       not acceptance, and the tests-approved label is a human action.
+
   - date: 2026-10-17
     task: M2-01
     branch: feat/m2-01-console
@@ -754,6 +1624,7 @@ entries:
       Requested: renewed M5 consumer review of the two corrected findings and their
       four regressions. Merge remains a human action; no merge or auto-merge was
       requested or performed.
+
   - date: 2026-10-17
     task: M2-01
     branch: feat/m2-01-console
@@ -794,6 +1665,7 @@ entries:
       the conditional cancellation-ownership fix and their four regressions.
       Merge remains a human action; no merge or auto-merge was requested or
       performed.
+
   - date: 2026-10-18
     task: M2-01
     branch: feat/m2-01-console
@@ -837,4 +1709,3 @@ entries:
       extraction and routing remain with Issue #37, kept Open with unfinished
       items unchecked. Merge remains a human action; no merge or auto-merge was
       requested or performed.
-
