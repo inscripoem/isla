@@ -208,7 +208,7 @@ Once the id convention is agreed (PR #32), the rows are added to `docs/req/requi
   explicit-output and duplicate-option errors, usage errors and output preservation.
 - **Changed** `package.json` — `evaluation:report` script and the new suite in `test:m6`.
 - **No** provider, runtime composition, evaluation table or case ID. The R1 case remains pending M5
-  allocation. Code commits: `252dd7d` and `3512135`.
+  allocation. Code commits: `252dd7d`, `3512135` and `8005ec6`.
 
 ### Verification (slice 9)
 
