@@ -1655,3 +1655,17 @@ entries:
       full_suite: "pnpm test 946/53; pnpm verify exit 0; typecheck, lint and build passed."
       mutation: "Removing blank-identifier validation and removing CLI validation each turned the relevant tests red; both restored. The mutation run accidentally wrote the default table; the file was removed and the command now requires explicit output."
     human_review: "M6 self-review; M5 review pending. R1 case allocation remains pending M5."
+  - date: 2026-10-19
+    task: M6-02
+    branch: m6-02-r1-recorded-run
+    change: "R1 test expansion after review: add a valid not-run report case, reject unknown nested fields, and cover an unreadable input file. The R1 suite now has 14 deterministic cases; no provider, table or case ID was added."
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: []
+    commits: [8005ec6]
+    agent: opencode/deepseek-v4-flash
+    verification:
+      focused: "test/offline/m6-02-recorded-run.test.ts: 14/1 passed."
+      role: "test:m6 172/12; composition 12/1; readiness 42/3; trace 41/1."
+      full_suite: "pnpm test 949/53; pnpm verify exit 0; typecheck, lint and build passed."
+    human_review: "M6 self-review; M5 review pending. Case allocation remains pending."
