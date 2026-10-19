@@ -2,6 +2,7 @@ import { WebSocket } from 'ws'
 import type { PerformanceCommand, PerformanceReceipt } from '../../src/contracts'
 import type { AudioResolver, MediaDriver, ReceiptTools } from '../../src/performance/browser/types'
 import { createPerformerMachine } from '../browser/performer-machine'
+import type { PerformerState } from '../browser/performer-machine'
 
 /**
  * Node transport wrapper around the shared browser-safe performer state machine.
@@ -35,6 +36,9 @@ export interface PerformerClient {
   resume(): Promise<JsonObject>
   stop(): Promise<JsonObject>
   input(text: string, messageId?: string): Promise<JsonObject>
+  /** Explicit operator recovery; resolves on the recovery ack or a correlated error. */
+  recover(): Promise<JsonObject>
+  state(): PerformerState
   events(): JsonObject[]
   receipts(): PerformanceReceipt[]
   errors(): JsonObject[]
@@ -156,6 +160,17 @@ export function createPerformerClient(options: PerformerClientOptions): Performe
         (message) => message.kind === 'control.ack' && payloadOf(message).requestMessageId === messageId,
       )
     },
+    recover: async () => {
+      const messageId = machine.recover()
+      if (messageId === null) throw new Error('performer client has no session snapshot yet')
+      return waitFor(
+        (message) =>
+          (message.kind === 'session.recovery.ack' &&
+            payloadOf(message).requestMessageId === messageId) ||
+          (message.kind === 'request.error' && payloadOf(message).requestId === messageId),
+      )
+    },
+    state: () => machine.state(),
     input: async (text: string, messageId?: string) => {
       const id = machine.input(text, messageId)
       if (id === null) throw new Error('performer client has no session snapshot yet')

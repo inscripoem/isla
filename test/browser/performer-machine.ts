@@ -34,16 +34,33 @@ export interface PerformerDisplay {
   reaction: string | null
 }
 
+export interface PerformerRecoveryState {
+  /** `idle` before a request; `requested` while one is outstanding. */
+  status: 'idle' | 'requested' | 'applied' | 'already_applied' | 'failed'
+  retiredSessionId: string | null
+  successorSessionId: string | null
+  recoveries: number
+  remainingRecoveries: number | null
+}
+
 export interface PerformerState {
   sessionId: string
   epoch: number
   lifecycle: string
+  /**
+   * Explicit application retirement state owned by the server, never inferred
+   * from `lifecycle`. While true the page disables Send and Resume; the session
+   * is stopped and only a recovery retry or a reconnect can continue.
+   */
+  retiring: boolean
   outputConfirmation: string
   performer: boolean
   operator: boolean
   lastStage: string | null
   display: PerformerDisplay
   error: string | null
+  /** Operator-driven recovery status; never inferred from measured media. */
+  recovery: PerformerRecoveryState
 }
 
 export interface PerformerMachineHooks {
@@ -51,6 +68,7 @@ export interface PerformerMachineHooks {
   onSnapshot?(message: unknown): void
   onEvent?(message: unknown): void
   onReceipt?(receipt: PerformanceReceipt): void
+  onRecovery?(message: unknown): void
   onServiceError?(raw: string, reason: string): void
   onStateChanged?(): void
 }
@@ -62,6 +80,12 @@ export interface PerformerMachine {
   input(text: string, messageId?: string): string | null
   resume(): string | null
   stop(): string | null
+  /**
+   * Explicit operator recovery: end the current session and continue in a fresh
+   * successor. The acknowledgement is the operator's decision that playback was
+   * ended, never a measured delivery fact.
+   */
+  recover(): string | null
   state(): PerformerState
   dispose(reason: string): void
 }
@@ -144,6 +168,7 @@ export function createPerformerMachine(options: {
   let sessionId = ''
   let epoch = 0
   let lifecycle = 'stopped'
+  let retiring = false
   let outputConfirmation = 'confirmed'
   let performer = false
   let operator = false
@@ -158,6 +183,14 @@ export function createPerformerMachine(options: {
   const completedOutputs = new Set<string>()
   let lastAttachMessageId: string | null = null
   let lastBootstrapMessageId: string | null = null
+  let lastRecoverMessageId: string | null = null
+  let recovery: PerformerRecoveryState = {
+    status: 'idle',
+    retiredSessionId: null,
+    successorSessionId: null,
+    recoveries: 0,
+    remainingRecoveries: null,
+  }
 
   const notify = (): void => hooks.onStateChanged?.()
 
@@ -491,6 +524,13 @@ export function createPerformerMachine(options: {
         hooks.onSnapshot?.(message)
         break
       }
+      case 'session.recovery.state': {
+        // Explicit retirement state; a stale frame never overrides the current
+        // epoch, and it is never inferred from lifecycle.
+        if (message.epoch < epoch) break
+        retiring = message.payload.retiring
+        break
+      }
       case 'session.event':
         hooks.onEvent?.(message)
         break
@@ -507,6 +547,21 @@ export function createPerformerMachine(options: {
         lastBootstrapMessageId = null
         operator = true
         break
+      case 'session.recovery.ack': {
+        // Correlate to an outstanding recovery request; the envelope stays on the
+        // retiring session, so the session filter above already matched it.
+        if (lastRecoverMessageId === null || message.payload.requestMessageId !== lastRecoverMessageId) break
+        lastRecoverMessageId = null
+        recovery = {
+          status: message.payload.status === 'applied' ? 'applied' : 'already_applied',
+          retiredSessionId: message.payload.retiredSessionId,
+          successorSessionId: message.payload.successorSessionId,
+          recoveries: message.payload.recoveries,
+          remainingRecoveries: message.payload.remainingRecoveries,
+        }
+        hooks.onRecovery?.(message)
+        break
+      }
       case 'input.ack':
       case 'control.ack': {
         const ack = message.payload as ControlAck | InputAck
@@ -521,9 +576,13 @@ export function createPerformerMachine(options: {
       }
       case 'request.error': {
         lastError = `${message.payload.code}: ${message.payload.message}`
-        // A failed attach/bootstrap leaves no correlation pending.
+        // A failed attach/bootstrap/recovery leaves no correlation pending.
         lastAttachMessageId = null
         lastBootstrapMessageId = null
+        if (lastRecoverMessageId !== null && message.payload.requestId === lastRecoverMessageId) {
+          lastRecoverMessageId = null
+          recovery = { ...recovery, status: 'failed' }
+        }
         break
       }
       case 'performance.offer':
@@ -600,17 +659,31 @@ export function createPerformerMachine(options: {
       options.transport.send(raw)
       return messageId
     },
+    recover(): string | null {
+      const messageId = nextId('recover')
+      // The acknowledgement is the operator's explicit decision that they have
+      // ended playback in the previous session. It is a required literal so it
+      // cannot be omitted; it is never measured media or a delivery fact.
+      const raw = buildEnvelope('session.recover', { acknowledgePlaybackEnded: true }, messageId)
+      if (raw === null) return null
+      lastRecoverMessageId = messageId
+      recovery = { ...recovery, status: 'requested' }
+      options.transport.send(raw)
+      return messageId
+    },
     state(): PerformerState {
       return {
         sessionId,
         epoch,
         lifecycle,
+        retiring,
         outputConfirmation,
         performer,
         operator,
         lastStage,
         display,
         error: lastError,
+        recovery: { ...recovery },
       }
     },
     dispose(reason: string): void {

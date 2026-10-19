@@ -1,8 +1,16 @@
 import { createHash, randomBytes } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { WebSocket } from 'ws'
-import type { ClockPort, InputAck, ServerMessage, TrustedControlContext } from '../contracts'
-import { controlAckToWire, inputAckToWire } from '../contracts'
+import type {
+  ClockPort,
+  ControlAck,
+  ControlResumeMessage,
+  InputAck,
+  InputSubmitMessage,
+  ServerMessage,
+  TrustedControlContext,
+} from '../contracts'
+import { controlAckSchema, controlAckToWire, inputAckSchema, inputAckToWire } from '../contracts'
 import { isLoopbackHost } from './config'
 import {
   APPLICATION_PATH,
@@ -12,8 +20,14 @@ import {
   parseApplicationClientMessage,
   requestError,
   sessionAttachAckMessageSchema,
+  sessionRecoveryAckMessageSchema,
+  sessionRecoveryStateMessageSchema,
+  type SessionRecoverMessage,
+  type SessionRecoveryStateMessage,
 } from '../contracts'
 import type { RuntimeComposition } from './composition'
+import { RecoveryError } from './session-recovery'
+import type { RecoveryErrorCode, RecoveryResult, SessionRecovery } from './session-recovery'
 import type { PerformerBridgeMessage, TransportSendResult } from './performance-bridge'
 
 /**
@@ -45,6 +59,13 @@ export interface ApplicationEndpointOptions {
    * sink is isolated and never awaited.
    */
   onDiagnostic?: (diagnostic: ApplicationDiagnostic) => void
+  /**
+   * Explicit operator-driven session recovery. When supplied, an operator may
+   * retire the current session and adopt a fresh successor built from confirmed
+   * history. The successor is adopted with its own connection generation, so no
+   * old message, receipt or asynchronous completion can reach it.
+   */
+  recovery?: SessionRecovery
 }
 
 type ApplicationDiagnosticOperation =
@@ -187,7 +208,8 @@ function createOperatorBootstrapStore(clock: ClockPort, ttlMs: number): Operator
 }
 
 export function createApplicationEndpoint(options: ApplicationEndpointOptions): ApplicationEndpoint {
-  const { composition } = options
+  const { recovery } = options
+  let composition = options.composition
   const allowedOrigins = new Set(
     options.allowedOrigins
       .map((origin) => canonicalOrigin(origin))
@@ -211,7 +233,9 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
   const bootstraps = createOperatorBootstrapStore(options.clock, bootstrapTtlMs)
 
   const connections = new Map<string, ConnectionState>()
-  const sessionRef = correlationRef(composition.sessionId)
+  // A recovery swaps the live composition, so the diagnostic session reference
+  // is derived from the current composition each time rather than captured once.
+  const sessionRef = (): string => correlationRef(composition.sessionId)
   let reporting = false
 
   /** Reads the coordinator epoch defensively so reporting can never throw. */
@@ -249,6 +273,13 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
   let messageCounter = 0
   let connectionCounter = 0
   let disposed = false
+  /**
+   * True from the moment a valid recovery request for the current session is
+   * accepted until its successor is installed. While retiring (or after a failed
+   * retirement) new input and Resume are refused and the scheduler is halted, so
+   * the old session can never keep producing work during or after the swap.
+   */
+  let retiring = false
 
   const makeMessageId = (): string => {
     messageCounter += 1
@@ -325,27 +356,45 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
   }
 
   // The bridge dispatches offers/grants to the performer and forwards
-  // intermediate/stray receipts to the authoritative endpoint.
-  composition.bridge.bindTransport({
-    send: sendToPerformer,
-    handleEvidence: (message) => composition.coordinator.endpoint.handlePlayerMessage(message),
-    makeMessageId,
-    generation: () => performerGeneration,
-  })
+  // intermediate/stray receipts to the authoritative endpoint. Every callback
+  // is bound to the composition that owns it: a delayed send or evidence
+  // callback from a retired composition is dropped rather than reaching the
+  // installed successor. The transport therefore never closes over the mutable
+  // `composition` variable.
+  const bindBridge = (owner: RuntimeComposition): void => {
+    owner.bridge.bindTransport({
+      send: (message) => (composition === owner ? sendToPerformer(message) : 'unsent'),
+      handleEvidence: async (message) => {
+        if (composition !== owner) return
+        await owner.coordinator.endpoint.handlePlayerMessage(message)
+      },
+      makeMessageId,
+      generation: () => performerGeneration,
+    })
+  }
+  bindBridge(composition)
 
-  let draining = false
+  /**
+   * The composition currently draining the scheduler. It is an ownership token,
+   * not a boolean: an in-flight pass for a retired composition must not clear
+   * the successor's slot or restart its scheduler when it settles.
+   */
+  let drainOwner: RuntimeComposition | null = null
   let pendingWake = false
 
   const drain = async (): Promise<void> => {
-    if (disposed || draining) return
-    draining = true
+    const owner = composition
+    if (disposed || drainOwner !== null || retiring) return
+    drainOwner = owner
     try {
-      while (!disposed && pendingWake) {
+      while (!disposed && !retiring && composition === owner && pendingWake) {
         pendingWake = false
         let sinceYield = 0
-        while (!disposed && performerId !== null) {
-          const outcome = await composition.coordinator.runTurn()
-          if (disposed) break
+        while (!disposed && !retiring && composition === owner && performerId !== null) {
+          const outcome = await owner.coordinator.runTurn()
+          // A swap or retirement during the await ends this pass; the successor's
+          // scheduler is started separately by its own wake.
+          if (disposed || retiring || composition !== owner) return
           const progressed = outcome.status === 'completed' || outcome.status === 'cancelled'
           if (!progressed) break
           sinceYield += 1
@@ -360,30 +409,39 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
         }
       }
     } catch {
-      // A drain fault must not wedge the scheduler; a later wake retries.
-      const epoch = currentEpoch()
+      // A drain fault from a superseded composition must not be attributed to
+      // the successor, and must not wedge or reset the successor's scheduler.
+      if (disposed || retiring || composition !== owner) return
+      let epoch: number | undefined
+      try {
+        epoch = owner.coordinator.epoch()
+      } catch {
+        epoch = undefined
+      }
       reportDiagnostic({
         level: 'warn',
         service: 'isla-runtime',
         operation: 'application.scheduler',
         outcome: 'error',
-        sessionRef,
+        sessionRef: correlationRef(owner.sessionId),
         ...(epoch !== undefined ? { epoch } : {}),
       })
     } finally {
-      draining = false
+      if (drainOwner === owner) drainOwner = null
     }
   }
 
   const wake = (): void => {
     pendingWake = true
-    if (!draining) void drain()
+    if (drainOwner === null) void drain()
   }
 
-  const broadcast = (message: ServerMessage): void => {
+  const broadcast = (message: ServerMessage | SessionRecoveryStateMessage): void => {
     for (const conn of connections.values()) safeSend(conn, message)
   }
-  const unsubscribe = composition.coordinator.endpoint.onServerMessage(broadcast)
+  // Rebound on recovery: the successor coordinator's server messages must reach
+  // the connections that survive the swap.
+  let unsubscribe = composition.coordinator.endpoint.onServerMessage(broadcast)
 
   const handleSnapshot = async (conn: ConnectionState): Promise<void> => {
     try {
@@ -403,6 +461,9 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
           lastSeq: snapshot.seq,
         },
       })
+      // A newly connected client also learns the explicit retirement state, so a
+      // reload after a failed retirement remains disabled until a retry succeeds.
+      sendRecoveryState(conn)
     } catch {
       // A snapshot fault leaves the connection unbound; it may re-attach.
       const epoch = currentEpoch()
@@ -411,7 +472,7 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
         service: 'isla-runtime',
         operation: 'application.snapshot',
         outcome: 'error',
-        sessionRef,
+        sessionRef: sessionRef(),
         ...(epoch !== undefined ? { epoch } : {}),
         connectionId: conn.id,
       })
@@ -484,6 +545,260 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
     )
   }
 
+  /**
+   * Adopt a successfully built successor and retire every old connection. The
+   * successor is installed before any socket is closed, so a surviving socket
+   * cannot reach the old runtime; `performerId` is cleared first so the close
+   * handler does not detach the successor's bridge. Old evidence stays in the
+   * shared store; only in-memory scheduling and connections are retired.
+   */
+  const installSuccessor = (previous: RuntimeComposition, next: RuntimeComposition): void => {
+    if (disposed) {
+      // The endpoint shut down while the successor was being built: release it
+      // and never install or bind it.
+      next.dispose()
+      return
+    }
+    performerId = null
+    performerGeneration += 1
+    unsubscribe()
+    composition = next
+    // The retiring scheduler's slot is released here; its in-flight pass is
+    // fenced by composition identity and cannot run a turn for the successor.
+    drainOwner = null
+    retiring = false
+    unsubscribe = composition.coordinator.endpoint.onServerMessage(broadcast)
+    bindBridge(next)
+    for (const conn of [...connections.values()]) {
+      conn.closed = true
+      conn.performer = false
+      try {
+        conn.ws.close(1001, 'session recovered')
+      } catch {
+        // Ignore close faults; the connection is dropped from the map regardless.
+      }
+    }
+    connections.clear()
+    previous.dispose()
+  }
+
+  const sendRecoveryAck = (
+    conn: ConnectionState,
+    message: SessionRecoverMessage,
+    status: 'applied' | 'already_applied',
+    result: RecoveryResult,
+  ): void => {
+    // The envelope stays on the retiring session and the request epoch so the
+    // acknowledgement correlates to the request; the successor identity is in
+    // the payload. `already_applied` means no second successor was created.
+    safeSend(
+      conn,
+      sessionRecoveryAckMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId: makeMessageId(),
+        sessionId: message.sessionId,
+        epoch: message.epoch,
+        kind: 'session.recovery.ack',
+        payload: {
+          status,
+          requestMessageId: message.messageId,
+          retiredSessionId: result.retiredSessionId,
+          successorSessionId: result.sessionId,
+          recoveries: result.recoveries,
+          remainingRecoveries: result.remainingRecoveries,
+        },
+      }),
+    )
+  }
+
+  /** Map a recovery refusal to a protocol error; only construction is retryable. */
+  const recoveryRefusal = (
+    code: RecoveryErrorCode,
+  ): { code: Parameters<typeof requestError>[4]; message: string; retryable: boolean } => {
+    switch (code) {
+      case 'unknown_session':
+        return {
+          code: 'conflict',
+          message: 'recovery request matches neither the current nor a retired session',
+          retryable: false,
+        }
+      case 'source_limit':
+        return {
+          code: 'conflict',
+          message: 'session recovery would exceed the archive-source bound',
+          retryable: false,
+        }
+      case 'construction_failed':
+        return {
+          code: 'storage_unavailable',
+          message: 'failed to construct the successor session; retry is possible',
+          retryable: true,
+        }
+    }
+  }
+
+  /**
+   * Stop the retiring session's scheduling immediately, before the successor
+   * construction is awaited. The coordinator revokes all session work (aborting
+   * an in-flight turn and clearing queued input); the bridge and gate stay alive
+   * until a successful install disposes the composition, so the retiring
+   * session's stored evidence remains readable. The `retiring` flag keeps input
+   * and Resume refused until the successor is installed, or permanently if
+   * retirement failed.
+   */
+  /** The explicit retirement-state message for one session/epoch. */
+  const recoveryStateMessage = (
+    sessionId: string,
+    epoch: number,
+    retiringValue: boolean,
+  ): SessionRecoveryStateMessage =>
+    sessionRecoveryStateMessageSchema.parse({
+      protocolVersion: '0.2',
+      messageId: makeMessageId(),
+      sessionId,
+      epoch,
+      kind: 'session.recovery.state',
+      payload: { retiring: retiringValue },
+    })
+
+  /** Tell one newly connected client the current, authoritative retirement state. */
+  const sendRecoveryState = (conn: ConnectionState): void => {
+    safeSend(conn, recoveryStateMessage(composition.sessionId, composition.coordinator.epoch(), retiring))
+  }
+
+  const retireCurrentSession = (target: RuntimeComposition): void => {
+    if (retiring) return
+    retiring = true
+    target.coordinator.dispose()
+    // Publish the authoritative retirement state and the real stopped snapshot so
+    // an attached client learns from the runtime that the session is retiring,
+    // not from a UI guess. A refusal that never retires the session never
+    // reaches here.
+    void publishRetirement(target)
+  }
+
+  /** Broadcast the explicit retirement state and the real stopped snapshot. */
+  const publishRetirement = async (owner: RuntimeComposition): Promise<void> => {
+    try {
+      const snapshot = await owner.coordinator.endpoint.snapshot()
+      // A delayed predecessor publication must never reach successor clients: if
+      // the endpoint shut down or the composition already swapped, drop it.
+      if (disposed || composition !== owner) return
+      broadcast(recoveryStateMessage(owner.sessionId, snapshot.epoch, true))
+      broadcast({
+        protocolVersion: '0.2',
+        messageId: makeMessageId(),
+        sessionId: snapshot.sessionId,
+        epoch: snapshot.epoch,
+        kind: 'session.snapshot',
+        payload: {
+          lifecycle: snapshot.lifecycle,
+          activeTurnId: snapshot.activeTurnId,
+          performerStatus: snapshot.performerStatus,
+          outputConfirmation: snapshot.outputConfirmation,
+          capabilityRevision: snapshot.capabilityRevision,
+          lastSeq: snapshot.seq,
+        },
+      })
+    } catch {
+      // Best effort: the retirement itself is already committed.
+    }
+  }
+
+  /** Reject new input while the current session is being retired. */
+  const sendRetirementInputRefusal = (
+    conn: ConnectionState,
+    message: InputSubmitMessage,
+    owner: RuntimeComposition,
+  ): void => {
+    const ack: InputAck = inputAckSchema.parse({
+      status: 'rejected',
+      requestMessageId: message.messageId,
+      sessionId: owner.sessionId,
+      epoch: owner.coordinator.epoch(),
+      code: 'conflict',
+      message: 'the session is being retired; continue in the successor session',
+      retryable: false,
+    })
+    safeSend(conn, inputAckToWire(ack, makeMessageId()))
+  }
+
+  /** Refuse Resume while the current session is being retired. */
+  const sendRetirementControlRefusal = (
+    conn: ConnectionState,
+    message: ControlResumeMessage,
+    owner: RuntimeComposition,
+  ): void => {
+    const ack: ControlAck = controlAckSchema.parse({
+      sessionId: owner.sessionId,
+      requestId: message.payload.requestId,
+      requestMessageId: message.messageId,
+      action: 'resume',
+      status: 'refused',
+      previousEpoch: owner.coordinator.epoch(),
+      epoch: owner.coordinator.epoch(),
+      lifecycle: owner.coordinator.lifecycle(),
+      outputConfirmation: owner.coordinator.outputConfirmation(),
+      reasonCode: 'conflict',
+      message: 'resume refused while the session is being retired',
+    })
+    safeSend(conn, controlAckToWire(ack, makeMessageId()))
+  }
+
+  const handleRecover = async (conn: ConnectionState, message: SessionRecoverMessage): Promise<void> => {
+    // An operator decision, never inferred from a payload or from measured media.
+    if (conn.role !== 'operator') {
+      sendError(conn, 'unauthorized', 'session recovery requires operator authority', message.messageId)
+      return
+    }
+    if (recovery === undefined) {
+      sendError(conn, 'conflict', 'session recovery is not enabled for this runtime', message.messageId)
+      return
+    }
+    // The envelope session id is the session the operator intends to retire. A
+    // request against the current session must carry its current epoch; a
+    // request against an already-retired session is answered idempotently and is
+    // not epoch-checked against the live successor.
+    const retiringCurrent = message.sessionId === composition.sessionId
+    if (retiringCurrent && message.epoch !== composition.coordinator.epoch()) {
+      sendError(conn, 'stale', 'recovery epoch is not the current epoch', message.messageId)
+      return
+    }
+    // Only a request for the current session may stop the live runtime. Unknown,
+    // stale-epoch, unauthorized and already-retired requests never touch it.
+    const previous = composition
+    if (retiringCurrent) retireCurrentSession(previous)
+    let result: RecoveryResult
+    try {
+      result = await recovery.recover(message.sessionId)
+    } catch (error) {
+      if (error instanceof RecoveryError) {
+        // A refused retirement (for example the archive-source bound) leaves the
+        // session stopped and unserviceable for new work; a construction failure
+        // leaves it stopped and retryable. The operator may always retry.
+        const refusal = recoveryRefusal(error.code)
+        sendError(conn, refusal.code, refusal.message, message.messageId, refusal.retryable)
+        return
+      }
+      throw error
+    }
+    if (disposed) {
+      // The endpoint shut down while the successor was building: release the
+      // constructed successor and never install or bind it. The shared store is
+      // untouched.
+      if (result.status === 'applied') result.composition.dispose()
+      return
+    }
+    // A concurrent request that already swapped the endpoint must not install a
+    // second successor; the captured `previous` is the guard.
+    if (result.status === 'applied' && composition === previous) {
+      sendRecoveryAck(conn, message, 'applied', result)
+      installSuccessor(previous, result.composition)
+    } else {
+      sendRecoveryAck(conn, message, 'already_applied', result)
+    }
+  }
+
   const handleMessage = async (conn: ConnectionState, raw: string): Promise<void> => {
     if (disposed || conn.closed) return
     let parsedJson: unknown
@@ -499,13 +814,14 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
       return
     }
     const message = parsed.message
-    // Control and binding messages are never blocked by backpressure so Stop
-    // stays responsive under load.
+    // Control, binding and operator-recovery messages are never blocked by
+    // backpressure so Stop and recovery stay responsive under load.
     const exempt =
       message.kind === 'control.stop' ||
       message.kind === 'control.resume' ||
       message.kind === 'session.attach' ||
-      message.kind === 'operator.bootstrap'
+      message.kind === 'operator.bootstrap' ||
+      message.kind === 'session.recover'
     if (!exempt && conn.inFlight >= maxInboundPerConnection) {
       sendError(conn, 'conflict', 'too many concurrent requests', null, true)
       return
@@ -514,31 +830,49 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
     try {
       switch (message.kind) {
         case 'input.submit': {
-          const ack: InputAck = await composition.coordinator.endpoint.submitInput(
+          const owner = composition
+          if (retiring) {
+            sendRetirementInputRefusal(conn, message, owner)
+            return
+          }
+          const ack: InputAck = await owner.coordinator.endpoint.submitInput(
             message,
             contextFor(conn),
           )
+          // A composition superseded during the await must not answer or
+          // schedule work for the successor.
+          if (composition !== owner) return
           safeSend(conn, inputAckToWire(ack, makeMessageId()))
-          if (ack.status === 'accepted') wake()
+          if (ack.status === 'accepted' && !retiring) wake()
           return
         }
         case 'control.stop':
         case 'control.resume': {
-          const ack = await composition.coordinator.endpoint.control(message, contextFor(conn))
+          const owner = composition
+          if (retiring && message.kind === 'control.resume') {
+            sendRetirementControlRefusal(conn, message, owner)
+            return
+          }
+          const ack = await owner.coordinator.endpoint.control(message, contextFor(conn))
+          if (composition !== owner) return
           safeSend(conn, controlAckToWire(ack, makeMessageId()))
           return
         }
         case 'performance.receipt': {
+          const owner = composition
           if (!conn.performer || performerId !== conn.id) {
             sendError(conn, 'unauthorized', 'player receipts require the bound performer connection', message.messageId)
             return
           }
-          if (message.sessionId !== composition.sessionId) {
+          if (message.sessionId !== owner.sessionId) {
             sendError(conn, 'unauthorized', 'receipt envelope session does not match this runtime', message.messageId)
             return
           }
-          const outcome = await composition.bridge.deliver(message)
-          if (outcome === 'forward') await composition.coordinator.endpoint.handlePlayerMessage(message)
+          const outcome = await owner.bridge.deliver(message)
+          // A delayed receipt from a retired composition must never be forwarded
+          // into the installed successor.
+          if (composition !== owner) return
+          if (outcome === 'forward') await owner.coordinator.endpoint.handlePlayerMessage(message)
           return
         }
         case 'performance.ready': {
@@ -573,6 +907,10 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
           handleOperatorBootstrap(conn, message.messageId, message.sessionId, message.epoch, message.payload.token)
           return
         }
+        case 'session.recover': {
+          await handleRecover(conn, message)
+          return
+        }
         default: {
           sendError(conn, 'unknown_kind', 'message kind is not supported')
         }
@@ -584,7 +922,7 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
         service: 'isla-runtime',
         operation: 'application.request',
         outcome: 'error',
-        sessionRef,
+        sessionRef: sessionRef(),
         epoch: message.epoch,
         connectionId: conn.id,
         messageKind: message.kind,

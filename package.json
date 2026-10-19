@@ -13,7 +13,7 @@
     "lint": "oxlint",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "test:m1": "vitest run test/offline/m1-performance.test.ts",
+    "test:m1": "vitest run test/offline/m1-performance.test.ts test/offline/m1-kokoro-worker-entry.test.ts",
     "test:m2": "vitest run test/offline/m2-console.test.ts",
     "test:m3": "vitest run test/offline/m3-decision.test.ts",
     "test:m4": "vitest run test/offline/m4-dialogue.test.ts test/offline/m4-storage-integration.test.ts test/offline/m4-memory-enhancement.test.ts test/offline/m4-audience-scope.test.ts",
@@ -31,6 +31,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@huggingface/transformers": "3.5.1",
+    "kokoro-js": "1.2.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "ws": "^8.22.0",
