@@ -1679,3 +1679,551 @@ entries:
     commits: [c66e018]
     agent: opencode/deepseek-v4-flash
     human_review: "M6 type-sharing change; M5 review pending. R1 case allocation remains deferred."
+  - date: "2026-10-19"
+    task: M5-production-composition
+    branch: feat/m5-production-composition
+    change: >-
+      Add the M5 production composition and durable application lifecycle on the
+      published PR45 head 6bcfc2b. `src/runtime/production.ts` owns one shared
+      SQLite handle, the M6 store and history view over it, the operator session
+      recovery controller and the loopback server; every composition (the initial
+      one and each recovery successor) is built through
+      `createReconstructedRuntimeComposition` with its own deadline gate, the
+      injected peer set is validated before storage is opened, and `stop()`
+      serializes with `start()`, stops the transport, awaits every coordinator's
+      queued writes through the new `settle()` and only then closes the handle.
+      `src/runtime/production-cli.ts` is the runnable entry: it loads an explicit
+      deployment module from `ISLA_DEPLOYMENT_MODULE` (a missing or malformed
+      module fails visibly, never a fixture fallback), resolves storage/server
+      configuration fail-fast, emits structured JSON and performs the controlled
+      shutdown on SIGINT/SIGTERM. `src/runtime/composition.ts` accepts an injected
+      `synthesis` port (supplying neither `synthesis` nor `audioEntries` is an
+      explicit `TypeError`) and an optional `CompositionAudioResources` seam whose
+      `retireBefore`/`retireSession` calls are isolated so a throwing registry
+      cannot break Stop or disposal. `src/runtime/coordinator.ts` gains
+      `settle(): Promise<void>` over the serialized write chain. Tests cover peer
+      validation, pre-storage rejection, audio retirement, durable close/reopen
+      with confirmed archives and a partial-unknown null-persona archive,
+      `live_session_not_fresh` refusal without a leaked WAL file, stop-before-start,
+      in-flight shutdown, one gate per composition and the CLI lifecycle.
+    requirements: [FR-05, FR-06]
+    invariants: [INV-12, INV-15]
+    cases: [C-32, C-33]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.0.32
+    launch_flags: [run, -m, self-api/deepseek-v4-flash#xhigh, --agent, build, --format, json]
+    sessions: [ses_eb01582deffe1lXlytG5wjv8Gm]
+    supervision: >-
+      Captain approved the implementation plan and this task worktree. The
+      session was launched non-interactively with the observed flags above; the
+      configured DeepSeek-V4-Flash provider and xhigh variant were used and no
+      `--pure` flag was present. M1/M2/M3/M4/M6 ownership was preserved: no peer
+      provider was implemented, no live provider was called and production source
+      imports no test code. The genuine session remains in the local OpenCode
+      session storage; no transcript is copied into the checkout and none is
+      fabricated.
+    human_review: >-
+      Captain approved the plan before implementation; the result remains under
+      review. All changes are uncommitted and unpublished; no commit, push,
+      review, merge or GitHub write was performed.
+    verification:
+      typecheck: "pnpm typecheck passed."
+      m5: "pnpm test:m5: 107 tests / 4 files passed."
+      full_suite: "pnpm verify: 826 tests / 48 files passed; typecheck, lint and build passed; only the advisory G1 notice."
+    scope: >-
+      Application-level durability over the real M6 SQLite backend only. Dynamic
+      audio (concrete M1 Kokoro provider, audio HTTP serving and browser resolver
+      adoption), live M3 decisions, the live M4 text provider, the M5 production
+      runVariant adapter (Issue 41) and course-wide acceptance remain open; the
+      application tests inject controlled peer fixtures and assert real
+      application behavior, not live providers.
+  - date: "2026-10-19"
+    task: M5-production-shutdown-boundary
+    branch: feat/m5-production-composition
+    change: >-
+      Repair the production shutdown boundary after the unchanged independent
+      probe showed a cancelled turn writing `result.stale` into a finalized
+      SQLite statement and reporting `storageFailure: true`. `settle()` is now a
+      two-phase controlled drain: it seals operation admission, drains every
+      admitted bounded operation to its terminal bookkeeping (the active turn's
+      aborted provider calls and stale result, an in-flight receipt
+      finalization), then seals writes and awaits the serialized write chain, so
+      a late raw-provider callback is refused without storage access instead of
+      racing the close. `disposeSession()` releases a playback wait that can no
+      longer receive terminal evidence; `stop()` marks shutdown synchronously,
+      stops the transport, drains recorded recovery builds, disposes every
+      composition and settles every coordinator inside a `finally` before
+      closing the handle; a recovery build racing shutdown is refused as
+      `construction_failed` without a store read; and a creation failure
+      disposes the built compositions and closes the handle. An intermediate
+      immediate write seal that dropped the already-invoked provider attempt was
+      rejected by supervising review and corrected. The composition comments now
+      state the actual `synthesis`/`audioEntries` contract (at least one is
+      required; `synthesis` takes precedence when both are supplied).
+      Regressions: the held cancellation-ignoring selector is invoked exactly
+      once, its `provider.call` (`disposition: aborted`) and `result.stale`
+      survive stop and a real SQLite reopen, and release after stop performs no
+      store access and admits no delivery; a held `output.receipt` append keeps
+      stop pending and the receipt and `delivery.committed` drain durably; a
+      held successor preflight drains, the late successor is retired and a later
+      recovery is refused without a store read; an invalid `allowedHosts` entry
+      fails construction after the initial build and the cleanup retires that
+      composition without a WAL. The M5 session-recovery integration assertion was adapted
+      so old evidence must remain an unchanged prefix while retirement may only
+      append the interrupted turn's bounded cancellation bookkeeping, and that
+      bookkeeping must be truthful: exactly one terminal turn record and it is
+      `cancelled`, every appended provider call is `aborted`, and no delivery or
+      completed receipt is admitted by retirement. The root Vite entry
+      (`vite.config.ts`) now forwards `/app` (WebSocket) and `/operator` (HTTP)
+      to the runtime alongside `/health` and `/diag`; the proxy forwards the
+      original `Origin` and `Host`, so the runtime's own origin/host checks still
+      decide, and M2 keeps the console UI.
+    requirements: [FR-05, FR-06]
+    invariants: [INV-12, INV-15]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.0.32
+    launch_flags: [run, -m, self-api/deepseek-v4-flash#xhigh, --agent, build, --format, json]
+    sessions: [ses_eb01582deffe1lXlytG5wjv8Gm]
+    supervision: >-
+      Same supervised session as M5-production-composition. The supervising assistant
+      interrupted the first seal attempt after the unchanged probe showed the
+      already-invoked provider attempt disappearing from storage; the two-phase
+      drain above is the corrected design, and the probe was re-run unchanged.
+      No Git mutation, live runtime provider call, subagent or peer implementation was
+      performed; the genuine session remains in local OpenCode storage.
+    human_review: >-
+      Supervised interruption and correction recorded. All changes remain
+      uncommitted and unpublished; status remains under review.
+    verification:
+      typecheck: "pnpm typecheck passed."
+      m5: "pnpm test:m5: 112 tests / 4 files passed."
+      focused: "pnpm exec vitest run test/offline/i1-recovery.test.ts test/offline/m5-coordinator.test.ts test/offline/m5-production-application.test.ts test/offline/m5-runtime.test.ts: 124 tests / 4 files passed."
+      full_suite: "pnpm verify: 831 tests / 48 files passed; typecheck, lint and build passed; the advisory G1 notice and expected non-failing diagnostics (Node SQLite experimental warnings, one WebSocket max-payload rejection warning from the server boundary test) were the only warnings."
+      gates: "Actual-diff gates with CHANGED_FILES_FILE set to the tracked and untracked working-tree changes and AI_USE_LOG_BASE_FILE set to the log at HEAD: pnpm gate:ai-use-log passed with the log growing 49 -> 51 entries; pnpm test:trace: 41 tests passed."
+      root_entry: "node test/browser/root-entry-routing.mjs against the real loop runtime and the real root Vite entry: 8/8 checks passed (console page, /health, /operator/bootstrap allowed-origin 200 and disallowed-origin/missing-header 403, a real /app snapshot plus session.attach round-trip, the /app origin refusal, and the unchanged /diag ping)."
+      probe: "Unchanged .cache/shutdown-review-probe.ts: provider.call (aborted) and result.stale stored, writesAfterStopResolved [], storageFailure false, lateUsageEvents 0; before the repair the same probe stored result.stale with 'statement has been finalized' and reported storageFailure true."
+    scope: >-
+      The same production-composition scope as the previous entry; no new
+      dependency, shared contract, case ID or peer module. Dynamic audio
+      HTTP/routing and resource assembly remain M5-owned; M1 supplies the
+      synthesis provider and audio-resource registry interfaces and M2 is the
+      browser consumer. The probe and the shutdown-boundary tests use controlled
+      fixtures, not live providers.
+  - date: "2026-10-19"
+    task: M5-process-restart-acceptance
+    change: >-
+      The production application now has a two-process restart acceptance over
+      one real SQLite database: two separately spawned production CLI processes
+      driven through the actual application transport (WebSocket `/app`). The
+      first produces a confirmed turn (completed receipts and
+      `delivery.committed` events observed through the transport) and exits 0
+      under SIGTERM. The second starts under a fresh live id, explicitly selects
+      the previous live session and the seeded archive
+      (`ISLA_TEST_ARCHIVE_SESSIONS`), and continues output in a new turn. The
+      assembled dialogue context is observed through the test-only capture hook
+      (`ISLA_TEST_DIALOGUE_CAPTURE_FILE`) in the deployment module: carried
+      confirmed history reaches the provider with `historySource: 'history-port'`
+      in selection order, the partial-unknown null-attribution record is
+      excluded, and an independent `createRecoveryView` read after the second
+      exit proves each session keeps exactly its own evidence with the unknown
+      record preserved and never promoted. No replay is asserted by complete
+      session-scoped delivery identities (`sessionId:turnId:segmentId`) plus
+      fresh-session authority on every performance message and receipt. The
+      shared child-process harness launches the runtime directly through the tsx
+      loader (`node --import tsx src/runtime/production-cli.ts`), closes tracked
+      performer clients on failure, and waits (SIGTERM, then SIGKILL, both
+      bounded) for every tracked process before removing its temporary database.
+    requirements: [FR-05, FR-06]
+    invariants: [INV-12, INV-15]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.0.32
+    launch_flags: [run, -m, self-api/deepseek-v4-flash#xhigh, --agent, build, --format, json]
+    sessions: [ses_eb01582deffe1lXlytG5wjv8Gm]
+    supervision: >-
+      Same supervised session as M5-production-composition. The supervising
+      assistant recorded the first acceptance run's failure and a cleanup defect
+      before further runs: the no-replay check compared raw `outputId` strings
+      across sessions although those ids are per-process counters, and the
+      harness's SIGKILL of the tsx bin wrapper left the actual CLI orphaned
+      (PID 254031, terminated by the supervisor with SIGTERM). The assertions
+      were corrected to complete session-scoped identities plus fresh-session
+      authority without changing production ID generation, and the harness was
+      rebuilt as described above. No Git mutation, live runtime provider call,
+      subagent or peer implementation was performed; the genuine session remains
+      in local OpenCode storage.
+    human_review: >-
+      Supervised interruption and correction recorded. All changes remain
+      uncommitted and unpublished; status remains under review.
+    verification:
+      m5: "pnpm test:m5: 113 tests / 5 files passed."
+      acceptance: "pnpm exec vitest run test/offline/production-cli.test.ts test/offline/m5-process-restart.test.ts: 6 tests / 2 files passed; no production CLI process survived cleanup, and an out-of-tree cleanup probe observed the actual runtime PID gone and its temporary database removed after a failure-style cleanup without SIGTERM."
+      full_suite: "pnpm verify: 832 tests / 49 files passed; typecheck, lint and build passed; the advisory G1 notice and expected non-failing diagnostics (Node SQLite experimental warnings, one WebSocket max-payload rejection warning from the server boundary test) were the only warnings."
+      gates: "Actual-diff gates with CHANGED_FILES_FILE set to the tracked and untracked working-tree changes and AI_USE_LOG_BASE_FILE set to the log at HEAD: pnpm gate:ai-use-log passed with the working-tree log at 52 entries against 49 at HEAD; pnpm test:trace: 41 tests passed."
+    scope: >-
+      Real child processes, real SQLite and the real application transport; the
+      peer modules remain the labeled test substitutes, so no live provider,
+      acoustic output, uncommitted-tail crash recovery or complete course
+      acceptance is claimed. No new dependency, shared contract, case ID or peer
+      module was added; the identity contract used by the no-replay assertion is
+      the existing M6 delivery key (`sessionId:turnId:segmentId:modality`).
+  - date: "2026-10-19"
+    task: M5-dynamic-audio-route
+    change: >-
+      The runtime now serves registered dynamic audio resources to same-origin
+      browser consumers over one explicit route: `POST /audio?ref=...` with the
+      `x-isla-audio-fetch` header. The route refuses a GET (405), a missing
+      header (403), a missing or non-exact Origin (403; a browser POST supplies
+      Origin itself, and a missing one is refused rather than admitted), a
+      non-loopback Host (403), a missing or repeated ref (400), an unknown,
+      retired or out-of-scope reference (404), a request whose session/epoch or
+      serving lifecycle no longer matches (409), a disposed route (503) and an
+      over-capacity route (429). The live identity is read from the authoritative
+      composition on every request and again after the resolver settles and
+      after the body is acquired: it carries the session id, the epoch and a
+      `servable` flag computed from the coordinator lifecycle (`running` only,
+      excluding the initial stopped composition, stopped, degraded and retiring
+      states), so a Stop, retirement, recovery or degradation during acquisition
+      cannot publish stale audio even when the epoch is unchanged. The serving
+      slot and the resource lease are held until the response finishes, closes or
+      errors; a release requested before a late resolver settlement is applied
+      when that lease arrives, so a non-cooperating resolver still releases
+      exactly once; route disposal aborts the acquisition and terminates every
+      still-open response instead of waiting forever for completion. The
+      application endpoint takes an optional `audioSource`; the production peer
+      set widens `audioResources` to `ProductionAudioResources` (retirement plus
+      `admission`/`resolve`) and validates all four methods; the root Vite entry
+      proxies `/audio` to the runtime. M2's `AudioResolver.resolve(audioRef,
+      signal)` consumer seam is unchanged.
+    requirements: [FR-04, FR-05]
+    invariants: [INV-01]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.0.32
+    launch_flags: [run, -m, self-api/deepseek-v4-flash#xhigh, --agent, build, --format, json]
+    sessions: [ses_eb01582deffe1lXlytG5wjv8Gm]
+    supervision: >-
+      Same supervised session as M5-production-composition. The supervisor
+      interrupted run 84215 after independently reproducing a concrete
+      early-disconnect leak with an unchanged out-of-tree probe
+      (`.cache/audio-late-lease-review-probe.ts`, not modified): the client
+      closed before the held resolver settled, and `releaseCount` stayed 0 while
+      `pendingCount` reached 0, because the release path marked `released` while
+      the lease was still null, so the later lease assignment was never
+      released. The interruption also required disposal to terminate or refuse a
+      still-open response rather than only aborting a resolver and then waiting
+      for `responseDone`, required the late non-cooperating settlement to still
+      release its resource, and required the application live identity to carry
+      the admissible lifecycle and retiring state, rechecked after asynchronous
+      acquisition even when the epoch did not change. All three were corrected
+      in the route and the application wiring; the unchanged probe then reported
+      `releaseCount 1` / `pendingCount 0`. No Git mutation, live provider call,
+      subagent, dependency change or edit to the frozen
+      `m5-production-composition` worktree was performed; the genuine
+      interruption is recorded here rather than smoothed over.
+    human_review: >-
+      Supervised interruption, reproduction and correction recorded. All changes
+      remain uncommitted and unpublished; status remains under review until the
+      Captain confirms.
+    verification:
+      m5: "pnpm test:m5: 123 tests / 6 files passed (the new route suite adds 10: lifecycle refusal and same-epoch recheck, early-disconnect release, lease and slot held until finish with a paused 16 MiB client and 429 capacity, disposal of a still-open response with late settlement release, production refusals 405/403/400/404/409, session/epoch scope, Stop and retired-epoch refusal after Resume, Stop during acquisition with a held real lease, and the assembled turn)."
+      acceptance: "The unchanged probe `.cache/audio-late-lease-review-probe.ts` (node --import tsx) reported releaseCount 1 of 1 with pendingCount 0. Real processes: `pnpm dev:loop` and `pnpm dev`, then `node test/browser/root-entry-routing.mjs` passed 11/11 (including header 403, GET 405 and disallowed-origin 403 for /audio through the root proxy) and `node test/browser/root-entry-audio-browser.mjs` passed 8/8 in headless Chromium: the demo page's real operator bootstrap and Resume, a browser same-origin POST that the runtime admitted with its own Origin header and that returned the registered 103420-byte WAV (equal to the prepared asset), the stopped-session 409, the missing-header 403, the GET 405 and the unknown-reference 404. The assembled-turn check uses the real M1 Kokoro synthesis adapter, the real M1 registry and a clearly controlled raw-audio provider (no live provider, download or inference) and compares the bytes acquired over the HTTP route with the encoder output of the provider samples."
+      full_suite: "pnpm verify: 842 tests / 50 files passed; typecheck, lint and build passed; only the advisory G1 notice and expected diagnostics (Node SQLite experimental warnings, one WebSocket max-payload rejection warning from the server boundary test) appeared."
+      gates: "Actual-diff gates with CHANGED_FILES_FILE set to the tracked and untracked working-tree changes (excluding the .vitest/ run artifact) and AI_USE_LOG_BASE_FILE set to the log at HEAD (abb847c): pnpm gate:ai-use-log passed with the working-tree log at 53 entries against 49 at HEAD; pnpm test:trace passed 41 tests; pnpm gate:eval reported G4 not run (no evaluation set or provider access; not a pass); the test-approval gate is satisfied in advise mode, while enforce mode with GITHUB_EVENT_NAME=pull_request fails for an unpublished change set without the tests-approved label, which is a remote/human action."
+    scope: >-
+      The route, its application and production wiring, the test-only demo
+      fixture source that registers the prepared WAV asset for the live
+      identity, and the acceptance checks. No live provider, no acoustic
+      measurement and no browser product resolver is claimed: the browser check
+      performs a same-origin POST from the page context through the root Vite
+      proxy, while M2's product resolver remains M2's work. No new dependency,
+      shared C1-C7 contract, case ID or peer module was added; all changes
+      remain uncommitted.
+  - date: "2026-10-19"
+    task: M5-dynamic-audio-acceptance-boundaries
+    change: >-
+      Added four boundary acceptance tests to the dynamic audio route suite and
+      made the browser acceptance script portable. Route mechanics now prove
+      that invalidation while `Blob.arrayBuffer()` is pending refuses 409 and
+      releases the lease exactly once, and that an early-disconnected resolver
+      which ignores abort keeps its serving slot until it settles (a further
+      request is 429 `busy`, and the slot frees only on settlement). Through the
+      actual application, the suite now proves that a real storage fault (the
+      event table renamed on the live SQLite database) degrades the running
+      session without an epoch change while an acquisition is held, so the held
+      request is refused 409, its lease releases exactly once and the reference
+      is reclaimed; and that operator recovery during a held acquisition refuses
+      the old bytes, releases the lease exactly once, leaves the retired
+      reference reclaimed, refuses the stopped successor 409 until it is
+      resumed, then serves only a successor-scoped reference (the retired one is
+      404). The production fixture's `boot` now waits for the session snapshot
+      before sending operator and control messages; a successor client connected
+      right after recovery had exposed a harness race where the snapshot had not
+      arrived, the bootstrap message was never sent and the client wait timed
+      out. `test/browser/root-entry-audio-browser.mjs` no longer bakes in
+      absolute Playwright or Chromium paths: it resolves Playwright from the
+      installed packages (or `ISLA_PLAYWRIGHT_PATH`) and lets Playwright select
+      Chromium (or takes `ISLA_CHROMIUM_PATH`). The handoff provenance now states
+      that `abb847c` is the squashed PR45 merge commit on main, not PR45's
+      original head (`6bcfc2b`).
+    requirements: [FR-04, FR-05]
+    invariants: [INV-01]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.0.32
+    launch_flags: [run, -m, self-api/deepseek-v4-flash#xhigh, --agent, build, --format, json]
+    sessions: [ses_eb01582deffe1lXlytG5wjv8Gm]
+    supervision: >-
+      Same supervised session as M5-dynamic-audio-route. The supervisor
+      identified the remaining acceptance boundaries as coverage gaps rather
+      than already verified behavior and required them exercised through the
+      actual application where applicable, with truthful acoustic limits. During
+      the reruns the supervisor also corrected a server-ownership mistake: a
+      first browser rerun had reused a leftover loop server from the previous
+      acceptance run whose session was already resumed, so the demo page's
+      `#start` control was disabled and the click timed out. The supervisor
+      verified and terminated the leftover processes (started earlier in this
+      worktree), independently launched fresh direct Node children
+      (`node --import tsx test/browser/loop-server.ts`,
+      `node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5173
+      --strictPort`), reran both tracked checks with explicit
+      `ISLA_PLAYWRIGHT_PATH`/`ISLA_CHROMIUM_PATH`, and recorded the exact logs
+      and cleanup JSON. The failed reused-server attempt and the successful
+      fresh run are both recorded rather than smoothed over. No Git mutation,
+      live provider call, subagent, dependency change or new scope was
+      performed; the frozen `m5-production-composition` worktree was not
+      touched.
+    human_review: >-
+      Supervised coverage round and server-ownership correction recorded. All
+      changes remain uncommitted and unpublished; status remains under review
+      until the Captain confirms.
+    verification:
+      m5: "pnpm test:m5: 127 tests / 6 files passed; test/offline/m5-audio-resource-route.test.ts now has 14 tests, including the four new boundaries (degraded without an epoch change under a held acquisition, operator recovery under a held acquisition with the stopped successor refusing until resumed, invalidation while Blob.arrayBuffer() is pending, and the early-disconnected non-cooperating resolver holding its slot until settlement)."
+      acceptance: "The unchanged probe `.cache/audio-late-lease-review-probe.ts` (node --import tsx) still reported releaseCount 1 of 1 with pendingCount 0 (not modified). The tracked browser checks ran against fresh direct Node children: `node test/browser/root-entry-routing.mjs` passed 11/11 and the Chromium acceptance passed 8/8 with the prepared toolchain supplied through ISLA_PLAYWRIGHT_PATH and ISLA_CHROMIUM_PATH; the run log is .cache/m5-audio-fresh-browser.log and the cleanup record .cache/m5-audio-fresh-browser.json (owned PIDs 307531/307532 exited after SIGTERM without force; ports 4317/5173/5174 empty)."
+      full_suite: "pnpm verify: 846 tests / 50 files passed; typecheck, lint and build passed; only the expected non-failing diagnostics (Node SQLite experimental warnings, one WebSocket max-payload rejection warning from the server boundary test) appeared."
+      gates: "Actual-diff gates with CHANGED_FILES_FILE set to the tracked and untracked working-tree changes and AI_USE_LOG_BASE_FILE set to the log at abb847c: pnpm gate:ai-use-log passed with the working-tree log at 54 entries against 49 at abb847c; pnpm test:trace passed 41 tests; pnpm gate:eval reported G4 not run (no evaluation set or provider access; not a pass); the test-approval gate is satisfied in advise mode, while enforce mode with GITHUB_EVENT_NAME=pull_request fails for an unpublished change set without the tests-approved label, which is a remote/human action."
+    scope: >-
+      Test-only coverage and tooling: four boundary tests in the route suite,
+      the snapshot-first boot fix in the production fixture, and the portable
+      browser script with its documented invocation. No production source file
+      was changed in this increment. No live provider, acoustic measurement,
+      durable recovery from degradation or browser product resolver is claimed;
+      the degraded case proves refusal and lease release, not session recovery.
+      No new dependency, shared contract, case ID or peer module was added; all
+      changes remain uncommitted.
+
+  - date: "2026-10-19"
+    task: M5-evaluation-adapter
+    change: >-
+      Added a coordinator-backed ComparisonDeps.runVariant adapter with explicit
+      peers and an audio consumer, real Resume/input/turn execution, fresh-session
+      preflight, evidence-based outcome mapping, per-invocation late-usage joins
+      and returned cleanup diagnostics. Added 19 actual-runner cases over real
+      SQLite and a test-only consumer using the real browser performer machine.
+      M6 source and shared contracts remain unchanged.
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.0.32
+    launch_flags: [run, -m, self-api/deepseek-v4-flash#xhigh, --agent, build, --format, json]
+    sessions: [ses_eb01582deffe1lXlytG5wjv8Gm]
+    supervision: >-
+      OpenCode authored the adapter and tests in the existing build session.
+      The supervisor interrupted repeated investigation and later delivered
+      independent probes: synthesis failures were initially misclassified as
+      cancelled with failureRate 0, and cleanup failures were initially lost
+      when diagnostic persistence failed. Both probes now verify the corrections.
+      A held-playback fixture race was reproduced under repeated runs and fixed
+      with separated expiry timing. The supervisor checked actual-started Stop
+      coverage, independently ran full verification, and maintained handoff and
+      log documentation. An unnecessary local-agent metadata lookup during log
+      preparation was interrupted; verified session facts were supplied directly.
+    human_review: >-
+      The implementation follows the Captain-approved M5 plan. The increment is
+      under review, uncommitted and unpublished. No merge or external message
+      is implied by local verification.
+    transcript_record: >-
+      Genuine session metadata and partial native captures are retained privately.
+      A complete native export is still pending; partial output is not represented
+      as a complete transcript. Original failed and interrupted rounds remain recorded.
+    verification:
+      focused: "19 adapter cases passed; 146 M5 tests / 7 files passed; typecheck and lint passed."
+      opencode: "After a reproduced expiry-order fixture race was corrected, ten focused runs and two full test runs passed (922 tests / 55 files)."
+      independent: "pnpm verify passed 922 tests / 55 files, typecheck, lint and build. Original synthesis-failure and cleanup-plus-diagnostic-failure probes passed after repair."
+      gates: "Actual working-tree trace/G6 and G4 status are retained in the external review evidence; no live G4 pass is claimed."
+    scope: >-
+      M5 execution and measurement plumbing only. Stage timing, first audible,
+      stop-to-silence, actual provider request counts and cost remain unobserved.
+      M4 on this base does not propagate text-source token counts. Supplied
+      replyIntent cases are refused explicitly before execution; M3 decisions
+      are not overridden and labels are not scored. Product consumer adoption,
+      live provider acceptance and retained physical ownership remain separate.
+  - date: "2026-10-19"
+    task: M5-retained-physical-synthesis
+    change: >-
+      Assemble one M1 worker provider and retained synthesis adapter across
+      composition recovery, preserving each facade's originating deadline gate
+      and physical occupancy until the original job settles. Add deployment
+      owned release through application creation failure, shutdown and CLI
+      signals, preserving multiple cleanup failures and repeat-stop errors.
+      Register signal handlers before startup/readiness. Add controlled real
+      Node worker and real CLI pending-release acceptance without loading a model.
+    requirements: [FR-04, FR-05, NFR-02, NFR-04]
+    invariants: [INV-01]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.0.32
+    launch_flags: [run, -m, self-api/deepseek-v4-flash#xhigh, --agent, build, --format, json]
+    sessions: [ses_eb01582deffe1lXlytG5wjv8Gm]
+    supervision: >-
+      Same genuine build session. Runs 89811, 80162 and 5459 were interrupted
+      through the native API; their handles ended 0, 1 and 1 respectively.
+      Correction run 73208 completed with exit 0. Independent unchanged probes
+      exposed and verified fixes for overwritten origin gates, failed candidate
+      interference, swallowed startup cleanup errors, false repeated-stop
+      success and loss of simultaneous endpoint/release failures. Full tests
+      twice failed immediate-SIGTERM cases at 926/928; signal registration was
+      moved before readiness without adding a sleep to those tests. Original
+      failures and interrupted output remain in external evidence. The supervisor
+      reviewed source, ran independent full verification and prepared documents.
+      Complete native session export remains pending; partial pages are not a
+      complete transcript. No subagent or live provider was used.
+    human_review: >-
+      Under review. The originating-gate wrapper depends on the pinned M1
+      synchronous binding prefix and requires review if that ordering changes.
+      A factory failing before returning a deployment owns its own cleanup.
+      M1 close waits for exit without rejecting merely because of an exit code;
+      the earlier contrary review statement is corrected in external evidence.
+      Arbitrary deployment-owned release callbacks can still reject.
+    verification:
+      full_suite: "Independent pnpm verify: 931 tests / 52 files, typecheck, lint and build passed; source checkpoint unchanged. OpenCode full verification also passed."
+      focused: "M5 148 / 7, M1 214 / 2, trace 41 passed; physical suite 16 and CLI suite 10 cases."
+      acceptance: >-
+        Real scripted Node worker: held generation, logical Stop, busy recovery
+        successor, settlement, resource reuse, disposal requested and observed
+        actual thread exit. Headless turns do not establish completed playback.
+        Real CLI: pending release blocks both exit and shutdown_complete until
+        explicitly unblocked. Independent origin/repeat-stop/startup and combined
+        shutdown-error probes pass. No actual model or acoustic measurement.
+    scope: >-
+      M5 runtime assembly, lifecycle, supporting tests and documentation only.
+      No M1 production source, shared contract, new dependency or case ID change.
+      Registry ownership remains with the caller. No commit, push or external
+      message. Evaluation adoption and live product acceptance remain separate.
+  - date: "2026-10-19"
+    task: M5-combined-evaluation-physical-acceptance
+    change: >-
+      Add one sequential combined acceptance to the existing evaluation suite:
+      actual M6 runner and M5 adapter, retained M1 synthesis, real audio registry
+      and controlled real Node worker. Verify success with acquired/released
+      resources, operator Stop during held synthesis, busy failure without a new
+      generation, settlement/reuse and caller-owned close through actual exit.
+      Extend failure-safe teardown; no production code or consumer helper change.
+    requirements: [FR-04, FR-05, NFR-02, NFR-04]
+    invariants: [INV-01]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.0.32
+    launch_flags: [run, -m, self-api/deepseek-v4-flash#xhigh, --agent, build, --format, json]
+    sessions: [ses_eb01582deffe1lXlytG5wjv8Gm]
+    supervision: >-
+      Supervisor adopted exact frozen increments into the PR34/PR40 combination
+      with checked hashes and explicit metadata unions, moved the same idle
+      session and verified its location. Initial launch failed before coding
+      because native build was unavailable; the existing local project override
+      was copied and reloaded, with no global change. Run 92296 completed exit 0.
+      OpenCode changed only the evaluation test, including one intentional busy
+      assertion failure to check cleanup, then restored it. Supervisor reviewed
+      the test and independently ran unpiped pnpm verify; code hashes stayed
+      unchanged. Failed-case output and authentic final report are retained
+      externally. Partial stream captures are not a complete session export.
+    human_review: >-
+      Under review; no commit or publication. High/Medium: no unresolved finding
+      in this controlled combination. Low: the existing synthesis refusal event
+      has no stage field, so its diagnostic is unknown: busy; classification
+      remains failed. No unrelated runtime change was made for that label.
+    verification:
+      focused: "Evaluation 20 tests; M5 168 / 8; typecheck/lint passed."
+      full_suite: "OpenCode and independent pnpm verify: 1008 tests / 57 files, typecheck, lint and build passed. Independent source checkpoint unchanged."
+      negative: >-
+        Temporarily expecting busy to complete produced 19 passed / 1 failed;
+        the worker cleanup allowed process exit. The assertion was restored and
+        the focused suite passed again before independent full verification.
+        The probe shell piped through tail: its printed EXIT:0 is not a passing
+        test result. Original negative output remains in external evidence.
+      acceptance: >-
+        Two successful resource acquisitions and releases preceded the two
+        completed receipts. Stop left the second physical generation held;
+        the successor recorded busy failure and no new generation, then the
+        original settlement permitted reuse. One caller-owned disposal awaited
+        actual thread exit. No SDK/model loaded; controlled media receipts are
+        not acoustic output. Timings, actual provider attempts and cost stay null.
+    scope: >-
+      Test-only combined acceptance and supervisor documentation/log updates.
+      M1/M6 production, shared contracts and frozen source trees unchanged.
+      Real deployment, peer adoption, real evaluation and native export remain
+      outstanding. No new dependency, case ID, subagent or external message.
+  - date: "2026-10-19"
+    task: M5-native-session-export-verification
+    change: >-
+      Update handoff export status after the user authorized one direct CLI
+      output-redirection exception. Preserve the complete native session export
+      externally without modifying its raw bytes. No application or test change.
+    requirements: []
+    invariants: []
+    cases: []
+    commits: []
+    agent: codex-supervisor
+    sessions: [ses_eb01582deffe1lXlytG5wjv8Gm]
+    human_review: >-
+      One-time local export explicitly authorized; it is not commit, push,
+      review or merge authorization. The earlier unanswered core-only publication
+      proposal is withdrawn in favour of the prepared combined scope, whose
+      final publication still requires explicit approval after owner dependencies.
+    verification: >-
+      Native CLI exit 0. JSON contains 1640 unique records, including 1525
+      assistant records all labelled build/self-api/deepseek-v4-flash/xhigh.
+      Terminal outcome is succeeded and session update/idle metadata matches the
+      current native API. The unchanged 19337344-byte source and stable copy share
+      SHA256 0e36e1e6b36037109c85041bcaf14b518db8067620067ffbdf924fe8d99a8119.
+      Failed/interrupted/compacted historical records are retained. Model/provider
+      labels do not independently prove an upstream service identity.
+  - date: "2026-10-19"
+    task: M5-publication-alignment
+    branch: feat/m5-production-main
+    change: "Restore the existing OpenCode-authored M5 combination on merged main d1b040bc. Preserve the main M6 script, INV-16 row and log; refresh publication handoffs. No new application or test code was authored."
+    requirements: [FR-04, FR-05, FR-06]
+    invariants: [INV-01, INV-12, INV-14]
+    commits: []
+    agent: "Codex (restoration, metadata, documentation and independent verification)"
+    verification:
+      full: "1013 tests / 58 files; typecheck, lint and build passed."
+      focused: "M5 168 / 8. The initial newline-delimited file list did not validate the actual change range; G6 and trace were rerun with all 39 paths NUL-delimited. Preserve the initial logs as superseded validation evidence."
+      browser: "11 root-routing and 8 Chromium audio-route checks passed; server exits observed."
+    human_review: "Captain approved local alignment and verification. Commit, push and PR publication still require exact-content confirmation. G4 remains not run; no live provider or acoustic claim."

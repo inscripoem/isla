@@ -3,6 +3,7 @@ import type {
   CapabilitySnapshot,
   ControlStopMessage,
   DecisionRequest,
+  EventStorePort,
   InputSubmitMessage,
   PerformanceCommand,
   PerformanceReceipt,
@@ -2099,5 +2100,124 @@ describe('M5 coordinator final review corrections (production)', () => {
           (event.payload as { call?: string }).call === 'reaction',
       )
     expect(reactionCall).toBeUndefined()
+  })
+})
+
+describe('M5 coordinator controlled shutdown (production)', () => {
+  it('settle awaits every queued write and never rejects after dispose', async () => {
+    const base = correct.createFixtureEventStore()
+    const appendGate = createGate()
+    let appendCalls = 0
+    const store: EventStorePort = {
+      append: async (event) => {
+        appendCalls += 1
+        // Hold the first queued write so the settle boundary is observable.
+        if (appendCalls === 1) await appendGate.promise
+        return base.append(event)
+      },
+      commitDeliveryWithEvent: (delivery, event) => base.commitDeliveryWithEvent(delivery, event),
+      readSession: (sessionId) => base.readSession(sessionId),
+      exportJsonl: (sessionId) => base.exportJsonl(sessionId),
+    }
+    const coordinator = buildCoordinator({ sessionId: FIXTURE_SESSION_ID, store })
+    await coordinator.endpoint.control(
+      {
+        protocolVersion: '0.2',
+        kind: 'control.resume',
+        messageId: 'm-resume-settle',
+        sessionId: FIXTURE_SESSION_ID,
+        epoch: 0,
+        payload: { requestId: 'r-resume-settle' },
+      },
+      fixtureOperatorContext(),
+    )
+
+    let settled = false
+    const settling = coordinator.settle().then(() => {
+      settled = true
+    })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    // The queued write is genuinely held: settle must not resolve past it.
+    expect(appendCalls).toBe(1)
+    expect(settled).toBe(false)
+    appendGate.release()
+    await settling
+    expect(settled).toBe(true)
+
+    // Settle after disposal still resolves; it never rejects.
+    coordinator.dispose()
+    await coordinator.settle()
+  })
+
+  it('drains an aborted turn to its bookkeeping and then refuses a late receipt without storage access', async () => {
+    const base = correct.createFixtureEventStore()
+    const gate = createGate()
+    const entered = createGate()
+    let storeCalls = 0
+    const store: EventStorePort = {
+      append: async (event) => {
+        storeCalls += 1
+        return base.append(event)
+      },
+      commitDeliveryWithEvent: (delivery, event) => base.commitDeliveryWithEvent(delivery, event),
+      readSession: (sessionId) => base.readSession(sessionId),
+      exportJsonl: (sessionId) => base.exportJsonl(sessionId),
+    }
+    const coordinator = buildCoordinator({
+      sessionId: FIXTURE_SESSION_ID,
+      store,
+      selection: createGatedSelectionPort(gate.promise, () => entered.release()),
+    })
+    await coordinator.endpoint.control(
+      {
+        protocolVersion: '0.2',
+        kind: 'control.resume',
+        messageId: 'm-resume-drain',
+        sessionId: FIXTURE_SESSION_ID,
+        epoch: 0,
+        payload: { requestId: 'r-resume-drain' },
+      },
+      fixtureOperatorContext(),
+    )
+    await coordinator.endpoint.submitInput(
+      {
+        protocolVersion: '0.2',
+        kind: 'input.submit',
+        messageId: 'm-input-drain',
+        sessionId: FIXTURE_SESSION_ID,
+        epoch: 1,
+        payload: { source: 'local-audience', text: 'a turn held at selection' },
+      },
+      fixtureViewerContext(),
+    )
+    const turn = coordinator.runTurn()
+    await entered.promise
+
+    // Disposal aborts the raw provider; settle drains the bounded cancellation
+    // bookkeeping for the already-invoked attempt, then seals writes.
+    coordinator.dispose()
+    const settling = coordinator.settle()
+    gate.release()
+    const outcome = await turn
+    await settling
+    expect(outcome.status).toBe('stale')
+    expect(coordinator.metrics().storageFailure).toBe(false)
+    const events = await base.readSession(FIXTURE_SESSION_ID)
+    const types = events.map((event) => event.type)
+    expect(types).toContain('provider.call')
+    expect(types).toContain('result.stale')
+    expect(events.find((event) => event.type === 'provider.call')?.payload).toMatchObject({
+      call: 'selection',
+      disposition: 'aborted',
+    })
+
+    // A late receipt after the write seal is refused without touching storage.
+    const callsAfterSeal = storeCalls
+    const malformed = { kind: 'performance.receipt' } as unknown as Parameters<
+      typeof coordinator.endpoint.handlePlayerMessage
+    >[0]
+    await coordinator.endpoint.handlePlayerMessage(malformed)
+    expect(storeCalls).toBe(callsAfterSeal)
+    expect(coordinator.metrics().storageFailure).toBe(false)
   })
 })

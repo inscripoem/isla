@@ -29,6 +29,8 @@ import type { RuntimeComposition } from './composition'
 import { RecoveryError } from './session-recovery'
 import type { RecoveryErrorCode, RecoveryResult, SessionRecovery } from './session-recovery'
 import type { PerformerBridgeMessage, TransportSendResult } from './performance-bridge'
+import { createAudioResourceRoute } from './audio-resource-route'
+import type { AudioResourceSource } from './audio-resource-route'
 
 /**
  * M5 application endpoint. It owns the browser-facing transport boundary:
@@ -66,6 +68,13 @@ export interface ApplicationEndpointOptions {
    * old message, receipt or asynchronous completion can reach it.
    */
   recovery?: SessionRecovery
+  /**
+   * Optional dynamic audio resource source for the `POST /audio` route. When
+   * supplied, an exact-origin, loopback-host, explicitly marked request may
+   * acquire the bytes of a currently admissible resource; when omitted, the
+   * route does not exist and the server answers 404 for `/audio`.
+   */
+  audioSource?: AudioResourceSource
 }
 
 type ApplicationDiagnosticOperation =
@@ -301,6 +310,29 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
     const canonical = canonicalOrigin(origin)
     return canonical !== null && allowedOrigins.has(canonical)
   }
+
+  /**
+   * The optional audio route reads the authoritative live session/epoch and its
+   * serving lifecycle from the current composition on every request and after
+   * every asynchronous boundary, so a Stop, retirement, recovery or degraded
+   * state during acquisition is observed even when the epoch itself is
+   * unchanged. Only a running, non-retiring session serves new audio: the
+   * initial stopped composition, a stopped or degraded session and a session
+   * being retired are refused.
+   */
+  const audioRoute =
+    options.audioSource === undefined
+      ? undefined
+      : createAudioResourceRoute({
+          source: options.audioSource,
+          liveIdentity: () => ({
+            sessionId: composition.sessionId,
+            epoch: composition.coordinator.epoch(),
+            servable: !disposed && !retiring && composition.coordinator.lifecycle() === 'running',
+          }),
+          allowOrigin,
+          allowHost,
+        })
 
   const safeSend = (conn: ConnectionState, payload: unknown): TransportSendResult => {
     if (conn.ws.readyState !== WebSocket.OPEN) return 'unsent'
@@ -949,7 +981,10 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
       } catch {
         return false
       }
-      if (pathname !== OPERATOR_BOOTSTRAP_PATH) return false
+      if (pathname !== OPERATOR_BOOTSTRAP_PATH) {
+        if (audioRoute !== undefined && audioRoute.handleHttp(req, res)) return true
+        return false
+      }
 
       const deny = (status: number, code: string): boolean => {
         res.writeHead(status, {
@@ -1014,6 +1049,7 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
     dispose(): void {
       if (disposed) return
       disposed = true
+      audioRoute?.dispose()
       unsubscribe()
       for (const conn of connections.values()) {
         conn.closed = true

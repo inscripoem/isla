@@ -748,9 +748,36 @@ describe('I1 explicit session recovery', () => {
     expect(next.receipts().some((receipt) => receipt.stage === 'completed')).toBe(false)
     expect(await harness.confirmedHistory(successor)).toHaveLength(0)
 
-    // Old evidence, including the unknown turn, is preserved unchanged.
+    // Old evidence, including the unknown turn, is preserved unchanged: the
+    // predecessor retirement may only append the interrupted turn's bounded
+    // cancellation bookkeeping (an aborted provider call and its late usage,
+    // then the terminal turn record), never rewrite or drop durable evidence.
     expect(await harness.confirmedHistory(LIVE)).toHaveLength(1)
-    expect(await createEventStore(harness.backend).readSession(LIVE)).toEqual(eventsBefore)
+    const afterRecovery = await createEventStore(harness.backend).readSession(LIVE)
+    expect(afterRecovery.slice(0, eventsBefore.length)).toEqual(eventsBefore)
+    const appended = afterRecovery.slice(eventsBefore.length)
+    const knownTurnIds = new Set(
+      eventsBefore.map((event) => event.turnId).filter((turnId) => turnId !== null),
+    )
+    expect(appended.every((event) => event.turnId !== null && knownTurnIds.has(event.turnId))).toBe(
+      true,
+    )
+    expect(
+      appended.every((event) =>
+        ['provider.call', 'provider.usage.late', 'turn.ended'].includes(event.type),
+      ),
+    ).toBe(true)
+    // The appended bookkeeping is truthful cancellation, never fabricated
+    // completion: exactly one terminal turn record, and it is cancelled; every
+    // appended provider call is aborted; no delivery or completed receipt is
+    // admitted by retirement.
+    const appendedEnds = appended.filter((event) => event.type === 'turn.ended')
+    expect(appendedEnds).toHaveLength(1)
+    expect(appendedEnds[0]?.payload).toMatchObject({ status: 'cancelled' })
+    for (const call of appended.filter((event) => event.type === 'provider.call')) {
+      expect(call.payload).toMatchObject({ disposition: 'aborted' })
+    }
+    expect(appended.some((event) => event.type === 'delivery.committed')).toBe(false)
   })
 
   it('does not stop the current session for an unknown recovery target', async () => {

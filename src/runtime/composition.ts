@@ -6,6 +6,7 @@ import type {
   EventStorePort,
   HistoryQueryPort,
   MemoryCommitPort,
+  PlayerPort,
   ReactionPort,
   RendererPort,
   SelectionPort,
@@ -30,13 +31,26 @@ import {
 import type { ArchiveSelectionConfig, ValidatedArchiveSelection } from './session-archives'
 
 /**
+ * Controlled server-side audio resource ownership used by the composition on
+ * Stop and disposal. It is structurally satisfied by the M1
+ * `AudioResourceRegistry`; the composition never resolves or plays bytes and
+ * never decides whether a prepared reference may be dispatched.
+ */
+export interface CompositionAudioResources {
+  /** Retire every session resource below `newEpoch`; later epochs stay admissible. */
+  retireBefore(sessionId: string, newEpoch: number): number
+  /** Retire every session resource and refuse all later epochs. */
+  retireSession(sessionId: string): number
+}
+
+/**
  * Production composition for one interactive session. It wires the M5
- * coordinator to the merged M1 fixed synthesis, the injected renderer adapter
- * (the M1 mapped renderer with its driver supplied by the caller) and the
- * server-side audio bridge, and to injected M3/M4 ports and the M6 store.
- * Missing peer modules are supplied by the caller as explicit substitutes (the
- * demo/test harness); this module imports no test code and makes no provider
- * assumptions.
+ * coordinator to an injected synthesis port (or the merged M1 fixed synthesis
+ * over explicit catalog entries), the injected renderer adapter (the M1 mapped
+ * renderer with its driver supplied by the caller) and the server-side audio
+ * bridge, and to injected M3/M4 ports and the M6 store. Missing peer modules
+ * are supplied by the caller as explicit substitutes (the demo/test harness);
+ * this module imports no test code and makes no provider assumptions.
  */
 export interface RuntimeCompositionDeps {
   clock: ClockPort
@@ -50,8 +64,21 @@ export interface RuntimeCompositionDeps {
   renderer: RendererPort
   /** Server-owned deadline gate; shared with the mapped renderer and the bridge. */
   gate: RuntimeDeadlineGate
-  /** Catalogued fixed audio entries used by M1 fixed synthesis. */
-  audioEntries: readonly FixedAudioEntry[]
+  /**
+   * Catalogued fixed audio entries used by M1 fixed synthesis. At least one of
+   * `synthesis` or `audioEntries` must be supplied; supplying neither is an
+   * explicit missing-configuration failure rather than an empty catalog. When
+   * both are supplied, `synthesis` takes precedence.
+   */
+  audioEntries?: readonly FixedAudioEntry[]
+  /** Injected synthesis port (for example M1 Kokoro); preferred over `audioEntries`. */
+  synthesis?: SynthesisPort
+  /**
+   * Optional controlled audio resource ownership: resources of a revoked epoch
+   * are retired on Stop and all session resources are retired on dispose. A
+   * fault here is isolated and can never prevent Stop or disposal.
+   */
+  audioResources?: CompositionAudioResources
   sessionId?: string
   profile?: Partial<SessionProfileConfig>
   timings?: Partial<CycleTimings>
@@ -197,7 +224,16 @@ export interface ReconstructedRuntimeDeps {
   history: HistoryQueryPort
   renderer: RendererPort
   gate: RuntimeDeadlineGate
-  audioEntries: readonly FixedAudioEntry[]
+  /**
+   * At least one of `synthesis` or `audioEntries` must be supplied; supplying
+   * neither fails visibly before any runtime is constructed. When both are
+   * supplied, `synthesis` takes precedence.
+   */
+  audioEntries?: readonly FixedAudioEntry[]
+  /** Injected synthesis port (for example M1 Kokoro); preferred over `audioEntries`. */
+  synthesis?: SynthesisPort
+  /** Optional controlled audio resource ownership (Stop/dispose retirement). */
+  audioResources?: CompositionAudioResources
   reconstruction: ArchiveSelectionConfig
   textSource?: DialogueTextSource
   personaRecall?: PersonaRecallPort
@@ -257,7 +293,9 @@ export async function createReconstructedRuntimeComposition(
     store: deps.store,
     renderer: deps.renderer,
     gate: deps.gate,
-    audioEntries: deps.audioEntries,
+    ...(deps.synthesis !== undefined ? { synthesis: deps.synthesis } : {}),
+    ...(deps.audioEntries !== undefined ? { audioEntries: deps.audioEntries } : {}),
+    ...(deps.audioResources !== undefined ? { audioResources: deps.audioResources } : {}),
     sessionId: selection.liveSessionId,
     // Character identity is bound to the validated selection, never to an ad-hoc
     // caller override.
@@ -278,32 +316,72 @@ export async function createReconstructedRuntimeComposition(
 
 export function createRuntimeComposition(deps: RuntimeCompositionDeps): RuntimeComposition {
   const sessionId = deps.sessionId ?? `session-${randomUUID()}`
-  const synthesis = createFixedSynthesis({ entries: deps.audioEntries, clock: deps.clock })
+  // Explicit missing-configuration failure: a composition without a synthesis
+  // port cannot prepare speech, and silently using an empty fixed catalog would
+  // misreport every prepared segment as `fixed_audio_missing`.
+  const synthesis =
+    deps.synthesis ??
+    (deps.audioEntries !== undefined
+      ? createFixedSynthesis({ entries: deps.audioEntries, clock: deps.clock })
+      : undefined)
+  if (synthesis === undefined) {
+    throw new TypeError(
+      'runtime composition requires a synthesis port: supply `synthesis` or `audioEntries`',
+    )
+  }
   const bridge = createPerformanceBridge({
     sessionId,
     gate: deps.gate,
     clock: deps.clock,
     ...(deps.cancelTtlMs !== undefined ? { cancelTtlMs: deps.cancelTtlMs } : {}),
   })
-  const coordinator = createRuntimeCoordinator({
-    clock: deps.clock,
-    authorizer: deps.authorizer,
-    selection: deps.selection,
-    reaction: deps.reaction,
-    dialogue: deps.dialogue,
-    synthesis,
-    renderer: deps.renderer,
-    player: bridge.player,
-    commit: deps.commit,
-    store: deps.store,
-    sessionId,
-    ...(deps.profile !== undefined ? { profile: deps.profile } : {}),
-    ...(deps.timings !== undefined ? { timings: deps.timings } : {}),
-    ...(deps.inputTtlMs !== undefined ? { inputTtlMs: deps.inputTtlMs } : {}),
-    ...(deps.storageTtlMs !== undefined ? { storageTtlMs: deps.storageTtlMs } : {}),
-    ...(deps.cancelTtlMs !== undefined ? { cancelTtlMs: deps.cancelTtlMs } : {}),
-    ...(deps.maxPendingInputs !== undefined ? { maxPendingInputs: deps.maxPendingInputs } : {}),
-  })
+  const resources = deps.audioResources
+  // Stop reaches the runtime through the coordinator's player call. Wrapping
+  // `cancel` retires the revoked epoch's audio resources at the same boundary;
+  // the retirement is isolated so a registry fault can never prevent Stop or
+  // change the cancellation evidence the bridge returns.
+  const player: PlayerPort =
+    resources === undefined
+      ? bridge.player
+      : {
+          ...bridge.player,
+          cancel: (request, context) => {
+            try {
+              resources.retireBefore(sessionId, request.newEpoch)
+            } catch {
+              // Best-effort resource retirement; Stop proceeds regardless.
+            }
+            return bridge.player.cancel(request, context)
+          },
+        }
+  let coordinator: RuntimeCoordinator
+  try {
+    coordinator = createRuntimeCoordinator({
+      clock: deps.clock,
+      authorizer: deps.authorizer,
+      selection: deps.selection,
+      reaction: deps.reaction,
+      dialogue: deps.dialogue,
+      synthesis,
+      renderer: deps.renderer,
+      player,
+      commit: deps.commit,
+      store: deps.store,
+      sessionId,
+      ...(deps.profile !== undefined ? { profile: deps.profile } : {}),
+      ...(deps.timings !== undefined ? { timings: deps.timings } : {}),
+      ...(deps.inputTtlMs !== undefined ? { inputTtlMs: deps.inputTtlMs } : {}),
+      ...(deps.storageTtlMs !== undefined ? { storageTtlMs: deps.storageTtlMs } : {}),
+      ...(deps.cancelTtlMs !== undefined ? { cancelTtlMs: deps.cancelTtlMs } : {}),
+      ...(deps.maxPendingInputs !== undefined ? { maxPendingInputs: deps.maxPendingInputs } : {}),
+    })
+  } catch (error) {
+    // The bridge was created here; a failed coordinator construction must
+    // release it instead of leaking an unowned performance bridge. The
+    // synthesis port and the gate stay caller-owned.
+    bridge.dispose()
+    throw error
+  }
   let disposed = false
   return {
     coordinator,
@@ -316,6 +394,13 @@ export function createRuntimeComposition(deps: RuntimeCompositionDeps): RuntimeC
       coordinator.dispose()
       bridge.dispose()
       deps.gate.dispose()
+      if (resources !== undefined) {
+        try {
+          resources.retireSession(sessionId)
+        } catch {
+          // Best-effort resource retirement; disposal is already complete.
+        }
+      }
     },
   }
 }

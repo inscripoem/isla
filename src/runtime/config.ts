@@ -8,6 +8,16 @@ export const HEALTH_PATH = '/health'
 
 export const DIAGNOSTICS_PATH = '/diag'
 
+/**
+ * Dynamic audio resource route. The fetch is an explicit, non-cacheable
+ * acquisition (`POST`) with an explicit header, so a browser client supplies
+ * the `Origin` header and the strict exact-origin policy is kept; the browser
+ * resolver seam (`AudioResolver.resolve`) remains unchanged.
+ */
+export const AUDIO_PATH = '/audio'
+
+export const AUDIO_FETCH_HEADER = 'x-isla-audio-fetch'
+
 export const DEFAULT_MAX_PAYLOAD = 16 * 1024
 
 export const SHUTDOWN_GRACE_MS = 2000
