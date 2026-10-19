@@ -108,7 +108,7 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
 
 - Date: 2026-10-19 · Reviewer: M6 (self) · Verdict: **implementation complete; M5 review pending**
 - Scope: `recorded-run.ts`, `report-command.ts`, the `evaluation:report` package script, the new R1 test and
-  Delta/verification notes. No provider, runtime composition or evaluation table.
+  Delta/verification notes; code commit `252dd7d`. No provider, runtime composition or evaluation table.
 - Contract: versioned schema; unknown fields rejected; no trusted summary; report-level refusals preserved;
   atomic writer; refused input writes nothing.
 - Verification: `test:m6` **167/12**, composition **12/1**, readiness **42/3**, trace **41/1**, full
