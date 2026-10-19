@@ -1,8 +1,8 @@
 # M5 evaluation adapter handoff
 
-Current combined publication: `feat/m5-production-main` over [d1b040bc42bc5367b5f0612ff8b4968049205752](https://github.com/inscripoem/isla/commit/d1b040bc42bc5367b5f0612ff8b4968049205752), under review and unpublished. The original increment baselines and counts below are provenance; current alignment and verification are recorded in [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline). Application and test contents are unchanged from the frozen combination.
+Current publication: [PR48](https://github.com/inscripoem/isla/pull/48) at [17ab93335e77d8a231674ae3a2a7c9d10fad2cc5](https://github.com/inscripoem/isla/tree/17ab93335e77d8a231674ae3a2a7c9d10fad2cc5), based on main `d1b040bc`. Both remote CI runs passed. M6 approved its storage/evaluation consumer boundary on 2026-10-19; the PR remains open. The original increment baselines and test counts below are historical provenance. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline) for the combined publication and current review follow-up.
 
-Revision: 2026-10-19.3. Status: under review; local, uncommitted and unpublished.
+Revision: 2026-10-19.4. Status: published in PR48; under review.
 
 ## Scope and baseline
 
@@ -27,6 +27,8 @@ Missing peers/consumer, mismatched variant metadata, unsupported case conditions
 ## Outcomes and measurements
 
 A completed cycle requires at least one matching effective fully-delivered record and all committed deliveries for that turn to be fully delivered. A zero-output cycle or a consumer that supplies no effective terminal evidence cannot produce bench completion. The adapter reads recorded dependency, dialogue and delivery evidence because the coordinator uses `cancelled` for some execution-failure paths. An observed operator Stop remains cancellation; other non-completed paths produce a failure reason.
+
+Storage boundary assumption: `hasEffectiveCompletedDelivery` inspects the committed classification and relies on the production M6 write boundary to validate the `fully-delivered` / `completed` terminal-outcome pair. A custom store must enforce the same `CommitDelivery` validation; a classification-only mock or unvalidated legacy/imported record does not establish that guarantee. The adapter does not independently validate the pair.
 
 Confirmed cancellation and completed speech are different facts. A cancelled receipt can leave output confirmation `confirmed` while delivery remains `partial-unknown`. Missing terminal evidence remains unconfirmed and never enters fully-delivered history. These local receipts do not prove acoustic audibility or silence.
 
@@ -58,4 +60,4 @@ Independent combined `pnpm verify` passed 1008 tests / 57 files with typecheck, 
 
 M3 must provide real decision implementations and reviewed cases/rubric; M4 must complete its reviewed dialogue/usage interface and cases; M1/M2 must provide the product consumer and actual-output measurement method; M6 retains recorded-run/report tooling. Review the supplied-intent mode and cleanup-reason interpretation with M3/M6 before a real comparison. Keep existing role ownership, case IDs and invariant allocations unchanged.
 
-The genuine OpenCode build session is `ses_eb01582deffe1lXlytG5wjv8Gm` (`self-api/deepseek-v4-flash#xhigh`, OpenCode 2.0.32). OpenCode authored the application/test changes; the supervisor reviewed, probed, independently verified and prepared this handoff. No commit, push, review/comment publication or merge accompanies this local increment.
+The genuine OpenCode build session is `ses_eb01582deffe1lXlytG5wjv8Gm` (`self-api/deepseek-v4-flash#xhigh`, OpenCode 2.0.32). OpenCode authored the application/test changes; the supervisor reviewed, probed, independently verified and prepared this handoff. The original increment was later published in PR48; no merge has occurred.

@@ -1,8 +1,8 @@
 # M5 retained physical synthesis handoff
 
-Current combined publication: `feat/m5-production-main` over [d1b040bc42bc5367b5f0612ff8b4968049205752](https://github.com/inscripoem/isla/commit/d1b040bc42bc5367b5f0612ff8b4968049205752), under review and unpublished. The original increment baselines and counts below are provenance; current alignment and verification are recorded in [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline). Application and test contents are unchanged from the frozen combination.
+Current publication: [PR48](https://github.com/inscripoem/isla/pull/48) at [17ab93335e77d8a231674ae3a2a7c9d10fad2cc5](https://github.com/inscripoem/isla/tree/17ab93335e77d8a231674ae3a2a7c9d10fad2cc5), based on main `d1b040bc`. Both remote CI runs passed. M6 approved its storage/evaluation consumer boundary on 2026-10-19; the PR remains open. The original increment baselines and test counts below are historical provenance. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline) for the combined publication and current review follow-up.
 
-Revision: 2026-10-19.3. Status: under review; local, uncommitted and unpublished.
+Revision: 2026-10-19.4. Status: published in PR48; under review.
 
 ## Scope and baseline
 
@@ -43,4 +43,4 @@ These boundaries preserve the earlier admitted-evidence drain: callbacks arrivin
 
 Self-review: the identified gate-ownership, repeated-close, cleanup-observability and readiness defects are corrected and covered. The synchronous M1 binding dependency is explicit. No unrelated refactoring or additional provider lock was introduced. Adoption with the evaluation increment is now independently verified in the combined tree (1008 tests / 57 files). The actual adapter/runner, retained synthesis, real registry and controlled real worker cover completed delivery, Stop during a held job, busy failure, settlement/reuse and caller-owned close. The consumer releases each acquired resource before its completed receipt. See [the evaluation handoff](HANDOFF-M5-EVALUATION-ADAPTER.en.md). Full product/provider/acoustic acceptance remains separate work.
 
-The genuine OpenCode build session is `ses_eb01582deffe1lXlytG5wjv8Gm` (`self-api/deepseek-v4-flash#xhigh`, OpenCode 2.0.32). OpenCode authored application/tests; the supervisor supplied independent probes, reviewed results and prepared this handoff. Failed and interrupted rounds remain in the external evidence. No commit, push, GitHub message or merge accompanies this increment.
+The genuine OpenCode build session is `ses_eb01582deffe1lXlytG5wjv8Gm` (`self-api/deepseek-v4-flash#xhigh`, OpenCode 2.0.32). OpenCode authored application/tests; the supervisor supplied independent probes, reviewed results and prepared this handoff. Failed and interrupted rounds remain in the external evidence. The original increment was later published in PR48; no merge has occurred.

@@ -1,9 +1,8 @@
 # M5 production composition and durable application lifecycle handoff
 
-Current combined publication: `feat/m5-production-main` over [d1b040bc42bc5367b5f0612ff8b4968049205752](https://github.com/inscripoem/isla/commit/d1b040bc42bc5367b5f0612ff8b4968049205752), under review and unpublished. The original increment baselines and counts below are provenance; current alignment and verification are recorded in [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline). Application and test contents are unchanged from the frozen combination.
+Current publication: [PR48](https://github.com/inscripoem/isla/pull/48) at [17ab93335e77d8a231674ae3a2a7c9d10fad2cc5](https://github.com/inscripoem/isla/tree/17ab93335e77d8a231674ae3a2a7c9d10fad2cc5), based on main `d1b040bc`. Both remote CI runs passed. M6 approved its storage/evaluation consumer boundary on 2026-10-19; the PR remains open. The original increment baselines and test counts below are historical provenance. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline) for the combined publication and current review follow-up.
 
-Revision: 2026-10-19.4. Owner: M5 — CHANG Xuben. Status: under review, local and
-uncommitted. Branch: `feat/m5-production-composition`, based on the published PR45
+Revision: 2026-10-19.5. Owner: M5 — CHANG Xuben. Status: published in PR48; under review. Historical increment branch: `feat/m5-production-composition`, based on the published PR45
 head `6bcfc2b`. Scope: FR-05/FR-06 production assembly, durable startup/controlled
 shutdown and explicit selected-history recovery over the existing M6 SQLite backend,
 the root Vite entry routing for the application socket and operator bootstrap, and
@@ -203,7 +202,7 @@ the CLI suite; production source never imports it.
 
 ## Verification
 
-Local results on 2026-10-19 (uncommitted working tree):
+Historical increment results on 2026-10-19 (before PR48 publication):
 
 ```sh
 pnpm typecheck      # passed

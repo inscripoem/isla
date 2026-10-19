@@ -2227,3 +2227,78 @@ entries:
       focused: "M5 168 / 8. The initial newline-delimited file list did not validate the actual change range; G6 and trace were rerun with all 39 paths NUL-delimited. Preserve the initial logs as superseded validation evidence."
       browser: "11 root-routing and 8 Chromium audio-route checks passed; server exits observed."
     human_review: "Captain approved local alignment and verification. Commit, push and PR publication still require exact-content confirmation. G4 remains not run; no live provider or acoustic claim."
+  - date: "2026-10-19"
+    task: M5-i1-recovery-cancellation-attribution
+    branch: feat/m5-production-main
+    change: >-
+      Address the reviewer request on the unreadable carried-source recovery
+      case in `test/offline/i1-recovery.test.ts`: capture the interrupted
+      turn's id from its newly started receipt and require every appended
+      retirement record (`provider.call`, `provider.usage.late`, `turn.ended`)
+      to carry exactly that id, instead of accepting any turn id already
+      present in the unchanged prefix. The case still requires the unchanged
+      prefix, exactly one appended `turn.ended` with `status: cancelled`,
+      every appended provider call `aborted`, and no appended delivery or
+      completed receipt. Test-only; no production source changed.
+    requirements: [FR-05, FR-06]
+    invariants: [INV-12, INV-15]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.0.32
+    sessions: [ses_eabd30267ffeAKNx0oVteNu9Id]
+    supervision: >-
+      Captain approved this local follow-up to PR48 at 17ab933. The
+      misattribution discrimination was demonstrated with a temporary
+      counterfactual: the old "any previously known turn" predicate accepted
+      the confirmed turn's id for appended bookkeeping (probe assertion
+      passed), while the strengthened equality pointed at that same id failed
+      with 1 failed / 16 skipped. The temporary probe was reverted and the
+      focused suite passed again. No Git mutation, subagent, configuration
+      edit or production change was made; the separately handled review
+      documentation was left untouched.
+    human_review: >-
+      Captain approved the local follow-up and requested the focused test
+      change, the focused suite, full verification and this log entry.
+      Results remain under review and unpublished; no commit, push, review
+      or merge was performed.
+    verification:
+      focused: "pnpm exec vitest run test/offline/i1-recovery.test.ts: 17 tests / 1 file passed."
+      mutation: "Temporarily expecting the confirmed turn's id for appended bookkeeping: 1 failed / 16 skipped; the old predicate accepted that id while the strengthened equality rejected it. Probe reverted, suite passed again."
+      full_suite: "pnpm verify: 1013 tests / 58 files passed; typecheck, lint and build passed; advisory G1 notice and the known non-failing diagnostics only."
+    scope: >-
+      Test-only strengthening of one recovery regression. No production
+      behavior, shared contract, case ID or dependency changed. Recovery
+      remains lifecycle recovery over the existing store; no durable
+      disk/crash recovery, live provider or acoustic claim is made.
+
+  - date: "2026-10-19"
+    task: M5-pr48-review-documentation
+    branch: feat/m5-production-main
+    change: >-
+      Address the M6 consumer review on published PR48: add the runtime
+      evaluation-adapter row under NFR-01/NFR-04 and INV-16 with existing
+      C-52 through C-55 scope, record the production CommitDelivery write
+      validation assumption, correct the current publication and CI status
+      in five team handoffs, and identify the browser toolchain and the
+      reviewer environment's reproduction limitation. Historical increment
+      baselines remain identified. Paired Chinese understanding copies and
+      original snapshots are preserved outside the repository.
+    requirements: [NFR-01, NFR-04, FR-06]
+    invariants: [INV-12, INV-16]
+    cases: [C-52, C-53, C-54, C-55]
+    commits: []
+    agent: codex-supervisor
+    human_review: >-
+      Captain explicitly approved the complete local implementation plan.
+      Publication, PR-body edits and responses still require approval of
+      exact content. This entry does not assert new remote publication.
+    verification: >-
+      Reviewed the live PR48 approval at 17ab933 and both successful CI
+      runs. Read the existing 8-check browser evidence and verified the
+      installed Playwright 1.63.0 and Chromium 155.0.8059.79 versions.
+      The browser result remains bound to 17ab933; this documentation
+      follow-up changes no application source or browser script. The
+      separately recorded OpenCode increment tightens one recovery test.

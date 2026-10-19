@@ -1,9 +1,8 @@
 # M5 dynamic audio resource route handoff
 
-Current combined publication: `feat/m5-production-main` over [d1b040bc42bc5367b5f0612ff8b4968049205752](https://github.com/inscripoem/isla/commit/d1b040bc42bc5367b5f0612ff8b4968049205752), under review and unpublished. The original increment baselines and counts below are provenance; current alignment and verification are recorded in [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline). Application and test contents are unchanged from the frozen combination.
+Current publication: [PR48](https://github.com/inscripoem/isla/pull/48) at [17ab93335e77d8a231674ae3a2a7c9d10fad2cc5](https://github.com/inscripoem/isla/tree/17ab93335e77d8a231674ae3a2a7c9d10fad2cc5), based on main `d1b040bc`. Both remote CI runs passed. M6 approved its storage/evaluation consumer boundary on 2026-10-19; the PR remains open. The original increment baselines and test counts below are historical provenance. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline) for the combined publication and current review follow-up.
 
-Revision: 2026-10-19.2. Owner: M5 — CHANG Xuben. Status: under review, local and
-uncommitted. Worktree: `m5-dynamic-audio`, based on merged main `abb847c` (the
+Revision: 2026-10-19.4. Owner: M5 — CHANG Xuben. Status: published in PR48; under review. Historical increment worktree: `m5-dynamic-audio`, based on merged main `abb847c` (the
 squashed PR45 merge commit; the restored production-composition patch is the
 working base). Scope:
 FR-04/FR-05 delivery of registered dynamic audio resources to a same-origin
@@ -14,6 +13,10 @@ real-browser acceptances. M1 registry/synthesis internals, the M2 product
 resolver and live provider work are not part of this slice. The production
 application base remains described in the [production composition
 handoff](HANDOFF-M5-PRODUCTION.en.md).
+
+## Recorded browser toolchain
+
+The 8/8 audio-route result on published `17ab933` used Node.js 22.23.3, pnpm 12.9.0, Playwright 1.63.0 and Chromium 155.0.8059.79 on briefcase (Linux x86_64). Playwright was installed outside the checkout at `~/LocalDev/cityu/tools/isla-browser/node_modules/playwright`; Chromium was supplied through `ISLA_CHROMIUM_PATH` from Nix `nixpkgs#chromium`. Reproduction requires those browser tools and the explicit paths shown in the acceptance command below. M6 did not reproduce the browser result because its review environment lacked Playwright/Chromium. This is HTTP/media-byte evidence, not an acoustic measurement.
 
 ## Route contract
 
@@ -202,6 +205,6 @@ lifecycle no longer matches is `conflict`.
 - Requested review: M2 on the POST wire shape and the unchanged resolver seam;
   M1 on the registry's admission/lease use (no registry change was made); M5
   coordination on the peer-set widening and the root proxy entry.
-- All changes remain uncommitted and unpublished; no Git mutation, live service
-  call, subagent or dependency change was performed. The frozen
+- The original local increment was later published in PR48. No live service
+  call, subagent or dependency change was part of that increment. The frozen
   `m5-production-composition` worktree was not touched.

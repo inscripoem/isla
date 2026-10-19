@@ -697,6 +697,8 @@ describe('I1 explicit session recovery', () => {
     // One confirmed turn and one interrupted (unknown) turn in the live session.
     await harness.client.input('a confirmed question')
     await until(async () => (await harness.confirmedHistory(LIVE)).length, (count) => count >= 1)
+    const confirmedTurnId = (await harness.confirmedHistory(LIVE))[0]?.turnId
+    if (confirmedTurnId === undefined) throw new Error('the confirmed turn has no id')
     // The confirmed turn already reported `started`; capture those output
     // identities and require a NEWLY started output, not any started receipt.
     const startedBefore = new Set(
@@ -707,13 +709,20 @@ describe('I1 explicit session recovery', () => {
     )
     media.holdEndedFrom(media.createCount())
     await harness.client.input('an interrupted question')
-    await until(
+    const interruptedStarted = await until(
       () =>
         harness.client
           .receipts()
-          .some((receipt) => receipt.stage === 'started' && !startedBefore.has(receipt.outputId)),
-      (started) => started,
+          .find((receipt) => receipt.stage === 'started' && !startedBefore.has(receipt.outputId)),
+      (receipt) => receipt !== undefined,
     )
+    if (interruptedStarted === undefined) {
+      throw new Error('the interrupted output never reached started')
+    }
+    const interruptedTurnId = interruptedStarted.turnId
+    // The two turns must be distinguishable by id, or tying the appended
+    // bookkeeping below to the interrupted turn would prove nothing.
+    expect(interruptedTurnId).not.toBe(confirmedTurnId)
     await harness.client.disconnect()
     await until(
       async () => (await harness.currentComposition().coordinator.endpoint.snapshot()).outputConfirmation,
@@ -756,12 +765,12 @@ describe('I1 explicit session recovery', () => {
     const afterRecovery = await createEventStore(harness.backend).readSession(LIVE)
     expect(afterRecovery.slice(0, eventsBefore.length)).toEqual(eventsBefore)
     const appended = afterRecovery.slice(eventsBefore.length)
-    const knownTurnIds = new Set(
-      eventsBefore.map((event) => event.turnId).filter((turnId) => turnId !== null),
-    )
-    expect(appended.every((event) => event.turnId !== null && knownTurnIds.has(event.turnId))).toBe(
-      true,
-    )
+    // Every appended cancellation record must belong to the actual interrupted
+    // turn. The unchanged prefix already contains the earlier confirmed turn's
+    // id, so accepting any previously known turn would let a record misattributed
+    // to the completed turn pass as the interrupted turn's bookkeeping.
+    expect(appended.length).toBeGreaterThan(0)
+    expect(appended.every((event) => event.turnId === interruptedTurnId)).toBe(true)
     expect(
       appended.every((event) =>
         ['provider.call', 'provider.usage.late', 'turn.ended'].includes(event.type),
