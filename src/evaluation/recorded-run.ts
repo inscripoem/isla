@@ -18,6 +18,20 @@ import type { FixedConditions, ReportInput, RunMeta } from './report'
 
 export const RECORDED_RUN_SCHEMA_VERSION = 1
 
+/**
+ * The frozen `schemaVersion: 1` recorded-run shape shared by R2's producer and
+ * R1's parser. The parser returns a `ReportInput` (with a recomputed summary);
+ * this type describes the file itself and deliberately has no `summary` field.
+ */
+export interface RecordedRunV1 {
+  readonly schemaVersion: typeof RECORDED_RUN_SCHEMA_VERSION
+  readonly meta: RunMeta
+  readonly variants: readonly Variant[]
+  readonly conditions: FixedConditions
+  readonly records: readonly AttemptRecord[]
+  readonly notRun: readonly NotRunEntry[]
+}
+
 const TOP_LEVEL_KEYS = [
   'schemaVersion',
   'meta',
