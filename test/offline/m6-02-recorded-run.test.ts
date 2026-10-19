@@ -45,6 +45,7 @@ const RECORD = {
 
 const VARIANT = { id: 'v1', kind: 'rules', combined: false } as const
 
+// Structural fixture: the conditions are synthetic; this is not a measurement.
 const RUN = {
   schemaVersion: 1,
   meta: { runId: 'run-1', generatedAt: '2026-10-19' },
@@ -89,6 +90,32 @@ describe('recorded-run parser', () => {
     expect(parsed.violations.join(' ')).toContain('summary is not a recognised field')
   })
 
+  it('rejects blank variant, case and not-run identifiers or reasons', () => {
+    const blankVariant = parseRecordedRun(
+      JSON.stringify({ ...RUN, variants: [{ ...VARIANT, id: '   ' }] }),
+    )
+    expect(blankVariant.ok).toBe(false)
+    if (blankVariant.ok) throw new Error('unreachable')
+    expect(blankVariant.violations.join(' ')).toContain('must not be blank')
+
+    const blankCase = parseRecordedRun(
+      JSON.stringify({ ...RUN, records: [{ ...RECORD, caseId: '   ' }] }),
+    )
+    expect(blankCase.ok).toBe(false)
+    if (blankCase.ok) throw new Error('unreachable')
+    expect(blankCase.violations.join(' ')).toContain('must not be blank')
+
+    const blankNotRun = parseRecordedRun(
+      JSON.stringify({
+        ...RUN,
+        notRun: [{ variantId: 'v1', caseId: 'case-1', reason: '   ' }],
+      }),
+    )
+    expect(blankNotRun.ok).toBe(false)
+    if (blankNotRun.ok) throw new Error('unreachable')
+    expect(blankNotRun.violations.join(' ')).toContain('must not be blank')
+  })
+
   it('rejects malformed JSON and a wrong schema version', () => {
     const malformed = parseRecordedRun('{')
     expect(malformed.ok).toBe(false)
@@ -120,6 +147,18 @@ describe('evaluation:report command', () => {
 
   it('prints help without writing anything', () => {
     expect(runReportCommand(['--help'])).toBe(0)
+  })
+
+  it('requires an explicit output and rejects duplicate options', () => {
+    const directory = tempDirectory()
+    const input = writeRun(directory, RUN)
+    expect(runReportCommand(['--input', input])).toBe(2)
+    expect(
+      runReportCommand(['--input', input, '--input', input, '--output', join(directory, 'table.md')]),
+    ).toBe(2)
+    expect(
+      runReportCommand(['--input', input, '--output', join(directory, 'a.md'), '--output', join(directory, 'b.md')]),
+    ).toBe(2)
   })
 
   it('returns a usage error when --input is missing', () => {

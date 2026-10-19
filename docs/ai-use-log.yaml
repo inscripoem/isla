@@ -1635,8 +1635,8 @@ entries:
     commits: [252dd7d]
     agent: opencode/deepseek-v4-flash
     verification:
-      focused: "test/offline/m6-02-recorded-run.test.ts: 9/1 passed."
-      role: "test:m6 167/12; composition 12/1; readiness 42/3; trace 41/1."
-      full_suite: "pnpm test 944/53; pnpm verify exit 0; typecheck, lint and build passed."
+      focused: "test/offline/m6-02-recorded-run.test.ts: 11/1 passed."
+      role: "test:m6 169/12; composition 12/1; readiness 42/3; trace 41/1."
+      full_suite: "pnpm test 946/53; pnpm verify exit 0; typecheck, lint and build passed."
       mutation: "Removing the schema-version check and removing the fixture-source refusal each turned the relevant tests red; both restored."
     human_review: "M6 self-review; M5 review pending. No new case id was assigned; R1 traceability needs an M5 allocation."

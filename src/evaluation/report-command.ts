@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
-import { EVALUATION_TABLE_PATH } from './artifacts'
 import { parseRecordedRun } from './recorded-run'
 import { writeEvaluationReport } from './report'
 
@@ -23,7 +22,7 @@ export type ReportCommandParseResult =
   | { readonly ok: false; readonly message: string }
 
 const USAGE =
-  'usage: pnpm evaluation:report --input <recorded-run.json> [--output <evaluation-table.md>]'
+  'usage: pnpm evaluation:report --input <recorded-run.json> --output <evaluation-table.md>'
 
 export function parseReportCommandArgs(argv: readonly string[]): ReportCommandParseResult {
   let input: string | undefined
@@ -35,6 +34,7 @@ export function parseReportCommandArgs(argv: readonly string[]): ReportCommandPa
       return { ok: false, message: USAGE }
     }
     if (argument === '--input') {
+      if (input !== undefined) return { ok: false, message: `--input may be specified only once\n${USAGE}` }
       const value = argv[index + 1]
       if (value === undefined) return { ok: false, message: `--input requires a path\n${USAGE}` }
       input = value
@@ -42,6 +42,7 @@ export function parseReportCommandArgs(argv: readonly string[]): ReportCommandPa
       continue
     }
     if (argument === '--output') {
+      if (output !== undefined) return { ok: false, message: `--output may be specified only once\n${USAGE}` }
       const value = argv[index + 1]
       if (value === undefined) return { ok: false, message: `--output requires a path\n${USAGE}` }
       output = value
@@ -52,7 +53,8 @@ export function parseReportCommandArgs(argv: readonly string[]): ReportCommandPa
   }
 
   if (input === undefined) return { ok: false, message: `--input is required\n${USAGE}` }
-  return { ok: true, value: { input, output: output ?? EVALUATION_TABLE_PATH } }
+  if (output === undefined) return { ok: false, message: `--output is required\n${USAGE}` }
+  return { ok: true, value: { input, output } }
 }
 
 /**

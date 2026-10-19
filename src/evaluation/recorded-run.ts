@@ -103,6 +103,21 @@ function readString(object: ObjectValue, key: string, path: string, validator: V
   return value
 }
 
+function readNonBlankString(
+  object: ObjectValue,
+  key: string,
+  path: string,
+  validator: Validator,
+): string | null {
+  const value = readString(object, key, path, validator)
+  if (value === null) return null
+  if (value.trim().length === 0) {
+    validator.violations.push(`${path}.${key} must not be blank`)
+    return null
+  }
+  return value
+}
+
 function readStringOrNull(
   object: ObjectValue,
   key: string,
@@ -174,7 +189,7 @@ function parseVariants(value: unknown[], path: string, validator: Validator): Va
     const itemPath = `${path}[${index}]`
     const object = checkObject(item, itemPath, VARIANT_KEYS, validator)
     if (object === null) continue
-    const id = readString(object, 'id', itemPath, validator)
+    const id = readNonBlankString(object, 'id', itemPath, validator)
     const kind = readString(object, 'kind', itemPath, validator)
     const combined = readBoolean(object, 'combined', itemPath, validator)
     if (kind !== null && !VARIANT_KINDS.includes(kind as (typeof VARIANT_KINDS)[number])) {
@@ -265,8 +280,8 @@ function parseConditions(value: unknown, path: string, validator: Validator): Fi
 function parseRecord(value: unknown, path: string, validator: Validator): AttemptRecord | null {
   const object = checkObject(value, path, RECORD_KEYS, validator)
   if (object === null) return null
-  const caseId = readString(object, 'caseId', path, validator)
-  const variantId = readString(object, 'variantId', path, validator)
+  const caseId = readNonBlankString(object, 'caseId', path, validator)
+  const variantId = readNonBlankString(object, 'variantId', path, validator)
   const cold = readBoolean(object, 'cold', path, validator)
   const outcome = readString(object, 'outcome', path, validator)
   if (outcome !== null && !OUTCOMES.includes(outcome as (typeof OUTCOMES)[number])) {
@@ -344,9 +359,9 @@ function parseNotRun(value: unknown[], path: string, validator: Validator): NotR
     const itemPath = `${path}[${index}]`
     const object = checkObject(item, itemPath, NOT_RUN_KEYS, validator)
     if (object === null) continue
-    const variantId = readString(object, 'variantId', itemPath, validator)
-    const caseId = readString(object, 'caseId', itemPath, validator)
-    const reason = readString(object, 'reason', itemPath, validator)
+    const variantId = readNonBlankString(object, 'variantId', itemPath, validator)
+    const caseId = readNonBlankString(object, 'caseId', itemPath, validator)
+    const reason = readNonBlankString(object, 'reason', itemPath, validator)
     if (variantId === null || caseId === null || reason === null) continue
     entries.push({ variantId, caseId, reason })
   }

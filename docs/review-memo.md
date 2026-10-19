@@ -109,11 +109,11 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
 - Date: 2026-10-19 · Reviewer: M6 (self) · Verdict: **implementation complete; M5 review pending**
 - Scope: `recorded-run.ts`, `report-command.ts`, the `evaluation:report` package script, the new R1 test and
   Delta/verification notes; code commit `252dd7d`. No provider, runtime composition or evaluation table.
-- Contract: versioned schema; unknown fields rejected; no trusted summary; report-level refusals preserved;
-  atomic writer; refused input writes nothing.
-- Verification: `test:m6` **167/12**, composition **12/1**, readiness **42/3**, trace **41/1**, full
-  **944/53**, `pnpm verify` exit 0. Mutations: schema-version check removed and fixture refusal removed each
-  turned tests red; restored.
+- Contract: versioned schema; unknown fields and blank identifiers rejected; no trusted summary; report-level
+  refusals preserved; explicit output; duplicate options rejected; atomic writer; refused input writes nothing.
+- Verification: `test:m6` **169/12**, composition **12/1**, readiness **42/3**, trace **41/1**, full
+  **946/53**, `pnpm verify` exit 0. Mutations: schema-version, blank-identifier and CLI validation removals
+  each turned tests red; restored.
 - Traceability: NFR-01/NFR-04, INV-16, ADR-007/Delta-007, C-52…C-55. R1 has **no case ID yet**; M5 allocation
   is required. No new ID was self-assigned.
 - Limits: no real provider run, no `evaluation-table.md`, G4 not run, no quality/latency/cost claim.
