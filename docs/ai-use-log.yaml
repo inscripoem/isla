@@ -1725,7 +1725,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: [INV-16]
     cases: [C-69, C-70, C-71]
-    commits: []
+    commits: [b8fa0f3]
     agent: opencode/deepseek-v4-flash
     verification:
       focused: "test/offline/m6-02-bench.test.ts: 7/1 passed."

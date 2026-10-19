@@ -124,7 +124,7 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
 
 - Date: 2026-10-19 · Reviewer: M6 (self) · Verdict: **M5 changes addressed; re-review pending**
 - Scope: `src/evaluation/bench.ts`, `test/offline/m6-02-bench.test.ts`, `test:m6` selection, Delta/verification
-  notes and C-69/C-70/C-71 rows; no provider, runtime composition or evaluation table.
+  notes and C-69/C-70/C-71 rows; code commit `b8fa0f3`; no provider, runtime composition or evaluation table.
 - Contract: returns the frozen `schemaVersion: 1` shape; no `summary`; `sampleSize` is the actual recorded
   attempt count; not-run cases and thrown variants remain explicit. R2 imports the shared `RecordedRunV1`
   type from R1 (commit `761fa40`) and `serializeRecordedRun` emits the R1 file text (commit `37cf15a`).
