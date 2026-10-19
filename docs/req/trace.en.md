@@ -67,6 +67,11 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-53 | implemented | `test/offline/m6-02-metrics.test.ts` | incomplete usage remains unknown rather than becoming a partial total |
 | C-54 | implemented | `test/offline/m6-02-comparison.test.ts` | a thrown variant is recorded as a failure with a reason |
 | C-55 | implemented | `test/offline/m6-02-report.test.ts` | the evaluation report rejects a fixture text source (this case covers fixture-source rejection only, not every report validation rule) |
+| C-68 | implemented | `test/offline/m6-i1-storage-recovery.test.ts` | coordinator writes SQLite, closes and reopens, restores only confirmed history and keeps interrupted output unresolved |
+
+> C-68 is the distinct M6-01 coordinator/SQLite-reopen proof. C-32/C-33 remain
+> the registered unit verifiers for the recovery view and storage-only restart;
+> all three link INV-12.
 
 ## Requirement trace
 
@@ -77,7 +82,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | FR-03 | M1 | C-06, C-11 | — |
 | FR-04 | M1 | C-01, C-04, C-10 | — |
 | FR-05 | M5 | C-03, C-04 | C-08 |
-| FR-06 | M6 | C-12, C-17, C-21, C-22, C-29, C-30, C-31, C-32, C-33, C-45, C-46, C-47 | application startup/selected-history recovery integration; M6 SQLite module recovery is implemented in merged PR26 |
+| FR-06 | M6 | C-12, C-17, C-21, C-22, C-29, C-30, C-31, C-32, C-33, C-45, C-46, C-47, C-68 | application startup/selected-history recovery integration; M6 SQLite module recovery is implemented in merged PR26 |
 | NFR-01 | M5 | C-52, C-54, C-55 | metric baseline |
 | NFR-02 | M5 | C-10, C-17 | C-05, C-09, recovery duration |
 | NFR-03 | M3 | — | C-16, human rubric |
@@ -95,7 +100,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-09 | M5 | C-46, C-47 | M4/SQLite consumer rollout |
 | INV-10 | M6 | C-26, C-27 | — |
 | INV-11 | M6 | C-27, C-28, C-48 | — |
-| INV-12 | M6 | C-32, C-33 | — |
+| INV-12 | M6 | C-32, C-33, C-68 | — |
 | INV-13 | M6 | C-34, C-35, C-37 | — |
 | INV-14 | M6 | C-36 | — |
 | INV-15 | M5 | C-47 (existing turn reconstruction ordering regression) | M4/M6 consumer acceptance |

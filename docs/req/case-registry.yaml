@@ -364,3 +364,9 @@ cases:
       file: test/offline/m6-02-report.test.ts
       test: "refuses a fixture text source"
 
+  - id: C-68
+    status: implemented
+    title: Coordinator SQLite reopen restores only confirmed history and keeps interrupted output unresolved
+    verifier:
+      file: test/offline/m6-i1-storage-recovery.test.ts
+      test: "restores only confirmed history after the coordinator writes SQLite and reopens"
