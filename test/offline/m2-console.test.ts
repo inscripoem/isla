@@ -1127,4 +1127,213 @@ describe('console playback binding', () => {
     expect(binding.status().activeOutputId).toBe(newer.outputId)
     binding.dispose()
   })
+
+  it('discards a busy continuation the console stopped by acknowledgement', async () => {
+    const resolver = createControlledResolver()
+    const media = createControlledMediaDriver()
+    const receipts: PerformanceReceipt[] = []
+    const subtitles: string[] = []
+    const faults: string[] = []
+
+    const binding = createPlaybackBinding({
+      bootstrap: bootstrap(1),
+      resolver,
+      media,
+      newReceiptId: () => 'console-receipt',
+      localNowMs: () => 12,
+      onReceipt: (receipt) => receipts.push(receipt),
+      onStatus: () => {},
+      onSubtitle: (text) => subtitles.push(text),
+      onFault: (message) => faults.push(message),
+    })
+
+    const frame = (messageId: string, command: PerformanceCommand) =>
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId,
+        sessionId: command.sessionId,
+        epoch: command.epoch,
+        kind: 'performance.execute',
+        payload: command,
+      })
+
+    // A owns the slot at epoch 1; B at the same epoch is rejected busy and its
+    // continuation is queued behind this synchronous delivery.
+    const first = fixturePerformanceCommand({ outputId: 'output-a', subtitleText: 'first' })
+    binding.handleServerMessage(frame('m-execute-a', first))
+    expect(binding.status().activeOutputId).toBe(first.outputId)
+    const busy = fixturePerformanceCommand({ outputId: 'output-b', subtitleText: 'second' })
+    binding.handleServerMessage(frame('m-execute-b', busy))
+
+    // Before the continuation resumes, the console accepts a correlated Stop
+    // acknowledgement advancing it to epoch 2 / stopped. The retry must revalidate
+    // admission against that frontier and discard, not re-offer into M1.
+    binding.handleServerMessage(
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId: 'm-stop-ack',
+        sessionId: SESSION,
+        epoch: 2,
+        kind: 'control.ack',
+        payload: {
+          sessionId: SESSION,
+          requestId: 'control-request-1',
+          requestMessageId: 'control-message-1',
+          action: 'stop',
+          status: 'applied',
+          previousEpoch: 1,
+          epoch: 2,
+          lifecycle: 'stopped',
+          outputConfirmation: 'pending',
+          reasonCode: null,
+          message: 'stopped',
+        },
+      }),
+    )
+    await settleMicrotasks()
+
+    expect(faults).toEqual(['ignored output-b: the command is behind the accepted epoch'])
+    expect(subtitles).toEqual(['first'])
+    expect(binding.status().activeOutputId).not.toBe(busy.outputId)
+    expect(receipts.every((receipt) => receipt.outputId !== busy.outputId)).toBe(true)
+    binding.dispose()
+  })
+
+  it('discards a busy continuation the console stopped by snapshot', async () => {
+    const resolver = createControlledResolver()
+    const media = createControlledMediaDriver()
+    const receipts: PerformanceReceipt[] = []
+    const subtitles: string[] = []
+    const faults: string[] = []
+
+    const binding = createPlaybackBinding({
+      bootstrap: bootstrap(1),
+      resolver,
+      media,
+      newReceiptId: () => 'console-receipt',
+      localNowMs: () => 12,
+      onReceipt: (receipt) => receipts.push(receipt),
+      onStatus: () => {},
+      onSubtitle: (text) => subtitles.push(text),
+      onFault: (message) => faults.push(message),
+    })
+
+    const frame = (messageId: string, command: PerformanceCommand) =>
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId,
+        sessionId: command.sessionId,
+        epoch: command.epoch,
+        kind: 'performance.execute',
+        payload: command,
+      })
+
+    const first = fixturePerformanceCommand({ outputId: 'output-a', subtitleText: 'first' })
+    binding.handleServerMessage(frame('m-execute-a', first))
+    const busy = fixturePerformanceCommand({ outputId: 'output-b', subtitleText: 'second' })
+    binding.handleServerMessage(frame('m-execute-b', busy))
+
+    // A stopped snapshot at epoch 2 advances the accepted frontier the same way a
+    // Stop acknowledgement does; the pending retry must read that frontier and
+    // discard rather than admit an epoch-1 command the console has superseded.
+    binding.handleServerMessage(
+      serverMessageSchema.parse(snapshotWith(2, 10, { lifecycle: 'stopped' })),
+    )
+    await settleMicrotasks()
+
+    expect(faults).toEqual(['ignored output-b: the command is behind the accepted epoch'])
+    expect(subtitles).toEqual(['first'])
+    expect(binding.status().activeOutputId).not.toBe(busy.outputId)
+    expect(receipts.every((receipt) => receipt.outputId !== busy.outputId)).toBe(true)
+    binding.dispose()
+  })
+
+  it('discards a busy continuation a local cancellation superseded', async () => {
+    const resolver = createControlledResolver()
+    const media = createControlledMediaDriver()
+    const receipts: PerformanceReceipt[] = []
+    const subtitles: string[] = []
+    const faults: string[] = []
+
+    const binding = createPlaybackBinding({
+      bootstrap: bootstrap(1),
+      resolver,
+      media,
+      newReceiptId: () => 'console-receipt',
+      localNowMs: () => 12,
+      onReceipt: (receipt) => receipts.push(receipt),
+      onStatus: () => {},
+      onSubtitle: (text) => subtitles.push(text),
+      onFault: (message) => faults.push(message),
+    })
+
+    const frame = (messageId: string, command: PerformanceCommand) =>
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId,
+        sessionId: command.sessionId,
+        epoch: command.epoch,
+        kind: 'performance.execute',
+        payload: command,
+      })
+
+    const first = fixturePerformanceCommand({ outputId: 'output-a', subtitleText: 'first' })
+    binding.handleServerMessage(frame('m-execute-a', first))
+    const busy = fixturePerformanceCommand({ outputId: 'output-b', subtitleText: 'second' })
+    binding.handleServerMessage(frame('m-execute-b', busy))
+
+    // A disconnect or unmount cancels local playback and renews the caller signal.
+    // The pending retry must not re-offer on the fresh signal, which would
+    // resurrect an operation the console deliberately cancelled.
+    binding.cancelLocal()
+    await settleMicrotasks()
+
+    expect(faults).toEqual(['ignored output-b: a local cancellation superseded the attempt'])
+    expect(subtitles).toEqual(['first'])
+    expect(binding.status().idle).toBe(true)
+    expect(receipts.every((receipt) => receipt.outputId !== busy.outputId)).toBe(true)
+    binding.dispose()
+  })
+
+  it('discards a busy continuation after the player is disposed', async () => {
+    const resolver = createControlledResolver()
+    const media = createControlledMediaDriver()
+    const receipts: PerformanceReceipt[] = []
+    const faults: string[] = []
+
+    const binding = createPlaybackBinding({
+      bootstrap: bootstrap(1),
+      resolver,
+      media,
+      newReceiptId: () => 'console-receipt',
+      localNowMs: () => 12,
+      onReceipt: (receipt) => receipts.push(receipt),
+      onStatus: () => {},
+      onSubtitle: () => {},
+      onFault: (message) => faults.push(message),
+    })
+
+    const frame = (messageId: string, command: PerformanceCommand) =>
+      serverMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId,
+        sessionId: command.sessionId,
+        epoch: command.epoch,
+        kind: 'performance.execute',
+        payload: command,
+      })
+
+    const first = fixturePerformanceCommand({ outputId: 'output-a' })
+    binding.handleServerMessage(frame('m-execute-a', first))
+    const busy = fixturePerformanceCommand({ outputId: 'output-b' })
+    binding.handleServerMessage(frame('m-execute-b', busy))
+
+    // Disposing the mount invalidates the pending attempt; the retry must discard
+    // rather than offer a command to a disposed player.
+    binding.dispose()
+    await settleMicrotasks()
+
+    expect(faults).toEqual(['ignored output-b: the local player is disposed'])
+    expect(receipts.every((receipt) => receipt.outputId !== busy.outputId)).toBe(true)
+  })
 })

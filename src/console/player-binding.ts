@@ -192,19 +192,38 @@ export function createPlaybackBinding(options: PlaybackBindingOptions): Playback
       await offer(command, caller.signal)
     } catch (error) {
       if (error instanceof PlayerDispatchError && error.code === 'busy') {
-        // The slot conflict was only a conflict when this attempt started. A
-        // newer output may have been admitted during the await — possibly reusing
-        // the caller signal an accepted cancel deliberately left bound
-        // (cancel → a newer execute) — and an unconditional supersede would
-        // revoke that newer output. Revalidate the owning operation and the
-        // generation first; if either changed, re-offer on the current caller so
-        // M1 rejects the command on its own terms instead of aborting the owner.
-        const stillOwner =
-          generation === generationAtStart && controller.status().activeOutputId === ownerAtStart
-        try {
-          await offer(command, stillOwner ? supersede() : caller.signal)
-        } catch (retryError) {
-          options.onFault(`${command.outputId}: ${describe(retryError)}`)
+        // A busy rejection resumes on a later microtask, after unrelated messages
+        // may have been decoded, so the conflict is only a conflict when this
+        // attempt started. Revalidate admission, disposal and the local
+        // cancellation lifetime before any retry side effect, exactly as the
+        // initial offer checked them — a stale command the console has superseded
+        // or stopped must not be admitted on the retry path it was fenced from at
+        // the initial offer.
+        const retryRefusal = disposed ? 'the local player is disposed' : refuse(command)
+        if (retryRefusal !== null) {
+          // The accepted frontier advanced past this command (a Stop
+          // acknowledgement or a stopped snapshot), or the player has been
+          // disposed: discard the invalidated attempt instead of re-offering it.
+          options.onFault(`ignored ${command.outputId}: ${retryRefusal}`)
+        } else if (generation !== generationAtStart) {
+          // A local cancellation renewed the caller signal and aborted the
+          // operation bound to it. Re-offering would resurrect playback the
+          // console deliberately cancelled, so discard the attempt.
+          options.onFault(
+            `ignored ${command.outputId}: a local cancellation superseded the attempt`,
+          )
+        } else {
+          // Nothing superseded the attempt, so the slot conflict is still the one
+          // it saw. If a newer output now owns the slot — possibly reusing the
+          // caller signal an accepted cancel deliberately left bound
+          // (cancel → a newer execute) — re-offer on the current caller so M1
+          // rejects the command on its own terms instead of aborting that owner.
+          const stillOwner = controller.status().activeOutputId === ownerAtStart
+          try {
+            await offer(command, stillOwner ? supersede() : caller.signal)
+          } catch (retryError) {
+            options.onFault(`${command.outputId}: ${describe(retryError)}`)
+          }
         }
       } else {
         options.onFault(`${command.outputId}: ${describe(error)}`)
