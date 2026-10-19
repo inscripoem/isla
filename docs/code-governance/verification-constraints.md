@@ -105,6 +105,6 @@ rejects a missing file or absent test string.
 
 - `test/offline/m6-02-recorded-run.test.ts` — a valid versioned recorded run writes the exact rendered table;
   malformed JSON, wrong schema version, an embedded summary, fixture/injected-clock runs, sample mismatch,
-  empty attempts, blank not-run reasons and unknown variants are refused; a refused run writes nothing and
-  preserves an existing output. The command uses a temp path; it does not create the repository evaluation
-  table.
+  empty attempts, blank identifiers/reasons, unknown variants, missing/duplicate CLI options and an explicit
+  output are validated; a refused run writes nothing and preserves an existing output. The command uses a temp
+  path; it does not create the repository evaluation table.

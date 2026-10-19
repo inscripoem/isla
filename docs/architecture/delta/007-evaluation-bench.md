@@ -202,16 +202,17 @@ Once the id convention is agreed (PR #32), the rows are added to `docs/req/requi
 - **Added** `src/evaluation/report-command.ts` — `pnpm evaluation:report`; reads a recorded run, validates
   it through the parser and the existing report rules, and writes through `writeEvaluationReport`. Refused
   input writes nothing and preserves an existing output.
-- **Added** `test/offline/m6-02-recorded-run.test.ts` — 9 deterministic cases covering the valid write,
+- **Added** `test/offline/m6-02-recorded-run.test.ts` — 11 deterministic cases covering the valid write,
   malformed JSON, wrong schema version, embedded-summary rejection, fixture/injected-clock refusal, sample
-  mismatch, empty attempts, blank not-run reason, unknown variant, usage errors and output preservation.
+  mismatch, empty attempts, blank identifiers/reasons, unknown variant, explicit-output and duplicate-option
+  errors, usage errors and output preservation.
 - **Changed** `package.json` — `evaluation:report` script and the new suite in `test:m6`.
 - **No** provider, runtime composition, evaluation table or case ID. The R1 case remains pending M5
   allocation. Code commit: `252dd7d`.
 
 ### Verification (slice 9)
 
-- `test:m6` **167 / 12**; composition **12 / 1**; readiness **42 / 3**; trace **41 / 1**; full **944 / 53**;
+- `test:m6` **169 / 12**; composition **12 / 1**; readiness **42 / 3**; trace **41 / 1**; full **946 / 53**;
   `pnpm verify` exit 0.
-- Mutations: removing the schema-version check and removing the fixture-source refusal each turned the
-  relevant tests red; both restored.
+- Mutations: removing the schema-version check, removing the blank-identifier check and removing the CLI
+  validation each turned the relevant tests red; all restored.
