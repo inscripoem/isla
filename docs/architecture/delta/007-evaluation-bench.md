@@ -191,3 +191,27 @@ Once the id convention is agreed (PR #32), the rows are added to `docs/req/requi
 - Mutations: restoring `failureRate = 0` turned two tests red; removing the blank-not-run check turned one test red; both restored.
 - No new case id was assigned; the zero-attempt/not-run test still needs an M5 allocation before it can be
   registered as a case.
+
+---
+
+## Slice 9 — R1 recorded-run command (2026-10-19)
+
+- **Added** `src/evaluation/recorded-run.ts` — a strict `schemaVersion: 1` recorded-run parser. It rejects
+  unknown fields and malformed shapes, and it recomputes `summary` with `summarise(records)` rather than
+  trusting an embedded total.
+- **Added** `src/evaluation/report-command.ts` — `pnpm evaluation:report`; reads a recorded run, validates
+  it through the parser and the existing report rules, and writes through `writeEvaluationReport`. Refused
+  input writes nothing and preserves an existing output.
+- **Added** `test/offline/m6-02-recorded-run.test.ts` — 9 deterministic cases covering the valid write,
+  malformed JSON, wrong schema version, embedded-summary rejection, fixture/injected-clock refusal, sample
+  mismatch, empty attempts, blank not-run reason, unknown variant, usage errors and output preservation.
+- **Changed** `package.json` — `evaluation:report` script and the new suite in `test:m6`.
+- **No** provider, runtime composition, evaluation table or case ID. The R1 case remains pending M5
+  allocation.
+
+### Verification (slice 9)
+
+- `test:m6` **167 / 12**; composition **12 / 1**; readiness **42 / 3**; trace **41 / 1**; full **944 / 53**;
+  `pnpm verify` exit 0.
+- Mutations: removing the schema-version check and removing the fixture-source refusal each turned the
+  relevant tests red; both restored.

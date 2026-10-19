@@ -1625,3 +1625,18 @@ entries:
       full_suite: "pnpm test 935/52; pnpm verify exit 0; typecheck, lint and build passed."
       mutation: "Restoring failureRate=0 turned two tests red; removing the blank-not-run reason check turned one test red; both restored."
     human_review: "M6 self-review fix after the #40 review; M5 re-review pending. No new case id was assigned; the zero-attempt/not-run regression still needs an M5 allocation."
+  - date: 2026-10-19
+    task: M6-02
+    branch: m6-02-r1-recorded-run
+    change: "M6-02 R1: add a strict versioned recorded-run parser and the evaluation:report command. The parser rejects unknown fields and wrong schema versions and recomputes the summary; the command writes through writeEvaluationReport, refuses malformed/unpublishable input, writes nothing on refusal, and uses the existing atomic writer. Adds R1 tests and Delta/verification/review notes. No provider, runtime composition or evaluation table."
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    verification:
+      focused: "test/offline/m6-02-recorded-run.test.ts: 9/1 passed."
+      role: "test:m6 167/12; composition 12/1; readiness 42/3; trace 41/1."
+      full_suite: "pnpm test 944/53; pnpm verify exit 0; typecheck, lint and build passed."
+      mutation: "Removing the schema-version check and removing the fixture-source refusal each turned the relevant tests red; both restored."
+    human_review: "M6 self-review; M5 review pending. No new case id was assigned; R1 traceability needs an M5 allocation."

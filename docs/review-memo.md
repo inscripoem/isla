@@ -103,3 +103,17 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
 - Verification: focused bench suites **56 / 3**; `test:m6` **158 / 11**, composition **12 / 1**, readiness **42 / 3**, trace **41 / 1**, full **935 / 52**, `pnpm verify` exit 0 at the fix commit. Mutations: restoring `failureRate = 0` and removing the blank not-run reason check each turned the relevant tests red; both restored.
 - Limits: no real provider, no evaluation table, G4 not run, no S6 claim. The zero-attempt/not-run regression is not yet registered as a case; M5 allocation is required. Branch protection remains absent.
 - M5 approval at `0196c35` does not cover the fix head; re-review is requested.
+
+## M6 self-review — M6-02 R1 recorded-run command
+
+- Date: 2026-10-19 · Reviewer: M6 (self) · Verdict: **implementation complete; M5 review pending**
+- Scope: `recorded-run.ts`, `report-command.ts`, the `evaluation:report` package script, the new R1 test and
+  Delta/verification notes. No provider, runtime composition or evaluation table.
+- Contract: versioned schema; unknown fields rejected; no trusted summary; report-level refusals preserved;
+  atomic writer; refused input writes nothing.
+- Verification: `test:m6` **167/12**, composition **12/1**, readiness **42/3**, trace **41/1**, full
+  **944/53**, `pnpm verify` exit 0. Mutations: schema-version check removed and fixture refusal removed each
+  turned tests red; restored.
+- Traceability: NFR-01/NFR-04, INV-16, ADR-007/Delta-007, C-52…C-55. R1 has **no case ID yet**; M5 allocation
+  is required. No new ID was self-assigned.
+- Limits: no real provider run, no `evaluation-table.md`, G4 not run, no quality/latency/cost claim.
