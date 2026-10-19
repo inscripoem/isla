@@ -100,3 +100,11 @@ rejects a missing file or absent test string.
 - Fault injection for storage failure is supplied by the **test adapter** (READINESS-KITS:26); the
   production API exposes no failure switch (ADR-001).
 - Tier 3 behavioral thresholds and full-course gates remain pending.
+
+## M6-02 R1 recorded-run command
+
+- `test/offline/m6-02-recorded-run.test.ts` — a valid versioned recorded run writes the exact rendered table;
+  malformed JSON, wrong schema version, an embedded summary, fixture/injected-clock runs, sample mismatch,
+  empty attempts, blank not-run reasons and unknown variants are refused; a refused run writes nothing and
+  preserves an existing output. The command uses a temp path; it does not create the repository evaluation
+  table.
