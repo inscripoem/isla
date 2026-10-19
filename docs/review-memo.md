@@ -119,3 +119,16 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
 - Schema freeze: R1 `schemaVersion: 1` shape is frozen in Delta-007; R2/S6 must emit exactly that shape, and a change requires version 2.
 - Case allocation: **deferred debt**; no ID claimed and no case/trace row added.
 - Limits: no real provider run, no `evaluation-table.md`, G4 not run, no quality/latency/cost claim.
+
+## M6 self-review — M6-02 R2 runBench harness
+
+- Date: 2026-10-19 · Reviewer: M6 (self) · Verdict: **implementation complete locally; M5 review pending**
+- Scope: `src/evaluation/bench.ts`, `test/offline/m6-02-bench.test.ts`, `test:m6` selection and
+  Delta/verification notes. No provider, runtime composition or evaluation table.
+- Contract: returns the frozen `schemaVersion: 1` shape; no `summary`; `sampleSize` is the actual recorded
+  attempt count; not-run cases and thrown variants remain explicit.
+- Verification: `test:m6` **176/13**, composition **12/1**, readiness **42/3**, trace **41/1**, full
+  **953/54**, `pnpm verify` exit 0. Mutation: cases-as-sample-size turned the not-run test red; restored.
+- Traceability: NFR-01/NFR-04, INV-16, ADR-007/Delta-007; R2 has **no case ID** yet. Case allocation is
+  deferred debt; no new ID was self-assigned.
+- Limits: no real provider run, no `evaluation-table.md`, G4 not run, no quality/latency/cost claim.

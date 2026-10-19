@@ -108,3 +108,10 @@ rejects a missing file or absent test string.
   empty attempts, blank identifiers/reasons, unknown nested fields/variants, missing/duplicate CLI options,
   unreadable input and an explicit output are validated; a refused run writes nothing and preserves an existing output. The command uses a temp
   path; it does not create the repository evaluation table.
+
+## M6-02 R2 runBench harness
+
+- `test/offline/m6-02-bench.test.ts` — `runBench` returns the frozen recorded-run v1 shape, recomputes the
+  actual attempt sample size, preserves not-run entries and thrown failures, does not emit a trusted summary,
+  and does not mutate the supplied cases/variants. The test uses the synthetic runner; no provider or runtime
+  pipeline is imported.

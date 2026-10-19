@@ -1669,3 +1669,18 @@ entries:
       role: "test:m6 172/12; composition 12/1; readiness 42/3; trace 41/1."
       full_suite: "pnpm test 949/53; pnpm verify exit 0; typecheck, lint and build passed."
     human_review: "M6 self-review; M5 review pending. Case allocation remains pending."
+  - date: 2026-10-19
+    task: M6-02
+    branch: m6-02-r2-runbench
+    change: "M6-02 R2: add runBench, a harness that wraps the existing runComparison with an injected runVariant and returns the frozen recorded-run schemaVersion 1 shape. The declared sample size is actual recorded attempts, not case count; no trusted summary; not-run and thrown cases remain explicit. Adds four offline tests and test:m6 selection. No provider, runtime composition or table."
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    verification:
+      focused: "test/offline/m6-02-bench.test.ts: 4/1 passed."
+      role: "test:m6 176/13; composition 12/1; readiness 42/3; trace 41/1."
+      full_suite: "pnpm test 953/54; pnpm verify exit 0; typecheck, lint and build passed."
+      mutation: "Using cases rather than recorded attempts as sampleSize turned the not-run test red; restored."
+    human_review: "M6 self-review; M5 review pending. R2 case allocation remains deferred debt."
