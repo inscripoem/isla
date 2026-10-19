@@ -1684,3 +1684,13 @@ entries:
       full_suite: "pnpm test 953/54; pnpm verify exit 0; typecheck, lint and build passed."
       mutation: "Using cases rather than recorded attempts as sampleSize turned the not-run test red; restored."
     human_review: "M6 self-review; M5 review pending. R2 case allocation remains deferred debt."
+  - date: 2026-10-19
+    task: M6-02
+    branch: m6-02-r2-runbench
+    change: "R2 schema sharing: import the frozen RecordedRunV1 type from R1's recorded-run module and remove the duplicate local interface. Runtime behavior and the recorded-run shape are unchanged."
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: []
+    commits: [761fa40]
+    agent: opencode/deepseek-v4-flash
+    human_review: "M6 type-sharing change; M5 review pending. R2 case allocation remains deferred."
