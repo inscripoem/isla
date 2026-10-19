@@ -73,3 +73,14 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
   `list_mcp_resources` cannot establish the absence of servers or tools.
 - Fixes at `3c52788`: the MCP claim is scoped with the server/tool inventory recorded **unknown**, §3.5
   answers the ADR and adoption questions, §4 separates code from enforcement, `INV-15` added.
+
+## M6 self-review — M6-01 coordinator/SQLite recovery test (on `m6-01-sqlite-app-recovery`)
+
+- Date: 2026-10-19 · Reviewer: M6 (self) · Verdict: **OK for handoff with recorded debt**
+- Spec alignment: covers M5's completed/interrupted/earlier-completed/empty matrix, SQLite close/reopen, preserved identities and evidence. Storage reopen is kept separate from application/process restart.
+- Architecture alignment: M5 `createCoordinatorContractRunner` with explicit `RunnerDeps`; real SQLite event store/history/replay/projection; controlled non-storage peers. No production code changed.
+- Code/test quality: focused **3/3**, `test:m6` **99/7**, readiness **42/3**, trace **41/1**, full **812/47**, `pnpm verify` exit 0; mutation removing the `fully-delivered` filter turned two tests red and was restored; `git diff --check` clean.
+- Operational metadata: branch `m6-01-sqlite-app-recovery`, base `main` `abb847c`; no PR; M5 formal review pending. C-68 is branch-local and not on `main`.
+- Security/efficiency: temporary SQLite files only; no credentials, network or live provider.
+- Recorded debt: AI-use `commits` remains empty; C-68 awaits M5 review; C-65/C-66/C-67 remain separate slices; C-48 traceability and the projection-scope fix remain separate.
+- Result: C-68 registered; FR-06, trace and INV-12 linked; #25 review requested with exact revision and evidence.

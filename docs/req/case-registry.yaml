@@ -335,3 +335,10 @@ cases:
     verifier:
       file: test/offline/m6-storage.test.ts
       test: "rejects a malformed event before mutation and lets a corrected retry apply"
+
+  - id: C-68
+    status: implemented
+    title: Coordinator SQLite reopen restores only confirmed history and keeps interrupted output unresolved
+    verifier:
+      file: test/offline/m6-i1-storage-recovery.test.ts
+      test: "restores only confirmed history after the coordinator writes SQLite and reopens"
