@@ -26,9 +26,11 @@ import { createVirtualClock } from '../support/virtual-clock'
  * M6-01 acceptance: the real M5 coordinator over a real SQLite M6 store.
  *
  * This uses M5's coordinator contract runner with explicit RunnerDeps: the M6
- * event store, history, replay and projection are real SQLite/in-process ports;
- * all non-storage peers are controlled fixtures. No fixture event store or
- * fixture history is used for the assertions.
+ * event store, history and replay are real SQLite ports. The in-process
+ * projection is supplied in RunnerDeps but is not consumed by
+ * createCoordinatorContractRunner, so this test does not verify projection
+ * progress; C-66 remains separate. All non-storage peers are controlled
+ * fixtures. No fixture event store or fixture history is used for the assertions.
  *
  * The test proves the completed/interrupted/earlier-completed/empty matrix, then
  * reads the persisted classifications and original identities after closing and

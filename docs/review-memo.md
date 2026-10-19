@@ -78,9 +78,19 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
 
 - Date: 2026-10-19 · Reviewer: M6 (self) · Verdict: **OK for handoff with recorded debt**
 - Spec alignment: covers M5's completed/interrupted/earlier-completed/empty matrix, SQLite close/reopen, preserved identities and evidence. Storage reopen is kept separate from application/process restart.
-- Architecture alignment: M5 `createCoordinatorContractRunner` with explicit `RunnerDeps`; real SQLite event store/history/replay/projection; controlled non-storage peers. No production code changed.
+- Architecture alignment: M5 `createCoordinatorContractRunner` with explicit `RunnerDeps`; real SQLite event store/history/replay; controlled non-storage peers. The in-process projection is supplied but not consumed by the coordinator runner, so projection progress is not verified here; C-66 remains separate. No production code changed.
 - Code/test quality: focused **3/3**, `test:m6` **99/7**, readiness **42/3**, trace **41/1**, full **812/47**, `pnpm verify` exit 0; mutation removing the `fully-delivered` filter turned two tests red and was restored; `git diff --check` clean.
-- Operational metadata: branch `m6-01-sqlite-app-recovery`, base `main` `abb847c`; no PR; M5 formal review pending. C-68 is branch-local and not on `main`.
+- Operational metadata: branch `m6-01-sqlite-app-recovery`, base `main` `abb847c`; PR #47; M5 approved `a4af5e2`; the resolved merge head is pending M5 confirmation. C-68 is branch-local and not on `main`.
 - Security/efficiency: temporary SQLite files only; no credentials, network or live provider.
-- Recorded debt: AI-use `commits` remains empty; C-68 awaits M5 review; C-65/C-66/C-67 remain separate slices; C-48 traceability and the projection-scope fix remain separate.
+- Recorded debt: AI-use `commits` remains empty; C-68 is M5-approved at `a4af5e2`; C-65/C-66/C-67 remain separate slices; C-48 traceability and the projection-scope fix remain separate. This test does not verify projection progress.
 - Result: C-68 registered; FR-06, trace and INV-12 linked; #25 review requested with exact revision and evidence.
+
+## M5 review — M6-01 coordinator/SQLite recovery test (on `m6-01-sqlite-app-recovery`)
+
+- Date: 2026-10-19 · Reviewer: M5 (`inscripoem`) · Verdict: **APPROVED** at `a4af5e2`
+- Scope: test-only C-68 storage-reopen proof. M5 confirmed the coordinator writes through the SQLite event store and fresh real history/recovery/replay ports read the reopened database; completed, interrupted, earlier-completed-segment and empty-history cases pass; identities, classifications and event evidence are preserved.
+- Traceability: C-68 linked from FR-06 and INV-12; the suite is in `test:m6`.
+- Independent verification: `pnpm verify` **812/47**, `test:m6` **99/7**, actual-range G6 passed on the exact head.
+- Non-blocking clarification: the in-process projection is supplied but not consumed by `createCoordinatorContractRunner`; C-66 remains separate.
+- Integration: main moved to `5dd5e79`; the merge conflict is confined to `docs/ai-use-log.yaml`, with both entry sets preserved. The resolved head requires M5 confirmation because approval covers `a4af5e2`.
+- Limits: controlled-peer SQLite reopen only; not process-crash, live-provider, acoustic or S6 evidence.
