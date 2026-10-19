@@ -216,3 +216,25 @@ Once the id convention is agreed (PR #32), the rows are added to `docs/req/requi
   `pnpm verify` exit 0.
 - Mutations: removing the schema-version check, removing the blank-identifier check and removing the CLI
   validation each turned the relevant tests red; all restored.
+
+---
+
+## Frozen R1 recorded-run v1 shape (2026-10-19)
+
+R1's input shape is frozen at `schemaVersion: 1`. R2 and S6 must emit exactly this shape; any addition or
+semantic change requires `schemaVersion: 2` and a new review.
+
+Top-level keys are strict:
+
+- `schemaVersion: 1`
+- `meta`: `runId`, `generatedAt`
+- `variants[]`: `id`, `kind` (`rules` or `model`), `combined`
+- `conditions`: the existing `FixedConditions` fields
+- `records[]`: the existing `AttemptRecord` fields, including timing and usage
+- `notRun[]`: `variantId`, `caseId`, `reason`
+
+There is no trusted `summary`; R1 recomputes it with `summarise(records)`. Unknown fields, blank identifiers
+and blank not-run reasons are refused. The CLI requires an explicit `--output`; a refused run writes
+nothing and preserves an existing output. The repository evaluation table is not created by R1 tests.
+
+The R1 case allocation is **deferred debt**: no case ID is claimed, and no case/trace row has been invented.
