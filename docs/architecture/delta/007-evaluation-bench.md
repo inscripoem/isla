@@ -253,7 +253,7 @@ case/trace row has been invented.
   size, thrown-variant failure, and input immutability.
 - **Changed** `package.json` — the R2 suite is included in `test:m6`.
 - **No** provider, runtime composition, evaluation table or case ID. The R2 case remains pending/deferred.
-- Code commits: `4b3de7e`; shared-type adoption `761fa40`.
+- Code commits: `4b3de7e`; shared-type adoption `761fa40`; serializer bridge `37cf15a`.
 
 ### Verification (slice 10)
 
