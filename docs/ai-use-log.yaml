@@ -989,3 +989,18 @@ entries:
       Lifecycle recovery over the existing in-memory I1 store only. SQLite restart
       recovery, live dialogue/TTS/VTS, acoustic verification and full I1 acceptance
       remain open; no new dependency was added and no peer module was implemented.
+  - date: 2026-10-19
+    task: M6-01
+    branch: m6-01-sqlite-app-recovery
+    change: "M6-01 acceptance: add an app-loop + SQLite reopen test. One completed turn and one interrupted turn are written through the real M5/M1/M6 application path, the database is closed and reopened, and only the confirmed turn is restored. The interrupted turn remains unresolved and is never replayed. The test cites C-32/C-33 and INV-12; it is storage-reopen evidence, not application/process restart or acoustic proof."
+    requirements: [FR-06]
+    invariants: [INV-12]
+    cases: [C-32, C-33]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    verification:
+      focused: "test/offline/m6-i1-storage-recovery.test.ts: 2/2 passed on the reviewed head."
+      role: "test:m6 98/7; composition 12/1; readiness 42/3; trace 41/1."
+      full_suite: "pnpm test 811/47; pnpm verify exit 0; typecheck, lint and build passed."
+      mutation: "Removing the fully-delivered filter from the confirmed-history query made the new test red; source restored and the focused/role/verify checks passed again."
+    human_review: "Test-only M6-01 acceptance slice; M5 review requested for harness use and storage assertions. No production code change; no real provider, speech or app/process recovery claim."

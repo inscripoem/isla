@@ -64,6 +64,11 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-48 | implemented | `test/offline/m6-sqlite.test.ts` | legacy delivery attribution migrates safely (NULL preserved; unsafe legacy data refused) |
 | C-51 | implemented | `test/offline/m6-storage.test.ts` | an event is validated against the schema before append mutates storage |
 
+> Additional M6-01 app-loop evidence for C-32/C-33 and INV-12:
+> `test/offline/m6-i1-storage-recovery.test.ts` closes and reopens SQLite after a
+> completed turn and an interrupted turn. It is additional integration evidence,
+> not a replacement for the registered `m6-recovery.test.ts` unit verifiers.
+
 ## Requirement trace
 
 | Requirement | Owner | Deterministic cases | Pending |
