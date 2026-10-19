@@ -2302,3 +2302,17 @@ entries:
       The browser result remains bound to 17ab933; this documentation
       follow-up changes no application source or browser script. The
       separately recorded OpenCode increment tightens one recovery test.
+
+  - date: "2026-10-19"
+    task: M5-main-integration-handoff
+    change: >-
+      Rebased PR48 onto main 27ba83f. OpenCode resolved only the log and script
+      conflicts in session ses_eab84f63affescCSd3auqfI191; original entries and
+      application source were preserved. Codex updated current integration
+      handoffs after independent full 1027/59, M5 168/8, M6 172/12, recovery17
+      and actual-range G6/trace verification. Historical browser evidence remains
+      bound to 17ab933 and was not rerun for the rebase.
+    agent: Codex supervisor; conflict edits by OpenCode build self-api/deepseek-v4-flash xhigh
+    requirements: [FR-04, FR-05, FR-06, NFR-01, NFR-04]
+    invariants: [INV-01, INV-09, INV-12, INV-16]
+    commits: []

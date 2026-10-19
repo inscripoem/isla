@@ -1,27 +1,31 @@
 # Isla delivery plan
 
-Revision: 2026-10-19.6. Status: under review. Existing roles and workload ratings are unchanged. PR states below are a dated snapshot; review each current head before adoption.
+Revision: 2026-10-19.7. Status: under review. Existing roles and workload ratings are unchanged. PR states below are a dated snapshot; review each current head before adoption.
 
 ## Current baseline
 
-Main is [d1b040bc42bc5367b5f0612ff8b4968049205752](https://github.com/inscripoem/isla/commit/d1b040bc42bc5367b5f0612ff8b4968049205752) after Captain squash-merged PR40. Its tree equals the reviewed PR40 head, and main CI passed. PR33, PR34, PR36, PR45 and PR47 are also merged. The earlier PR40 and PR47 local history repairs are superseded; they must not be pushed.
+Main is [27ba83f367b47729db315e783968342a5e33f21f](https://github.com/inscripoem/isla/commit/27ba83f367b47729db315e783968342a5e33f21f) after PR49 merged. PR33, PR34, PR36, PR40, PR45 and PR47 are also merged. Earlier PR40/47 local history repairs remain superseded and must not be pushed.
+
+PR48's two commits were rebased onto this main in an isolated integration branch. Conflicts were limited to `docs/ai-use-log.yaml` and `package.json`: all original entries and both M5/M6 script additions are preserved. Application source, tests and browser scripts retain their original contents; the R1 files match main. Independent combined verification passed 1027 tests / 59 files, typecheck, lint and build; M5 168/8, M6 172/12, recovery 17/17 and actual PR/push-range G6 and trace 41/41 passed. Remote current-head CI and renewed consumer review must be checked in PR48 after publication. Historical browser evidence below remains bound to `17ab933`; it was not rerun for this rebase.
 
 | PR / current head | State | Next action |
 | --- | --- | --- |
 | [33](https://github.com/inscripoem/isla/pull/33), [34](https://github.com/inscripoem/isla/pull/34), [40](https://github.com/inscripoem/isla/pull/40), [47](https://github.com/inscripoem/isla/pull/47) | Merged; their implementation and tests are retained in the current main baseline | Verify consumers; keep owner changes outside the M5 publication diff |
 | [35](https://github.com/inscripoem/isla/pull/35) `10f87e9` | Changes requested; the latest inspected update does not change the dialogue implementation | Repair explicitly selected archive recall while preserving composite session/turn identity |
-| [43](https://github.com/inscripoem/isla/pull/43) `efb0edf` | Busy-retry lifetime fix and main reconciliation published; both CI runs pass; Changes requested remains pending renewed M5 review | Complete current-head re-review; keep production transport/client adoption separate in Issue37. |
+| [43](https://github.com/inscripoem/isla/pull/43) `efb0edf` | M5 approved the busy-retry repair; M1 review and a new main conflict remain | M2 reconciles main and obtains M1 review; production adoption remains in Issue37 |
+| [49](https://github.com/inscripoem/isla/pull/49) | Merged; R1 parser and report command are on main | Retain strict input and report-refusal boundaries |
+| [50](https://github.com/inscripoem/isla/pull/50) `6b7da98` | M5 approved the non-finite fix and C69–C71 coverage after independent verification; open | Human merge after required reviews; no live acceptance is implied |
 | [45](https://github.com/inscripoem/isla/pull/45) | Merged | M2/M1 consumer adoption and combined recovery acceptance |
 
 CI success, review approval, merge and product acceptance remain separate facts. External review/comment publication requires confirmation of the exact text and commit; a request to perform review work alone does not authorize sending it.
 
 ## M5 publication and review follow-up
 
-The combined implementation is published as [PR48](https://github.com/inscripoem/isla/pull/48) at [17ab93335e77d8a231674ae3a2a7c9d10fad2cc5](https://github.com/inscripoem/isla/tree/17ab93335e77d8a231674ae3a2a7c9d10fad2cc5), based on main `d1b040bc`. The 39 approved paths and remote tree were verified. Push CI [39221905629](https://github.com/inscripoem/isla/actions/runs/39221905629) and PR CI [39222018493](https://github.com/inscripoem/isla/actions/runs/39222018493) passed on that exact commit. M6 approved its storage/evaluation consumer boundary; PR48 remains open.
+The original combined implementation was published as [PR48](https://github.com/inscripoem/isla/pull/48) at [17ab93335e77d8a231674ae3a2a7c9d10fad2cc5](https://github.com/inscripoem/isla/tree/17ab93335e77d8a231674ae3a2a7c9d10fad2cc5), based on main `d1b040bc`. The 39 approved paths and remote tree were verified. Push CI [39221905629](https://github.com/inscripoem/isla/actions/runs/39221905629) and PR CI [39222018493](https://github.com/inscripoem/isla/actions/runs/39222018493) passed on that exact commit. M6 approved its storage/evaluation consumer boundary; PR48 remains open.
 
 Publication verification: `pnpm verify` passed 1013 tests / 58 files, typecheck, lint and build; M5 passed 168 / 8; actual-change G6 and trace passed. Root HTTP/WebSocket routing passed 11 checks and Chromium audio-route acceptance passed 8 checks, with both server exits observed. The browser result used Playwright 1.63.0 and Chromium 155.0.8059.79, Node.js 22.23.3 and pnpm 12.9.0 on briefcase; see the [audio handoff](HANDOFF-M5-DYNAMIC-AUDIO.en.md#recorded-browser-toolchain). M6 did not reproduce the browser run because its environment lacked those tools. G4 remains not run.
 
-The review follow-up adds the evaluation-adapter trace row and storage-validation assumption, corrects publication status and tightens the recovery test to the interrupted turn. Its local verification and eventual publication are recorded separately from the approved `17ab933` baseline; a new push requires renewed review under the current rules. Historical increment baselines and counts below do not override the published state.
+The five review follow-ups were published at `0adc537`: evaluation-adapter trace and storage-validation assumptions, publication/toolchain clarification, and exact interrupted-turn recovery assertions. The current main integration preserves them. A rebased push requires renewed review; historical increment baselines and counts below remain revision-specific.
 
 M6 [PR49](https://github.com/inscripoem/isla/pull/49) at `f46322d` adds the versioned recorded-run/report command; draft [PR50](https://github.com/inscripoem/isla/pull/50) at `3d79fa5` adds the producer and is stacked on PR49. Both have passing remote CI and await M5 review. R1/R2 case reservations are being coordinated in Issue25; neither PR proves live measurements or G4 acceptance.
 
