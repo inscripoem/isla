@@ -124,7 +124,7 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
 
 - Date: 2026-10-19 · Reviewer: M6 (self) · Verdict: **implementation complete locally; M5 review pending**
 - Scope: `src/evaluation/bench.ts`, `test/offline/m6-02-bench.test.ts`, `test:m6` selection and
-  Delta/verification notes. No provider, runtime composition or evaluation table.
+  Delta/verification notes; code commit `4b3de7e`. No provider, runtime composition or evaluation table.
 - Contract: returns the frozen `schemaVersion: 1` shape; no `summary`; `sampleSize` is the actual recorded
   attempt count; not-run cases and thrown variants remain explicit.
 - Verification: `test:m6` **176/13**, composition **12/1**, readiness **42/3**, trace **41/1**, full

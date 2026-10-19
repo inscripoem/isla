@@ -250,6 +250,7 @@ The R1 case allocation is **deferred debt**: no case ID is claimed, and no case/
   size, thrown-variant failure, and input immutability.
 - **Changed** `package.json` — the R2 suite is included in `test:m6`.
 - **No** provider, runtime composition, evaluation table or case ID. The R2 case remains pending/deferred.
+- Code commit: `4b3de7e`.
 
 ### Verification (slice 10)
 
