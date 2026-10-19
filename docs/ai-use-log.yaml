@@ -1617,7 +1617,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: [INV-16]
     cases: [C-52, C-53, C-54, C-55]
-    commits: []
+    commits: [b2a6a56]
     agent: opencode/deepseek-v4-flash
     verification:
       focused: "m6-02-metrics + m6-02-comparison + m6-02-report: 56 tests / 3 files passed."

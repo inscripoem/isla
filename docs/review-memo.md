@@ -98,7 +98,7 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
 ## M6 self-review — M6-02 evaluation bench (PR #40, fixes applied)
 
 - Date: 2026-10-19 · Reviewer: M6 (self) · Verdict: **fixes applied; M5 re-review pending**
-- Scope: review fixes above `9e0bf81`, on `m6-02-bench`. No rebase and no force-push.
+- Scope: review fixes in `b2a6a56`, above `9e0bf81`, on `m6-02-bench`. No rebase and no force-push.
 - Fixed: zero-attempt variants now report an unknown failure rate (`—`), not `0.0%`; blank not-run reasons are refused; INV-16 appears in both trace tables; `ATTEMPT_OUTCOMES` is no longer an external export; ADR-007/Delta-007 and the PR evidence are reconciled.
 - Verification: focused bench suites **56 / 3**; `test:m6` **158 / 11**, composition **12 / 1**, readiness **42 / 3**, trace **41 / 1**, full **935 / 52**, `pnpm verify` exit 0 at the fix commit. Mutations: restoring `failureRate = 0` and removing the blank not-run reason check each turned the relevant tests red; both restored.
 - Limits: no real provider, no evaluation table, G4 not run, no S6 claim. The zero-attempt/not-run regression is not yet registered as a case; M5 allocation is required. Branch protection remains absent.
