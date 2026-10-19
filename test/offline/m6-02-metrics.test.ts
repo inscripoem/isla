@@ -119,7 +119,7 @@ describe('summarise — honesty of the aggregate', () => {
   it('reports an empty sample as unknown rather than zero', () => {
     const summary = summarise([])
     expect(summary.attempts).toBe(0)
-    expect(summary.failureRate).toBe(0)
+    expect(summary.failureRate).toBeNull()
     expect(summary.warm.totalMs.p50).toBeNull()
     expect(summary.usage.unknown).toBe(true)
     expect(summary.usage.costUsd).toBeNull()

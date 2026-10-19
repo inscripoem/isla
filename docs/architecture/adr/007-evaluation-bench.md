@@ -1,6 +1,6 @@
 # ADR-007 — Shared comparison and measurement bench (M6-02)
 
-Status: accepted (proposal under review). Date: 2026-10-16. Owner: M6 (evaluation tooling lane).
+Status: proposed (PR #40 under review). Date: 2026-10-16. Owner: M6 (evaluation tooling lane).
 Related: ADR-006 (gate tooling — lands with **PR #27**) · `docs/code-governance/structural-constraints.md` §4 (lands with **PR #32**).
 
 ## Problem
@@ -36,7 +36,8 @@ field is distinct from the summary's count of bench records.
 A measurement that was not observed is `null`. Usage is summed **only when every attempt reports it**;
 otherwise the aggregate is `null` and `unknown` is true. This is the literal reading of NFR-04
 (*"Missing usage remains unknown"*), and it is deliberately conservative: a partial sum presented as a
-total is a lie.
+total is a lie. The failure rate of an empty sample is likewise **`null`**, not `0`: zero attempts means the
+rate is undefined, not that nothing failed.
 
 ### D4 — Cold and warm are separate populations
 
@@ -66,9 +67,11 @@ It **refuses** to render, naming the reasons, when the run cannot support the nu
 - a **fixture** text source — it consumes no tokens and is not comparable to a provider run (#41, M4);
 - **latency from an injected clock** — a fixture clock returns a constant, so its durations are not
   measurements (#41, M4);
-- **no attempts** — a report with no attempts claims nothing;
+- **no attempts** — a report with no attempts claims nothing; a declared variant with no attempts is
+  reported with `—` rather than a `0%` failure rate;
 - a **declared sample size** that differs from the attempts actually recorded;
-- a blank required condition, or a record for a variant the run did not declare.
+- a blank required condition, a record for a variant the run did not declare, or a **not-run entry with
+  no reason** — a not-run result must be explicit.
 
 Two rules are structural rather than prose: an unobserved stage prints `—`, never `0`; and the runner's
 first-attempt window is labelled **"first attempt"**, not "cold", because it does not establish a cold

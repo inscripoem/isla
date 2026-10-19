@@ -157,7 +157,7 @@ describe('runComparison — every attempt is accounted for', () => {
     expect(run.records).toEqual([])
     expect(run.notRun).toEqual([])
     expect(run.summary.attempts).toBe(0)
-    expect(run.summary.failureRate).toBe(0)
+    expect(run.summary.failureRate).toBeNull()
   })
 })
 

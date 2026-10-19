@@ -1,7 +1,7 @@
 # Delta-007 — Evaluation bench: measurement, runner, report and case shape
 
 Change record for **ADR-007**. Date: 2026-10-16. Branch `m6-02-bench` (based on `main`).
-Scope: **additive** — no register, contract, schema or behaviour change.
+Scope: **additive** — no contract or schema change; S5 adds the INV-16/C-52…C-55 register rows.
 
 ## Change
 
@@ -169,3 +169,25 @@ Once the id convention is agreed (PR #32), the rows are added to `docs/req/requi
 - **Amended** ADR-007 D2: the provider-attempt count is a different field from the number of bench records.
 - No new invariant or case id was allocated.
 
+---
+
+## Slice 8 — review fixes (2026-10-19)
+
+- **Changed** `src/evaluation/metrics.ts` — `failureRate` is `number | null`; an empty sample returns
+  `null`, never a fabricated `0`.
+- **Changed** `src/evaluation/report.ts` — a zero-attempt variant prints `—` for failure rate with a legend;
+  a not-run entry with a blank reason is refused.
+- **Changed** `test/offline/m6-02-metrics.test.ts`, `m6-02-comparison.test.ts`, `m6-02-report.test.ts` —
+  zero-attempt and blank-not-run regressions; the empty-sample tests now expect `null`.
+- **Changed** `src/evaluation/metrics.ts` — `ATTEMPT_OUTCOMES` is internal; no external consumer exists.
+- **Changed** `docs/req/trace.en.md`, `docs/architecture/trace-matrix.md` — INV-16 is now visible in both
+  trace tables.
+- **Changed** ADR-007 and this Delta — status/scope and the empty-sample/not-run rules reconciled.
+
+### Verification (slice 8)
+
+- Focused `m6-02-metrics` + `m6-02-comparison` + `m6-02-report`: **56 / 3**.
+- `pnpm test:m6` **158 / 11**; composition **12 / 1**; readiness **42 / 3**; trace **41 / 1**; full **935 / 52**; `pnpm verify` exit 0.
+- Mutations: restoring `failureRate = 0` turned two tests red; removing the blank-not-run check turned one test red; both restored.
+- No new case id was assigned; the zero-attempt/not-run test still needs an M5 allocation before it can be
+  registered as a case.

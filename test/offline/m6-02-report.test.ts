@@ -210,6 +210,29 @@ describe('the evaluation report is a receipt for a real run', () => {
     expect(result.markdown).toContain('| 3 | 1 | 1 | 1 |')
   })
 
+  it('reports an unknown failure rate for a variant with no attempts', () => {
+    const model: Variant = { id: 'model-candidate', kind: 'model', combined: true }
+    const records = [record({ caseId: 'case-normal', cold: true })]
+    const run = {
+      records,
+      notRun: [
+        { variantId: model.id, caseId: 'case-normal', reason: 'no evaluation provider configured' },
+      ],
+      summary: summarise(records),
+    }
+    const result = renderEvaluationReport({
+      run,
+      variants: [VARIANT, model],
+      conditions: { ...CONDITIONS, sampleSize: 1 },
+      meta: META,
+    })
+    if (!result.ok) throw new Error('unreachable')
+    expect(result.markdown).toContain(
+      '| model-candidate | model | yes | 0 | 0 | 0 | 0 | — | unknown |',
+    )
+    expect(result.markdown).toContain('no attempt was recorded for that variant')
+  })
+
   it('labels the first attempt honestly instead of calling it cold', () => {
     const result = renderEvaluationReport(input())
     if (!result.ok) throw new Error('unreachable')
@@ -311,6 +334,15 @@ describe('the report refuses a run it cannot honestly publish', () => {
     const fractional = sampleRun()
     fractional.records[0]!.attempts = 1.5
     expect(violationsOf({ run: fractional }).join(' ')).toContain('null or a whole number')
+  })
+
+  it('refuses a not-run entry with no reason', () => {
+    const run = sampleRun()
+    const withoutReason = {
+      ...run,
+      notRun: [{ variantId: VARIANT.id, caseId: 'case-skip', reason: '   ' }],
+    }
+    expect(violationsOf({ run: withoutReason }).join(' ')).toContain('has no reason')
   })
 
   it('refuses a failed attempt with no reason', () => {

@@ -25,7 +25,7 @@
 
 export type AttemptOutcome = 'completed' | 'cancelled' | 'failed'
 
-export const ATTEMPT_OUTCOMES: readonly AttemptOutcome[] = ['completed', 'cancelled', 'failed']
+const ATTEMPT_OUTCOMES: readonly AttemptOutcome[] = ['completed', 'cancelled', 'failed']
 
 /** The observable stages, one per owning role (PLAN:116, NFR-01). */
 export const TIMING_STAGES = [
@@ -112,8 +112,8 @@ export interface ComparisonSummary {
   /** Number of bench records in the run — not a provider-attempt count. */
   attempts: number
   outcomes: Record<AttemptOutcome, number>
-  /** failed / attempts; `0` when there are no attempts. */
-  failureRate: number
+  /** failed / attempts; `null` when there are no attempts. */
+  failureRate: number | null
   cold: WindowSummary
   warm: WindowSummary
   usage: UsageSummary
@@ -182,7 +182,7 @@ export function summarise(records: readonly AttemptRecord[]): ComparisonSummary 
   return {
     attempts: records.length,
     outcomes,
-    failureRate: records.length === 0 ? 0 : outcomes.failed / records.length,
+    failureRate: records.length === 0 ? null : outcomes.failed / records.length,
     cold: summariseWindow(records.filter((record) => record.cold)),
     warm: summariseWindow(records.filter((record) => !record.cold)),
     usage: {

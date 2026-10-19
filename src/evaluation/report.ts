@@ -213,6 +213,12 @@ function collectReportViolations(input: ReportInput): string[] {
     .filter((id) => !known.has(id))
   if (unknown.length > 0) violations.push(`recorded variant(s) not declared in the run: ${[...new Set(unknown)].join(', ')}`)
 
+  for (const entry of run.notRun) {
+    if (entry.reason.trim().length === 0) {
+      violations.push(`not-run ${entry.variantId}/${entry.caseId} has no reason; a not-run result must be explicit`)
+    }
+  }
+
   return violations
 }
 
@@ -242,9 +248,9 @@ function cell(value: string | number): string {
   return String(value).replace(/\|/g, '\\|').replace(/\r?\n/g, ' ')
 }
 
-/** A share of attempts, one decimal. */
-function rate(value: number): string {
-  return `${(value * 100).toFixed(1)}%`
+/** A share of attempts, one decimal; `—` when there were no attempts. */
+function rate(value: number | null): string {
+  return value === null ? '—' : `${(value * 100).toFixed(1)}%`
 }
 
 /** Tokens and cost, or `unknown` — never a partial total. */
@@ -332,6 +338,8 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
   }
 
   lines.push(
+    '',
+    '> `—` in the failure-rate column means no attempt was recorded for that variant; the rate is unknown.',
     '',
     '## Latency (ms)',
     '',
