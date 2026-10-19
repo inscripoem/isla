@@ -1854,3 +1854,46 @@ entries:
       full_suite: "pnpm test 935/52; pnpm verify exit 0; typecheck, lint and build passed."
       mutation: "Restoring failureRate=0 turned two tests red; removing the blank-not-run reason check turned one test red; both restored."
     human_review: "M6 self-review fix after the #40 review; M5 re-review pending. No new case id was assigned; the zero-attempt/not-run regression still needs an M5 allocation."
+  - date: 2026-10-19
+    task: M2-01
+    branch: feat/m2-01-console
+    change: >-
+      Resolve the fourth M5 review of PR #43 (pullrequestreview-5568702349, one
+      P2) without changing application protocol 0.2. player-binding.ts: the catch
+      path that resumes a busy rejection on a later microtask now revalidates the
+      same admission fence, disposal and caller generation that the initial offer
+      checked before it retries, so a continuation that arrived before the console
+      stopped the session, revoked the epoch, cancelled locally or disposed the
+      player is discarded instead of being re-offered to M1. The older-owner case
+      is preserved: when nothing superseded the attempt, the retry still supersedes
+      and lets M1 reject the command as stale. Add four offline regressions in
+      test/offline/m2-console.test.ts (31 total).
+    requirements: [FR-04, FR-05]
+    invariants: [INV-01]
+    cases: []
+    commits: [ad0400c]
+    agent: traecode/deepseek-v4.1-flash
+    provider: trae-cn
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      The same recorded governance deviation as the M2-01 console entries above:
+      this review-fix increment was authored in a TraeCode session under the
+      Captain-approved plan, so no OpenCode session identifier exists or is
+      asserted.
+    verification:
+      role: "pnpm test:m2: 31 passed (the 27 previous cases plus 4 new regressions)."
+      regressions: >-
+        The four new cases were confirmed to fail against the pre-fix source (the
+        player-binding edit temporarily stashed, 4 failed and 27 passed) and to
+        pass with the fix restored; the disposal case failed with
+        `dispatch rejected (unavailable)` rather than the discarded-continuation
+        fault before the fix.
+      full_suite: >-
+        On the integration head after merging origin/main (d1b040b): pnpm test
+        964/52; pnpm verify exit 0 with typecheck, lint and build passing.
+    human_review: >-
+      Requested: renewed M5 review of the corrected retry boundary and its four
+      regressions. The shared transport adoption, production client extraction and
+      routing remain with Issue #37, kept Open with unfinished items unchecked.
+      Merge remains a human action; no merge or auto-merge was requested or
+      performed.
