@@ -1943,6 +1943,45 @@ entries:
     human_review: "M6 self-review; M5 review pending. Case allocation remains pending."
   - date: 2026-10-19
     task: M6-02
+    branch: m6-02-r2-runbench
+    change: "M6-02 R2: add runBench, a harness that wraps the existing runComparison with an injected runVariant and returns the frozen recorded-run schemaVersion 1 shape. The declared sample size is actual recorded attempts, not case count; no trusted summary; not-run and thrown cases remain explicit. Adds four offline tests and test:m6 selection. No provider, runtime composition or table."
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: []
+    commits: [4b3de7e]
+    agent: opencode/deepseek-v4-flash
+    verification:
+      focused: "test/offline/m6-02-bench.test.ts: 4/1 passed."
+      role: "test:m6 176/13; composition 12/1; readiness 42/3; trace 41/1."
+      full_suite: "pnpm test 953/54; pnpm verify exit 0; typecheck, lint and build passed."
+      mutation: "Using cases rather than recorded attempts as sampleSize turned the not-run test red; restored."
+    human_review: "M6 self-review; M5 review pending. R2 case allocation remains deferred debt."
+  - date: 2026-10-19
+    task: M6-02
+    branch: m6-02-r2-runbench
+    change: "R2 schema sharing: import the frozen RecordedRunV1 type from R1's recorded-run module and remove the duplicate local interface. Runtime behavior and the recorded-run shape are unchanged."
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: []
+    commits: [761fa40]
+    agent: opencode/deepseek-v4-flash
+    human_review: "M6 type-sharing change; M5 review pending. R2 case allocation remains deferred."
+  - date: 2026-10-19
+    task: M6-02
+    branch: m6-02-r2-runbench
+    change: "R2 serialization bridge: add serializeRecordedRun so the harness returns JSON text the R1 file command consumes. No schema fields, runtime pipeline or provider changed."
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: []
+    commits: [37cf15a]
+    agent: opencode/deepseek-v4-flash
+    verification:
+      focused: "test/offline/m6-02-bench.test.ts: 4/1 passed."
+      role: "test:m6 176/13; composition 12/1; readiness 42/3; trace 41/1."
+      full_suite: "pnpm test 953/54; pnpm verify exit 0; typecheck, lint and build passed."
+    human_review: "M6 self-review; M5 review pending. R2 case allocation remains deferred."
+  - date: 2026-10-19
+    task: M6-02
     branch: m6-02-r1-recorded-run
     change: "R1 schema sharing: export the frozen RecordedRunV1 interface from recorded-run.ts so R2 imports one producer/consumer type instead of duplicating it. No JSON shape or behavior change."
     requirements: [NFR-01, NFR-04]
@@ -1951,3 +1990,18 @@ entries:
     commits: [c66e018]
     agent: opencode/deepseek-v4-flash
     human_review: "M6 type-sharing change; M5 review pending. R1 case allocation remains deferred."
+  - date: 2026-10-19
+    task: M6-02
+    branch: m6-02-r2-runbench
+    change: "R2 review fix: reject non-finite observations before JSON serialization (including the serializer guard), preserve legitimate nulls, and add C-71 producer-to-command integration over two variants with executed and not-run entries. Register C-69/C-70 and C-71 traceability rows. No schema-shape or provider change."
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: [C-69, C-70, C-71]
+    commits: [b8fa0f3]
+    agent: opencode/deepseek-v4-flash
+    verification:
+      focused: "test/offline/m6-02-bench.test.ts: 7/1 passed."
+      role: "test:m6 179/13; composition 12/1; readiness 42/3; trace 41/1."
+      full_suite: "pnpm test 956/54; pnpm verify exit 0; typecheck, lint and build passed."
+      mutation: "Non-finite guard rejects before serialization; valid two-variant C-71 path writes through the real R1 command."
+    human_review: "Addresses M5 P2; M5 re-review requested after push. C-71 verifier now exists and passes."

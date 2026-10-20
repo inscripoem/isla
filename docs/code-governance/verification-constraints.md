@@ -108,3 +108,28 @@ rejects a missing file or absent test string.
   empty attempts, blank identifiers/reasons, unknown nested fields/variants, missing/duplicate CLI options,
   unreadable input and an explicit output are validated; a refused run writes nothing and preserves an existing output. The command uses a temp
   path; it does not create the repository evaluation table.
+
+## M6-02 R2 runBench harness
+
+- `test/offline/m6-02-bench.test.ts` — `runBench` returns the frozen recorded-run v1 shape, recomputes the
+  actual attempt sample size, preserves not-run entries and thrown failures, does not emit a trusted summary,
+  and does not mutate the supplied cases/variants; `serializeRecordedRun` produces the JSON the R1 parser
+  consumes. The test uses the synthetic runner; no provider or runtime pipeline is imported.
+
+### C-69 — zero-attempt variant reporting
+
+`test/offline/m6-02-report.test.ts` / “reports an unknown failure rate for a variant with no attempts”. A mixed run
+with a not-run-only variant renders `—` for failure rate and unknown usage; an entirely unexecuted run is still
+refused.
+
+### C-70 — R1 recorded-run refusal
+
+`test/offline/m6-02-recorded-run.test.ts` / “refuses a malformed or unpublishable run and writes nothing”.
+Output-preservation, strict-schema, and summary-recomputation tests remain supporting coverage.
+
+### C-71 — R2 producer-to-command integration
+
+`test/offline/m6-02-bench.test.ts` / “writes a runBench recording through the R1 report command without losing
+attempts or not-run entries”. Two variants, executed and not-run entries, temporary serialized input and the real
+R1 command are used; all-not-run refusal, output preservation and non-finite serialization refusal remain
+supporting boundary tests.

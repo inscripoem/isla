@@ -237,5 +237,28 @@ There is no trusted `summary`; R1 recomputes it with `summarise(records)`. Unkno
 and blank not-run reasons are refused. The CLI requires an explicit `--output`; a refused run writes
 nothing and preserves an existing output. The repository evaluation table is not created by R1 tests.
 
-The R1 module now exports the single `RecordedRunV1` interface (commit `c66e018`); R2 imports that type instead of redefining it. The
-R1 case allocation is **deferred debt**: no case ID is claimed, and no case/trace row has been invented.
+The R1 module now exports the single `RecordedRunV1` interface (commit `c66e018`); R2 imports that type
+instead of redefining it. The R1 case allocation is **deferred debt**: no case ID is claimed, and no
+case/trace row has been invented.
+
+---
+
+## Slice 10 — R2 runBench harness (2026-10-19)
+
+- **Added** `src/evaluation/bench.ts` — `runBench` wraps the existing `runComparison` with an injected
+  `runVariant` and returns exactly the frozen `schemaVersion: 1` recorded-run shape. It emits no `summary`;
+  the declared sample size is the number of attempts actually recorded, not the number of cases.
+  `serializeRecordedRun` provides the JSON text the R1 file command consumes.
+- **Added** `test/offline/m6-02-bench.test.ts` — 7 deterministic cases: shape/round-trip, not-run sample
+  size, thrown-variant failure, input immutability, non-finite producer/serializer refusal, and C-71
+  producer-to-command integration over two variants with executed and not-run entries.
+- **Changed** `package.json` — the R2 suite is included in `test:m6`.
+- **No** provider, runtime composition, evaluation table or case ID. The R2 case remains pending/deferred.
+- Code commits: `4b3de7e`; shared-type adoption `761fa40`; serializer bridge `37cf15a`; non-finite fix and C-71 `b8fa0f3`.
+
+### Verification (slice 10)
+
+- `test:m6` **179 / 13**; composition **12 / 1**; readiness **42 / 3**; trace **41 / 1**; full **956 / 54**;
+  `pnpm verify` exit 0.
+- Mutation: counting cases rather than recorded attempts as `sampleSize` turned the not-run test red;
+  restored. Non-finite `totalMs`/timing values are refused before serialization; legitimate nulls remain valid.

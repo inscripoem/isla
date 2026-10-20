@@ -370,3 +370,24 @@ cases:
     verifier:
       file: test/offline/m6-i1-storage-recovery.test.ts
       test: "restores only confirmed history after the coordinator writes SQLite and reopens"
+
+  - id: C-69
+    status: implemented
+    title: A not-run-only variant in a mixed run reports unknown failure rate and usage
+    verifier:
+      file: test/offline/m6-02-report.test.ts
+      test: "reports an unknown failure rate for a variant with no attempts"
+
+  - id: C-70
+    status: implemented
+    title: A malformed or unpublishable recorded run is refused without writing output
+    verifier:
+      file: test/offline/m6-02-recorded-run.test.ts
+      test: "refuses a malformed or unpublishable run and writes nothing"
+
+  - id: C-71
+    status: implemented
+    title: A runBench recording is consumed by the real R1 report command without losing attempts or not-run entries
+    verifier:
+      file: test/offline/m6-02-bench.test.ts
+      test: "writes a runBench recording through the R1 report command without losing attempts or not-run entries"
