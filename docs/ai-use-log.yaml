@@ -2851,7 +2851,7 @@ entries:
     requirements: [FR-06]
     invariants: [INV-06]
     cases: [C-66]
-    commits: []
+    commits: [39f3086]
     agent: opencode/deepseek-v4-flash
     verification:
       focused: "test/offline/m6-storage.test.ts -t P3: 1/1 passed."
@@ -2866,7 +2866,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: [INV-16]
     cases: [C-52, C-53, C-54, C-55, C-69, C-70, C-71]
-    commits: []
+    commits: [5ab2888]
     agent: opencode/deepseek-v4-flash
     verification:
       focused: "requirements/readiness/trace after the row: readiness 42/3; trace 41/1."
