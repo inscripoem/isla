@@ -54,3 +54,31 @@ the root Vite configuration unchanged. Open the printed local URL, then:
 measurements. This demo does not prove acoustic output or acoustic silence;
 those require a separate physical observation. Start is evidenced only by an
 actual media `playing` event, never by a fulfilled `play()` promise.
+
+## M2-01 console demo (second entry point)
+
+`console.html` is a separate manual entry for the M2-01 control console. Open
+`http://127.0.0.1:<port>/console.html` after starting the same demo-local Vite
+server. It mounts the real `ConsoleApp`, the real application transport logic
+and the real browser playback controller; the only substitute is an explicit
+in-page **fixture transport** that answers with the agreed v0.2 messages
+(`input.ack`, `control.ack`, `session.snapshot`, `session.event`,
+`performance.execute`, `performance.cancel`) instead of a runtime. No runtime,
+provider or Node code takes part, and this page is never part of the production
+entry.
+
+What it demonstrates:
+
+- Input dispatch with visible per-request outcomes: `accepted`, `duplicate`
+  (submitting the same source/text twice) and `rejected` (any text starting with
+  `reject`).
+- Stop and Resume controls answered with `control.ack`, an epoch change and a
+  `session.snapshot`.
+- Playback receipts observed locally in the browser after Resume. The console
+  has no player-to-runtime channel yet, so the receipts panel is labelled
+  **local evidence only**; it never claims the runtime confirmed delivery.
+- An honest non-dispatching state: the console only dispatches once a trusted
+  bootstrap has arrived.
+
+The fixture is an approved substitute for an unfinished runtime boundary. Passing
+this demo is not evidence of live runtime integration.

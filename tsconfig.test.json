@@ -13,6 +13,7 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
+    "jsx": "react-jsx",
     "noEmit": true,
 
     /* Linting */
@@ -21,5 +22,9 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["test"]
+  /* `src/vite-env.d.ts` carries the Vite client ambient declarations and the
+     `animal-island-ui/style` module declaration that the shared console
+     components rely on. The manual browser demo under `test/browser` imports
+     those components, so the file must also belong to this program. */
+  "include": ["test", "src/vite-env.d.ts"]
 }

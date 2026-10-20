@@ -33,7 +33,10 @@
   },
   "dependencies": {
     "@huggingface/transformers": "3.5.1",
+    "animal-island-ui": "2.2.1",
+    "classnames": "^2.5.1",
     "kokoro-js": "1.2.1",
+    "naive-icons": "1.6.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "ws": "^8.22.0",
