@@ -173,3 +173,14 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
 - Verification: focused verifier 1/1; `test:m6` **181/14**, trace **41/1**, full **987/55**, `pnpm verify` exit 0.
   The test now also asserts the original legacy classification/outcome row survives.
 - Limits: migration boundary only; no live provider, table, G4 or S6 claim.
+
+## M6 self-review — C-66 P3 getter alignment
+
+- Date: 2026-10-20 · Reviewer: M6 (self) · Verdict: **P3 resolved in the fixture; review pending**
+- Scope: `test/support/correct-ports.ts` and the C-66 P3 regression in `test/offline/m6-storage.test.ts`;
+  no production source or shared-contract change.
+- Decision: the scalar `appliedSeq()` getter follows the **last attempted** session. Production already
+  does this; the fixture now updates `lastSessionId` before gap/duplicate early returns.
+- Verification: focused P3 1/1; `test:m6` **182/14**; trace **41/1**; full **1125/63**. A last-advanced
+  mutation turned the P3 regression red with `expected 1 to be +0`; restored.
+- Limits: no production consumer; no interface change; no live/G4/S6 claim.

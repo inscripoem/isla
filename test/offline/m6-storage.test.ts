@@ -5,7 +5,7 @@ import {
 } from '../conformance/storage.conformance'
 import type { StorageKit } from '../conformance/storage.conformance'
 import { runtimeEventSchema } from '../../src/contracts'
-import type { CommitDelivery, RuntimeEvent } from '../../src/contracts'
+import type { CommitDelivery, MemoryProjectionPort, RuntimeEvent } from '../../src/contracts'
 import * as correct from '../support/correct-ports'
 import * as faulty from '../support/faulty-ports'
 import {
@@ -982,6 +982,34 @@ describe('M6 storage invariants', () => {
     // A remains at 2; B is not changed by A's later idempotent event.
     expect((await apply(sessionA, 1, 'c66-a-1')).appliedSeq).toBe(2)
     expect((await apply(sessionB, 1, 'c66-b-1')).appliedSeq).toBe(1)
+  })
+
+  it('C-66 P3: production and fixture scalar getters agree on last attempted session', async () => {
+    const runSequence = async (
+      projection: MemoryProjectionPort,
+      entries: readonly [string, number, string][],
+    ): Promise<number> => {
+      for (const [sessionId, seq, eventId] of entries) {
+        await projection.apply(fixtureRuntimeEvent({ sessionId, seq, eventId }))
+      }
+      return projection.appliedSeq()
+    }
+
+    const gapThenOtherSession: [string, number, string][] = [
+      ['session-p3-a', 1, 'p3-a-1'],
+      ['session-p3-b', 2, 'p3-b-2'],
+    ]
+    const lastAttemptedA: [string, number, string][] = [
+      ['session-p3-a', 1, 'p3-a-1'],
+      ['session-p3-a', 2, 'p3-a-2'],
+      ['session-p3-b', 1, 'p3-b-1'],
+      ['session-p3-a', 1, 'p3-a-1'],
+    ]
+
+    expect(await runSequence(createMemoryProjection(), gapThenOtherSession)).toBe(0)
+    expect(await runSequence(correct.createFixtureMemoryProjection(), gapThenOtherSession)).toBe(0)
+    expect(await runSequence(createMemoryProjection(), lastAttemptedA)).toBe(2)
+    expect(await runSequence(correct.createFixtureMemoryProjection(), lastAttemptedA)).toBe(2)
   })
 })
 
