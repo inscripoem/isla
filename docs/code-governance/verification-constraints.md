@@ -43,13 +43,13 @@ confirms; it does not discover.**
 | --- | --- | --- |
 | INV-04 (session-scoped identity/sequence uniqueness) | C-18, C-23, C-39, C-40, C-41, C-43, C-44, C-51 | `m6-storage.test.ts`; conformance `append-duplicate`, `append-changed-content`, `append-seq-unique`, `append-session-scoped-identity`; conflicting commit reports `conflict` on both sides; canonical content equality (key order irrelevant, array order significant); a non-JSON payload is rejected with `unsupported_payload` (incl. sparse arrays) |
 | INV-05 (atomic delivery + event) | C-19, C-38, C-42 | `m6-storage.test.ts::INV-05` (failed commit persists nothing; a later unpublishable mutation leaves no partial state); `m6-sqlite-backend.test.ts` (batch rollback); conformance `atomic-failure-reported`, `atomic-no-partial-mutation` |
-| INV-06 (projection no gap / idempotent) | C-20 | `m6-storage.test.ts::INV-06`; conformance `projection-no-gap-claim`, `projection-idempotent` |
+| INV-06 (projection no gap / idempotent / session-scoped) | C-20, C-66 | `m6-storage.test.ts::INV-06`; `m6-storage.test.ts` C-66 independent-session test; conformance `projection-no-gap-claim`, `projection-idempotent` |
 | INV-07 (record isolation) | C-24, C-29 | `m6-storage.test.ts` (isolation tests); conformance `input-isolation`, `read-isolation` → runs over **both** in-memory and SQLite |
 | INV-08 (history ordering) | C-25, C-29 | `m6-storage.test.ts` (ordering test); conformance `history-ordered` → over **both** backends |
-| INV-09 (delivery attribution and consistent evidence) | C-46, C-47 | `m5-attribution.test.ts` (capture and persistence); conformance `delivery-invalid-combination:*`, `delivery-invalid-event:*`, `delivery-correlation:*`, `delivery-provenance:*`; negative adapters `createCombinationNormalizingEventStore`, `createProvenanceIgnoringEventStore` |
+| INV-09 (delivery attribution and consistent evidence) | C-46, C-47, C-67 | `m5-attribution.test.ts` (capture and persistence); `m6-late-delivery-conflict.test.ts` (late fully-delivered claim against cancelled delivery preserves original); conformance `delivery-invalid-combination:*`, `delivery-invalid-event:*`, `delivery-correlation:*`, `delivery-provenance:*`; negative adapters `createCombinationNormalizingEventStore`, `createProvenanceIgnoringEventStore` |
 | INV-15 (M5 within-turn reconstruction) | C-47 | `m5-attribution.test.ts`, existing ordering regression: exact session/turn filtering, known indices ascending, unknowns last, stable ties, preserved nulls and unchanged input |
 | INV-10 (config + schema version validated) | C-26, C-27 | `m6-sqlite.test.ts` (config + migrations) |
-| INV-11 (migration recoverable) | C-27, C-28, C-48 | `m6-sqlite.test.ts` (backup before apply; rollback on failure; legacy attribution migrated/refused) |
+| INV-11 (migration recoverable / contradictory legacy refusal) | C-27, C-28, C-48, C-65 | `m6-sqlite.test.ts` (backup before apply; rollback on failure; legacy attribution migrated/refused; contradictory row refused and database preserved) |
 | FR-06 (SQLite conformance) | C-29 | `m6-sqlite-backend.test.ts` (conformance suite over SQLite) |
 | FR-06 (SQLite persistence/reopen) | C-30 | `m6-sqlite-backend.test.ts` (reopen + isolation) |
 | FR-06 (delivery terminal outcome persisted) | C-31 | `m6-sqlite-backend.test.ts` (terminal outcome for recovery) |

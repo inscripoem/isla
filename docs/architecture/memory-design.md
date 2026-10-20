@@ -1,7 +1,7 @@
 # Memory / state design
 
 Status: under review. M6 contributes the persistence portion; memory semantics are owned by M4 and
-live authority by M5. Step A record-shape coordination is under review. Updated: 2026-10-15.
+live authority by M5. Step A record-shape coordination is under review. Updated: 2026-10-20.
 
 ## Scope and ownership
 
@@ -20,7 +20,7 @@ The table describes the persistence target. Current main supplies an in-memory b
 | Committed events (`RuntimeEvent`) | Yes | `event-store` / SQLite `events` | Append-only; `seq` strictly increasing |
 | Delivery outcomes (`CommitDelivery`) | Yes | SQLite `deliveries` | SQLite target; `terminalOutcome` is validated at the write boundary but is not yet part of the in-memory read record (see below) |
 | Confirmed spoken history | Yes | `deliveries` (`fully-delivered` only) | Returned by `HistoryQueryPort` |
-| Memory projection position | Yes | `appliedSeq` | Advances one event at a time; never across a gap |
+| Memory projection position | Yes | in-process `appliedSeq` | One bookmark per session internally; advances one event at a time; never across a gap or across sessions. The shared scalar getter reports the most recently applied session; `apply` returns the event session’s position. |
 | Persona attribution and segment order | Planned for SQLite; present in memory | `personaProfileId`, `personaProfileVersion`, `segmentIndex` | Captured from the original request/segment; M6 must map each field explicitly in its SQLite adapter, retaining legacy unknowns as null |
 | Active turn / pending outputs | No (by design) | — | Restart begins stopped; unresolved outputs stay `unknown` |
 | Raw audio | Separate local files | DB reference only | Never inside event payloads |
@@ -31,8 +31,10 @@ The table describes the persistence target. Current main supplies an in-memory b
 1. Events are **append-only**; identity and `seq` are unique (INV-04). Reuse with changed content is
    rejected, never overwritten.
 2. A delivery and its supporting event commit **atomically** (INV-05): both or neither.
-3. Delivery commit is **idempotent**: identical re-commit returns `duplicate`; changed `textHash`, `segmentIndex`, `personaProfileId` or `personaProfileVersion`
-   returns `conflict` (key = `sessionId:turnId:segmentId:modality`).
+3. Delivery commit is **idempotent**: identical re-commit returns `duplicate`; changed `textHash`, `segmentIndex`,
+   `personaProfileId`, `personaProfileVersion`, or a changed delivery classification/outcome for the same key
+   returns `conflict` (key = `sessionId:turnId:segmentId:modality`). The original delivery record remains
+   unchanged; a contradictory supporting event is retained as audit evidence (C-67).
 4. A delivery write is **internally consistent**: `classification`/`terminalOutcome` must pair
    validly (`fully-delivered` ↔ `completed`; a `cancelled`/`failed`/`unknown` outcome may be
    `partial-unknown` or `not-delivered`), and the supporting event's known provenance and

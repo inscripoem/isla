@@ -103,6 +103,22 @@ sessions. SQLite migration must explicitly retain unknown legacy values as null;
 multi-session reconstruction are separate work. The earlier frozen-contract decision above describes
 the PR9 increment; this coordinated record-shape update is an explicit later revision.
 
+## C-66 amendment — session-scoped projection bookmark (2026-10-20, under review)
+
+C-66 corrects a latent state-scope defect in the in-process memory projection. The bookmark was a
+single `applied` value, so a projection shared across sessions could let one session's sequence
+advance, skip or block another's. The amendment:
+
+- keeps the frozen `MemoryProjectionPort` signature unchanged;
+- keys `createMemoryProjection()` state by `event.sessionId`; the `apply` result is the event session's position, and the legacy scalar getter reports the most recently applied session;
+- updates the correct/faulty fixtures and the recovery assertion;
+- adds the deterministic C-66 independent-session regression.
+
+M5 assigns event `seq`; this amendment does not add sequence authority to M6. `EventStorePort` and
+`HistoryQueryPort` are unchanged. There is no production caller today, so M5/consumer review is
+required before adoption. The existing INV-06 no-gap and idempotence rules remain in force within each
+session. No shared contract signature changes in this amendment.
+
 ## Re-open triggers
 
 - A backend cannot express `(sessionId, eventId)` identity or ordering (e.g. SQLite index limits).

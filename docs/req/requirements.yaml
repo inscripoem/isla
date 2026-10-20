@@ -99,6 +99,9 @@ requirements:
       - kind: deterministic
         description: On restart only confirmed history is restored; unresolved records remain unknown with their outcome and are never replayed.
         cases: [C-32, C-33, C-68]
+      - kind: deterministic
+        description: A late, internally valid fully-delivered/completed claim for an already-cancelled delivery is refused at the storage boundary; the original audit and classification remain unchanged and the contradictory supporting event is retained.
+        cases: [C-67]
 
   - id: NFR-01
     title: Responsiveness and synchronization
@@ -274,7 +277,7 @@ requirements:
         cases: [C-42]
 
   - id: INV-06
-    title: A memory projection never advances across a gap and is idempotent
+    title: A memory projection never advances across a gap, is idempotent, and keeps its bookmark session-scoped
     category: invariant
     priority: must
     owner: M6
@@ -283,8 +286,8 @@ requirements:
     status: under-review
     acceptance:
       - kind: deterministic
-        description: A gap does not advance the projection and reapplying an applied event does not advance it (FR-06; C-12).
-        cases: [C-20]
+        description: A gap does not advance the projection, reapplying an applied event does not advance it, and one session's bookmark never advances or skips another's (FR-06; C-12; C-66).
+        cases: [C-20, C-66]
 
   - id: INV-07
     title: Committed records are isolated from caller mutation
@@ -323,7 +326,7 @@ requirements:
     acceptance:
       - kind: deterministic
         description: Delivery records retain the original segment index and generating persona identity/version through normal completion, Stop and late receipts. M6 preserves those values on read and reports a conflict on changed attribution; legacy unknowns remain null rather than being inferred.
-        cases: [C-46, C-47]
+        cases: [C-46, C-47, C-67]
 
   - id: INV-10
     title: Storage configuration and schema version are validated before use
@@ -339,7 +342,7 @@ requirements:
         cases: [C-26, C-27]
 
   - id: INV-11
-    title: A schema migration is recoverable
+    title: A schema migration is recoverable and refuses contradictory legacy rows
     category: invariant
     priority: must
     owner: M6
@@ -352,7 +355,7 @@ requirements:
         cases: [C-27, C-28]
       - kind: deterministic
         description: The v2 migration preserves genuinely unknown legacy attribution as NULL and drops the legacy persona_version column only when it holds no data; contradictory classification/outcome rows and non-NULL legacy persona values are refused with the database preserved (FR-06).
-        cases: [C-48]
+        cases: [C-48, C-65]
 
   - id: INV-12
     title: Restart restores only confirmed history and never replays unresolved output

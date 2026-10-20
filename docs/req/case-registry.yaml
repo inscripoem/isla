@@ -327,6 +327,13 @@ cases:
       file: test/offline/m6-sqlite.test.ts
       test: "preserves legacy NULL attribution across the v2 migration, and drops the legacy column"
 
+  - id: C-65
+    status: implemented
+    title: A contradictory legacy classification/outcome row is refused before migration exposure and the database is preserved
+    verifier:
+      file: test/offline/m6-sqlite.test.ts
+      test: "refuses a contradictory classification/outcome row and preserves the database"
+
   # Moved from C-49 (2026-10-17) to free that id for M4's admission-divergence guard;
   # historical AI-use log entries keep the original id and are not rewritten.
   - id: C-51
@@ -379,6 +386,19 @@ cases:
     verifier:
       file: test/offline/m6-02-report.test.ts
       test: "refuses a fixture text source"
+
+  - id: C-66
+    status: implemented
+    title: The projection bookmark is session-scoped; one session's sequence must never advance or skip another's
+    verifier:
+      file: test/offline/m6-storage.test.ts
+      test: "C-66: keeps the projection bookmark independent per session"
+  - id: C-67
+    status: implemented
+    title: A late fully-delivered claim for an already-cancelled delivery conflicts and preserves the original evidence
+    verifier:
+      file: test/offline/m6-late-delivery-conflict.test.ts
+      test: "refuses a later fully-delivered claim for an already-cancelled delivery and preserves the original evidence"
 
   - id: C-68
     status: implemented

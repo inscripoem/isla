@@ -2,13 +2,20 @@ import { pathToFileURL } from 'node:url'
 import type { ClockPort, EventStorePort, RendererPort } from '../../src/contracts'
 import { createApplicationEndpoint } from '../../src/runtime/application'
 import { createReconstructedRuntimeComposition } from '../../src/runtime/composition'
-import type { ReconstructedRuntimeComposition } from '../../src/runtime/composition'
+import type {
+  CompositionAudioResources,
+  ReconstructedRuntimeComposition,
+} from '../../src/runtime/composition'
 import { createMonotonicClock } from '../../src/runtime/clock'
 import { createRuntimeAuthorizer } from '../../src/runtime/control-policy'
+import { AUDIO_PATH } from '../../src/runtime/config'
 import { createDeadlineGate } from '../../src/runtime/deadline'
 import type { RuntimeDeadlineGate } from '../../src/runtime/deadline'
+import type { AudioResourceSource } from '../../src/runtime/audio-resource-route'
 import { createSessionRecovery } from '../../src/runtime/session-recovery'
 import { DiagnosticsServer } from '../../src/runtime/server'
+import { createAudioResourceRegistry, AudioResourceError } from '../../src/performance/audio-resources'
+import type { AudioResourceRegistry } from '../../src/performance/audio-resources'
 import { createMappedRenderer } from '../../src/performance/mapped-renderer'
 import type { RendererDriver, RendererObservation } from '../../src/performance/mapped-renderer'
 import type { StorageBackend } from '../../src/storage/backend'
@@ -19,8 +26,10 @@ import * as correct from '../support/correct-ports'
 import { createCatalogDialogueTextSource } from '../support/m4-kit'
 import {
   createM1ActualAssetEntries,
+  M1_FIXTURE_FORMAT,
   M1_FIXTURE_VOICE_ID,
   M1_FIXTURE_VOICE_VERSION,
+  readM1ActualWavAssets,
 } from '../support/m1-kit'
 import type { ArchiveSelectionConfig } from '../../src/runtime/session-archives'
 
@@ -87,6 +96,8 @@ export interface LoopCompositionDeps {
   clock: ClockPort
   backend: StorageBackend
   store: EventStorePort
+  /** Optional controlled audio resources: epoch retirement on Stop, session retirement on dispose. */
+  audioResources?: CompositionAudioResources
 }
 
 export type LoopCompositionBuilder = (
@@ -137,6 +148,7 @@ export function createLoopCompositionBuilder(deps: LoopCompositionDeps): LoopCom
       renderer: createRenderer(deadlineGate),
       gate: deadlineGate,
       audioEntries: createM1ActualAssetEntries(),
+      ...(deps.audioResources !== undefined ? { audioResources: deps.audioResources } : {}),
       reconstruction: selection,
       textSource: createCatalogDialogueTextSource(),
       profile: {
@@ -147,10 +159,74 @@ export function createLoopCompositionBuilder(deps: LoopCompositionDeps): LoopCom
   }
 }
 
+/**
+ * The demo's dynamic-audio fixture reference.
+ *
+ * The manual demo starts stopped, so no fixture resource can be registered for
+ * a fixed epoch up front: the audio route refuses every fetch until the operator
+ * resumes, and the resumed epoch is not known in advance. The fixture source
+ * below presents this one stable reference and registers the prepared WAV bytes
+ * with the real registry for the exact live session/epoch on the first admission
+ * query for that identity (the route only queries admission while the captured
+ * identity still matches the live one), mapping the stable reference to the
+ * registry-owned reference. Byte ownership, lease accounting and retirement
+ * remain the real registry's: it is wired as the composition's `audioResources`,
+ * so Stop retires the epoch and disposal retires the session. Test-only fixture;
+ * production code never imports this module.
+ */
+export const LOOP_AUDIO_ROUTE_CHECK_REF = 'audio://demo/audio-route-check'
+
+function createDemoAudioSource(
+  registry: AudioResourceRegistry,
+  bytes: Uint8Array,
+  format: string,
+): AudioResourceSource {
+  let current: { ref: string; sessionId: string; epoch: number } | null = null
+  const ensureRegistered = (sessionId: string, epoch: number): void => {
+    if (current !== null && current.sessionId === sessionId && current.epoch === epoch) return
+    const registered = registry.register({
+      requestId: 'demo-audio-route-check',
+      sessionId,
+      epoch,
+      turnId: 'demo-audio-route-check',
+      segmentId: 'demo-audio-route-check',
+      voiceProfileId: M1_FIXTURE_VOICE_ID,
+      voiceProfileVersion: M1_FIXTURE_VOICE_VERSION,
+      format,
+      bytes,
+    })
+    current = { ref: registered.audioRef, sessionId, epoch }
+  }
+  return {
+    admission(audioRef, sessionId, epoch) {
+      if (audioRef !== LOOP_AUDIO_ROUTE_CHECK_REF) {
+        return registry.admission(audioRef, sessionId, epoch)
+      }
+      ensureRegistered(sessionId, epoch)
+      return current === null ? 'unknown_ref' : registry.admission(current.ref, sessionId, epoch)
+    },
+    resolve(audioRef, signal) {
+      if (audioRef !== LOOP_AUDIO_ROUTE_CHECK_REF) return registry.resolve(audioRef, signal)
+      if (current === null) return Promise.reject(new AudioResourceError('unknown_ref'))
+      return registry.resolve(current.ref, signal)
+    },
+  }
+}
+
 async function main(): Promise<void> {
   const clock = createMonotonicClock()
   const backend = createInMemoryBackend()
   const store = createEventStore(backend)
+  const seedAsset = readM1ActualWavAssets()[0]
+  if (seedAsset === undefined) {
+    throw new Error('loop demo: no prepared WAV asset for the audio-route check')
+  }
+  const audioResources = createAudioResourceRegistry({
+    clock,
+    byteBudget: 16 * 1024 * 1024,
+    retentionMs: 10 * 60 * 1000,
+  })
+  const audioSource = createDemoAudioSource(audioResources, seedAsset.bytes, M1_FIXTURE_FORMAT)
 
   // Explicit operator recovery over the shared store. Each successor gets its
   // own deadline gate and mapped renderer bound to that gate, and is built from
@@ -158,7 +234,7 @@ async function main(): Promise<void> {
   // reconstruction entry. The initial selection starts the demo's live session.
   const recovery = await createSessionRecovery({
     initialSelection: LOOP_INITIAL_SELECTION,
-    build: createLoopCompositionBuilder({ clock, backend, store }),
+    build: createLoopCompositionBuilder({ clock, backend, store, audioResources }),
   })
   const composition = recovery.currentComposition()
   const application = createApplicationEndpoint({
@@ -166,6 +242,7 @@ async function main(): Promise<void> {
     recovery,
     clock,
     allowedOrigins: ALLOWED_ORIGINS,
+    audioSource,
     // Local structured diagnostics in the demo's log style. The record is
     // already bounded and free of input content, credentials and payloads; the
     // sink only re-labels the service.
@@ -188,6 +265,8 @@ async function main(): Promise<void> {
     port: bound.port,
     applicationPath: application.path,
     operatorBootstrap: '/operator/bootstrap',
+    audioRoute: AUDIO_PATH,
+    audioCheckRef: LOOP_AUDIO_ROUTE_CHECK_REF,
     page: 'http://127.0.0.1:5173/loop.html',
   })
 
