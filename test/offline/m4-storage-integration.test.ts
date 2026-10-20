@@ -8,6 +8,8 @@ import {
 } from '../../src/dialogue'
 import type {
   AssembledDialogueContext,
+  AssembledTurn,
+  AudienceIdentity,
   DialogueTextSource,
   MemoryEntrySource,
 } from '../../src/dialogue'
@@ -195,6 +197,8 @@ async function assembleOver(input: {
   request?: DialogueRequest
   deliveryRecall?: ReturnType<typeof createKeywordDeliveryRecall>
   explicitlySelectedSessionIds?: readonly string[]
+  audience?: AudienceIdentity
+  ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
 }): Promise<AssembledDialogueContext> {
   const capture: { view: AssembledDialogueContext | null } = { view: null }
   const sink: DialogueSink = { segment: async () => {} }
@@ -207,6 +211,10 @@ async function assembleOver(input: {
     ...(input.explicitlySelectedSessionIds === undefined
       ? {}
       : { explicitlySelectedSessionIds: input.explicitlySelectedSessionIds }),
+    ...(input.audience === undefined ? {} : { audience: input.audience }),
+    ...(input.ownerAudienceIdOf === undefined
+      ? {}
+      : { ownerAudienceIdOf: input.ownerAudienceIdOf }),
   })
 
   await port.generate(input.request ?? fixtureDialogueRequest(), createCallContext(), sink)
@@ -647,8 +655,81 @@ describe('M4 consumes the durable M6 store', () => {
     expect(capture.view.history.map((record) => record.sessionId)).not.toContain('archive-unselected')
   })
 
-  it('rebuilds the same context after a restart over the same durable state', async () => {
-    const backend = createInMemoryBackend()
+  it('refuses an automatic cross-session recall the durable store cannot attribute', async () => {
+    const harness = storeHarness()
+    expectApplied(
+      await commitSpoken(harness, {
+        sessionId: 'archive-auto',
+        turnId: 'archive-turn',
+        segmentId: 'archive-turn-seg-0',
+        text: 'The loud concert was memorable.',
+        seq: 10,
+      }),
+    )
+    expectApplied(
+      await commitSpoken(harness, {
+        sessionId: 'live-session',
+        turnId: 'live-turn',
+        segmentId: 'live-turn-seg-0',
+        text: 'A current reply.',
+        seq: 11,
+      }),
+    )
+
+    /*
+     * A cross-session view, which is what a later long-term-memory query would
+     * hand M4. Neither session is explicitly selected, so this is the automatic
+     * path, and it may only run on recorded owner evidence.
+     */
+    const spanning: HistoryQueryPort = {
+      confirmedHistory: async (sessionId) => [
+        ...(await harness.history.confirmedHistory('archive-auto')),
+        ...(await harness.history.confirmedHistory(sessionId)),
+      ],
+    }
+
+    const request = fixtureDialogueRequest({
+      sessionId: 'live-session',
+      selectedInput: { eventId: 'evt-auto-recall', text: 'Tell me about the loud concert' },
+      contextLimits: { maxTurns: 1, maxCharacters: 2000 },
+    })
+    const listener: AudienceIdentity = { kind: 'identified', audienceId: 'aud-7' }
+
+    // Durable identity, no owner column: the store cannot say whose record this
+    // is, so the older turn is refused rather than attributed by assumption.
+    const unattributed = await assembleOver({
+      history: spanning,
+      request,
+      deliveryRecall: createKeywordDeliveryRecall(),
+      audience: listener,
+    })
+    expect(unattributed.recalledTurns).toEqual([])
+    expect(unattributed.warnings.some((warning) => warning.includes('not recalled'))).toBe(true)
+
+    // The same records recall once the owner is known and matches. Nothing else
+    // about the data changed, so the evidence is what decided it.
+    const attributed = await assembleOver({
+      history: spanning,
+      request,
+      deliveryRecall: createKeywordDeliveryRecall(),
+      audience: listener,
+      ownerAudienceIdOf: (turn: AssembledTurn) =>
+        turn.sessionId === 'archive-auto' ? 'aud-7' : null,
+    })
+    expect(attributed.recalledTurns.map((entry) => entry.turn.sessionId)).toEqual(['archive-auto'])
+
+    // A different owner is a mismatch, not a pass.
+    const foreign = await assembleOver({
+      history: spanning,
+      request,
+      deliveryRecall: createKeywordDeliveryRecall(),
+      audience: listener,
+      ownerAudienceIdOf: () => 'aud-someone-else',
+    })
+    expect(foreign.recalledTurns).toEqual([])
+  })
+
+  it('rebuilds the same context after a restart over the same durable state', async () => {    const backend = createInMemoryBackend()
     const before = storeHarness(backend)
     expectApplied(
       await commitSpoken(before, {

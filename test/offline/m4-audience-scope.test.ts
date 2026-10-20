@@ -23,11 +23,16 @@ import { CHARACTER_CONTENT } from '../../src/dialogue/persona-content'
  * What these tests pin down, in the order the rules matter:
  *   1. An anonymous or ephemeral listener never yields a durable memory. M5
  *      ruled that a per-session temporary id does not make a memory durable.
- *   2. Cross-session recall needs three things at once: audience-bound scope, a
- *      durable identity, and the SAME stable id on both sides. Any one missing
- *      forbids it.
+ *   2. Cross-session recall has exactly two ways in. EXPLICIT SELECTION: a
+ *      session inside the validated archive selection, which needs no audience
+ *      identity at all because M5 authorized it. AUTOMATIC RETRIEVAL: a durable
+ *      identity, an audience-bound candidate, AND recorded owner evidence that
+ *      matches that identity exactly - four conditions, any one missing forbids
+ *      it. Missing evidence refuses; it is never a pass.
  *   3. The persona bible never carries a record id or a listener's private data.
- *      This guard is write-time and identity-independent on purpose.
+ *      This guard is write-time and identity-independent on purpose. A negation
+ *      marker excuses the naming of a sensitive TOPIC, never a literal address or
+ *      mailbox.
  *
  * Every rule here is a refusal, so the assertions are mostly about what did NOT
  * happen. A test that only checked the happy path would pass just as well with
@@ -181,6 +186,26 @@ describe('bible write guard', () => {
     expect(issues).toEqual([])
   })
 
+  it('reports literal contact data whether the line asserts it or negates it', () => {
+    // The pair, asserted and negated. Both carry the same mailbox, and the
+    // second one forbids nothing at all despite the marker: "never forget to
+    // write to" is a habit, not a prohibition. An exemption keyed only on the
+    // marker let a single leading word hide a real address from the guard.
+    const asserted = collectBibleLeakIssues('> - [S] Writes to li.wei@example.com nightly.')
+    const negated = collectBibleLeakIssues(
+      '> - [S] Never forget to write to li.wei@example.com nightly.',
+    )
+
+    expect(asserted.map((issue) => issue.rule)).toContain(BIBLE_LEAK_RULES.privateContent)
+    expect(negated.map((issue) => issue.rule)).toContain(BIBLE_LEAK_RULES.privateContent)
+    expect(negated[0]?.excerpt).toBe('li.wei@example.com')
+    // The literal check runs before the exemption and does not replace it, so a
+    // genuine prohibition without a value is still clean.
+    expect(collectBibleLeakIssues('> - Never publish a phone number, address or password.')).toEqual(
+      [],
+    )
+  })
+
   it('does not fire on prose that merely discusses the word audience', () => {
     const issues = collectBibleLeakIssues('The audience is addressed with mock exasperation.')
     expect(issues).toEqual([])
@@ -256,6 +281,26 @@ describe('delivery-recall cross-session guard', () => {
     expect(mayRecallCandidate(request, turn({ sessionId: 'other', turnId: 't1' }))).toBe(false)
   })
 
+  it('allows an explicitly selected archive with no audience and no owner evidence', () => {
+    // M5's validated reconstruction hands M4 a list of archive sessions and no
+    // listener identity, deliberately: it does not invent a stable listener id.
+    // Selection is the authorization, so the audience conditions do not apply.
+    const request = {
+      inputText: 'the loud concert',
+      replyIntent: 'answer',
+      candidates: [],
+      sessionId: 's1',
+      explicitlySelectedSessionIds: ['archive-selected'],
+    }
+    expect(mayRecallCandidate(request, turn({ sessionId: 'archive-selected', turnId: 't1' }))).toBe(
+      true,
+    )
+    // Selection authorizes the listed sessions only, never their neighbours.
+    expect(mayRecallCandidate(request, turn({ sessionId: 'archive-other', turnId: 't2' }))).toBe(
+      false,
+    )
+  })
+
   it('refuses a session-scoped candidate even for an identified listener', () => {
     const request = {
       inputText: 'the loud concert',
@@ -273,7 +318,7 @@ describe('delivery-recall cross-session guard', () => {
     ).toBe(false)
   })
 
-  it('allows a cross-session audience-bound candidate for a durable listener', () => {
+  it('refuses automatically when the source cannot name an owner, even for a durable listener', () => {
     const request = {
       inputText: 'the loud concert',
       replyIntent: 'answer',
@@ -282,7 +327,52 @@ describe('delivery-recall cross-session guard', () => {
       scope: 'audience-bound' as const,
       audience: IDENTIFIED,
     }
-    expect(mayRecallCandidate(request, turn({ sessionId: 'other', turnId: 't1' }))).toBe(true)
+    // No `ownerAudienceIdOf`. An earlier revision admitted this candidate: an
+    // absent owner was read as "nothing to compare" rather than "no evidence".
+    // The store cannot say whose memory it is, so the guard has nothing to
+    // establish, and the automatic path refuses instead of trusting.
+    expect(mayRecallCandidate(request, turn({ sessionId: 'other', turnId: 't1' }))).toBe(false)
+  })
+
+  it('refuses automatically when the candidate has no recorded owner', () => {
+    const request = {
+      inputText: 'the loud concert',
+      replyIntent: 'answer',
+      candidates: [],
+      sessionId: 's1',
+      scope: 'audience-bound' as const,
+      audience: IDENTIFIED,
+      ownerAudienceIdOf: () => null,
+    }
+    expect(mayRecallCandidate(request, turn({ sessionId: 'other', turnId: 't1' }))).toBe(false)
+  })
+
+  it('refuses automatically when the recorded owner is blank', () => {
+    const request = {
+      inputText: 'the loud concert',
+      replyIntent: 'answer',
+      candidates: [],
+      sessionId: 's1',
+      scope: 'audience-bound' as const,
+      audience: IDENTIFIED,
+      ownerAudienceIdOf: () => '   ',
+    }
+    // A blank owner carries exactly as much information as a missing one.
+    expect(mayRecallCandidate(request, turn({ sessionId: 'other', turnId: 't1' }))).toBe(false)
+  })
+
+  it('refuses a cross-session candidate when the requesting turn declares session-only scope', () => {
+    const request = {
+      inputText: 'the loud concert',
+      replyIntent: 'answer',
+      candidates: [],
+      sessionId: 's1',
+      // Absent means session-only, which is what this asserts: a matching owner
+      // does not override the scope the request itself declared.
+      audience: IDENTIFIED,
+      ownerAudienceIdOf: () => 'aud-7',
+    }
+    expect(mayRecallCandidate(request, turn({ sessionId: 'other', turnId: 't1' }))).toBe(false)
   })
 
   it('refuses when the recorded owner is a different audience', () => {

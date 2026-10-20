@@ -18,6 +18,7 @@ import {
 } from '../../src/dialogue'
 import type {
   AssembledDialogueContext,
+  AssembledTurn,
   AudienceIdentity,
   DeliveryMemoryStore,
   DialogueTextSource,
@@ -97,9 +98,14 @@ async function assembleWith(
     personaRecall?: PersonaRecallPort
     /**
      * Who is listening. Omitted means anonymous, which forbids cross-session
-     * recall; tests that span sessions must say who is listening.
+     * recall; tests that span sessions either name the listener AND supply
+     * owner evidence, or go through `explicitlySelectedSessionIds`.
      */
     audience?: AudienceIdentity
+    /** Archive sessions authorized by M5's validated selection. */
+    explicitlySelectedSessionIds?: readonly string[]
+    /** Recorded owner of a candidate's memory, for the automatic cross-session path. */
+    ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
   } = {},
 ): Promise<AssembledDialogueContext> {
   const capture = captureView()
@@ -110,6 +116,12 @@ async function assembleWith(
     ...(options.deliveryRecall === undefined ? {} : { deliveryRecall: options.deliveryRecall }),
     ...(options.personaRecall === undefined ? {} : { personaRecall: options.personaRecall }),
     ...(options.audience === undefined ? {} : { audience: options.audience }),
+    ...(options.explicitlySelectedSessionIds === undefined
+      ? {}
+      : { explicitlySelectedSessionIds: options.explicitlySelectedSessionIds }),
+    ...(options.ownerAudienceIdOf === undefined
+      ? {}
+      : { ownerAudienceIdOf: options.ownerAudienceIdOf }),
   })
   await generate(port, options.request ?? fixtureDialogueRequest())
   const view = capture.view
@@ -450,15 +462,19 @@ describe('M4 delivery-memory recall', () => {
     const view = await assembleWith(memory, {
       history,
       request: fixtureDialogueRequest({
+        // The live session is the one asking, so its own turn is ordinary
+        // same-session history rather than a cross-session candidate.
+        sessionId: 'live',
         selectedInput: { eventId: 'evt-recall', text: 'Tell me about the loud concert' },
         contextLimits: { maxTurns: 3, maxCharacters: 2000 },
       }),
       deliveryRecall: createKeywordDeliveryRecall(),
-      // This test spans restored sessions, so it needs an identified listener:
-      // without a durable audience identity the cross-session recall below is
-      // refused by design (see mayRecallCandidate), and the displacement this
-      // test is about would never happen.
-      audience: { kind: 'identified', audienceId: 'aud-restore' },
+      // Restored archives reach M4 the way they do in production: through M5's
+      // validated selection, which authorizes these sessions by id and
+      // deliberately supplies no listener identity. No audience is invented here,
+      // and no owner evidence is available for these records, so selection is the
+      // only mechanism that can admit them.
+      explicitlySelectedSessionIds: ['archive-old', 'archive-a', 'archive-b'],
     })
 
     expect(view.recalledTurns.map((entry) => [entry.turn.sessionId, entry.turn.turnId])).toEqual([
@@ -484,5 +500,49 @@ describe('M4 delivery-memory recall', () => {
         (entry) => entry.sessionId === 'archive-b' && entry.turnId === 'shared',
       ),
     ).toBe(false)
+  })
+
+  // The automatic path is the other way into a recall, and it rests on evidence
+  // rather than on a selection. Same data, three levels of evidence: none, a
+  // different owner, the matching one. Only the last may recall, and the first
+  // says so in a warning instead of losing the memory silently.
+  it('requires recorded owner evidence for automatic cross-session recall', async () => {
+    const memory = createDeliveryMemoryStore()
+    await commitTurn(memory, 'old-concert', 'The loud concert was bright tonight.', 'archive-auto')
+    await commitTurn(memory, 'new', 'A plain reply for today.', 'live')
+
+    const history: HistoryQueryPort = {
+      confirmedHistory: async () => [
+        ...(await memory.confirmedHistory('archive-auto')),
+        ...(await memory.confirmedHistory('live')),
+      ],
+    }
+    const assemble = (ownerAudienceIdOf?: (turn: AssembledTurn) => string | null) =>
+      assembleWith(memory, {
+        history,
+        request: fixtureDialogueRequest({
+          sessionId: 'live',
+          selectedInput: { eventId: 'evt-auto-recall', text: 'Tell me about the loud concert' },
+          contextLimits: { maxTurns: 1, maxCharacters: 2000 },
+        }),
+        deliveryRecall: createKeywordDeliveryRecall(),
+        audience: { kind: 'identified', audienceId: 'aud-restore' },
+        ...(ownerAudienceIdOf === undefined ? {} : { ownerAudienceIdOf }),
+      })
+
+    // Durable identity, no owner evidence. The identity alone is not enough.
+    const unattributed = await assemble()
+    expect(unattributed.recalledTurns).toEqual([])
+    expect(unattributed.turns.map((turn) => turn.sessionId)).toEqual(['live'])
+    expect(unattributed.warnings.some((warning) => warning.includes('not recalled'))).toBe(true)
+
+    // Evidence that names somebody else is a mismatch, not an absence.
+    expect((await assemble(() => 'aud-someone-else')).recalledTurns).toEqual([])
+
+    // The same data recalls once the owner is recorded and matches.
+    const owned = await assemble(() => 'aud-restore')
+    expect(owned.recalledTurns.map((entry) => [entry.turn.sessionId, entry.turn.turnId])).toEqual([
+      ['archive-auto', 'old-concert'],
+    ])
   })
 })

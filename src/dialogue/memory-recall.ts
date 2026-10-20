@@ -1,5 +1,5 @@
 import type { AssembledTurn } from './context'
-import { isDurableAudience, normalizeAudience } from './audience'
+import { mayRecallAcrossSessions } from './audience'
 import type { AudienceIdentity, MemoryScope } from './audience'
 
 /**
@@ -70,9 +70,13 @@ export interface DeliveryRecallRequest {
    */
   explicitlySelectedSessionIds?: readonly string[]
   /**
-   * Audience that owns each candidate's memory, when the candidate came from a
-   * long-lived store. Absent means the candidate has no recorded owner, which
-   * is treated as no match.
+   * Audience that owns each candidate's memory, read from wherever the caller
+   * keeps it (today, nothing does: M6 has no owner column yet).
+   *
+   * Required for the AUTOMATIC cross-session path: absent or `null` means the
+   * source cannot prove the candidate belongs to this listener, and the candidate
+   * is refused. An explicitly selected archive does not need it, because M5
+   * authorized that session by selection.
    */
   ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
 }
@@ -105,24 +109,33 @@ export interface DeliveryRecallPort {
  *
  * A candidate from ANOTHER session is a different matter, and this is where the
  * guard earns its keep. Such a candidate was produced for some earlier listener,
- * possibly a different person. A cross-session recall therefore requires either
- * explicit M5 archive selection or BOTH:
- *   1. the current identity is durable (an anonymous or per-session temporary id
- *      never qualifies - M5 ruled the latter does not make memory durable); and
- *   2. the candidate is `audience-bound`, which assembly derived from that same
- *      identity when the candidate was admitted.
+ * possibly a different person. There are exactly two ways in:
  *
- * Explicit selection is checked first and is intentionally independent of
- * audience identity: M5 has already authorized those archive sessions. It does
- * not authorize any session outside the validated selection.
+ *   1. **Explicit M5 archive selection.** A session in
+ *      `explicitlySelectedSessionIds` was authorized by the validated
+ *      reconstruction, so it needs no audience identity at all - M5's producer
+ *      deliberately does not invent one. Selection authorizes nothing outside
+ *      the validated list.
+ *   2. **Automatic audience-based retrieval**, which needs all three of: a
+ *      durable current identity (an anonymous or per-session temporary id never
+ *      qualifies - M5 ruled the latter does not make memory durable), an
+ *      `audience-bound` candidate, and a RECORDED OWNER for that candidate that
+ *      matches the current id exactly.
  *
- * When the source records an OWNER for the candidate, the ids must also match
- * exactly. That check is skipped when no owner is recorded, because an absent
- * owner is missing evidence rather than a mismatch - refusing every candidate
- * from a store that simply has no owner column would disable cross-session
- * recall entirely. Recorded as a known limitation rather than left silent: once
- * M6 persists an owner per durable record, this branch disappears and the id
- * comparison becomes unconditional.
+ * Missing owner evidence is a refusal, not a pass. An earlier version treated an
+ * absent `ownerAudienceIdOf` as "no mismatch to check" and admitted the
+ * candidate, which made the automatic boundary permissive exactly where it
+ * matters: the store could not say whose memory it was, so the guard had nothing
+ * to compare and chose to trust it. Absence of evidence is not evidence of the
+ * same listener. A source that cannot name the owner must route its sessions
+ * through explicit selection instead, or wait for M6 to persist an owner per
+ * durable record; it must not get a silent pass.
+ *
+ * The rule is not re-implemented here. `mayRecallAcrossSessions` is the statement
+ * of the same conditions for the same question, so this function delegates to it
+ * rather than restating them. Two copies of one rule is how the two entry points
+ * came to disagree in the first place: `mayRecallAcrossSessions` rejected a
+ * missing owner while this path admitted it.
  *
  * The check runs BEFORE scoring, so a cross-session candidate cannot influence
  * the result even when it would be dropped later anyway.
@@ -130,13 +143,20 @@ export interface DeliveryRecallPort {
 export function mayRecallCandidate(request: DeliveryRecallRequest, turn: AssembledTurn): boolean {
   if (turn.sessionId === request.sessionId) return true
   if (request.explicitlySelectedSessionIds?.includes(turn.sessionId)) return true
-  if (!isDurableAudience(request.audience)) return false
-  if (turn.scope !== 'audience-bound') return false
-  const owner = request.ownerAudienceIdOf?.(turn)
-  if (owner === undefined) return true
-  const current = normalizeAudience(request.audience)
-  if (current.kind !== 'identified' && current.kind !== 'pseudonymous') return false
-  return owner === current.audienceId
+  /*
+   * The requesting turn's own declared scope is checked, not only the candidate's.
+   * `scope` is documented as absent-means-`session-only`, and a caller that has
+   * not thought about scope must not get retained memory just because it also
+   * happened to pass an identity. Assembly always supplies it, so this changes
+   * nothing on the production path; it stops the documented default from being
+   * decorative.
+   */
+  if (request.scope !== 'audience-bound') return false
+  return mayRecallAcrossSessions({
+    scope: turn.scope,
+    ownerAudienceId: request.ownerAudienceIdOf?.(turn),
+    currentAudience: request.audience,
+  })
 }
 
 /*

@@ -329,6 +329,12 @@ export interface AssembleDialogueContextInput {
    * This does not grant access to any session outside the selection.
    */
   explicitlySelectedSessionIds?: readonly string[]
+  /**
+   * Recorded owner of a candidate's memory, when the caller has one
+   * (./memory-recall). Automatic cross-session recall is refused without it;
+   * explicitly selected archives do not consult it.
+   */
+  ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
 }
 
 /**
@@ -597,6 +603,9 @@ export async function assembleDialogueContext(
           scope: scopeFor('utterance', input.audience).scope,
           audience: input.audience,
           explicitlySelectedSessionIds: input.explicitlySelectedSessionIds,
+          ...(input.ownerAudienceIdOf === undefined
+            ? {}
+            : { ownerAudienceIdOf: input.ownerAudienceIdOf }),
         })
 
   const recalledTurns: RecalledTurn[] = []
@@ -700,7 +709,7 @@ export async function assembleDialogueContext(
   const crossSessionDrops = input.deliveryRecall?.crossSessionDrops ?? 0
   if (crossSessionDrops > 0) {
     warnings.push(
-      `${crossSessionDrops} older turn(s) from other sessions were not recalled: no durable audience identity for this listener`,
+      `${crossSessionDrops} older turn(s) from other sessions were not recalled: no durable audience identity with recorded owner evidence for this listener, and the session was not explicitly selected`,
     )
   }
   if (recalledCharacters + recalledTurnCharacters >= maxCharacters && recentTurns.length > 0) {

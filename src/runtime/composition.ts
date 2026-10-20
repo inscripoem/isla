@@ -13,6 +13,7 @@ import type {
 } from '../contracts'
 import { createDialoguePort } from '../dialogue/dialogue-port'
 import type { DialogueTextSource } from '../dialogue/dialogue-port'
+import type { AssembledTurn } from '../dialogue/context'
 import { createDeliveryMemoryStore } from '../dialogue/memory-commit'
 import type { DeliveryMemoryStore } from '../dialogue/memory-commit'
 import type { PersonaRecallPort } from '../dialogue/persona-recall'
@@ -86,6 +87,13 @@ export interface DialogueCompositionDeps {
   personaRecall?: PersonaRecallPort
   deliveryRecall?: DeliveryRecallPort
   explicitlySelectedSessionIds?: readonly string[]
+  /**
+   * Recorded owner of a recalled candidate's memory. Automatic cross-session
+   * recall refuses a candidate it cannot attribute; nothing supplies this yet
+   * because M6 does not persist an owner field. Explicitly selected archives are
+   * authorized by the selection instead.
+   */
+  ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
 }
 
 export interface DialogueComposition {
@@ -106,6 +114,7 @@ export function createDialogueComposition(deps: DialogueCompositionDeps): Dialog
     ...(deps.explicitlySelectedSessionIds !== undefined
       ? { explicitlySelectedSessionIds: deps.explicitlySelectedSessionIds }
       : {}),
+    ...(deps.ownerAudienceIdOf !== undefined ? { ownerAudienceIdOf: deps.ownerAudienceIdOf } : {}),
   })
   return { dialogue, memory }
 }
@@ -124,6 +133,7 @@ export interface ReconstructedDialogueCompositionDeps {
   textSource?: DialogueTextSource
   personaRecall?: PersonaRecallPort
   deliveryRecall?: DeliveryRecallPort
+  ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
 }
 
 export interface ReconstructedDialogueFromSelectionDeps {
@@ -132,6 +142,7 @@ export interface ReconstructedDialogueFromSelectionDeps {
   textSource?: DialogueTextSource
   personaRecall?: PersonaRecallPort
   deliveryRecall?: DeliveryRecallPort
+  ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
 }
 
 export interface ReconstructedDialogueComposition extends DialogueComposition {
@@ -160,6 +171,7 @@ export function createReconstructedDialogueFromSelection(
     ...(deps.personaRecall !== undefined ? { personaRecall: deps.personaRecall } : {}),
     ...(deps.deliveryRecall !== undefined ? { deliveryRecall: deps.deliveryRecall } : {}),
     explicitlySelectedSessionIds: selection.sources.map((source) => source.sessionId),
+    ...(deps.ownerAudienceIdOf !== undefined ? { ownerAudienceIdOf: deps.ownerAudienceIdOf } : {}),
   })
   return { ...composed, selection, history: composedHistory }
 }
@@ -213,6 +225,7 @@ export interface ReconstructedRuntimeDeps {
   textSource?: DialogueTextSource
   personaRecall?: PersonaRecallPort
   deliveryRecall?: DeliveryRecallPort
+  ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
   /** Any remaining session-profile fields (for example voice). Character identity is always bound to the selection. */
   profile?: Partial<SessionProfileConfig>
   timings?: Partial<CycleTimings>
@@ -258,6 +271,7 @@ export async function createReconstructedRuntimeComposition(
     ...(deps.textSource !== undefined ? { textSource: deps.textSource } : {}),
     ...(deps.personaRecall !== undefined ? { personaRecall: deps.personaRecall } : {}),
     ...(deps.deliveryRecall !== undefined ? { deliveryRecall: deps.deliveryRecall } : {}),
+    ...(deps.ownerAudienceIdOf !== undefined ? { ownerAudienceIdOf: deps.ownerAudienceIdOf } : {}),
   })
 
   const composition = createRuntimeComposition({

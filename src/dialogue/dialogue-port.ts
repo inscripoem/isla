@@ -11,7 +11,7 @@ import type {
   UsageRecord,
 } from '../contracts'
 import { assembleDialogueContext } from './context'
-import type { AssembledDialogueContext } from './context'
+import type { AssembledDialogueContext, AssembledTurn } from './context'
 import type { PersonaRecallPort } from './persona-recall'
 import type { DeliveryRecallPort } from './memory-recall'
 import type { AudienceIdentity } from './audience'
@@ -101,6 +101,14 @@ export interface DialoguePortOptions {
   deliveryRecall?: DeliveryRecallPort
   /** Validated M5 archive sessions authorized for cross-session recall. */
   explicitlySelectedSessionIds?: readonly string[]
+  /**
+   * Recorded owner of a candidate's memory (./memory-recall). The automatic
+   * cross-session path refuses a candidate it cannot attribute, so a caller that
+   * keeps an owner per record supplies this; a caller whose sessions arrive
+   * through `explicitlySelectedSessionIds` does not need it. Nothing in this
+   * repository supplies it yet: M6 does not persist an owner field.
+   */
+  ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
   /**
    * Who is listening (./audience). Omitted means anonymous.
    *
@@ -200,6 +208,9 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
         ...(options.explicitlySelectedSessionIds === undefined
           ? {}
           : { explicitlySelectedSessionIds: options.explicitlySelectedSessionIds }),
+        ...(options.ownerAudienceIdOf === undefined
+          ? {}
+          : { ownerAudienceIdOf: options.ownerAudienceIdOf }),
       })
 
       const candidates = (await source.compose(view, maxSegments)).slice(0, maxSegments)

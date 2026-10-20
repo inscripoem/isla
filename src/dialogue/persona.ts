@@ -279,22 +279,37 @@ const BIBLE_ACTOR_ID_PATTERN =
   /\b(?:actor|audience|listener|viewer|viewer|user|session|client)_?id\s*[:=]\s*\S+/gi
 
 /**
- * Personal-data patterns that must never appear in the bible.
+ * Literal personal data that must never appear in the bible.
  *
- * The initial list is deliberately small and specific. A broad pattern such as
- * "any long digit run" would reject a bible that innocently mentions a year or a
- * stream number, and a guard that cries wolf gets switched off - which is worse
- * than having no guard, because it creates the appearance of protection.
+ * These match DATA rather than topics: an address, a phone number. They are
+ * checked on every blockquoted line, including lines that carry a negation
+ * marker, because the exemption for prohibition prose is about WHAT a sentence
+ * names, not about whether a real value is present.
  *
- * These are matched against ASSERTED text only. See `isNegatedLine`: a boundary
- * such as "Never claim that fictional magic can diagnose" names a sensitive topic
- * in order to forbid it, and that is exactly what a bible SHOULD say.
+ * Why negation cannot excuse these. A negation marker proves the sentence
+ * forbids something; it does not prove the address inside it is invented.
+ * "Never write to li.wei@example.com" is still a real mailbox pasted into a file
+ * that `renderPersonaBlock` reads out every turn to every listener, and the
+ * verb in front of it does not make it less readable. An earlier version
+ * returned early for any negated line, so prefixing one word was enough to hide
+ * a contact detail from the guard - and the guard then reported a clean bible.
  */
-const BIBLE_PRIVATE_PATTERNS: readonly RegExp[] = [
-  // Contact details and credentials. These are the classic things that turn a
-  // persona document into an accidental contact list.
+const BIBLE_LITERAL_DATA_PATTERNS: readonly RegExp[] = [
   /[\w.+-]+@[\w-]+\.[\w.]+/, // email address
   /\b(?:\+?\d[\d\s-]{7,}\d)\b/, // long digit run that can be a phone number
+]
+
+/**
+ * Sensitive TOPICS that are only a problem when asserted as fact.
+ *
+ * These are matched against asserted text only. See `isNegatedLine`: a boundary
+ * such as "Never claim that fictional magic can diagnose" names a sensitive
+ * topic in order to forbid it, and that is exactly what a bible SHOULD say. The
+ * list stays small and specific: a broad pattern such as "any long digit run"
+ * would reject a bible that innocently mentions a year or a stream number, and a
+ * guard that cries wolf gets switched off.
+ */
+const BIBLE_ASSERTED_TOPIC_PATTERNS: readonly RegExp[] = [
   /\b(?:password|passwd|api[_-]?key|secret[_-]?key|credential)s?\b/i,
   // Health and identity data. Present as content, not as a boundary rule.
   /\b(?:diagnosis|diagnosed|medical record|prescription|medication|therapy appointment)\b/i,
@@ -303,12 +318,31 @@ const BIBLE_PRIVATE_PATTERNS: readonly RegExp[] = [
   /\b(?:lives? at|address(?:es|ed)? is|住址|门牌)\b/i,
 ]
 
+function pushPrivateIssues(
+  issues: BibleLeakIssue[],
+  text: string,
+  line: number,
+  patterns: readonly RegExp[],
+): void {
+  for (const pattern of patterns) {
+    const match = text.match(pattern)
+    if (match !== null && match[0] !== undefined) {
+      issues.push({ rule: BIBLE_LEAK_RULES.privateContent, excerpt: match[0], line })
+    }
+  }
+}
+
 /**
  * Negative construction markers.
  *
  * A line that forbids something is not disclosing it. "Never pretend to know
  * private facts" is required content, and reporting it would force the author to
  * delete the very boundary the reviewer needs.
+ *
+ * The exemption covers TOPICS only. It cannot cover literal contact data,
+ * because the marker says nothing about whether the value beside it is real:
+ * "Never forget to write to li.wei@example.com nightly" forbids nothing at all,
+ * yet still carries a mailbox. See `BIBLE_LITERAL_DATA_PATTERNS`.
  */
 const NEGATION_MARKERS: readonly string[] = [
   'never',
@@ -372,18 +406,16 @@ export function collectBibleLeakIssues(bible: string): readonly BibleLeakIssue[]
       issues.push({ rule: BIBLE_LEAK_RULES.actorId, excerpt: actorMatch[0], line: index + 1 })
     }
 
+    // Literal data first, with no exemption: a real address or mailbox is a leak
+    // whatever verb stands in front of it.
+    pushPrivateIssues(issues, text, index + 1, BIBLE_LITERAL_DATA_PATTERNS)
+
+    // A prohibition names a topic in order to forbid it, so the topic list is
+    // checked on asserted text only. The check above already ran, which is what
+    // keeps a negation marker from hiding a literal value.
     if (isNegatedLine(text)) continue
 
-    for (const pattern of BIBLE_PRIVATE_PATTERNS) {
-      const match = text.match(pattern)
-      if (match !== null && match[0] !== undefined) {
-        issues.push({
-          rule: BIBLE_LEAK_RULES.privateContent,
-          excerpt: match[0],
-          line: index + 1,
-        })
-      }
-    }
+    pushPrivateIssues(issues, text, index + 1, BIBLE_ASSERTED_TOPIC_PATTERNS)
   }
 
   return issues
