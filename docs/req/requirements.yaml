@@ -342,7 +342,7 @@ requirements:
         cases: [C-26, C-27]
 
   - id: INV-11
-    title: A schema migration is recoverable
+    title: A schema migration is recoverable and refuses contradictory legacy rows
     category: invariant
     priority: must
     owner: M6
@@ -355,7 +355,7 @@ requirements:
         cases: [C-27, C-28]
       - kind: deterministic
         description: The v2 migration preserves genuinely unknown legacy attribution as NULL and drops the legacy persona_version column only when it holds no data; contradictory classification/outcome rows and non-NULL legacy persona values are refused with the database preserved (FR-06).
-        cases: [C-48]
+        cases: [C-48, C-65]
 
   - id: INV-12
     title: Restart restores only confirmed history and never replays unresolved output

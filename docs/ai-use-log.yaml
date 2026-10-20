@@ -2012,7 +2012,7 @@ entries:
     requirements: [FR-06]
     invariants: [INV-06]
     cases: [C-66]
-    commits: []
+    commits: [9b88b14]
     agent: opencode/deepseek-v4-flash
     verification:
       focused: "test/offline/m6-storage.test.ts: 64/64; test/offline/m6-recovery.test.ts: 4/4."
@@ -2020,13 +2020,14 @@ entries:
       full_suite: "pnpm test 986/54; pnpm verify exit 0; typecheck, lint and build passed."
       mutation: "Session-blind bookmark mutation turned C-66 red with `expected 2 to be +0`; restored and the focused C-66 test passed again."
     human_review: "M5/consumer review requested for the storage behaviour. C-66 was reserved in #25; no ID self-assignment; the shared port signature is unchanged."
+  - date: 2026-10-20
     task: M6-01-C-67
     branch: m6-c67-late-delivery
     change: "C-67: add a storage-boundary regression showing that a late, internally valid fully-delivered/completed claim for an already-cancelled delivery conflicts, preserves the original record and classification, and retains the contradictory supporting event. Add the test to test:m6 and link C-67/FR-06/INV-09. No production source change."
     requirements: [FR-06]
     invariants: [INV-09]
     cases: [C-67]
-    commits: []
+    commits: [4caad18]
     agent: opencode/deepseek-v4-flash
     verification:
       focused: "test/offline/m6-late-delivery-conflict.test.ts: 1/1 passed."
@@ -2034,3 +2035,18 @@ entries:
       full_suite: "pnpm test 986/55; pnpm verify exit 0; typecheck, lint and build passed."
       mutation: "Making the same-key classification change a duplicate turned C-67 red with expected duplicate to be conflict; restored and C-67 passed again."
     human_review: "M5/consumer review requested. C-64 remains M4's admission case; C-67 is the M6 storage cross-reference."
+  - date: 2026-10-20
+    task: M6-01-C-65
+    branch: m6-storage-semantics
+    change: "C-65: register the existing contradictory legacy classification/outcome migration test as its own case and link it under INV-11/FR-06. C-48 remains the legacy-NULL migration proof. Test/docs only; no production source change."
+    requirements: [FR-06]
+    invariants: [INV-11]
+    cases: [C-65]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    verification:
+      focused: "test/offline/m6-sqlite.test.ts -t contradictory: 1/1 passed (15 total in file)."
+      role: "test:m6 181/14; composition 12/1; readiness 42/3; trace 41/1."
+      full_suite: "pnpm test 987/55; pnpm verify exit 0; typecheck, lint and build passed."
+      mutation: "C-65 is an existing negative-path test, strengthened to assert the original row survives. No production code changed."
+    human_review: "M5/consumer review requested. C-65 was reserved in #25; no ID self-assignment."
