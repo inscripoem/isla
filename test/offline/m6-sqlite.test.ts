@@ -297,6 +297,11 @@ describe('M6 SQLite legacy attribution migration (C-48)', () => {
       /contradict/,
     )
     expect(readSchemaVersion(db)).toBe(1)
+    expect(
+      db
+        .prepare('SELECT classification, terminal_outcome FROM deliveries WHERE session_id = ?')
+        .get('s1'),
+    ).toEqual({ classification: 'fully-delivered', terminal_outcome: 'cancelled' })
     db.close()
   })
 

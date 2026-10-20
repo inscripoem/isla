@@ -49,7 +49,7 @@ confirms; it does not discover.**
 | INV-09 (delivery attribution and consistent evidence) | C-46, C-47, C-67 | `m5-attribution.test.ts` (capture and persistence); `m6-late-delivery-conflict.test.ts` (late fully-delivered claim against cancelled delivery preserves original); conformance `delivery-invalid-combination:*`, `delivery-invalid-event:*`, `delivery-correlation:*`, `delivery-provenance:*`; negative adapters `createCombinationNormalizingEventStore`, `createProvenanceIgnoringEventStore` |
 | INV-15 (M5 within-turn reconstruction) | C-47 | `m5-attribution.test.ts`, existing ordering regression: exact session/turn filtering, known indices ascending, unknowns last, stable ties, preserved nulls and unchanged input |
 | INV-10 (config + schema version validated) | C-26, C-27 | `m6-sqlite.test.ts` (config + migrations) |
-| INV-11 (migration recoverable) | C-27, C-28, C-48 | `m6-sqlite.test.ts` (backup before apply; rollback on failure; legacy attribution migrated/refused) |
+| INV-11 (migration recoverable / contradictory legacy refusal) | C-27, C-28, C-48, C-65 | `m6-sqlite.test.ts` (backup before apply; rollback on failure; legacy attribution migrated/refused; contradictory row refused and database preserved) |
 | FR-06 (SQLite conformance) | C-29 | `m6-sqlite-backend.test.ts` (conformance suite over SQLite) |
 | FR-06 (SQLite persistence/reopen) | C-30 | `m6-sqlite-backend.test.ts` (reopen + isolation) |
 | FR-06 (delivery terminal outcome persisted) | C-31 | `m6-sqlite-backend.test.ts` (terminal outcome for recovery) |

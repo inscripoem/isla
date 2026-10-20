@@ -163,3 +163,13 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
   **986/55**, `pnpm verify` exit 0. A permissive duplicate/upgrade mutation turned C-67 red with
   `expected duplicate to be conflict`; restored.
 - Limits: storage boundary only; C-64 remains M4's admission case; no live provider, table, G4 or S6 claim.
+
+## M6 self-review — C-65 contradictory legacy-row trace
+
+- Date: 2026-10-20 · Reviewer: M6 (self) · Verdict: **test/docs-only trace convergence; M5 review pending**
+- Scope: C-65 registry/trace rows and the existing `m6-sqlite.test.ts` verifier; no production source changed.
+- Behaviour: a legacy row with an inconsistent classification/outcome pair is refused during migration, the
+  schema version remains 1, and the database is preserved. C-48 remains the legacy-NULL migration proof.
+- Verification: focused verifier 1/1; `test:m6` **181/14**, trace **41/1**, full **987/55**, `pnpm verify` exit 0.
+  The test now also asserts the original legacy classification/outcome row survives.
+- Limits: migration boundary only; no live provider, table, G4 or S6 claim.
