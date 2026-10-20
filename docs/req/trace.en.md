@@ -109,7 +109,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-12 | M6 | C-32, C-33, C-68 | — |
 | INV-13 | M6 | C-34, C-35, C-37 | — |
 | INV-14 | M6 | C-36 | — |
-| INV-15 | M5 | C-47 (existing turn reconstruction ordering regression) | M4/M6 consumer acceptance |
+| INV-15 | M5 | C-47, C-50 (turn reconstruction ordering and M4 agreement guard) | M4/M6 consumer acceptance |
 | INV-16 | M6 | C-52, C-53, C-54, C-55, C-69, C-70, C-71 | — |
 
 ## Ordering trace correction (2026-10-15)

@@ -953,6 +953,32 @@ entries:
         strict UTF-8/BOM handling, non-feature events, and read-only production Git adapters.
         The frozen list and complete event diff semantics are unchanged. Tests do not mutate Git.
 
+  - date: 2026-10-18
+    task: M4-02
+    branch: feat/m4-02
+    change: "Dialogue retention beyond the recency window: salience pinning that protects a scored turn from character trimming, a rollup line reporting how many turns were omitted instead of dropping them silently, and opt-in delivery recall over the turns the window dropped. `maxTurns` becomes a bound on the turns that reach the prompt in total, so a recalled turn displaces a recent one instead of adding to it, displacement beginning with the oldest unpinned turn and every displaced turn recorded as a `turn-limit` exclusion. Displacement identifies a record by the session-and-turn pair, not by `turnId` alone: the turn counter is session-scoped, so a restored session reuses ids and the bare id dropped a pinned record belonging to another session. Also adds the C-50 agreement guard between M4's reconstruction and M5's `orderTurnDeliveries`, and registers C-49 (admission divergence) and C-50 (ordering agreement) after M6's C-49 -> C-51 migration reached main."
+    requirements: [FR-02]
+    invariants: [INV-15]
+    cases: [C-49, C-50]
+    commits: []
+    agent: workbuddy/claude
+    human_review: "Reviewed in #35 by M5 and M6; the session-scoped identity defect in recall displacement was found by M5's re-review and is fixed here with a regression over repeated turn ids across restored sessions."
+
+  - date: 2026-10-20
+    task: M4-02
+    branch: feat/m4-02
+    change: "Close the two guard gaps M5's re-review of #35 found. Automatic cross-session delivery recall now requires recorded owner evidence: `mayRecallCandidate` delegates to `mayRecallAcrossSessions` instead of restating the same rule, so an absent `ownerAudienceIdOf`, a null owner and a blank owner are all refused rather than admitted, and the requesting turn's declared scope must be `audience-bound` instead of the documented default being decorative. `ownerAudienceIdOf` is threaded from `DialoguePortOptions` through context assembly and the three M4 compositions, so a caller that holds an owner per record has a seam; explicitly selected archives still need no identity and no owner evidence, and the drop warning now names the real cause. Separately, the bible write guard splits literal personal data from sensitive topics: email and phone patterns run on every blockquoted line, so a negation marker can no longer hide a real address, while the exemption stays for genuine prohibition prose such as a boundary that names a diagnosis only to forbid it. No invariant identifier covers recall authorization, so none is claimed. No shared contract, storage schema or requirement changed."
+    requirements: [FR-02]
+    invariants: []
+    cases: []
+    commits: []
+    agent: workbuddy/claude
+    verification:
+      focused: "test:m4 124/124 (m4-dialogue 57, m4-storage-integration 13, m4-memory-enhancement 17, m4-audience-scope 37)."
+      mutation: "Restoring the permissive cross-session branch turned seven cases red; moving the literal-data check back behind the negation exemption turned the assertion/negation pair red. Both restored."
+      full_suite: "pnpm test 1023 passed / 12 failed (1035 tests, 55 files). All 12 are Windows-only path-shape, spawn or line-ending assertions in files this change does not touch: cli x3, boundaries x3, requirements x1, m6-sqlite x3, m6-02-boundary x2. typecheck, lint (0/0) and build pass."
+    human_review: "M5's re-review of 44de67c raised both findings as P2; fixes and regressions are on the worktree and not yet published. C-49/C-50 trace and INV-15 consumer links remain M5's coordinated follow-up, so no case id was taken here."
+
   - date: "2026-10-18"
     task: I1-01-session-recovery
     branch: feat/i1-session-recovery

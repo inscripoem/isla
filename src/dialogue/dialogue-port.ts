@@ -11,8 +11,10 @@ import type {
   UsageRecord,
 } from '../contracts'
 import { assembleDialogueContext } from './context'
-import type { AssembledDialogueContext } from './context'
+import type { AssembledDialogueContext, AssembledTurn } from './context'
 import type { PersonaRecallPort } from './persona-recall'
+import type { DeliveryRecallPort } from './memory-recall'
+import type { AudienceIdentity } from './audience'
 import { createFinalizedSegmentRegistry, deriveSegmentId } from './segment-id'
 import { isSubstantiveSpeech, normalizeFinalText } from './text'
 import { buildDialogueUsage } from './usage'
@@ -91,6 +93,31 @@ export interface DialoguePortOptions {
    * with confirmed history, see ./persona-recall.
    */
   personaRecall?: PersonaRecallPort
+  /**
+   * Delivery-memory recall over confirmed turns that aged out of the recency
+   * window. Adds no I/O (candidates are already loaded during assembly) and no
+   * model call; see ./memory-recall. Omitted means no delivery recall.
+   */
+  deliveryRecall?: DeliveryRecallPort
+  /** Validated M5 archive sessions authorized for cross-session recall. */
+  explicitlySelectedSessionIds?: readonly string[]
+  /**
+   * Recorded owner of a candidate's memory (./memory-recall). The automatic
+   * cross-session path refuses a candidate it cannot attribute, so a caller that
+   * keeps an owner per record supplies this; a caller whose sessions arrive
+   * through `explicitlySelectedSessionIds` does not need it. Nothing in this
+   * repository supplies it yet: M6 does not persist an owner field.
+   */
+  ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
+  /**
+   * Who is listening (./audience). Omitted means anonymous.
+   *
+   * Anonymous is the safe default on purpose: an unidentified listener produces
+   * session-scoped memory only, so a caller that has not wired an identity yet
+   * gets the conservative behaviour rather than durable retention by accident.
+   * See `mayRecallCandidate` in ./memory-recall for what this gates.
+   */
+  audience?: AudienceIdentity
   textSource?: DialogueTextSource
   /** Clamped to MAX_DIALOGUE_SEGMENTS whatever value is passed. */
   maxSegments?: number
@@ -176,6 +203,14 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
         ...(options.history === undefined ? {} : { history: options.history }),
         ...(options.memory === undefined ? {} : { memory: options.memory }),
         ...(options.personaRecall === undefined ? {} : { personaRecall: options.personaRecall }),
+        ...(options.deliveryRecall === undefined ? {} : { deliveryRecall: options.deliveryRecall }),
+        ...(options.audience === undefined ? {} : { audience: options.audience }),
+        ...(options.explicitlySelectedSessionIds === undefined
+          ? {}
+          : { explicitlySelectedSessionIds: options.explicitlySelectedSessionIds }),
+        ...(options.ownerAudienceIdOf === undefined
+          ? {}
+          : { ownerAudienceIdOf: options.ownerAudienceIdOf }),
       })
 
       const candidates = (await source.compose(view, maxSegments)).slice(0, maxSegments)

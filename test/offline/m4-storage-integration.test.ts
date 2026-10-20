@@ -2,16 +2,22 @@ import { describe, expect, it } from 'vitest'
 import {
   createDeliveryMemoryStore,
   createDialoguePort,
+  createKeywordDeliveryRecall,
   personaVersionKey,
   renderDialoguePrompt,
 } from '../../src/dialogue'
 import type {
   AssembledDialogueContext,
+  AssembledTurn,
+  AudienceIdentity,
   DialogueTextSource,
   MemoryEntrySource,
 } from '../../src/dialogue'
 import { createEventStore, createHistoryQuery, createInMemoryBackend } from '../../src/storage'
 import type { StorageBackend } from '../../src/storage'
+import { createReconstructedDialogueFromSelection } from '../../src/runtime/composition'
+import { validateArchiveSelection } from '../../src/runtime/session-archives'
+import { orderTurnDeliveries } from '../../src/runtime/delivery-order'
 import type {
   AtomicCommitAck,
   ClockPort,
@@ -189,6 +195,10 @@ async function assembleOver(input: {
   history?: HistoryQueryPort
   memory?: MemoryEntrySource
   request?: DialogueRequest
+  deliveryRecall?: ReturnType<typeof createKeywordDeliveryRecall>
+  explicitlySelectedSessionIds?: readonly string[]
+  audience?: AudienceIdentity
+  ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
 }): Promise<AssembledDialogueContext> {
   const capture: { view: AssembledDialogueContext | null } = { view: null }
   const sink: DialogueSink = { segment: async () => {} }
@@ -197,6 +207,14 @@ async function assembleOver(input: {
     textSource: capturingTextSource(capture),
     ...(input.history === undefined ? {} : { history: input.history }),
     ...(input.memory === undefined ? {} : { memory: input.memory }),
+    ...(input.deliveryRecall === undefined ? {} : { deliveryRecall: input.deliveryRecall }),
+    ...(input.explicitlySelectedSessionIds === undefined
+      ? {}
+      : { explicitlySelectedSessionIds: input.explicitlySelectedSessionIds }),
+    ...(input.audience === undefined ? {} : { audience: input.audience }),
+    ...(input.ownerAudienceIdOf === undefined
+      ? {}
+      : { ownerAudienceIdOf: input.ownerAudienceIdOf }),
   })
 
   await port.generate(input.request ?? fixtureDialogueRequest(), createCallContext(), sink)
@@ -573,8 +591,145 @@ describe('M4 consumes the durable M6 store', () => {
     expect(later.historySource).toBe('history-port')
   })
 
-  it('rebuilds the same context after a restart over the same durable state', async () => {
-    const backend = createInMemoryBackend()
+  it('recalls an explicitly selected archive without requiring an audience identity', async () => {
+    const harness = storeHarness()
+    expectApplied(
+      await commitSpoken(harness, {
+        sessionId: 'archive-selected',
+        turnId: 'archive-turn',
+        segmentId: 'archive-turn-seg-0',
+        text: 'The loud concert was memorable.',
+        seq: 10,
+      }),
+    )
+    expectApplied(
+      await commitSpoken(harness, {
+        sessionId: 'archive-unselected',
+        turnId: 'other-turn',
+        segmentId: 'other-turn-seg-0',
+        text: 'The loud concert was private.',
+        seq: 11,
+      }),
+    )
+    expectApplied(
+      await commitSpoken(harness, {
+        sessionId: 'live-session',
+        turnId: 'live-turn',
+        segmentId: 'live-turn-seg-0',
+        text: 'A current reply.',
+        seq: 12,
+      }),
+    )
+
+    const selection = validateArchiveSelection({
+      liveSessionId: 'live-session',
+      liveProfile: { profileId: 'character-fixture', profileVersion: '1' },
+      selectedSources: [{ sessionId: 'archive-selected' }],
+      catalogue: new Map([
+        ['archive-selected', { profileId: 'character-fixture', profileVersion: '1' }],
+      ]),
+    })
+    const capture: { view: AssembledDialogueContext | null } = { view: null }
+    const dialogue = createReconstructedDialogueFromSelection(selection, {
+      clock: FIXTURE_CLOCK,
+      history: harness.history,
+      deliveryRecall: createKeywordDeliveryRecall(),
+      textSource: capturingTextSource(capture),
+    })
+    await dialogue.dialogue.generate(
+      fixtureDialogueRequest({
+        sessionId: 'live-session',
+        selectedInput: { eventId: 'evt-archive-recall', text: 'Tell me about the loud concert' },
+        contextLimits: { maxTurns: 1, maxCharacters: 2000 },
+      }),
+      createCallContext(),
+      { segment: async () => {} },
+    )
+
+    if (capture.view === null) throw new Error('the reconstructed dialogue never assembled a context')
+
+    expect(capture.view.recalledTurns.map((entry) => entry.turn.sessionId)).toEqual([
+      'archive-selected',
+    ])
+    expect(capture.view.recalledTurns[0]?.turn.text).toBe('The loud concert was memorable.')
+    expect(capture.view.history.map((record) => record.sessionId)).not.toContain('archive-unselected')
+  })
+
+  it('refuses an automatic cross-session recall the durable store cannot attribute', async () => {
+    const harness = storeHarness()
+    expectApplied(
+      await commitSpoken(harness, {
+        sessionId: 'archive-auto',
+        turnId: 'archive-turn',
+        segmentId: 'archive-turn-seg-0',
+        text: 'The loud concert was memorable.',
+        seq: 10,
+      }),
+    )
+    expectApplied(
+      await commitSpoken(harness, {
+        sessionId: 'live-session',
+        turnId: 'live-turn',
+        segmentId: 'live-turn-seg-0',
+        text: 'A current reply.',
+        seq: 11,
+      }),
+    )
+
+    /*
+     * A cross-session view, which is what a later long-term-memory query would
+     * hand M4. Neither session is explicitly selected, so this is the automatic
+     * path, and it may only run on recorded owner evidence.
+     */
+    const spanning: HistoryQueryPort = {
+      confirmedHistory: async (sessionId) => [
+        ...(await harness.history.confirmedHistory('archive-auto')),
+        ...(await harness.history.confirmedHistory(sessionId)),
+      ],
+    }
+
+    const request = fixtureDialogueRequest({
+      sessionId: 'live-session',
+      selectedInput: { eventId: 'evt-auto-recall', text: 'Tell me about the loud concert' },
+      contextLimits: { maxTurns: 1, maxCharacters: 2000 },
+    })
+    const listener: AudienceIdentity = { kind: 'identified', audienceId: 'aud-7' }
+
+    // Durable identity, no owner column: the store cannot say whose record this
+    // is, so the older turn is refused rather than attributed by assumption.
+    const unattributed = await assembleOver({
+      history: spanning,
+      request,
+      deliveryRecall: createKeywordDeliveryRecall(),
+      audience: listener,
+    })
+    expect(unattributed.recalledTurns).toEqual([])
+    expect(unattributed.warnings.some((warning) => warning.includes('not recalled'))).toBe(true)
+
+    // The same records recall once the owner is known and matches. Nothing else
+    // about the data changed, so the evidence is what decided it.
+    const attributed = await assembleOver({
+      history: spanning,
+      request,
+      deliveryRecall: createKeywordDeliveryRecall(),
+      audience: listener,
+      ownerAudienceIdOf: (turn: AssembledTurn) =>
+        turn.sessionId === 'archive-auto' ? 'aud-7' : null,
+    })
+    expect(attributed.recalledTurns.map((entry) => entry.turn.sessionId)).toEqual(['archive-auto'])
+
+    // A different owner is a mismatch, not a pass.
+    const foreign = await assembleOver({
+      history: spanning,
+      request,
+      deliveryRecall: createKeywordDeliveryRecall(),
+      audience: listener,
+      ownerAudienceIdOf: () => 'aud-someone-else',
+    })
+    expect(foreign.recalledTurns).toEqual([])
+  })
+
+  it('rebuilds the same context after a restart over the same durable state', async () => {    const backend = createInMemoryBackend()
     const before = storeHarness(backend)
     expectApplied(
       await commitSpoken(before, {
@@ -602,5 +757,80 @@ describe('M4 consumes the durable M6 store', () => {
 
     expect(second.turns.map((turn) => turn.text)).toEqual(first.turns.map((turn) => turn.text))
     expect(renderDialoguePrompt(second)).toBe(renderDialoguePrompt(first))
+  })
+})
+
+/**
+ * The within-turn ordering rule is implemented twice: once as M5's
+ * `orderTurnDeliveries` helper, which is the statement of the rule in
+ * INTERFACES, and once as the comparison inline in `assembleDialogueContext`,
+ * which is what actually reconstructs a turn. The shared conformance kit covers
+ * the storage layer only, so nothing mechanically prevents the two from drifting
+ * apart on the same data.
+ *
+ * This guard runs both over the same persisted records and fails if they
+ * disagree. It reaches across the module boundary on purpose: the dependency
+ * direction (a port implementation depending on the runtime layer) is
+ * uncomfortable, so the options are either to move the helper somewhere both
+ * modules can depend on, in which case this test is replaced by a direct call
+ * and the local comparison is deleted, or to keep two implementations and keep
+ * this guard.
+ */
+describe('M4 turn reconstruction agrees with the shared ordering helper', () => {
+  it('produces the same segment order for known, tied and unknown indices', async () => {
+    const harness = storeHarness()
+    // Committed so that arrival order, identifier spelling and index order all
+    // disagree, and covering every branch of the rule: a known index, a tie on
+    // that index, a lower index, and an unknown index.
+    expectApplied(
+      await commitSpoken(harness, {
+        turnId: 'turn-order',
+        segmentId: 'seg-zzz',
+        text: 'Unknown position.',
+        seq: 10,
+        segmentIndex: null,
+      }),
+    )
+    expectApplied(
+      await commitSpoken(harness, {
+        turnId: 'turn-order',
+        segmentId: 'seg-aaa',
+        text: 'Second position, later event.',
+        seq: 20,
+        segmentIndex: 2,
+      }),
+    )
+    expectApplied(
+      await commitSpoken(harness, {
+        turnId: 'turn-order',
+        segmentId: 'seg-mmm',
+        text: 'Second position, earlier event.',
+        seq: 30,
+        segmentIndex: 2,
+      }),
+    )
+    expectApplied(
+      await commitSpoken(harness, {
+        turnId: 'turn-order',
+        segmentId: 'seg-bbb',
+        text: 'First position.',
+        seq: 40,
+        segmentIndex: 0,
+      }),
+    )
+
+    const records = await harness.history.confirmedHistory(FIXTURE_SESSION_ID)
+    const shared = orderTurnDeliveries(records, FIXTURE_SESSION_ID, 'turn-order').map(
+      (record) => record.segmentId,
+    )
+
+    // The rule stated once, so the test cannot pass vacuously when both sides are
+    // wrong in the same way: index 0, then the index-2 tie in supporting-event
+    // order, then the unknown index last.
+    expect(shared).toEqual(['seg-bbb', 'seg-aaa', 'seg-mmm', 'seg-zzz'])
+
+    const view = await assembleOver({ history: harness.history })
+    expect(view.turns[0]?.turnId).toBe('turn-order')
+    expect(view.turns[0]?.segments.map((segment) => segment.segmentId)).toEqual(shared)
   })
 })
