@@ -2,11 +2,11 @@
 
 Consumer-approved historical baseline: [PR48](https://github.com/inscripoem/isla/pull/48) at [17ab93335e77d8a231674ae3a2a7c9d10fad2cc5](https://github.com/inscripoem/isla/tree/17ab93335e77d8a231674ae3a2a7c9d10fad2cc5), based on main `d1b040bc`. Both remote CI runs passed. M6 approved its storage/evaluation consumer boundary on 2026-10-19; the PR remains open. The original increment baselines and test counts below are historical provenance. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline) for the current main integration and its verification.
 
-Revision: 2026-10-19.4. Status: published in PR48; under review.
+Revision: 2026-10-20.2. Status: PR48 core published; current-main follow-up local and under review.
 
 ## Scope and baseline
 
-`src/runtime/evaluation-adapter.ts` supplies M6's `ComparisonDeps.runVariant` by executing the real M5 control/input/turn path with explicit deployment peers. It is based on [PR40 e44f6ce0a985853eb298cd53f42824dd3dfe5ec4](https://github.com/inscripoem/isla/commit/e44f6ce0a985853eb298cd53f42824dd3dfe5ec4), with the separately reviewed M5 production application and dynamic audio increments adopted locally. M6 retains its runner, metrics, report writer and forthcoming report command; no M6 source or shared contract was changed.
+`src/runtime/evaluation-adapter.ts` supplies M6's `ComparisonDeps.runVariant` by executing the real M5 control/input/turn path with explicit deployment peers. It is based on [PR40 e44f6ce0a985853eb298cd53f42824dd3dfe5ec4](https://github.com/inscripoem/isla/commit/e44f6ce0a985853eb298cd53f42824dd3dfe5ec4), with the separately reviewed M5 production application and dynamic audio increments adopted locally. M6 retains its runner, metrics, report writer and the merged R1 report command/R2 recorded-run harness; no M6 source or shared contract was changed.
 
 This increment implements execution and accounting plumbing. It does not establish a live provider run, acoustic measurements, a quality score, cap compliance or a G4 pass.
 
@@ -24,6 +24,12 @@ Call `createEvaluationAdapter` with caller-owned `EventStorePort` and `HistoryQu
 
 Missing peers/consumer, mismatched variant metadata, unsupported case conditions and non-fresh sessions produce explicit not-run reasons. Once input is admitted, a failed or cancelled attempt remains a record. Setup failures are not silently converted into executed provider attempts.
 
+## Receipt cutoff and observation lifetime
+
+The admitted drain seals receipt admission before the adapter reads its result evidence. A later player-message call increments the coordinator's in-memory `RuntimeMetrics.lateReceipts` counter and returns without validation, output-state changes, storage or memory commits. Missing terminal evidence is not upgraded to completed delivery; established completion is not regressed. This counter counts calls, not validated receipts or acoustic outcomes.
+
+The counter is available on the retained coordinator instance; it is not persisted or added to the recorded-run schema, and a call arriving after the adapter captures its observations does not retroactively alter that record. The caller must observe the instance while it exists if it needs this refusal count. The production shutdown order and durability limit are described in [the production handoff](HANDOFF-M5-PRODUCTION.en.md#receipts-after-the-operation-seal). No discarded receipt is fabricated as a delivery or reported as a storage failure.
+
 ## Outcomes and measurements
 
 A completed cycle requires at least one matching effective fully-delivered record and all committed deliveries for that turn to be fully delivered. A zero-output cycle or a consumer that supplies no effective terminal evidence cannot produce bench completion. The adapter reads recorded dependency, dialogue and delivery evidence because the coordinator uses `cancelled` for some execution-failure paths. An observed operator Stop remains cancellation; other non-completed paths produce a failure reason.
@@ -37,7 +43,7 @@ Confirmed cancellation and completed speech are different facts. A cancelled rec
 | `caseId`, `variantId`, `cold` | M6 owns labels and first-attempt bookkeeping. First in a comparison does not establish a cold process, worker, provider or cache. |
 | Stage timings and `totalMs` | All remain `null`. Budgets and successful coordinator wall time are not first-audible measurements. Stage boundaries and actual-output methods remain an I1-01 owner dependency. |
 | `attempts` | `null`: port invocations do not prove underlying model requests or retries. Separately labelled selection/reaction/dialogue counts remain available in the observation. |
-| Usage | `provider.call` and `provider.usage.late` join by the full invocation identity; late usage updates the original invocation. Missing counts stay unknown. On this PR40 base, M4's text-source interface does not propagate token counts, so completed dialogue aggregates remain unknown until M4-02 adoption. |
+| Usage | `provider.call` and `provider.usage.late` join by the full invocation identity; late usage updates the original invocation. Missing counts stay unknown. M5 does not infer token counts from completion: it reports counts only when present in recorded invocation evidence. M4 deadline expiry retains `DialogueEnd.usage.status: timeout`, distinct from ordinary cancellation; the coordinated provider/usage extension in Issue44 remains separate adoption work. |
 | Cost | `null`: `UsageRecord` has no observed monetary amount; `pricingRef` is not a price. |
 | Cleanup | Drain/detach/disposal faults are appended to the returned record's `failureReason`, preserving the observed output outcome, usage and any earlier execution reason. Thus a `completed` output can carry a cleanup failure and must not be treated as successful cleanup. Refused attempts append cleanup faults to the not-run reason. |
 

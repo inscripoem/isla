@@ -46,6 +46,7 @@ entries:
       Coordinated performance.status rollout is required. M2/M3 retain module
       ownership. Live dialogue/TTS/VTS, acoustic measurement, SQLite restart and
       full I1 acceptance remain open. PR34 was reviewed separately at 93846ab.
+
   - date: "2026-10-15"
     task: I1-01-main-rebuild-review
     change: >-
@@ -91,6 +92,7 @@ entries:
       Local unpublished I1 on main includes PR31 infrastructure but retains fixed
       synthesis and explicit M3/text substitutes. PR33/34, production console,
       live provider/resource composition and SQLite durability remain separate.
+
   - date: "2026-10-15"
     task: I1-01-application-and-selected-history
     change: >-
@@ -139,6 +141,7 @@ entries:
       speech assets and M6 uses memory storage. Product-console adoption, live
       providers, acoustic measurements, SQLite durability and complete course
       acceptance are not established. This candidate does not include PR31.
+
   - date: "2026-10-15"
     task: M5-INV-15-trace-correction
     change: >-
@@ -178,6 +181,7 @@ entries:
       remain coordinated M6 follow-up work, not implemented by this correction.
       Existing I1 changes are preserved. No new browser, live-provider or SQLite
       durability evidence is claimed.
+
   - date: "2026-10-15"
     task: I1-01-Step-A
     change: >-
@@ -225,6 +229,7 @@ entries:
       pipeline dependencies remain explicit substitutes. SQLite migration/recovery,
       archived-session selection, live providers and full product acceptance remain
       separate. Application protocol 0.2 and diagnostic protocol 1 are unchanged.
+
   - date: 2026-10-12
     task: M6-01
     branch: m6-storage
@@ -234,6 +239,7 @@ entries:
     commits: [f6bfae0, 77791d5]
     agent: opencode/deepseek-v4-flash
     human_review: "Corrected a production fault-injection API leak; moved failure injection into the test adapter"
+
   - date: 2026-10-12
     task: M6-01
     branch: m6-storage
@@ -243,6 +249,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Directed by the M6 owner after reviewing AGENTS.md and READINESS-KITS"
+
   - date: 2026-10-13
     task: M6-01
     branch: m6-storage
@@ -253,6 +260,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "M5 review requested session scoping; implemented with ADR-002"
+
   - date: 2026-10-13
     task: M6-01
     branch: m6-storage
@@ -263,6 +271,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "M5 review requested an isolation boundary; implemented with ADR-002"
+
   - date: 2026-10-13
     task: M6-01
     branch: m6-storage
@@ -273,6 +282,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "M5 review required the documented ordering; implemented with ADR-002"
+
   - date: 2026-10-14
     task: M6-01
     branch: m6-storage
@@ -283,6 +293,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "M5 re-review (Medium): preserve atomicity when a later mutation fails; ADR-002 D4"
+
   - date: 2026-10-14
     task: M6-01
     branch: m6-storage
@@ -293,6 +304,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Self-review: the catalog promises a `conflict` response; ADR-002 D1"
+
   - date: 2026-10-14
     task: M6-01
     branch: m6-storage
@@ -303,6 +315,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Self-review: the documented decision is canonical equality; the code used JSON.stringify; ADR-002 D1"
+
   - date: 2026-10-14
     task: M6-01
     branch: m6-storage
@@ -313,6 +326,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Self-review (mock M5): the first canonical implementation flattened Date payloads to `{}`; ADR-002 D1"
+
   - date: 2026-10-14
     task: M6-01
     branch: m6-storage
@@ -323,6 +337,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "M5 re-review: sparse array conflated with empty array; ADR-002 D1"
+
   - date: "2026-10-13"
     task: M1-01-A
     branch: feat/m1-01-adapters
@@ -372,6 +387,7 @@ entries:
       Actual fixed synthesis and mapped renderer, with controlled test dependencies
       and the existing fixture player. Browser playback, real Stop/history integration,
       live Kokoro/VTS, durable recovery and complete product acceptance remain pending.
+
   - date: "2026-10-14"
     task: M1-01-A-review-fix
     branch: feat/m1-01-adapters
@@ -426,6 +442,7 @@ entries:
       release invocation. The fixture player remains identified. A production
       same-domain expiry-aborting DeadlineGate is a coordinated I1-01 requirement;
       browser increment B and other owners' modules are unchanged by this correction.
+
   - date: "2026-10-15"
     task: M1-01-B
     branch: feat/m1-01-player
@@ -507,6 +524,7 @@ entries:
       deadline/start-aware delivery-history integration remain pending. Live
       Kokoro/VTS, acoustic/network timing and complete product acceptance are not
       established. Issue 2 remains open with unfinished M1-01/M1-02 items unchecked.
+
   - date: "2026-10-15"
     task: M1-02-A
     branch: feat/m1-02-kokoro-adapter
@@ -590,6 +608,7 @@ entries:
       DeadlineGate remain owner integration; VTS is later M1-02 work. Live Kokoro,
       acoustic output/timing and full product acceptance are not established.
       Issue 2 remains open with unfinished M1-01/M1-02 items unchecked.
+
   - date: 2026-10-14
     task: M6-01
     branch: m6-sqlite
@@ -600,6 +619,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Integration validation requested after the payload-contract fix; ADR-004"
+
   - date: 2026-10-15
     task: M6-01
     branch: m6-sqlite
@@ -610,6 +630,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "M5-Q4/Q5 answers; owner-approved"
+
   - date: 2026-10-15
     task: M6-01
     branch: m6-sqlite
@@ -620,6 +641,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "M5 agreed (append symmetry); owner-approved"
+
   - date: 2026-10-15
     task: M6-01
     branch: m6-sqlite
@@ -630,6 +652,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Owner-approved Phase 1 (base on #30, renumber +1); ADR-002 Step A + ADR-003; M5-Q4/Q5 pending"
+
   - date: 2026-10-14
     task: M6-01
     branch: m6-sqlite
@@ -640,6 +663,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Started after PR #9; ADR-003; branch m6-sqlite off m6-storage pending merge"
+
   - date: 2026-10-14
     task: M6-01
     branch: m6-sqlite
@@ -650,6 +674,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Reproduces the in-memory store contract durably; ADR-004"
+
   - date: 2026-10-14
     task: M6-01
     branch: m6-sqlite
@@ -660,6 +685,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Owner-approved B3 plan; ADR-005; M6 data, M5 lifecycle"
+
   - date: 2026-10-14
     task: M6-01
     branch: m6-sqlite
@@ -670,6 +696,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Self-review: the in-memory C-38 does not cover SQLite; ADR-004 D1"
+
   - date: 2026-10-17
     task: I1-01
     branch: feat/i1-application-loop
@@ -680,6 +707,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Captain-authorized integration; OpenCode resolved six doc conflicts. Independent pnpm verify passed 695 tests / 37 files, typecheck, lint and build; muted fixed-WAV browser two-turn, Stop/Resume, reload and disconnect checks passed. Coordinator corrected current-state/allocation wording after review; publication and consumer acceptance remain pending."
+
   - date: 2026-10-16
     task: M6-01
     branch: m6-storage-evidence
@@ -690,6 +718,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Targets the two claims marked unproven: durable recovery beyond a clean reopen, and universality of the invariants. Case ids pending allocation per structural-constraints.md section 3."
+
   - date: 2026-10-17
     task: M6-01
     branch: m6-storage-evidence
@@ -700,6 +729,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Awaiting review in #42; M4 drops its local copy of the same migration once this lands on main."
+
   - date: 2026-10-17
     task: I1-01
     branch: feat/i1-application-loop
@@ -721,6 +751,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Caught real register gaps (INV-01..03, INV-11); ADR-006"
+
   - date: 2026-10-14
     task: R3
     branch: m6-r3-gates
@@ -731,6 +762,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Wired the gates into ci.yml; README documents the gate design; ADR-006 D2"
+
   - date: 2026-10-14
     task: R3
     branch: m6-r3-gates
@@ -741,6 +773,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Governance documents; ADR-006 D3"
+
   - date: 2026-10-14
     task: R3
     branch: m6-r3-gates
@@ -751,6 +784,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Owner-approved Option A (mixed-artifact classification); ADR-006"
+
   - date: 2026-10-16
     task: R3
     branch: m6-r3-gates
@@ -761,6 +795,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Pending owner review; the case id for the id-enforcement and the G4 gate follows the convention in docs/code-governance/structural-constraints.md (allocate before adding, never self-assign)"
+
   - date: 2026-10-16
     task: R3
     branch: m6-g1-gate
@@ -771,6 +806,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Awaiting the team's agreement (at least 3 of 6) before switching the step from advise to enforce; case id C-M6-1 is pending allocation per structural-constraints.md section 3"
+
   - date: 2026-10-16
     task: R3
     branch: m6-r3-gates
@@ -781,6 +817,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Addresses M5's CHANGES_REQUESTED on 92871c2. This entry itself was demanded by the newly wired G6 gate, which failed the push run for a src/ change without a log update - the gate catching its own author. No re-review requested yet; G1 remains advisory."
+
   - date: 2026-10-16
     task: R3
     branch: m6-r3-gates
@@ -791,6 +828,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Same self-review pass as the M5 review fixes; no re-review requested yet."
+
   - date: 2026-10-16
     task: R3
     branch: m6-r3-gates
@@ -801,6 +839,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Same self-review pass; no re-review requested yet."
+
   - date: 2026-10-16
     task: R3
     branch: m6-r3-gates
@@ -811,6 +850,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Found while assessing whether the six gates are strong enough; no re-review requested yet."
+
   - date: 2026-10-16
     task: R3
     branch: m6-r3-gates
@@ -821,6 +861,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Makes the previous commit's claim true; no re-review requested yet."
+
   - date: 2026-10-17
     task: M6-01
     branch: m6-r3-gates
@@ -831,6 +872,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Addresses M5 review finding 1 on #27 (P1). Mutation-checked: restoring the tip-parent fallback fails the two range tests."
+
   - date: 2026-10-17
     task: M6-01
     branch: m6-r3-gates
@@ -841,6 +883,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Addresses M5 review finding 2 on #27 (P2). Mutation-checked: accepting an unchanged count fails the edit reproduction."
+
   - date: 2026-10-17
     task: M6-01
     branch: m6-r3-gates
@@ -851,6 +894,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Found by post-review self-audit on #27; the push-event G6 failure is what surfaced the missing record."
+
   - date: 2026-10-17
     task: M6-01
     branch: m6-r3-gates
@@ -861,6 +905,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: "Owner-approved fix after the push-event CI failure on the rebased #27. Mutation: trusting a missing `before` turns two range tests red."
+
   - date: 2026-10-17
     task: I1-01
     branch: feat/i1-application-loop
@@ -871,6 +916,7 @@ entries:
     commits: []
     agent: Codex
     human_review: "Captain explicitly authorized local fetch, merge, full-file staging and a signed integration commit. This records direct documentation and integration work, not a new OpenCode implementation session. Preservation and final verification are recorded in the delivery plan and external evidence; original browser observations remain tied to 4c42126. Publication requires separate approval."
+
   - date: 2026-10-17
     task: M6-01-PR36-frozen-restoration
     branch: feat/i1-application-loop
@@ -906,6 +952,7 @@ entries:
         files, symlinks, missing/non-ancestor/unresolvable baselines, aliases and self-approval,
         strict UTF-8/BOM handling, non-feature events, and read-only production Git adapters.
         The frozen list and complete event diff semantics are unchanged. Tests do not mutate Git.
+
   - date: "2026-10-18"
     task: I1-01-session-recovery
     branch: feat/i1-session-recovery
@@ -989,6 +1036,7 @@ entries:
       Lifecycle recovery over the existing in-memory I1 store only. SQLite restart
       recovery, live dialogue/TTS/VTS, acoustic verification and full I1 acceptance
       remain open; no new dependency was added and no peer module was implemented.
+
   - date: 2026-10-19
     task: M6-01
     branch: m6-01-sqlite-app-recovery
@@ -1004,6 +1052,7 @@ entries:
       full_suite: "pnpm test 812/47; pnpm verify exit 0; typecheck, lint and build passed."
       mutation: "Removing the fully-delivered filter from the confirmed-history query made the new test red; source restored and the focused/role/verify checks passed again."
     human_review: "Test-only M6-01 acceptance slice; M5 review requested for harness use and storage assertions. No production code change; no real provider, speech or app/process recovery claim."
+
   - date: 2026-10-15
     task: M1-02-provider-ownership
     branch: fix/m1-02-provider-ownership
@@ -1080,6 +1129,7 @@ entries:
       and CPU/browser evidence are separate P002 B work; no
       live/acoustic/full-product acceptance is claimed. Issue2 remains open with
       unfinished tasks unchecked.
+
   - date: 2026-10-16
     task: M1-02-M4-ownership-follow-up
     branch: fix/m1-02-provider-ownership
@@ -1140,6 +1190,7 @@ entries:
       hazard rather than supporting that shape. C5 is unchanged. Real SDK,
       acoustic and whole-product/course acceptance are separate. Issue2 stays
       open with unfinished tasks unchecked.
+
   - date: 2026-10-15
     task: M1-02-B-Kokoro-live
     branch: feat/m1-02-kokoro-live
@@ -1261,6 +1312,7 @@ entries:
       fixture, not a product voice/language choice. VTS C/D, acoustic quality
       and full product I1/I2 acceptance remain open. Issue2 stays Open and
       unfinished tasks unchecked.
+
   - date: 2026-10-15
     task: M1-02-B-CI-script-policy-and-verification-docs
     branch: feat/m1-02-kokoro-live
@@ -1332,6 +1384,7 @@ entries:
       contract, product root/HTTP path, production packaging, VTS or
       acoustic/full-product acceptance change. Issue2 stays Open with unfinished
       tasks unchecked.
+
   - date: 2026-10-16
     task: M1-02-M4-worker-follow-up
     branch: feat/m1-02-kokoro-live
@@ -1410,6 +1463,7 @@ entries:
       explicit entry test to test:m1. PR34 still depends on PR33. Production
       M5/M2 integration, live VTS, PR36 fixes and full product/course acceptance
       remain separate. Issue2 stays open with unfinished tasks unchecked.
+
   - date: 2026-10-16
     task: M1-02-M6-entry-coverage
     branch: feat/m1-02-kokoro-live
@@ -1480,6 +1534,181 @@ entries:
       and full product/course acceptance remain separate. Keep Issue2 Open
       with unfinished tasks unchecked; agents never merge or enable auto-merge.
 
+  - date: 2026-10-17
+    task: M2-01
+    branch: feat/m2-01-console
+    change: >-
+      Fill the last empty product module with the M2 console for application
+      protocol 0.2. Add a browser-safe WebSocket ConsoleTransportPort
+      (app-transport.ts) that validates every inbound frame against
+      serverMessageSchema and correlates acknowledgements by messageId; an explicit
+      pure-function state machine (console-state.ts) that accepts only session
+      events beyond the bootstrap snapshot seq, tracks lifecycle, epoch,
+      activeTurnId, performerStatus and outputConfirmation, and keeps pending
+      requests and unknown outcomes visible; and an M1 player binding
+      (player-binding.ts) that maps performance.execute/performance.cancel onto the
+      browser playback controller and returns receipts through an injected sink.
+      Rewrite ConsoleApp.tsx as a view over that state and rebuild the interface
+      with animal-island-ui, keeping the diagnostic protocol 1 panel separate from
+      the application view. Add 16 offline cases in test/offline/m2-console.test.ts
+      and a manual browser demo under test/browser/.
+    requirements: [FR-01, FR-04, FR-05]
+    invariants: [INV-01, INV-12]
+    cases: []
+    commits: []
+    agent: traecode/deepseek-v4.1-flash
+    provider: trae-cn
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      Governance deviation, recorded rather than concealed. AGENTS.md requires
+      application code to be authored through genuine OpenCode sessions with the
+      configured DeepSeek-V4-Flash provider; this M2-01 change was authored in a
+      TraeCode session under a Captain-approved plan (.trae/documents/m2-01-console-implementation-plan.md),
+      so no OpenCode session identifier exists for it. The agent field therefore
+      names the actual authoring agent and no ses_ identifier is asserted. The
+      Captain approved the scope, the animal-island-ui dependency and this
+      publication, and directed that the deviation be declared instead of
+      papered over.
+    verification:
+      role: "pnpm test:m2: 20 passed (the 16 first-slice cases plus 4 review regressions)."
+      full_suite: "pnpm verify on the merged origin/main (c2f9b38): 651 tests in 29 files; typecheck, lint and build passed."
+      readiness: "pnpm test:readiness: 41 passed."
+      trace: "pnpm test:trace: 15 passed."
+    scope: >-
+      The console drives an injected ConsoleTransportPort; the offline suite and
+      the browser demo use a fixture transport, so no server route, live provider
+      or real audio output is claimed. Three integration gaps are reported to M5
+      and not resolved here: ConsoleTransportPort has no player-to-runtime channel
+      for receipts, PerformanceCommand carries no bytes or URL, and the root Vite
+      config has no application-protocol proxy. Application protocol 0.2 and
+      diagnostic protocol 1 are unchanged.
+    human_review: >-
+      The Captain approved the scope, the dependency and this publication, and
+      directed that the provenance deviation be recorded truthfully. Consumer
+      review by M5 (shared transport port, player-to-runtime channel) and by M1
+      (the browser mount boundary) is requested and remains pending; publication is
+      not acceptance, and the tests-approved label is a human action.
+
+  - date: 2026-10-17
+    task: M2-01
+    branch: feat/m2-01-console
+    change: >-
+      Resolve the two P2 findings from M5's review of PR #43 without changing
+      application protocol 0.2. player-binding.ts now offers each performance
+      command over the current caller signal and supersedes the operation holding
+      the single admission slot only on an explicit `busy` conflict, so a
+      duplicate, a stale or invalid command and a rejected cancel preserve the
+      operation that is playing; console-state.ts keeps session state monotonic by
+      rejecting an older-epoch control acknowledgement for session state and
+      dropping a same-session older-epoch snapshot. Add four offline regressions in
+      test/offline/m2-console.test.ts.
+    requirements: [FR-01, FR-04, FR-05]
+    invariants: [INV-01, INV-12]
+    cases: []
+    commits: [377d8535777f94f0ba832e41409e304893dd9a4b]
+    agent: traecode/deepseek-v4.1-flash
+    provider: trae-cn
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      The same recorded governance deviation as the M2-01 console entry above:
+      this review-fix increment was authored in a TraeCode session under the
+      Captain-approved plan, so no OpenCode session identifier exists or is
+      asserted.
+    verification:
+      role: "pnpm test:m2: 20 passed."
+      full_suite: "pnpm verify: 655 tests in 29 files; typecheck, lint and build passed."
+      regressions: >-
+        The four new cases were confirmed to fail against the pre-fix source (the
+        two source edits temporarily stashed) and to pass with the fix.
+    human_review: >-
+      Requested: renewed M5 consumer review of the two corrected findings and their
+      four regressions. Merge remains a human action; no merge or auto-merge was
+      requested or performed.
+
+  - date: 2026-10-17
+    task: M2-01
+    branch: feat/m2-01-console
+    change: >-
+      Resolve the second M5 review of PR #43 (three P2 findings plus one
+      conditional finding) without changing application protocol 0.2.
+      console-state.ts drops a same-session snapshot that is at the same epoch but
+      behind the accepted sequence, so the accepted identity, turn, confirmation,
+      capability and sequence stay monotonic. player-binding.ts validates the
+      envelope session of a performance.cancel before it reaches M1, because
+      PerformanceCancel carries no session id; shows a command's subtitle only
+      once M1 admits it, read from a synchronous active-output transition, so a
+      duplicate, stale or rejected command cannot replace the playing subtitle;
+      and no longer aborts the caller signal on an accepted cancel, so a
+      synchronous cancel -> execute does not cancel a newer output. Add four
+      offline regressions in test/offline/m2-console.test.ts (24 total).
+    requirements: [FR-01, FR-04, FR-05]
+    invariants: [INV-01, INV-12]
+    cases: []
+    commits: [a63de25b17e6880d663072eeed040eff18917735]
+    agent: traecode/deepseek-v4.1-flash
+    provider: trae-cn
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      The same recorded governance deviation as the M2-01 console entries above:
+      this review-fix increment was authored in a TraeCode session under the
+      Captain-approved plan, so no OpenCode session identifier exists or is
+      asserted.
+    verification:
+      role: "pnpm test:m2: 24 passed (the 20 previous cases plus 4 new regressions)."
+      full_suite: "pnpm verify: 659 tests in 29 files; typecheck, lint and build passed."
+      regressions: >-
+        The four new cases were confirmed to fail against the pre-fix source (the
+        two source edits temporarily stashed, 4 failed and 20 passed) and to pass
+        with the fix restored.
+    human_review: >-
+      Requested: renewed M5 consumer review of the three corrected P2 findings,
+      the conditional cancellation-ownership fix and their four regressions.
+      Merge remains a human action; no merge or auto-merge was requested or
+      performed.
+
+  - date: 2026-10-18
+    task: M2-01
+    branch: feat/m2-01-console
+    change: >-
+      Resolve the M1 mount-boundary review of PR #43 (one P1, one P2) without
+      changing application protocol 0.2. P1: console-state.ts adds
+      SessionFrontier and reduceSessionFrontier, the session projection of
+      reduceServerMessage without the view lists; player-binding.ts reduces
+      every decoded message onto that frontier and fences execute admission
+      against it, so a command behind the accepted epoch or for a stopped
+      session is refused before M1 sees it instead of being admitted on M1's
+      lagging bootstrap epoch. P2: player-binding.ts revalidates the owning
+      output and a caller generation before an awaited busy rejection retries,
+      so an old continuation cannot supersede and revoke a newer output admitted
+      meanwhile on the caller signal an accepted cancel deliberately left bound.
+      Add three offline cases in test/offline/m2-console.test.ts (27 total): the
+      Stop-boundary fence, the busy-continuation owner check, and a
+      frontier/session projection consistency guard.
+    requirements: [FR-04, FR-05]
+    invariants: [INV-01]
+    cases: []
+    commits: [cdfc3a4]
+    agent: traecode/deepseek-v4.1-flash
+    provider: trae-cn
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      The same recorded governance deviation as the M2-01 console entries above:
+      this review-fix increment was authored in a TraeCode session under the
+      Captain-approved plan, so no OpenCode session identifier exists or is
+      asserted.
+    verification:
+      role: "pnpm test:m2: 27 passed (the 24 previous cases plus 3 new regressions)."
+      full_suite: "pnpm verify: 662 tests in 29 files; typecheck, lint and build passed."
+      regressions: >-
+        The three new cases were confirmed to fail against the pre-fix source (the
+        two source edits temporarily stashed, 3 failed and 24 passed) and to pass
+        with the fix restored.
+    human_review: >-
+      Requested: renewed M1 consumer review of the two corrected findings and
+      their three regressions. The shared transport adoption, production client
+      extraction and routing remain with Issue #37, kept Open with unfinished
+      items unchecked. Merge remains a human action; no merge or auto-merge was
+      requested or performed.
   - date: 2026-10-16
     task: M6-02
     branch: m6-02-bench
@@ -1626,6 +1855,49 @@ entries:
       mutation: "Restoring failureRate=0 turned two tests red; removing the blank-not-run reason check turned one test red; both restored."
     human_review: "M6 self-review fix after the #40 review; M5 re-review pending. No new case id was assigned; the zero-attempt/not-run regression still needs an M5 allocation."
   - date: 2026-10-19
+    task: M2-01
+    branch: feat/m2-01-console
+    change: >-
+      Resolve the fourth M5 review of PR #43 (pullrequestreview-5568702349, one
+      P2) without changing application protocol 0.2. player-binding.ts: the catch
+      path that resumes a busy rejection on a later microtask now revalidates the
+      same admission fence, disposal and caller generation that the initial offer
+      checked before it retries, so a continuation that arrived before the console
+      stopped the session, revoked the epoch, cancelled locally or disposed the
+      player is discarded instead of being re-offered to M1. The older-owner case
+      is preserved: when nothing superseded the attempt, the retry still supersedes
+      and lets M1 reject the command as stale. Add four offline regressions in
+      test/offline/m2-console.test.ts (31 total).
+    requirements: [FR-04, FR-05]
+    invariants: [INV-01]
+    cases: []
+    commits: [ad0400c]
+    agent: traecode/deepseek-v4.1-flash
+    provider: trae-cn
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      The same recorded governance deviation as the M2-01 console entries above:
+      this review-fix increment was authored in a TraeCode session under the
+      Captain-approved plan, so no OpenCode session identifier exists or is
+      asserted.
+    verification:
+      role: "pnpm test:m2: 31 passed (the 27 previous cases plus 4 new regressions)."
+      regressions: >-
+        The four new cases were confirmed to fail against the pre-fix source (the
+        player-binding edit temporarily stashed, 4 failed and 27 passed) and to
+        pass with the fix restored; the disposal case failed with
+        `dispatch rejected (unavailable)` rather than the discarded-continuation
+        fault before the fix.
+      full_suite: >-
+        On the integration head after merging origin/main (d1b040b): pnpm test
+        964/52; pnpm verify exit 0 with typecheck, lint and build passing.
+    human_review: >-
+      Requested: renewed M5 review of the corrected retry boundary and its four
+      regressions. The shared transport adoption, production client extraction and
+      routing remain with Issue #37, kept Open with unfinished items unchecked.
+      Merge remains a human action; no merge or auto-merge was requested or
+      performed.
+  - date: 2026-10-19
     task: M6-02
     branch: m6-02-r1-recorded-run
     change: "M6-02 R1: add a strict versioned recorded-run parser and the evaluation:report command. The parser rejects unknown fields and wrong schema versions and recomputes the summary; the command writes through writeEvaluationReport, refuses malformed/unpublishable input, writes nothing on refusal, and uses the existing atomic writer. Adds R1 tests and Delta/verification/review notes. No provider, runtime composition or evaluation table."
@@ -1671,6 +1943,45 @@ entries:
     human_review: "M6 self-review; M5 review pending. Case allocation remains pending."
   - date: 2026-10-19
     task: M6-02
+    branch: m6-02-r2-runbench
+    change: "M6-02 R2: add runBench, a harness that wraps the existing runComparison with an injected runVariant and returns the frozen recorded-run schemaVersion 1 shape. The declared sample size is actual recorded attempts, not case count; no trusted summary; not-run and thrown cases remain explicit. Adds four offline tests and test:m6 selection. No provider, runtime composition or table."
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: []
+    commits: [4b3de7e]
+    agent: opencode/deepseek-v4-flash
+    verification:
+      focused: "test/offline/m6-02-bench.test.ts: 4/1 passed."
+      role: "test:m6 176/13; composition 12/1; readiness 42/3; trace 41/1."
+      full_suite: "pnpm test 953/54; pnpm verify exit 0; typecheck, lint and build passed."
+      mutation: "Using cases rather than recorded attempts as sampleSize turned the not-run test red; restored."
+    human_review: "M6 self-review; M5 review pending. R2 case allocation remains deferred debt."
+  - date: 2026-10-19
+    task: M6-02
+    branch: m6-02-r2-runbench
+    change: "R2 schema sharing: import the frozen RecordedRunV1 type from R1's recorded-run module and remove the duplicate local interface. Runtime behavior and the recorded-run shape are unchanged."
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: []
+    commits: [761fa40]
+    agent: opencode/deepseek-v4-flash
+    human_review: "M6 type-sharing change; M5 review pending. R2 case allocation remains deferred."
+  - date: 2026-10-19
+    task: M6-02
+    branch: m6-02-r2-runbench
+    change: "R2 serialization bridge: add serializeRecordedRun so the harness returns JSON text the R1 file command consumes. No schema fields, runtime pipeline or provider changed."
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: []
+    commits: [37cf15a]
+    agent: opencode/deepseek-v4-flash
+    verification:
+      focused: "test/offline/m6-02-bench.test.ts: 4/1 passed."
+      role: "test:m6 176/13; composition 12/1; readiness 42/3; trace 41/1."
+      full_suite: "pnpm test 953/54; pnpm verify exit 0; typecheck, lint and build passed."
+    human_review: "M6 self-review; M5 review pending. R2 case allocation remains deferred."
+  - date: 2026-10-19
+    task: M6-02
     branch: m6-02-r1-recorded-run
     change: "R1 schema sharing: export the frozen RecordedRunV1 interface from recorded-run.ts so R2 imports one producer/consumer type instead of duplicating it. No JSON shape or behavior change."
     requirements: [NFR-01, NFR-04]
@@ -1679,6 +1990,21 @@ entries:
     commits: [c66e018]
     agent: opencode/deepseek-v4-flash
     human_review: "M6 type-sharing change; M5 review pending. R1 case allocation remains deferred."
+  - date: 2026-10-19
+    task: M6-02
+    branch: m6-02-r2-runbench
+    change: "R2 review fix: reject non-finite observations before JSON serialization (including the serializer guard), preserve legitimate nulls, and add C-71 producer-to-command integration over two variants with executed and not-run entries. Register C-69/C-70 and C-71 traceability rows. No schema-shape or provider change."
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: [C-69, C-70, C-71]
+    commits: [b8fa0f3]
+    agent: opencode/deepseek-v4-flash
+    verification:
+      focused: "test/offline/m6-02-bench.test.ts: 7/1 passed."
+      role: "test:m6 179/13; composition 12/1; readiness 42/3; trace 41/1."
+      full_suite: "pnpm test 956/54; pnpm verify exit 0; typecheck, lint and build passed."
+      mutation: "Non-finite guard rejects before serialization; valid two-variant C-71 path writes through the real R1 command."
+    human_review: "Addresses M5 P2; M5 re-review requested after push. C-71 verifier now exists and passes."
   - date: "2026-10-19"
     task: M5-production-composition
     branch: feat/m5-production-composition
@@ -2316,3 +2642,81 @@ entries:
     requirements: [FR-04, FR-05, FR-06, NFR-01, NFR-04]
     invariants: [INV-01, INV-09, INV-12, INV-16]
     commits: []
+
+  - date: "2026-10-20"
+    task: M5-pr48-response-boundary-review-repair
+    change: >-
+      Replace the platform-dependent paused-client response ownership test
+      with a test-only held ServerResponse.end boundary and actual HTTP
+      byte verification. Correct the trace closing note and clarify Linux
+      SIGTERM evidence, Windows forced termination and raw-signal gaps.
+      Production source, shared contracts and dependencies are unchanged.
+    agent: OpenCode build self-api/deepseek-v4-flash xhigh; Codex supervisor documentation and independent verification
+    session: ses_eab11c3b8ffefMHFivGiNpcIML
+    requirements: [FR-04, FR-05, FR-06, NFR-01, NFR-04]
+    invariants: [INV-01, INV-09, INV-12, INV-16]
+    commits: []
+    human_review: >-
+      Captain approved local repair and verification. The complete native
+      session and independent logs are preserved outside the repository.
+      This candidate remains under review; publication needs exact approval.
+    verification:
+      focused: "Independent audio/CLI/restart: 25 tests / 3 files passed."
+      m5: "Independent pnpm test:m5: 168 tests / 8 files passed."
+      full: "Independent pnpm verify: 1027 tests / 59 files, typecheck, lint and build passed."
+      negative_controls: >-
+        Three OpenCode-authored mutations independently replayed: premature
+        lease-and-slot release, lease-only release and slot-only release each
+        fail the target assertion without unhandled rejection. Source restored
+        after every control and its original SHA256 verified.
+    scope: >-
+      Linux x86_64, Node22.23.3. No Windows execution or browser rerun.
+      The held-end boundary is an ownership oracle, not a back-pressure
+      measurement. Windows cooperative shutdown and raw-signal reporting
+      remain separate follow-ups. G4/live-provider/acoustic acceptance is
+      not established.
+
+  - date: "2026-10-20"
+    task: M5-pr48-current-main-and-receipt-seal
+    change: >-
+      Reconcile PR48 fbfb565 with main37c1d9e in an isolated uncommitted
+      merge, retaining both AI-use histories, M5/M6 scripts, M2 dependencies
+      and R2 trace entries. Carry forward the deterministic audio-response
+      test. Add in-memory lateReceipts call counting after the operation
+      seal and regressions for preserved confirmed output and withheld first
+      completion with real M6 history. Refresh owner/status, usage and
+      lifecycle handoffs with paired external Chinese copies.
+    agent: OpenCode build self-api/deepseek-v4-flash xhigh; Codex supervisor documentation and independent checks
+    session: ses_ea80a8631ffeuMTQOaZbXZPrKE
+    requirements: [FR-04, FR-05, FR-06, NFR-01, NFR-04]
+    invariants: [INV-01, INV-09, INV-12, INV-16]
+    commits: []
+    human_review: >-
+      Captain approved local integration, repair and verification. The
+      supervisor required an additional first-completion regression because
+      the initial case covered an already-confirmed output only. No new
+      commit, push or external reply is authorized by this entry.
+    verification:
+      focused: "Independent coordinator/audio/CLI/restart: 115 tests / 4 files passed."
+      roles: "Independent M5 170/8, M2 31/1 and M6 179/13 passed."
+      full: "Independent pnpm verify: 1065 tests / 60 files, typecheck, lint and build passed."
+      negative: >-
+        Three audio ownership controls independently fail as intended.
+        Removing the post-seal counter increment makes both new receipt
+        regressions fail; original source bytes restored after every control.
+      browser: >-
+        Unchanged root HTTP/WebSocket script: 11/11. Unchanged Chromium
+        fixture-audio script: 8/8, exact 103420-byte WAV. Playwright1.63.0,
+        Chromium155.0.8059.79, Linux x86_64 / Node22.23.3. Direct runtime and
+        Vite children exit after SIGTERM, without forced termination.
+      recorded_failures: >-
+        The initial new test failed typecheck because a stored outputId is
+        nullable; the explicit assertion/narrowing repair passed. Genuine
+        failed and intermediate runs are retained with all 96 native session
+        records outside the repository.
+    scope: >-
+      lateReceipts counts incoming calls refused before validation, not
+      verified completions. It is in memory only, performs no storage or
+      memory commit, and does not change output confirmation or storageFailure.
+      No recorded-run schema or other owner source changes. No Windows,
+      product-console, live-provider, acoustic, S6 or G4 acceptance is claimed.

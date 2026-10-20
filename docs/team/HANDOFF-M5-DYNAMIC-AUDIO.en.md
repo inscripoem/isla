@@ -2,7 +2,7 @@
 
 Consumer-approved historical baseline: [PR48](https://github.com/inscripoem/isla/pull/48) at [17ab93335e77d8a231674ae3a2a7c9d10fad2cc5](https://github.com/inscripoem/isla/tree/17ab93335e77d8a231674ae3a2a7c9d10fad2cc5), based on main `d1b040bc`. Both remote CI runs passed. M6 approved its storage/evaluation consumer boundary on 2026-10-19; the PR remains open. The original increment baselines and test counts below are historical provenance. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline) for the current main integration and its verification.
 
-Revision: 2026-10-19.4. Owner: M5 — CHANG Xuben. Status: published in PR48; under review. Historical increment worktree: `m5-dynamic-audio`, based on merged main `abb847c` (the
+Revision: 2026-10-20.2. Owner: M5 — CHANG Xuben. Status: PR48 core published; current-main follow-up local and under review. Historical increment worktree: `m5-dynamic-audio`, based on merged main `abb847c` (the
 squashed PR45 merge commit; the restored production-composition patch is the
 working base). Scope:
 FR-04/FR-05 delivery of registered dynamic audio resources to a same-origin
@@ -13,6 +13,12 @@ real-browser acceptances. M1 registry/synthesis internals, the M2 product
 resolver and live provider work are not part of this slice. The production
 application base remains described in the [production composition
 handoff](HANDOFF-M5-PRODUCTION.en.md).
+
+## Response ownership regression (2026-10-20)
+
+The local follow-up to [M1's review](https://github.com/inscripoem/isla/pull/48#discussion_r4314578882) replaces the paused-client/16 MiB assumption with a test-only gate on the first matching real `ServerResponse.end`. Before releasing that call, the test observes zero finish events, an unreleased lease, one occupied slot and a second request refused as 429 `busy`. Releasing it delivers all 4096 patterned bytes over real HTTP, emits one finish, releases the lease once and restores capacity.
+
+Independent negative controls reject premature lease-and-slot release, lease-only release and slot-only release. Production route code is unchanged. The gate proves ownership at an unfinished-response boundary; it does not measure socket back-pressure. Linux/Node22.23.3 verification is recorded in DELIVERY-PLAN; Windows re-review remains pending. The current main-combination rerun passes unchanged root routing 11/11 and Chromium audio 8/8; this still exercises the explicit loop fixture page, not M2 product-console adoption. Historical results below retain their original versions.
 
 ## Recorded browser toolchain
 

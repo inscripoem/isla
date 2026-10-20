@@ -108,6 +108,12 @@ export interface RuntimeMetrics {
   dialogueAttempts: number
   rejectedLate: number
   rejectedReceipts: number
+  /**
+   * Player messages received after the operation seal. Counts incoming calls
+   * refused before any envelope or payload inspection, not validated receipts:
+   * nothing is parsed, attributed or persisted, and `storageFailure` is not set.
+   */
+  lateReceipts: number
   storageFailure: boolean
 }
 
@@ -594,6 +600,7 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
   let dialogueAttempts = 0
   let rejectedLate = 0
   let rejectedReceipts = 0
+  let lateReceipts = 0
   let storageFailure = false
   let turnCounter = 0
   let idCounter = 0
@@ -2219,8 +2226,12 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
     handlePlayerMessage(message) {
       // A receipt admitted before the operation seal drains to its terminal
       // bookkeeping; a late receipt after the seal is refused without touching
-      // storage.
-      if (operationsSealed) return Promise.resolve()
+      // storage. The refusal is observed as an incoming call: nothing is parsed
+      // after the seal, so the count never claims envelope or payload validity.
+      if (operationsSealed) {
+        lateReceipts += 1
+        return Promise.resolve()
+      }
       return trackOperation(handlePlayerMessageImpl(message))
     },
     onServerMessage(listener) {
@@ -2245,6 +2256,7 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
       dialogueAttempts,
       rejectedLate,
       rejectedReceipts,
+      lateReceipts,
       storageFailure,
     }),
     dispose: disposeSession,

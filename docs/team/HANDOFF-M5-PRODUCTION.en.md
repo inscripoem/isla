@@ -2,7 +2,7 @@
 
 Consumer-approved historical baseline: [PR48](https://github.com/inscripoem/isla/pull/48) at [17ab93335e77d8a231674ae3a2a7c9d10fad2cc5](https://github.com/inscripoem/isla/tree/17ab93335e77d8a231674ae3a2a7c9d10fad2cc5), based on main `d1b040bc`. Both remote CI runs passed. M6 approved its storage/evaluation consumer boundary on 2026-10-19; the PR remains open. The original increment baselines and test counts below are historical provenance. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline) for the current main integration and its verification.
 
-Revision: 2026-10-19.5. Owner: M5 — CHANG Xuben. Status: published in PR48; under review. Historical increment branch: `feat/m5-production-composition`, based on the published PR45
+Revision: 2026-10-20.2. Owner: M5 — CHANG Xuben. Status: PR48 core published; current-main follow-up local and under review. Historical increment branch: `feat/m5-production-composition`, based on the published PR45
 head `6bcfc2b`. Scope: FR-05/FR-06 production assembly, durable startup/controlled
 shutdown and explicit selected-history recovery over the existing M6 SQLite backend,
 the root Vite entry routing for the application socket and operator bootstrap, and
@@ -139,6 +139,35 @@ selection/reaction and the M4 live text source are still owner deliverables. M5
 owns the dynamic audio HTTP/routing and resource assembly; M2 is the browser
 consumer. `test/support/production-deployment.ts` is a test-only module used by
 the CLI suite; production source never imports it.
+
+## Receipts after the operation seal
+
+`settle()` first seals admission of new operations. Each later `handlePlayerMessage` call is refused before validation and increments `RuntimeMetrics.lateReceipts`. This counts incoming calls, including malformed or unrelated messages; it is not a count of verified playback completions. The counter is in memory only and disappears with the coordinator instance. No receipt event or delivery is written after the seal, no memory commit is made, and a refusal is not a storage failure.
+
+Production shutdown disposes the composition before draining it. A waiting output therefore remains unknown; a first completion receipt delivered after the seal cannot enter confirmed spoken history. Conversely, a previously confirmed output remains confirmed when a duplicate, unrelated or malformed message is refused. The counter supplies refusal visibility without attributing unvalidated messages to an output. This preserves a documented limit: the durable history cannot recover the contents of a post-seal receipt, and the counter itself does not establish acoustic playback.
+
+## Supported shutdown verification
+
+The process-level graceful-shutdown and two-process restart evidence is verified
+on briefcase/Linux x86_64 with Node.js 22.23.3. The supported tested trigger is
+SIGTERM sent to the directly spawned runtime PID (`node --import tsx`), with
+`shutdown_started`, awaited owned release, `shutdown_complete`, successful exit
+and SQLite reopen checked. SIGINT is implemented but is not independently
+established by these SIGTERM tests. The existing historical counts below retain
+their original revision and platform scope.
+
+On Windows, Node's [`subprocess.kill`](https://nodejs.org/docs/latest-v22.x/api/child_process.html#subprocesskillsignal)
+for SIGTERM/SIGINT kills the child forcefully; it does not demonstrate execution
+of the application's cooperative shutdown handler. M1's Windows/Node24 failures
+therefore remain a platform/trigger verification gap. Windows deployment needs a
+separately implemented and validated cooperative trigger before equivalent
+process-level shutdown/restart acceptance can be claimed. This follow-up adds no
+such trigger and does not skip or reinterpret the existing failing cases.
+
+The process helper currently maps a null exit code to -1 without returning the
+raw signal. Preserve M1's reported limitation: process exit alone is insufficient
+proof of graceful shutdown; lifecycle and release assertions are required. Raw
+signal reporting remains a separate harness follow-up.
 
 ## Evidence
 

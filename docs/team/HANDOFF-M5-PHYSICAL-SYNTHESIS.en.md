@@ -2,7 +2,7 @@
 
 Consumer-approved historical baseline: [PR48](https://github.com/inscripoem/isla/pull/48) at [17ab93335e77d8a231674ae3a2a7c9d10fad2cc5](https://github.com/inscripoem/isla/tree/17ab93335e77d8a231674ae3a2a7c9d10fad2cc5), based on main `d1b040bc`. Both remote CI runs passed. M6 approved its storage/evaluation consumer boundary on 2026-10-19; the PR remains open. The original increment baselines and test counts below are historical provenance. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline) for the current main integration and its verification.
 
-Revision: 2026-10-19.4. Status: published in PR48; under review.
+Revision: 2026-10-20.2. Status: PR48 core published; current-main follow-up local and under review.
 
 ## Scope and baseline
 
@@ -28,9 +28,14 @@ Stop can finish the logical wait while inference remains physically active. A su
 
 Application shutdown closes new construction, stops the transport, retires compositions/audio, drains admitted evidence and closes SQLite before awaiting owned release. Every shutdown phase is attempted. Transport, durable-drain and owned-release errors remain individually labelled; multiple phase failures are returned together. Cleanup runs once, and repeated or concurrent `stop()` calls retain the same failure instead of returning success. `state() === 'stopped'` describes logical application shutdown; successful completion of the `stop()` Promise establishes that owned release also completed.
 
-Creation failures retain the original error and any owned-release error. CLI listen failures also report a failed cleanup. Signal handlers are installed before server startup and before `listening` is published, so an immediate SIGTERM follows controlled shutdown. If shutdown begins during startup, readiness is not published afterward. `shutdown_complete` is emitted only after the owned release Promise resolves; a rejected release yields `shutdown_failed`.
+Creation failures retain the original error and any owned-release error. CLI listen failures also report a failed cleanup. Signal handlers are installed before server startup and before `listening` is published, so an immediate SIGTERM follows controlled shutdown on the verified Linux signal path. If shutdown begins during startup, readiness is not published afterward. `shutdown_complete` is emitted only after the owned release Promise resolves; a rejected release yields `shutdown_failed`.
 
 These boundaries preserve the earlier admitted-evidence drain: callbacks arriving after the write boundary is sealed cannot reopen SQLite. Provider exit does not imply acoustic silence, and a missing output receipt remains unknown.
+
+The process-level claims use Linux/Node22.23.3 and SIGTERM to the direct runtime
+PID. Windows `child.kill('SIGTERM')` forcibly terminates the process and cannot
+prove awaited release or graceful restart. The Windows trigger and raw-signal
+reporting gaps remain open; see [supported shutdown verification](HANDOFF-M5-PRODUCTION.en.md#supported-shutdown-verification).
 
 ## Verification
 

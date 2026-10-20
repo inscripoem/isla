@@ -5,6 +5,7 @@ import type {
   DecisionRequest,
   EventStorePort,
   InputSubmitMessage,
+  MemoryCommitPort,
   PerformanceCommand,
   PerformanceReceipt,
   PlayerPort,
@@ -20,6 +21,7 @@ import type {
 import {
   deliveryCommitAckSchema,
   performanceReceiptSchema,
+  playerMessageSchema,
   selectionResultSchema,
 } from '../../src/contracts'
 import {
@@ -30,6 +32,7 @@ import {
   type RuntimeCoordinatorDeps,
   type SessionProfileConfig,
 } from '../../src/runtime/coordinator'
+import { createEventStore, createHistoryQuery, createInMemoryBackend } from '../../src/storage'
 import { createCoordinatorRunner, createVirtualClock } from '../support/runner-factories'
 import * as correct from '../support/correct-ports'
 import { createGate } from '../support/context'
@@ -2219,5 +2222,205 @@ describe('M5 coordinator controlled shutdown (production)', () => {
     await coordinator.endpoint.handlePlayerMessage(malformed)
     expect(storeCalls).toBe(callsAfterSeal)
     expect(coordinator.metrics().storageFailure).toBe(false)
+  })
+
+  it('observes a valid completed receipt after settle without touching storage or a confirmed outcome', async () => {
+    const base = correct.createFixtureEventStore()
+    let storeCalls = 0
+    const store: EventStorePort = {
+      append: async (event) => {
+        storeCalls += 1
+        return base.append(event)
+      },
+      commitDeliveryWithEvent: (delivery, event) => {
+        storeCalls += 1
+        return base.commitDeliveryWithEvent(delivery, event)
+      },
+      readSession: (sessionId) => base.readSession(sessionId),
+      exportJsonl: (sessionId) => base.exportJsonl(sessionId),
+    }
+    const coordinator = buildCoordinator({ sessionId: FIXTURE_SESSION_ID, store })
+    await coordinator.endpoint.control(
+      {
+        protocolVersion: '0.2',
+        kind: 'control.resume',
+        messageId: 'm-resume-late-receipt',
+        sessionId: FIXTURE_SESSION_ID,
+        epoch: 0,
+        payload: { requestId: 'r-resume-late-receipt' },
+      },
+      fixtureOperatorContext(),
+    )
+    await coordinator.endpoint.submitInput(
+      {
+        protocolVersion: '0.2',
+        kind: 'input.submit',
+        messageId: 'm-input-late-receipt',
+        sessionId: FIXTURE_SESSION_ID,
+        epoch: 1,
+        payload: { source: 'local-audience', text: 'a turn that confirms an output' },
+      },
+      fixtureViewerContext(),
+    )
+    const turn = await coordinator.runTurn()
+    expect(turn.status).toBe('completed')
+    expect(coordinator.outputConfirmation()).toBe('confirmed')
+    expect(coordinator.deliveries()).toHaveLength(1)
+    const committed = coordinator.deliveries()[0]!
+    expect(committed.outputId).not.toBeNull()
+
+    coordinator.dispose()
+    await coordinator.settle()
+    expect(coordinator.metrics().storageFailure).toBe(false)
+    expect(coordinator.lifecycle()).toBe('stopped')
+    const storeCallsAfterSeal = storeCalls
+    const eventsBefore = coordinator.events().length
+    const sessionEventsBefore = (await base.readSession(FIXTURE_SESSION_ID)).length
+
+    // A controlled in-process consumer (the player side) delivers a valid
+    // completed receipt for the already-confirmed output after the seal, then an
+    // unrelated receipt and a malformed envelope. Each is refused before
+    // envelope or payload inspection and observed as an incoming call only.
+    const receipt = (messageId: string, outputId: string) => ({
+      protocolVersion: '0.2' as const,
+      messageId,
+      sessionId: FIXTURE_SESSION_ID,
+      epoch: coordinator.epoch(),
+      kind: 'performance.receipt' as const,
+      payload: fixturePerformanceReceipt({
+        receiptId: `receipt-late-${messageId}`,
+        outputId,
+        sessionId: FIXTURE_SESSION_ID,
+        epoch: coordinator.epoch(),
+        turnId: committed.turnId,
+        segmentId: committed.segmentId,
+        modality: committed.modality,
+        stage: 'completed',
+      }),
+    })
+    await coordinator.endpoint.handlePlayerMessage(receipt('m-late-valid', committed.outputId!))
+    expect(coordinator.metrics().lateReceipts).toBe(1)
+    await coordinator.endpoint.handlePlayerMessage(receipt('m-late-unrelated', 'output-unrelated'))
+    expect(coordinator.metrics().lateReceipts).toBe(2)
+    const malformed = { kind: 'performance.receipt' } as unknown as Parameters<
+      typeof coordinator.endpoint.handlePlayerMessage
+    >[0]
+    await coordinator.endpoint.handlePlayerMessage(malformed)
+    expect(coordinator.metrics().lateReceipts).toBe(3)
+
+    // Nothing was parsed, attributed, persisted or degraded: the confirmed
+    // outcome and every recorded event stay exactly as sealed.
+    expect(storeCalls).toBe(storeCallsAfterSeal)
+    expect(coordinator.metrics().storageFailure).toBe(false)
+    expect(coordinator.outputConfirmation()).toBe('confirmed')
+    expect(coordinator.deliveries()).toHaveLength(1)
+    expect(coordinator.events()).toHaveLength(eventsBefore)
+    expect((await base.readSession(FIXTURE_SESSION_ID)).length).toBe(sessionEventsBefore)
+  })
+
+  it('refuses the withheld first completion receipt delivered after the seal and keeps history empty', async () => {
+    // The real M6 event store and history query: a refused late receipt must
+    // leave confirmed spoken history empty rather than fabricate a record.
+    const backend = createInMemoryBackend()
+    const base = createEventStore(backend)
+    const history = createHistoryQuery(backend)
+    let storeCalls = 0
+    const store: EventStorePort = {
+      append: async (event) => {
+        storeCalls += 1
+        return base.append(event)
+      },
+      commitDeliveryWithEvent: (delivery, event) => {
+        storeCalls += 1
+        return base.commitDeliveryWithEvent(delivery, event)
+      },
+      readSession: (sessionId) => base.readSession(sessionId),
+      exportJsonl: (sessionId) => base.exportJsonl(sessionId),
+    }
+    const baseCommit = correct.createFixtureMemoryCommit()
+    let memoryCommitCalls = 0
+    const commit: MemoryCommitPort = {
+      commit: async (delivery) => {
+        memoryCommitCalls += 1
+        return baseCommit.commit(delivery)
+      },
+    }
+    const player = createAcceptedReceiptPlayer()
+    const coordinator = buildCoordinator({ sessionId: FIXTURE_SESSION_ID, store, commit, player })
+    await coordinator.endpoint.control(
+      {
+        protocolVersion: '0.2',
+        kind: 'control.resume',
+        messageId: 'm-resume-first-late',
+        sessionId: FIXTURE_SESSION_ID,
+        epoch: 0,
+        payload: { requestId: 'r-resume-first-late' },
+      },
+      fixtureOperatorContext(),
+    )
+    await coordinator.endpoint.submitInput(
+      {
+        protocolVersion: '0.2',
+        kind: 'input.submit',
+        messageId: 'm-input-first-late',
+        sessionId: FIXTURE_SESSION_ID,
+        epoch: 1,
+        payload: { source: 'local-audience', text: 'a turn whose completion is withheld' },
+      },
+      fixtureViewerContext(),
+    )
+    const turn = coordinator.runTurn()
+    await waitUntil(() => player.commands().length > 0)
+    // The real command identity of the registered output whose first completion
+    // receipt the controlled in-process consumer still holds.
+    const command = player.commands()[0]!
+
+    // Disposal revokes the session and settle seals the coordinator while that
+    // first completion has never been delivered: the output stays unresolved.
+    coordinator.dispose()
+    const settling = coordinator.settle()
+    await turn
+    await settling
+    expect(coordinator.outputConfirmation()).toBe('unknown')
+    expect(coordinator.deliveries()).toHaveLength(0)
+    expect(await history.confirmedHistory(FIXTURE_SESSION_ID)).toEqual([])
+    const storeCallsAfterSeal = storeCalls
+    const memoryCommitsAfterSeal = memoryCommitCalls
+    const eventsBefore = coordinator.events().length
+    const sessionEventsBefore = (await base.readSession(FIXTURE_SESSION_ID)).length
+
+    // The withheld completion arrives only now, schema-valid and under the real
+    // command identity it was registered with.
+    const envelope = {
+      protocolVersion: '0.2' as const,
+      messageId: 'm-first-late',
+      sessionId: command.sessionId,
+      epoch: command.epoch,
+      kind: 'performance.receipt' as const,
+      payload: fixturePerformanceReceipt({
+        receiptId: 'receipt-first-late',
+        outputId: command.outputId,
+        sessionId: command.sessionId,
+        epoch: command.epoch,
+        turnId: command.turnId,
+        segmentId: command.segmentId,
+        modality: 'audio',
+        stage: 'completed',
+      }),
+    }
+    expect(playerMessageSchema.safeParse(envelope).success).toBe(true)
+
+    await coordinator.endpoint.handlePlayerMessage(envelope)
+    expect(coordinator.metrics().lateReceipts).toBe(1)
+    // The refused call is observable only in memory: no storage write, no
+    // memory commit, no promotion of the unknown output, no spoken history.
+    expect(coordinator.metrics().storageFailure).toBe(false)
+    expect(storeCalls).toBe(storeCallsAfterSeal)
+    expect(memoryCommitCalls).toBe(memoryCommitsAfterSeal)
+    expect(coordinator.outputConfirmation()).toBe('unknown')
+    expect(coordinator.deliveries()).toHaveLength(0)
+    expect(coordinator.events()).toHaveLength(eventsBefore)
+    expect((await base.readSession(FIXTURE_SESSION_ID)).length).toBe(sessionEventsBefore)
+    expect(await history.confirmedHistory(FIXTURE_SESSION_ID)).toEqual([])
   })
 })

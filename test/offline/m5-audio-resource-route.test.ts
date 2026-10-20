@@ -269,6 +269,69 @@ function createGatedAudioResources(registry: AudioResourceRegistry): GatedAudioR
   }
 }
 
+interface HeldResponseEnd {
+  /**
+   * Defers the real end of the response for the first request carrying the
+   * held reference; every other request is left untouched.
+   */
+  attach(req: IncomingMessage, res: ServerResponse): void
+  /** True once the route has attempted to end the held response. */
+  endRequested(): boolean
+  /** Real `finish` events observed on the held response; zero while held. */
+  finishes(): number
+  /** Applies the captured end so the response can finish. */
+  release(): void
+}
+
+/**
+ * Test-only unfinished-response boundary.
+ *
+ * The route handles a real request on the real `ServerResponse` and attempts
+ * the final `end()` with the complete payload; that call is captured and
+ * applied only when the test releases it, so the response is deterministically
+ * unfinished. Socket back-pressure (a paused client and a payload larger than
+ * the platform's buffers) is deliberately not used: whether the server can
+ * finish such a response depends on platform buffering, so the server may
+ * already have finished before the client pauses.
+ */
+function createHeldResponseEnd(ref: string): HeldResponseEnd {
+  let attached = false
+  let endRequested = false
+  let finishes = 0
+  let applyEnd: (() => void) | null = null
+  return {
+    attach(req, res) {
+      if (attached) return
+      let url: URL
+      try {
+        url = new URL(req.url ?? '', 'http://localhost')
+      } catch {
+        return
+      }
+      if (url.pathname !== AUDIO_PATH || url.searchParams.get('ref') !== ref) return
+      attached = true
+      res.on('finish', () => {
+        finishes += 1
+      })
+      const originalEnd = res.end.bind(res) as (...args: unknown[]) => ServerResponse
+      res.end = ((...args: unknown[]) => {
+        endRequested = true
+        applyEnd = () => {
+          originalEnd(...args)
+        }
+        return res
+      }) as unknown as typeof res.end
+    },
+    endRequested: () => endRequested,
+    finishes: () => finishes,
+    release() {
+      const apply = applyEnd
+      applyEnd = null
+      if (apply !== null) apply()
+    },
+  }
+}
+
 interface DirectRoute {
   readonly route: AudioResourceRoute
   readonly port: number
@@ -279,6 +342,8 @@ async function startDirectRoute(options: {
   source: AudioResourceSource
   liveIdentity: () => AudioRouteIdentity
   maxConcurrent?: number
+  /** Test-only response boundary; see `createHeldResponseEnd`. */
+  holdResponseEnd?: (req: IncomingMessage, res: ServerResponse) => void
 }): Promise<DirectRoute> {
   const route = createAudioResourceRoute({
     source: options.source,
@@ -288,6 +353,7 @@ async function startDirectRoute(options: {
     ...(options.maxConcurrent !== undefined ? { maxConcurrent: options.maxConcurrent } : {}),
   })
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+    options.holdResponseEnd?.(req, res)
     if (!route.handleHttp(req, res)) {
       res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' })
       res.end('{"ok":false,"error":{"code":"no_route"}}')
@@ -487,10 +553,13 @@ describe('dynamic audio route mechanics', () => {
   })
 
   it('holds the lease and the serving slot until the response finishes', async () => {
-    // 16 MiB cannot be flushed to a client that stops reading: the loopback
-    // socket buffers (a few MiB at most on default settings) fill, so `finish`
-    // waits and neither the lease nor the slot may be released early.
-    const bytes = new Uint8Array(16 * 1024 * 1024)
+    // The response end is deferred by the test-only boundary in
+    // `createHeldResponseEnd`: the route supplies the complete payload and
+    // attempts the end, while the response stays deterministically unfinished.
+    const bytes = new Uint8Array(4096)
+    for (let index = 0; index < bytes.length; index += 1) bytes[index] = index % 251
+    const heldRef = 'audio://route/held'
+    const heldEnd = createHeldResponseEnd(heldRef)
     const deferred = createDeferredLease(bytes)
     let resolveCalls = 0
     const direct = await startDirectRoute({
@@ -498,38 +567,58 @@ describe('dynamic audio route mechanics', () => {
         admission: () => null,
         resolve: () => {
           resolveCalls += 1
-          return deferred.promise
+          if (resolveCalls === 1) return deferred.promise
+          return Promise.resolve({ blob: toBlob(bytes, 'audio/wav'), release: () => {} })
         },
       },
       liveIdentity: () => ({ sessionId: LIVE_SESSION, epoch: 1, servable: true }),
       maxConcurrent: 1,
+      holdResponseEnd: heldEnd.attach,
     })
     try {
-      const req = request({
-        host: '127.0.0.1',
-        port: direct.port,
-        path: `${AUDIO_PATH}?ref=${encodeURIComponent('audio://route/ref')}`,
-        method: 'POST',
-        headers: { origin: ALLOWED_ORIGIN, [AUDIO_FETCH_HEADER]: '1' },
-      })
-      req.on('error', () => {})
-      req.end()
+      const pending = audioRequest(direct.port, heldRef)
+      // If the test fails before the release, teardown destroys the held
+      // connection; keep that rejection from surfacing as an unhandled error
+      // beside the actual assertion failure.
+      void pending.catch(() => {})
       await until(() => resolveCalls, (calls) => calls === 1)
       deferred.settle()
-      const res = await new Promise<IncomingMessage>((resolve) => req.once('response', resolve))
-      res.pause()
-      await delay(50)
+      await until(() => heldEnd.endRequested(), (requested) => requested)
 
+      // The route supplied the complete payload and attempted the end, but the
+      // real response has not finished: neither the lease nor the serving slot
+      // may be released.
+      expect(heldEnd.finishes()).toBe(0)
       expect(deferred.releaseCount()).toBe(0)
+      expect(direct.route.pendingCount()).toBe(1)
+
+      // The occupied slot refuses further work while the response is unfinished,
+      // without disturbing the held serve.
       const busy = await audioRequest(direct.port, 'audio://route/other')
       expect(busy.status).toBe(429)
       expect(errorCodeOf(busy)).toBe('busy')
+      expect(resolveCalls).toBe(1)
+      expect(heldEnd.finishes()).toBe(0)
+      expect(deferred.releaseCount()).toBe(0)
+      expect(direct.route.pendingCount()).toBe(1)
 
-      const ended = new Promise<void>((resolve) => res.once('end', () => resolve()))
-      res.resume()
-      await ended
+      // Releasing the deferred end finishes the real response: the client
+      // receives every byte, the lease is released exactly once and capacity
+      // is restored.
+      heldEnd.release()
+      const served = await pending
+      expect(served.status).toBe(200)
+      expect(served.headers['content-type']).toBe('audio/wav')
+      expect(served.headers['content-length']).toBe(String(bytes.byteLength))
+      expect(served.bytes.equals(Buffer.from(bytes))).toBe(true)
+      await until(() => heldEnd.finishes(), (count) => count === 1)
       await until(() => deferred.releaseCount(), (count) => count === 1)
       await until(() => direct.route.pendingCount(), (count) => count === 0)
+
+      const after = await audioRequest(direct.port, 'audio://route/after')
+      expect(after.status).toBe(200)
+      expect(after.bytes.equals(Buffer.from(bytes))).toBe(true)
+      expect(deferred.releaseCount()).toBe(1)
     } finally {
       await direct.close()
     }
