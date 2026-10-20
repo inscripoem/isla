@@ -191,3 +191,51 @@ Once the id convention is agreed (PR #32), the rows are added to `docs/req/requi
 - Mutations: restoring `failureRate = 0` turned two tests red; removing the blank-not-run check turned one test red; both restored.
 - No new case id was assigned; the zero-attempt/not-run test still needs an M5 allocation before it can be
   registered as a case.
+
+---
+
+## Slice 9 — R1 recorded-run command (2026-10-19)
+
+- **Added** `src/evaluation/recorded-run.ts` — a strict `schemaVersion: 1` recorded-run parser. It rejects
+  unknown fields and malformed shapes, and it recomputes `summary` with `summarise(records)` rather than
+  trusting an embedded total.
+- **Added** `src/evaluation/report-command.ts` — `pnpm evaluation:report`; reads a recorded run, validates
+  it through the parser and the existing report rules, and writes through `writeEvaluationReport`. Refused
+  input writes nothing and preserves an existing output.
+- **Added** `test/offline/m6-02-recorded-run.test.ts` — 14 deterministic cases covering the valid write and valid not-run entry,
+  malformed JSON, wrong schema version, embedded-summary rejection, unknown nested fields,
+  fixture/injected-clock refusal, sample mismatch, empty attempts, blank identifiers/reasons, unknown variant,
+  explicit-output and duplicate-option errors, usage errors and output preservation.
+- **Changed** `package.json` — `evaluation:report` script and the new suite in `test:m6`.
+- **No** provider, runtime composition, evaluation table or case ID. The R1 case remains pending M5
+  allocation. Code commits: `252dd7d`, `3512135` and `8005ec6`.
+
+### Verification (slice 9)
+
+- `test:m6` **172 / 12**; composition **12 / 1**; readiness **42 / 3**; trace **41 / 1**; full **949 / 53**;
+  `pnpm verify` exit 0.
+- Mutations: removing the schema-version check, removing the blank-identifier check and removing the CLI
+  validation each turned the relevant tests red; all restored.
+
+---
+
+## Frozen R1 recorded-run v1 shape (2026-10-19)
+
+R1's input shape is frozen at `schemaVersion: 1`. R2 and S6 must emit exactly this shape; any addition or
+semantic change requires `schemaVersion: 2` and a new review.
+
+Top-level keys are strict:
+
+- `schemaVersion: 1`
+- `meta`: `runId`, `generatedAt`
+- `variants[]`: `id`, `kind` (`rules` or `model`), `combined`
+- `conditions`: the existing `FixedConditions` fields
+- `records[]`: the existing `AttemptRecord` fields, including timing and usage
+- `notRun[]`: `variantId`, `caseId`, `reason`
+
+There is no trusted `summary`; R1 recomputes it with `summarise(records)`. Unknown fields, blank identifiers
+and blank not-run reasons are refused. The CLI requires an explicit `--output`; a refused run writes
+nothing and preserves an existing output. The repository evaluation table is not created by R1 tests.
+
+The R1 module now exports the single `RecordedRunV1` interface (commit `c66e018`); R2 imports that type instead of redefining it. The
+R1 case allocation is **deferred debt**: no case ID is claimed, and no case/trace row has been invented.
