@@ -65,6 +65,11 @@ export interface DeliveryRecallRequest {
   /** Who is listening; absent means anonymous, and therefore never durable. */
   audience?: AudienceIdentity
   /**
+   * Sessions explicitly selected by M5's validated archive reconstruction.
+   * These sources are authorized by selection, not by an inferred audience.
+   */
+  explicitlySelectedSessionIds?: readonly string[]
+  /**
    * Audience that owns each candidate's memory, when the candidate came from a
    * long-lived store. Absent means the candidate has no recorded owner, which
    * is treated as no match.
@@ -100,11 +105,16 @@ export interface DeliveryRecallPort {
  *
  * A candidate from ANOTHER session is a different matter, and this is where the
  * guard earns its keep. Such a candidate was produced for some earlier listener,
- * possibly a different person. A cross-session recall therefore requires BOTH:
+ * possibly a different person. A cross-session recall therefore requires either
+ * explicit M5 archive selection or BOTH:
  *   1. the current identity is durable (an anonymous or per-session temporary id
  *      never qualifies - M5 ruled the latter does not make memory durable); and
  *   2. the candidate is `audience-bound`, which assembly derived from that same
  *      identity when the candidate was admitted.
+ *
+ * Explicit selection is checked first and is intentionally independent of
+ * audience identity: M5 has already authorized those archive sessions. It does
+ * not authorize any session outside the validated selection.
  *
  * When the source records an OWNER for the candidate, the ids must also match
  * exactly. That check is skipped when no owner is recorded, because an absent
@@ -119,6 +129,7 @@ export interface DeliveryRecallPort {
  */
 export function mayRecallCandidate(request: DeliveryRecallRequest, turn: AssembledTurn): boolean {
   if (turn.sessionId === request.sessionId) return true
+  if (request.explicitlySelectedSessionIds?.includes(turn.sessionId)) return true
   if (!isDurableAudience(request.audience)) return false
   if (turn.scope !== 'audience-bound') return false
   const owner = request.ownerAudienceIdOf?.(turn)

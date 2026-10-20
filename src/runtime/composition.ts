@@ -16,6 +16,7 @@ import type { DialogueTextSource } from '../dialogue/dialogue-port'
 import { createDeliveryMemoryStore } from '../dialogue/memory-commit'
 import type { DeliveryMemoryStore } from '../dialogue/memory-commit'
 import type { PersonaRecallPort } from '../dialogue/persona-recall'
+import type { DeliveryRecallPort } from '../dialogue/memory-recall'
 import { createFixedSynthesis } from '../performance/fixed-synthesis'
 import type { FixedAudioEntry } from '../performance/fixed-synthesis'
 import type { CycleTimings, RuntimeCoordinator, SessionProfileConfig } from './coordinator'
@@ -83,6 +84,8 @@ export interface DialogueCompositionDeps {
   /** Provider substitute for dialogue text; M4-02 supplies a live one. */
   textSource?: DialogueTextSource
   personaRecall?: PersonaRecallPort
+  deliveryRecall?: DeliveryRecallPort
+  explicitlySelectedSessionIds?: readonly string[]
 }
 
 export interface DialogueComposition {
@@ -99,6 +102,10 @@ export function createDialogueComposition(deps: DialogueCompositionDeps): Dialog
     memory,
     ...(deps.textSource !== undefined ? { textSource: deps.textSource } : {}),
     ...(deps.personaRecall !== undefined ? { personaRecall: deps.personaRecall } : {}),
+    ...(deps.deliveryRecall !== undefined ? { deliveryRecall: deps.deliveryRecall } : {}),
+    ...(deps.explicitlySelectedSessionIds !== undefined
+      ? { explicitlySelectedSessionIds: deps.explicitlySelectedSessionIds }
+      : {}),
   })
   return { dialogue, memory }
 }
@@ -116,6 +123,7 @@ export interface ReconstructedDialogueCompositionDeps {
   selection: ArchiveSelectionConfig
   textSource?: DialogueTextSource
   personaRecall?: PersonaRecallPort
+  deliveryRecall?: DeliveryRecallPort
 }
 
 export interface ReconstructedDialogueFromSelectionDeps {
@@ -123,6 +131,7 @@ export interface ReconstructedDialogueFromSelectionDeps {
   history: HistoryQueryPort
   textSource?: DialogueTextSource
   personaRecall?: PersonaRecallPort
+  deliveryRecall?: DeliveryRecallPort
 }
 
 export interface ReconstructedDialogueComposition extends DialogueComposition {
@@ -149,6 +158,8 @@ export function createReconstructedDialogueFromSelection(
     history: composedHistory,
     ...(deps.textSource !== undefined ? { textSource: deps.textSource } : {}),
     ...(deps.personaRecall !== undefined ? { personaRecall: deps.personaRecall } : {}),
+    ...(deps.deliveryRecall !== undefined ? { deliveryRecall: deps.deliveryRecall } : {}),
+    explicitlySelectedSessionIds: selection.sources.map((source) => source.sessionId),
   })
   return { ...composed, selection, history: composedHistory }
 }
@@ -201,6 +212,7 @@ export interface ReconstructedRuntimeDeps {
   reconstruction: ArchiveSelectionConfig
   textSource?: DialogueTextSource
   personaRecall?: PersonaRecallPort
+  deliveryRecall?: DeliveryRecallPort
   /** Any remaining session-profile fields (for example voice). Character identity is always bound to the selection. */
   profile?: Partial<SessionProfileConfig>
   timings?: Partial<CycleTimings>
@@ -245,6 +257,7 @@ export async function createReconstructedRuntimeComposition(
     history: deps.history,
     ...(deps.textSource !== undefined ? { textSource: deps.textSource } : {}),
     ...(deps.personaRecall !== undefined ? { personaRecall: deps.personaRecall } : {}),
+    ...(deps.deliveryRecall !== undefined ? { deliveryRecall: deps.deliveryRecall } : {}),
   })
 
   const composition = createRuntimeComposition({

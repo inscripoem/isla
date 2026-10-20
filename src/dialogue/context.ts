@@ -324,6 +324,11 @@ export interface AssembleDialogueContextInput {
    * stage refuse a cross-session recall.
    */
   audience?: AudienceIdentity
+  /**
+   * Archive sessions explicitly authorized by M5's validated reconstruction.
+   * This does not grant access to any session outside the selection.
+   */
+  explicitlySelectedSessionIds?: readonly string[]
 }
 
 /**
@@ -591,6 +596,7 @@ export async function assembleDialogueContext(
           sessionId: request.sessionId,
           scope: scopeFor('utterance', input.audience).scope,
           audience: input.audience,
+          explicitlySelectedSessionIds: input.explicitlySelectedSessionIds,
         })
 
   const recalledTurns: RecalledTurn[] = []

@@ -99,6 +99,8 @@ export interface DialoguePortOptions {
    * model call; see ./memory-recall. Omitted means no delivery recall.
    */
   deliveryRecall?: DeliveryRecallPort
+  /** Validated M5 archive sessions authorized for cross-session recall. */
+  explicitlySelectedSessionIds?: readonly string[]
   /**
    * Who is listening (./audience). Omitted means anonymous.
    *
@@ -194,7 +196,10 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
         ...(options.memory === undefined ? {} : { memory: options.memory }),
         ...(options.personaRecall === undefined ? {} : { personaRecall: options.personaRecall }),
         ...(options.deliveryRecall === undefined ? {} : { deliveryRecall: options.deliveryRecall }),
-      ...(options.audience === undefined ? {} : { audience: options.audience }),
+        ...(options.audience === undefined ? {} : { audience: options.audience }),
+        ...(options.explicitlySelectedSessionIds === undefined
+          ? {}
+          : { explicitlySelectedSessionIds: options.explicitlySelectedSessionIds }),
       })
 
       const candidates = (await source.compose(view, maxSegments)).slice(0, maxSegments)

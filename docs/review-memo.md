@@ -73,3 +73,49 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
   `list_mcp_resources` cannot establish the absence of servers or tools.
 - Fixes at `3c52788`: the MCP claim is scoped with the server/tool inventory recorded **unknown**, §3.5
   answers the ADR and adoption questions, §4 separates code from enforcement, `INV-15` added.
+
+## M6 self-review — M6-01 coordinator/SQLite recovery test (on `m6-01-sqlite-app-recovery`)
+
+- Date: 2026-10-19 · Reviewer: M6 (self) · Verdict: **OK for handoff with recorded debt**
+- Spec alignment: covers M5's completed/interrupted/earlier-completed/empty matrix, SQLite close/reopen, preserved identities and evidence. Storage reopen is kept separate from application/process restart.
+- Architecture alignment: M5 `createCoordinatorContractRunner` with explicit `RunnerDeps`; real SQLite event store/history/replay; controlled non-storage peers. The in-process projection is supplied but not consumed by the coordinator runner, so projection progress is not verified here; C-66 remains separate. No production code changed.
+- Code/test quality: focused **3/3**, `test:m6` **99/7**, readiness **42/3**, trace **41/1**, full **812/47**, `pnpm verify` exit 0; mutation removing the `fully-delivered` filter turned two tests red and was restored; `git diff --check` clean.
+- Operational metadata: branch `m6-01-sqlite-app-recovery`, base `main` `abb847c`; PR #47; M5 approved `a4af5e2`; the resolved merge head is pending M5 confirmation. C-68 is branch-local and not on `main`.
+- Security/efficiency: temporary SQLite files only; no credentials, network or live provider.
+- Recorded debt: AI-use `commits` remains empty; C-68 is M5-approved at `a4af5e2`; C-65/C-66/C-67 remain separate slices; C-48 traceability and the projection-scope fix remain separate. This test does not verify projection progress.
+- Result: C-68 registered; FR-06, trace and INV-12 linked; #25 review requested with exact revision and evidence.
+
+## M5 review — M6-01 coordinator/SQLite recovery test (on `m6-01-sqlite-app-recovery`)
+
+- Date: 2026-10-19 · Reviewer: M5 (`inscripoem`) · Verdict: **APPROVED** at `a4af5e2`
+- Scope: test-only C-68 storage-reopen proof. M5 confirmed the coordinator writes through the SQLite event store and fresh real history/recovery/replay ports read the reopened database; completed, interrupted, earlier-completed-segment and empty-history cases pass; identities, classifications and event evidence are preserved.
+- Traceability: C-68 linked from FR-06 and INV-12; the suite is in `test:m6`.
+- Independent verification: `pnpm verify` **812/47**, `test:m6` **99/7**, actual-range G6 passed on the exact head.
+- Non-blocking clarification: the in-process projection is supplied but not consumed by `createCoordinatorContractRunner`; C-66 remains separate.
+- Integration: main moved to `5dd5e79`; the merge conflict is confined to `docs/ai-use-log.yaml`, with both entry sets preserved. The resolved head requires M5 confirmation because approval covers `a4af5e2`.
+- Limits: controlled-peer SQLite reopen only; not process-crash, live-provider, acoustic or S6 evidence.
+
+## M6 self-review — M6-02 evaluation bench (PR #40, fixes applied)
+
+- Date: 2026-10-19 · Reviewer: M6 (self) · Verdict: **fixes applied; M5 re-review pending**
+- Scope: review fixes in `b2a6a56`, above `9e0bf81`, on `m6-02-bench`. No rebase and no force-push.
+- Fixed: zero-attempt variants now report an unknown failure rate (`—`), not `0.0%`; blank not-run reasons are refused; INV-16 appears in both trace tables; `ATTEMPT_OUTCOMES` is no longer an external export; ADR-007/Delta-007 and the PR evidence are reconciled.
+- Verification: focused bench suites **56 / 3**; `test:m6` **158 / 11**, composition **12 / 1**, readiness **42 / 3**, trace **41 / 1**, full **935 / 52**, `pnpm verify` exit 0 at the fix commit. Mutations: restoring `failureRate = 0` and removing the blank not-run reason check each turned the relevant tests red; both restored.
+- Limits: no real provider, no evaluation table, G4 not run, no S6 claim. The zero-attempt/not-run regression is not yet registered as a case; M5 allocation is required. Branch protection remains absent.
+- M5 approval at `0196c35` does not cover the fix head; re-review is requested.
+
+## M6 self-review — M6-02 R1 recorded-run command
+
+- Date: 2026-10-19 · Reviewer: M6 (self) · Verdict: **implementation complete; M5 review pending**
+- Scope: `recorded-run.ts`, `report-command.ts`, the `evaluation:report` package script, the new R1 test and
+  Delta/verification notes; code commits `252dd7d`, `3512135` and `8005ec6`. No provider, runtime composition or evaluation table.
+- Contract: versioned schema; unknown fields and blank identifiers rejected; no trusted summary; report-level
+  refusals preserved; explicit output; duplicate options rejected; atomic writer; refused input writes nothing.
+- Verification: `test:m6` **172/12**, composition **12/1**, readiness **42/3**, trace **41/1**, full
+  **949/53**, `pnpm verify` exit 0. Mutations: schema-version, blank-identifier and CLI validation removals
+  each turned tests red; restored.
+- Traceability: NFR-01/NFR-04, INV-16, ADR-007/Delta-007, C-52…C-55. R1 has **no case ID yet**; M5 allocation
+  is required. No new ID was self-assigned.
+- Schema freeze: R1 `schemaVersion: 1` shape is frozen in Delta-007; R2/S6 must emit exactly that shape, and a change requires version 2. R1 exports the shared `RecordedRunV1` type (commit `c66e018`); R2 imports it.
+- Case allocation: **deferred debt**; no ID claimed and no case/trace row added.
+- Limits: no real provider run, no `evaluation-table.md`, G4 not run, no quality/latency/cost claim.

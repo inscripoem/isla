@@ -1,7 +1,7 @@
 # M4-01 dialogue handoff
 
-Revision: 2026-10-17.1. Owner: M4 — lowen. Status: under review.
-Base: PR23 was squash-merged into main as `a28d76f`. This revision sits on top of the PR30 candidate `7297da4`, which already contains the M4 compatibility increment; it adds only the M4-owned follow-ups — an ordering-agreement guard against the shared helper, truthful `confirmedEventRefs` wording, and dual-environment verification. It is deliberately held back until PR30 lands, so that the eventual diff against main is exactly this increment. The standalone PR23 approval does not approve the contract change.
+Revision: 2026-10-20.1. Owner: M4 — lowen. Status: under review.
+Base: PR23 was squash-merged into main as `a28d76f`. This revision records the M4-owned follow-ups — the ordering-agreement guard, truthful `confirmedEventRefs` wording, dual-environment verification, and the selected-archive recall authorization boundary. The standalone PR23 approval does not approve the contract change.
 
 ## Implemented behavior
 
@@ -43,6 +43,8 @@ Import `createDialoguePort` and `DialoguePortOptions` from `src/dialogue/dialogu
 | `history` | Durable history source (M6). When supplied it is **authoritative** and defines the record set. |
 | `memory` | Local record source, offered to `MemoryEntrySource`. Used only when no durable history was supplied; persona attribution still comes from each record's persisted fields, so this side cannot fill in a missing component. |
 | `personaRecall` | `PersonaRecallPort`. Omitted resolves to `createDisabledPersonaRecall()`. |
+| `deliveryRecall` | Optional keyword delivery-memory recall. Omitted means no older-turn recall. |
+| `explicitlySelectedSessionIds` | M5-provided validated archive sessions. Selected archives may be recalled without an audience identity; unselected sessions remain ineligible. |
 | `maxSegments` | Upper bound on emitted segments; clamped to `MAX_DIALOGUE_SEGMENTS` (2). |
 
 **Composition rule** (settled in issue #22 after M5's correction). The durable source is authoritative and defines which records exist. The local store never substitutes for it while it is available: a local view holds only what this process has seen, so choosing it merely because it is non-empty would let one newly committed delivery replace reconstructed history. The local store becomes the record source only when no durable source was supplied, which is reported through `historySource` and raised as a warning. Attribution is no longer a local concern: it travels on each persisted record's own `personaProfileId`/`personaProfileVersion`, so the local store is not consulted as an attribution map and cannot fill in a missing persisted component. The two sources are never merged into one list, so a delivery held by both cannot be counted twice.
@@ -66,6 +68,8 @@ Authoring and policy constants, all exported:
 | `ITEM_PREFIX`, `INTERRUPTED_SPEECH_MARKER` | `'- '`, `' [cut off mid-sentence]'` | Rendered form, and therefore part of the charged length. |
 
 The bible is linked by `sourceDocument: 'prompts/dialogue/character.md'` and `sourceVersion: '1'`; the runtime profile is `profileId: 'Elleya'`, `version: '2'`, exposed as `personaVersionKey('Elleya', '2')` → `["Elleya","2"]`. The key is the JSON pair, not an `id@version` join, so a delimiter inside an id or version cannot make two personas collide. `src/dialogue/` owns the bible and the standing persona; they do not enter M6 storage, and there is no second writable source.
+
+Delivery recall distinguishes M5's explicit archive selection from automatic audience-based retrieval. A validated selected archive is authorized by its session id and does not require an invented audience identity; automatic cross-session recall still requires a durable audience and matching scope. The selected-session list is passed only from the validated reconstruction composition, and it does not authorize unselected sessions.
 
 `standingFactsFromBible` reads only blockquote lines (`/^\s*>/`) carrying the `[S]` marker, so the marker legend table never counts as content. `BIBLE_MARKERS` defines `[S]` standing, `[R]` recall candidate, `[H]` human-only. A drift guard in the test suite compares the bible's `[S]` lines against `standingFacts` item by item. `PERSONA_PLACEHOLDER_MARKERS` keeps unfinished text from shipping as persona; its CJK entry is data that detects an author who was writing in Chinese, and is deliberately not translated.
 

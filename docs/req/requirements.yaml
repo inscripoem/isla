@@ -98,7 +98,7 @@ requirements:
         cases: [C-29, C-30, C-31]
       - kind: deterministic
         description: On restart only confirmed history is restored; unresolved records remain unknown with their outcome and are never replayed.
-        cases: [C-32, C-33]
+        cases: [C-32, C-33, C-68]
 
   - id: NFR-01
     title: Responsiveness and synchronization
@@ -109,6 +109,9 @@ requirements:
     source: docs/team/REQUIREMENTS.en.md
     status: pending-measurement
     acceptance:
+      - kind: deterministic
+        description: Executed attempts are accounted for including failures and cancellations; a not-run result is not an executed attempt, and an evaluation report rejects a fixture text source.
+        cases: [C-52, C-54, C-55]
       - kind: pending-metric
         description: p95 input-to-first-audible-output and Stop-to-silence thresholds require a reviewed measured baseline.
         cases: []
@@ -154,6 +157,9 @@ requirements:
       - kind: deterministic
         description: At most one response-provider attempt per decision opportunity; unchanged input causes no polling.
         cases: [C-15]
+      - kind: deterministic
+        description: Failed and cancelled attempts remain in the aggregate, and incomplete usage remains unknown rather than becoming a partial total.
+        cases: [C-52, C-53]
       - kind: pending-metric
         description: Total token and cost caps require a reviewed measured baseline.
         cases: []

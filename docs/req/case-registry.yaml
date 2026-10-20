@@ -352,3 +352,37 @@ cases:
     verifier:
       file: test/offline/m4-storage-integration.test.ts
       test: "produces the same segment order for known, tied and unknown indices"
+  - id: C-52
+    status: implemented
+    title: Failed and cancelled attempts remain in the aggregate
+    verifier:
+      file: test/offline/m6-02-metrics.test.ts
+      test: "records failed and cancelled attempts instead of dropping them"
+
+  - id: C-53
+    status: implemented
+    title: Incomplete usage remains unknown rather than becoming a partial total
+    verifier:
+      file: test/offline/m6-02-metrics.test.ts
+      test: "keeps usage unknown when one attempt is missing it — never a partial total"
+
+  - id: C-54
+    status: implemented
+    title: A thrown variant is recorded as a failure with a reason
+    verifier:
+      file: test/offline/m6-02-comparison.test.ts
+      test: "records a variant that throws as a failure with a reason, not as a lost case"
+
+  - id: C-55
+    status: implemented
+    title: The evaluation report rejects a fixture text source
+    verifier:
+      file: test/offline/m6-02-report.test.ts
+      test: "refuses a fixture text source"
+
+  - id: C-68
+    status: implemented
+    title: Coordinator SQLite reopen restores only confirmed history and keeps interrupted output unresolved
+    verifier:
+      file: test/offline/m6-i1-storage-recovery.test.ts
+      test: "restores only confirmed history after the coordinator writes SQLite and reopens"

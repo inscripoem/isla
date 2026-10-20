@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createDeliveryMemoryStore,
   createDialoguePort,
+  createKeywordDeliveryRecall,
   personaVersionKey,
   renderDialoguePrompt,
 } from '../../src/dialogue'
@@ -12,6 +13,8 @@ import type {
 } from '../../src/dialogue'
 import { createEventStore, createHistoryQuery, createInMemoryBackend } from '../../src/storage'
 import type { StorageBackend } from '../../src/storage'
+import { createReconstructedDialogueFromSelection } from '../../src/runtime/composition'
+import { validateArchiveSelection } from '../../src/runtime/session-archives'
 import { orderTurnDeliveries } from '../../src/runtime/delivery-order'
 import type {
   AtomicCommitAck,
@@ -190,6 +193,8 @@ async function assembleOver(input: {
   history?: HistoryQueryPort
   memory?: MemoryEntrySource
   request?: DialogueRequest
+  deliveryRecall?: ReturnType<typeof createKeywordDeliveryRecall>
+  explicitlySelectedSessionIds?: readonly string[]
 }): Promise<AssembledDialogueContext> {
   const capture: { view: AssembledDialogueContext | null } = { view: null }
   const sink: DialogueSink = { segment: async () => {} }
@@ -198,6 +203,10 @@ async function assembleOver(input: {
     textSource: capturingTextSource(capture),
     ...(input.history === undefined ? {} : { history: input.history }),
     ...(input.memory === undefined ? {} : { memory: input.memory }),
+    ...(input.deliveryRecall === undefined ? {} : { deliveryRecall: input.deliveryRecall }),
+    ...(input.explicitlySelectedSessionIds === undefined
+      ? {}
+      : { explicitlySelectedSessionIds: input.explicitlySelectedSessionIds }),
   })
 
   await port.generate(input.request ?? fixtureDialogueRequest(), createCallContext(), sink)
@@ -572,6 +581,70 @@ describe('M4 consumes the durable M6 store', () => {
     })
     expect(later.turns).toEqual([])
     expect(later.historySource).toBe('history-port')
+  })
+
+  it('recalls an explicitly selected archive without requiring an audience identity', async () => {
+    const harness = storeHarness()
+    expectApplied(
+      await commitSpoken(harness, {
+        sessionId: 'archive-selected',
+        turnId: 'archive-turn',
+        segmentId: 'archive-turn-seg-0',
+        text: 'The loud concert was memorable.',
+        seq: 10,
+      }),
+    )
+    expectApplied(
+      await commitSpoken(harness, {
+        sessionId: 'archive-unselected',
+        turnId: 'other-turn',
+        segmentId: 'other-turn-seg-0',
+        text: 'The loud concert was private.',
+        seq: 11,
+      }),
+    )
+    expectApplied(
+      await commitSpoken(harness, {
+        sessionId: 'live-session',
+        turnId: 'live-turn',
+        segmentId: 'live-turn-seg-0',
+        text: 'A current reply.',
+        seq: 12,
+      }),
+    )
+
+    const selection = validateArchiveSelection({
+      liveSessionId: 'live-session',
+      liveProfile: { profileId: 'character-fixture', profileVersion: '1' },
+      selectedSources: [{ sessionId: 'archive-selected' }],
+      catalogue: new Map([
+        ['archive-selected', { profileId: 'character-fixture', profileVersion: '1' }],
+      ]),
+    })
+    const capture: { view: AssembledDialogueContext | null } = { view: null }
+    const dialogue = createReconstructedDialogueFromSelection(selection, {
+      clock: FIXTURE_CLOCK,
+      history: harness.history,
+      deliveryRecall: createKeywordDeliveryRecall(),
+      textSource: capturingTextSource(capture),
+    })
+    await dialogue.dialogue.generate(
+      fixtureDialogueRequest({
+        sessionId: 'live-session',
+        selectedInput: { eventId: 'evt-archive-recall', text: 'Tell me about the loud concert' },
+        contextLimits: { maxTurns: 1, maxCharacters: 2000 },
+      }),
+      createCallContext(),
+      { segment: async () => {} },
+    )
+
+    if (capture.view === null) throw new Error('the reconstructed dialogue never assembled a context')
+
+    expect(capture.view.recalledTurns.map((entry) => entry.turn.sessionId)).toEqual([
+      'archive-selected',
+    ])
+    expect(capture.view.recalledTurns[0]?.turn.text).toBe('The loud concert was memorable.')
+    expect(capture.view.history.map((record) => record.sessionId)).not.toContain('archive-unselected')
   })
 
   it('rebuilds the same context after a restart over the same durable state', async () => {
