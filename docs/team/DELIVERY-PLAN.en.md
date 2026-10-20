@@ -1,32 +1,36 @@
 # Isla delivery plan
 
-Revision: 2026-10-20.3. Status: under review. Existing roles and workload ratings are unchanged. PR states below are a dated snapshot; review each current head before adoption.
+Revision: 2026-10-20.4. Status: under review. Existing roles and workload ratings are unchanged. PR states below are a dated snapshot; review each current head before adoption.
 
 ## Current baseline
 
-Main is [37c1d9eea9df0061246294fd0d48a1de3410b20e](https://github.com/inscripoem/isla/commit/37c1d9eea9df0061246294fd0d48a1de3410b20e): PR43 merged as `4303325`, followed by PR50. PR33/34/36/40/45/47/49 are also merged. Earlier PR40/47 history repairs remain superseded and must not be pushed.
+Main is [579b14ba956f913c96e165fde1cf71301e11e392](https://github.com/inscripoem/isla/commit/579b14ba956f913c96e165fde1cf71301e11e392), after the human merge of PR51. C-65/C-66/C-67 are effective on main. Its tree matches reviewed PR51 head `54cf747`; main CI passes. PR33/34/36/40/43/45/47/49/50 are also merged.
 
-PR48 remains published at [fbfb56529066ec8201c8167c4fe9daad911bac0c](https://github.com/inscripoem/isla/commit/fbfb56529066ec8201c8167c4fe9daad911bac0c), based on `27ba83f`. Its historical push/PR CI passed, but the branch now conflicts with main. A local candidate combines both heads without a new commit: all original AI-use entries, M5 production scripts, M6 R2 test/trace entries and M2 dependencies are retained. M1's response test repair is carried forward. Independent combined verification passes 1065 tests / 60 files, typecheck, lint and build; M5 170/8, M2 31/1, M6 179/13 and targeted coordinator/audio/CLI/restart 115/4 pass. Publication remains pending; the earlier 1027/59 result belongs to the old combination.
+PR48 is published at [cbc845c746e426934acc8a55289fe58efefb8ec5](https://github.com/inscripoem/isla/commit/cbc845c746e426934acc8a55289fe58efefb8ec5), incorporating the previous main `37c1d9e`. Its independent 1065 tests / 60 files and remote CI results belong to that published combination. [M1's scoped Windows APPROVE](https://github.com/inscripoem/isla/pull/48#pullrequestreview-5583059851) resolves the original response-hold P2 on cbc845c; it does not certify a future integration head. M4's receipt-seal observation is addressed there. M6's no-further-concerns comment remains an ordinary comment.
 
-M6's [2026-10-20 comment](https://github.com/inscripoem/isla/pull/48#issuecomment-6284708924) reports no further concerns. It is an ordinary comment, not a new APPROVE. M1's test finding and [M4's non-blocking review](https://github.com/inscripoem/isla/pull/48#pullrequestreview-5581165694) remain the current follow-up scope.
+The current local candidate combines cbc845c with main579b14b without a new commit. It preserves M5 runtime/audio/evaluation behavior, the incoming M6 storage semantics and tests, both AI-use histories, both role test commands and all trace rows. Conflicts are limited to package.json, the AI-use log and the trace matrix; INTERFACES merges automatically. No new production logic, test logic, dependencies or contract signature is introduced beyond the two parent trees. The non-blocking PR51 getter mismatch remains M6 follow-up.
+
+Combined independent verification: M5 170/8, M6 181/14, recovery 17/1 and pnpm verify 1067/61 passed, including typecheck, lint and build. The six changed source/test files match main579b14b exactly; M5 runtime, audio and browser paths match cbc845c. Browser tests were not rerun because those paths, their dependencies and lockfile are unchanged; earlier browser results remain bound to cbc845c. No remote CI result or review approval is claimed for this uncommitted candidate.
 
 | PR / current head | State | Next action |
 | --- | --- | --- |
-| [33](https://github.com/inscripoem/isla/pull/33), [34](https://github.com/inscripoem/isla/pull/34), [40](https://github.com/inscripoem/isla/pull/40), [47](https://github.com/inscripoem/isla/pull/47) | Merged; their implementation and tests are retained in the current main baseline | Verify consumers; keep owner changes outside the M5 publication diff |
-| [35](https://github.com/inscripoem/isla/pull/35) `17cc8df` | Selected-archive recall repair is published; head CI passes, but review remains changes-requested and main conflicts remain | Verify the reconciled head; bounded static inspection does not replace executable consumer acceptance |
-| [43](https://github.com/inscripoem/isla/pull/43) | Merged as `4303325`; M1/M5 scoped review history retained | Issue37 still tracks production transport/receipt/recovery adoption and the Low control-notification UI follow-up |
-| [49](https://github.com/inscripoem/isla/pull/49) | Merged; R1 parser and report command are on main | Retain strict input and report-refusal boundaries |
-| [50](https://github.com/inscripoem/isla/pull/50) | Merged as `37c1d9e`; approved head was `6b7da98` | C-69/C-70/C-71 and R2 tooling are effective on main; real S6/G4 remains separate |
-| [51](https://github.com/inscripoem/isla/pull/51) `54cf747` | Open; C-65/C-66/C-67 implemented and registered on the branch; both remote CI checks pass | M5 consumer review remains pending; not adopted into this candidate or main |
-| [45](https://github.com/inscripoem/isla/pull/45) | Merged | M2/M1 consumer adoption and combined recovery acceptance |
+| [35](https://github.com/inscripoem/isla/pull/35) `44de67c` | Changes requested; selected-archive repair verified, two P2 findings remain | M4: missing-owner rejection for automatic recall and literal private-data detection despite negation wording |
+| [43](https://github.com/inscripoem/isla/pull/43) | Merged as `4303325` | M2: Issue37 product adoption and control-notification exception follow-up |
+| [48](https://github.com/inscripoem/isla/pull/48) `cbc845c` | Approved on the published head; conflicts with new main | Verify this local reconciliation, then obtain explicit publication approval and review of the new head |
+| [49](https://github.com/inscripoem/isla/pull/49), [50](https://github.com/inscripoem/isla/pull/50) | Merged; R1/R2 and C-69/C-70/C-71 are on main | Real adapter-to-recorded-run/report/G4 acceptance remains separate |
+| [51](https://github.com/inscripoem/isla/pull/51) | Human-merged as `579b14b` after M5 approval | Preserve C-65/C-66/C-67; M6 owns the non-blocking legacy-getter follow-up |
 
-CI success, review approval, merge and product acceptance remain separate facts. External review/comment publication requires confirmation of the exact text and commit; a request to perform review work alone does not authorize sending it.
+[M5's Issue25 reply](https://github.com/inscripoem/isla/issues/25#issuecomment-6286818499) records the Linux controlled-shutdown/restart evidence and exact gaps. [M5's Issue41 reply](https://github.com/inscripoem/isla/issues/41#issuecomment-6286821631) records the implemented adapter and pending adoption. All adapter stage timings and totalMs remain null; supplied replyIntent is refused. S6/G4, live providers and acoustic measurements remain unaccepted. Retention/deletion policy is undecided.
 
-## Local PR48 review repair (2026-10-20)
+[Issue37](https://github.com/inscripoem/isla/issues/37#issuecomment-6287602523) remains open: Windows cooperative shutdown/two-process restart, raw-signal reporting, M2 notification handling, strict decoder/status and product dynamic-resolver/recovery adoption remain separate. M1's Windows full run was 1048 passed / 17 failed, not all green; it does not replace Linux or new-combination evidence.
+
+CI success, review approval, merge and product acceptance remain separate facts. External publication requires confirmation of exact content and commit. Final PR merge is human-owned.
+
+## Published cbc845c repair evidence (historical combination)
 
 The candidate retains [M1's deterministic unfinished-response boundary](https://github.com/inscripoem/isla/pull/48#discussion_r4314578882), native HTTP bytes, lease/slot retention, busy refusal and exactly-once release. All three audio negative controls were independently replayed on this combined candidate and failed as intended, with source restored. The trace closing-note contradiction is corrected while retaining main's C-69/C-70/C-71 row additions.
 
-M4's review adds observable refusal at the receipt seal and a valid late-completion regression, without reopening storage or promoting unknown delivery. Usage wording is scoped to M5's recorded observations and preserves M4's timeout semantics. The original seven-file candidate and this current-main candidate remain distinct, unpublished versions.
+M4's review adds observable refusal at the receipt seal and a valid late-completion regression, without reopening storage or promoting unknown delivery. Usage wording is scoped to M5's recorded observations and preserves M4's timeout semantics. The original seven-file preparation remains historical; the subsequent main37c1d9e combination was published as cbc845c. These results do not verify the new main579b14b combination.
 
 Shutdown evidence remains limited to the direct runtime PID's Linux SIGTERM path. Windows forced termination, a cooperative Windows trigger and raw-signal reporting are separate gaps. The browser acceptance uses `/test/browser/loop.html` through the root proxy; it does not establish M2 product-console adoption. Independent root HTTP/WebSocket checks pass 11/11 and Chromium audio checks pass 8/8 with the unchanged scripts. The runtime and Vite children exited after SIGTERM (0 and 143), without force; ports were released. Both new sealed-receipt cases fail when the counter increment is removed, then pass after byte-identical restoration. Both actual working-tree ranges (push base fbfb565, PR base37c1d9e) pass G6 and trace41/41. G4 reports not run.
 
@@ -65,7 +69,7 @@ The C-49/C-50 and INV-15 documentation follow-up is prepared and independently v
 
 ## Evaluation and coordination boundaries
 
-[Issue41](https://github.com/inscripoem/isla/issues/41) retains the injected `VariantRun` seam: M5 composes and M6 aggregates. R1/R2 offline tooling is merged. [M6's evaluation handoff](https://github.com/inscripoem/isla/issues/41#issuecomment-6285177295) separates this from S6: a real run, evaluation table and real G4 are not started. C-65/C-66/C-67 are implemented and registered on unmerged PR51; consumer review remains pending. M6-01 and M6-02 handoffs are maintained in Issue25 and Issue41, respectively. M3's missing decision implementation blocks dependent variants; reviewed cases and rubric/version block quality claims, while the observe-versus-enforce caps decision blocks cap-compliance claims. None of those is a reason to postpone unrelated report tooling.
+[Issue41](https://github.com/inscripoem/isla/issues/41) retains the injected `VariantRun` seam: M5 composes and M6 aggregates. R1/R2 offline tooling is merged. [M6's evaluation handoff](https://github.com/inscripoem/isla/issues/41#issuecomment-6285177295) separates this from S6: a real run, evaluation table and real G4 are not started. C-65/C-66/C-67 are on main579b14b after PR51 consumer approval and human merge. M6-01 and M6-02 handoffs are maintained in Issue25 and Issue41, respectively. M3's missing decision implementation blocks dependent variants; reviewed cases and rubric/version block quality claims, while the observe-versus-enforce caps decision blocks cap-compliance claims. None of those is a reason to postpone unrelated report tooling.
 
 Metric start/end events, clock domains and observation methods remain provisional. `CycleTimings` are budgets; browser accept-to-ack and server accepted-to-dispatched intervals differ. First-in-run does not establish process/provider/cache cold state. Bench invocations do not establish response-provider attempt counts. `firstAudibleMs` and `stopToSilenceMs` stay unknown until actual-output observation is agreed. No real evaluation table or G4 pass is claimed.
 

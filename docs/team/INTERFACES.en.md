@@ -1,6 +1,6 @@
 # Interface and handoff baseline v0.2
 
-Revision: 2026-10-20.2. Status: under review. Shared schemas, the M5 coordinator, M1 synthesis/playback and M6 SQLite/evaluation tooling exist. Application protocol 0.2 includes correlated physical status; PR36/43/50 are merged, while the PR48 production/lifecycle follow-up remains under review. Full product integration and live acceptance remain separate. This is an evolvable baseline coordinated by M5 with affected producers and consumers.
+Revision: 2026-10-20.4. Status: under review. Shared schemas, the M5 coordinator, M1 synthesis/playback and M6 SQLite/evaluation tooling exist. Application protocol 0.2 includes correlated physical status; PR36/43/50/51 are merged. PR48 cbc845c has scoped M1 approval; its local combination with main579b14b remains under review. Full product integration and live acceptance remain separate. This is an evolvable baseline coordinated by M5 with affected producers and consumers.
 
 ## Executable contract map
 
@@ -80,7 +80,7 @@ A delivery write must be internally consistent. `classification` and `terminalOu
 
 ## C7: persistence, projection and replay
 
-M6 owns SQLite infrastructure, migrations and storage/history APIs; M4 owns memory semantics; M5 retains live authority. M5 constructs the supporting event and calls M6 `commitDeliveryWithEvent(delivery, event)` directly; only after a successful atomic acknowledgement does it call M4 memory admission. Commit delivery and its supporting event atomically before acknowledging persistence. Do not publish a different event with the same seq or commit spoken memory before persistence succeeds.
+M6 owns SQLite infrastructure, migrations and storage/history APIs; M4 owns memory semantics; M5 retains live authority. The memory projection bookmark is session-scoped internally (C-66): a shared projection must not advance or skip another session, and `apply` returns the event session’s position. The existing scalar `appliedSeq()` remains the most recently applied session’s position; it is not a cross-session query. M5 constructs the supporting event and calls M6 `commitDeliveryWithEvent(delivery, event)` directly; only after a successful atomic acknowledgement does it call M4 memory admission. Commit delivery and its supporting event atomically before acknowledging persistence. Do not publish a different event with the same seq or commit spoken memory before persistence succeeds.
 
 Event/delivery/sequence uniqueness is session-scoped. Identity reuse with changed content conflicts. Projections track applied seq and cannot claim current history across a gap. JSONL exports derive from committed records and must agree with them.
 

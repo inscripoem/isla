@@ -34,6 +34,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-18 | implemented | `test/offline/m6-storage.test.ts` | INV-04 event identity/sequence uniqueness |
 | C-19 | implemented | `test/offline/m6-storage.test.ts` | INV-05 atomic commit persists nothing |
 | C-20 | implemented | `test/offline/m6-storage.test.ts` | INV-06 projection does not advance across a gap |
+| C-66 | implemented | `test/offline/m6-storage.test.ts` | projection bookmark is independent per session |
 | C-21 | implemented | `test/conformance/storage.conformance.ts` | confirmed history is fully-delivered only |
 | C-22 | implemented | `test/offline/m6-storage.test.ts` | JSONL export carries event version attribution |
 | C-23 | implemented | `test/offline/m6-storage.test.ts` | event identity is session-scoped |
@@ -62,6 +63,8 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-46 | implemented | `test/offline/m5-attribution.test.ts` | M6 delivery attribution persistence: strict fields, nulls, ordering and conflicts |
 | C-47 | implemented | `test/offline/m5-attribution.test.ts` | M5 delivery attribution capture and reconstruction: normal, request mutation, Stop, late receipt, shared sessions, explicit indices and stable within-turn ordering (INV-15) |
 | C-48 | implemented | `test/offline/m6-sqlite.test.ts` | legacy delivery attribution migrates safely (NULL preserved; unsafe legacy data refused) |
+| C-65 | implemented | `test/offline/m6-sqlite.test.ts` | contradictory legacy classification/outcome is refused and the database is preserved |
+| C-67 | implemented | `test/offline/m6-late-delivery-conflict.test.ts` | a late fully-delivered claim for a cancelled delivery conflicts and preserves the original evidence |
 | C-51 | implemented | `test/offline/m6-storage.test.ts` | an event is validated against the schema before append mutates storage |
 | C-52 | implemented | `test/offline/m6-02-metrics.test.ts` | failed and cancelled attempts remain in the aggregate |
 | C-53 | implemented | `test/offline/m6-02-metrics.test.ts` | incomplete usage remains unknown rather than becoming a partial total |
@@ -85,7 +88,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | FR-03 | M1 | C-06, C-11 | — |
 | FR-04 | M1 | C-01, C-04, C-10 | — |
 | FR-05 | M5 | C-03, C-04 | C-08 |
-| FR-06 | M6 | C-12, C-17, C-21, C-22, C-29, C-30, C-31, C-32, C-33, C-45, C-46, C-47, C-68 | application startup/selected-history recovery integration; M6 SQLite module recovery is implemented in merged PR26 |
+| FR-06 | M6 | C-12, C-17, C-21, C-22, C-29, C-30, C-31, C-32, C-33, C-45, C-46, C-47, C-67, C-68 | application startup/selected-history recovery integration; M6 SQLite module recovery is implemented in merged PR26 |
 | NFR-01 | M5 | C-52, C-54, C-55, C-69, C-70, C-71 | metric baseline |
 | NFR-02 | M5 | C-10, C-17 | C-05, C-09, recovery duration |
 | NFR-03 | M3 | — | C-16, human rubric |
@@ -97,12 +100,12 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-03 | M5 | C-07 | — |
 | INV-04 | M6 | C-18, C-23, C-39, C-40, C-41, C-43, C-44, C-51 | — |
 | INV-05 | M6 | C-19, C-38, C-42 | — |
-| INV-06 | M6 | C-20 | — |
+| INV-06 | M6 | C-20, C-66 | — |
 | INV-07 | M6 | C-24 | — |
 | INV-08 | M6 | C-25 | — |
-| INV-09 | M5 | C-46, C-47 | M4/SQLite consumer rollout |
+| INV-09 | M5 | C-46, C-47, C-67 | M4/SQLite consumer rollout |
 | INV-10 | M6 | C-26, C-27 | — |
-| INV-11 | M6 | C-27, C-28, C-48 | — |
+| INV-11 | M6 | C-27, C-28, C-48, C-65 | — |
 | INV-12 | M6 | C-32, C-33, C-68 | — |
 | INV-13 | M6 | C-34, C-35, C-37 | — |
 | INV-14 | M6 | C-36 | — |
@@ -119,6 +122,7 @@ The [issue #25 coordination](https://github.com/inscripoem/isla/issues/25#issuec
 | M6 config / migration / recovery: INV-09 / INV-10 / INV-11 → INV-10 / INV-11 / INV-12 | Adopted with PR26; merged into main `a2ecb86` |
 | M6 trace gate / log gate: INV-12 / INV-13 → INV-13 / INV-14 | Adopted from merged PR27 on main `c2f9b38`; existing historical log entries retain their original IDs |
 | C-48 | M6 legacy-null migration/reopen; implemented in PR26 and merged into main `a2ecb86` |
+| C-65 | Contradictory legacy-row quarantine; separate C-48 null-preservation proof |
 | C-49 | Allocated to M4 admission divergence; registered on PR35 `b6c078d`, not adopted in this branch |
 | C-49 / C-50 / C-51 allocation | PR42 merged the active M6 append-validation migration to C-51; C-49/C-50 remain M4 allocations on PR35. [Issue25](https://github.com/inscripoem/isla/issues/25#issuecomment-6232454938) remains the numeric/ADR coordination location |
 

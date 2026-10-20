@@ -340,16 +340,18 @@ export function createFaultyHistoryQuery(source: FaultyHistorySource): HistoryQu
 }
 
 export function createFaultyMemoryProjection(): MemoryProjectionPort & { appliedCount: () => number } {
-  let applied = 0
+  const appliedBySession = new Map<string, number>()
+  let lastSessionId: string | null = null
   let count = 0
   return {
     appliedCount: () => count,
-    appliedSeq: () => applied,
+    appliedSeq: () => (lastSessionId === null ? 0 : (appliedBySession.get(lastSessionId) ?? 0)),
     async apply(event) {
       // Fault: reapplies without idempotence and claims current even past a gap.
-      applied = event.seq
+      appliedBySession.set(event.sessionId, event.seq)
+      lastSessionId = event.sessionId
       count += 1
-      return { appliedSeq: applied }
+      return { appliedSeq: event.seq }
     },
   }
 }

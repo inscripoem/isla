@@ -2720,3 +2720,101 @@ entries:
       memory commit, and does not change output confirmation or storageFailure.
       No recorded-run schema or other owner source changes. No Windows,
       product-console, live-provider, acoustic, S6 or G4 acceptance is claimed.
+  - date: 2026-10-20
+    task: M6-01-C-66
+    branch: m6-c66-projection-bookmark
+    change: "C-66: make the memory projection bookmark session-scoped internally. Add a C-66 independent-session regression, update the correct/faulty fixtures and recovery assertion, and link C-66/INV-06/FR-06 plus the ADR-002/Delta-002 amendment. The frozen MemoryProjectionPort signature and event-store/history ports remain unchanged; no provider or sequence-authority change."
+    requirements: [FR-06]
+    invariants: [INV-06]
+    cases: [C-66]
+    commits: [9b88b14]
+    agent: opencode/deepseek-v4-flash
+    verification:
+      focused: "test/offline/m6-storage.test.ts: 64/64; test/offline/m6-recovery.test.ts: 4/4."
+      role: "test:m6 180/13; composition 12/1; readiness 42/3; trace 41/1."
+      full_suite: "pnpm test 986/54; pnpm verify exit 0; typecheck, lint and build passed."
+      mutation: "Session-blind bookmark mutation turned C-66 red with `expected 2 to be +0`; restored and the focused C-66 test passed again."
+    human_review: "M5/consumer review requested for the storage behaviour. C-66 was reserved in #25; no ID self-assignment; the shared port signature is unchanged."
+  - date: 2026-10-20
+    task: M6-01-C-67
+    branch: m6-c67-late-delivery
+    change: "C-67: add a storage-boundary regression showing that a late, internally valid fully-delivered/completed claim for an already-cancelled delivery conflicts, preserves the original record and classification, and retains the contradictory supporting event. Add the test to test:m6 and link C-67/FR-06/INV-09. No production source change."
+    requirements: [FR-06]
+    invariants: [INV-09]
+    cases: [C-67]
+    commits: [4caad18]
+    agent: opencode/deepseek-v4-flash
+    verification:
+      focused: "test/offline/m6-late-delivery-conflict.test.ts: 1/1 passed."
+      role: "test:m6 180/14; composition 12/1; trace 41/1."
+      full_suite: "pnpm test 986/55; pnpm verify exit 0; typecheck, lint and build passed."
+      mutation: "Making the same-key classification change a duplicate turned C-67 red with expected duplicate to be conflict; restored and C-67 passed again."
+    human_review: "M5/consumer review requested. C-64 remains M4's admission case; C-67 is the M6 storage cross-reference."
+  - date: 2026-10-20
+    task: M6-01-C-65
+    branch: m6-storage-semantics
+    change: "C-65: register the existing contradictory legacy classification/outcome migration test as its own case and link it under INV-11/FR-06. C-48 remains the legacy-NULL migration proof. Test/docs only; no production source change."
+    requirements: [FR-06]
+    invariants: [INV-11]
+    cases: [C-65]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    verification:
+      focused: "test/offline/m6-sqlite.test.ts -t contradictory: 1/1 passed (15 total in file)."
+      role: "test:m6 181/14; composition 12/1; readiness 42/3; trace 41/1."
+      full_suite: "pnpm test 987/55; pnpm verify exit 0; typecheck, lint and build passed."
+      mutation: "C-65 is an existing negative-path test, strengthened to assert the original row survives. No production code changed."
+    human_review: "M5/consumer review requested. C-65 was reserved in #25; no ID self-assignment."
+  - date: "2026-10-20"
+    task: M5-pr48-main579-conflict-resolution
+    change: >-
+      Resolve the three conflicted files of the uncommitted merge of main
+      579b14b into PR48 cbc845c in the isolated pr48-main579 worktree,
+      preserving both owners' work. `package.json` unions the scripts: the M5
+      script keeps its eight suites and the M6 script keeps its thirteen suites
+      plus `test/offline/m6-late-delivery-conflict.test.ts`.
+      `docs/ai-use-log.yaml` keeps every PR48 M5 record followed by the three
+      incoming M6 records (C-66, C-67, C-65) and appends this session's entry.
+      `docs/architecture/trace-matrix.md` combines the header scope (M6 and M5
+      rows) with the 2026-10-20 date and retains the C-65/C-66/C-67 rows and
+      every M5 row. No production source, test, dependency or shared contract
+      changed; the known M6 legacy-getter P3 is untouched.
+    requirements: [FR-04, FR-05, FR-06, NFR-01, NFR-04]
+    invariants: [INV-01, INV-09, INV-12, INV-16]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.0.32
+    session: ses_ea759d8c4ffe6uU47g0fS7mg6B
+    supervision: >-
+      Captain approved local integration. OpenCode edited only the three
+      conflicted files and did not stage, commit, push or publish. The
+      supervisor separately refreshed paired handoffs, installed dependencies,
+      marked conflict resolution and verified the combination. No subagent
+      or credential file was used. The genuine session remains in local OpenCode
+      session storage; no transcript is copied into the checkout.
+    human_review: >-
+      Status remains under review. OpenCode performed structural checks;
+      the independent supervisor results below are separate. No commit or
+      remote publication has been performed for this candidate.
+    verification:
+      structural: >-
+        Local structural checks only: package.json parses as JSON; the log
+        preserves all 101 records from both sides (98 + 86 - 83) and parses as
+        YAML; no conflict markers remain in the three files. OpenCode did not
+        install dependencies or run tests; the supervisor did so afterward.
+      independent: >-
+        Offline frozen-lockfile installation passed. M5 170/8, M6 181/14,
+        recovery17/1 and pnpm verify1067/61 passed, with typecheck/lint/build.
+        All 101 original log records and both owners trace rows are preserved.
+        No product-source or test logic differs from the union of parent trees.
+      transcript: >-
+        All 29 native session messages were exported with original metadata,
+        including the interrupted investigation and resumed editing round.
+        Session outcome is succeeded/idle; provider self-api, model
+        deepseek-v4-flash, variant xhigh, agent build, OpenCode2.0.32.
+    scope: >-
+      Conflict resolution and record-keeping only. No production code, tests,
+      dependencies, shared C1-C7 contracts, case IDs or trace rows were added,
+      changed or removed beyond the union of the two sides.

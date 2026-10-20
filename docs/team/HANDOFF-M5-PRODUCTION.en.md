@@ -1,8 +1,8 @@
 # M5 production composition and durable application lifecycle handoff
 
-Consumer-approved historical baseline: [PR48](https://github.com/inscripoem/isla/pull/48) at [17ab93335e77d8a231674ae3a2a7c9d10fad2cc5](https://github.com/inscripoem/isla/tree/17ab93335e77d8a231674ae3a2a7c9d10fad2cc5), based on main `d1b040bc`. Both remote CI runs passed. M6 approved its storage/evaluation consumer boundary on 2026-10-19; the PR remains open. The original increment baselines and test counts below are historical provenance. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline) for the current main integration and its verification.
+Published baseline: [PR48 cbc845c746e426934acc8a55289fe58efefb8ec5](https://github.com/inscripoem/isla/commit/cbc845c746e426934acc8a55289fe58efefb8ec5), incorporating main37c1d9e. M1's [scoped Windows approval](https://github.com/inscripoem/isla/pull/48#pullrequestreview-5583059851) resolves the original response-hold P2 at that head. The current local candidate additionally incorporates main579b14b (merged PR51); publication and verification of that combination are separate. Earlier increment baselines and test counts below retain their original scope. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline) for current status, verification and remaining owner work.
 
-Revision: 2026-10-20.2. Owner: M5 — CHANG Xuben. Status: PR48 core published; current-main follow-up local and under review. Historical increment branch: `feat/m5-production-composition`, based on the published PR45
+Revision: 2026-10-20.4. Owner: M5 — CHANG Xuben. Status: cbc845c published; main579b14b reconciliation local and under review. Historical increment branch: `feat/m5-production-composition`, based on the published PR45
 head `6bcfc2b`. Scope: FR-05/FR-06 production assembly, durable startup/controlled
 shutdown and explicit selected-history recovery over the existing M6 SQLite backend,
 the root Vite entry routing for the application socket and operator bootstrap, and
@@ -296,13 +296,16 @@ behavior, not live providers, browser audio or acoustic output.
 
 ## Remaining integration dependencies
 
-| Owner | Needed for the production deployment module |
+| Owner | Remaining work |
 | --- | --- |
-| M1 | Published PR33/34 provide ownership observation and the concrete Kokoro provider/loader; landing and M5 adoption remain pending. The existing audio-resource registry supplies the retirement interface. |
-| M2 | Browser consumer of the M5-owned dynamic audio HTTP routing and resource assembly. |
-| M3 | `src/decision/` does not exist yet; selection and reaction ports have no production implementation. |
-| M4 | A live dialogue text provider (the composed production path otherwise uses a deterministic source). |
-| M5 | Dynamic audio HTTP/resource assembly, retained physical provider ownership and shutdown, and the production `runVariant` adapter (Issue 41). |
+| M1 | Live provider/VTS and actual-output observation; Windows cooperative release evidence with M5/M6. PR33/34 implementation is already merged and retained. |
+| M2 | Product transport/strict decoder/status, dynamic audio resolver, recovery controls and notification follow-up in Issue37. |
+| M3 | Production selection/reaction implementations, reviewed cases/rubric and cap policy. |
+| M4 | Live dialogue and usage adoption, reviewed cases, and the two remaining PR35 P2 repairs. |
+| M5 | Verify the main579b14b combination and coordinate deployment adoption; production lifecycle, dynamic audio and evaluation adapter are already implemented in PR48. |
+| M6 | Recorded-run/report adoption and storage support; C-65/C-66/C-67 are on main. The PR51 getter P3 remains separate. |
+
+Retention/deletion policy remains undecided. The [Issue25 reply](https://github.com/inscripoem/isla/issues/25#issuecomment-6286818499) records the controlled recovery evidence and platform/product gaps; the [Issue41 reply](https://github.com/inscripoem/isla/issues/41#issuecomment-6286821631) separates adapter implementation from S6/G4 acceptance.
 
 ## Ownership and remaining external acceptance
 
@@ -321,4 +324,4 @@ behavior, not live providers, browser audio or acoustic output.
   operator-driven; it never replays old audio and never admits unresolved
   delivery as spoken.
 - No owner review or merge is implied by this document. [DELIVERY-PLAN.en.md](DELIVERY-PLAN.en.md)
-  revision 2026-10-19.1 records the current increment, PR state and remaining owner work.
+  records the current combination, PR state and remaining owner work.
