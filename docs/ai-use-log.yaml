@@ -2005,3 +2005,18 @@ entries:
       full_suite: "pnpm test 956/54; pnpm verify exit 0; typecheck, lint and build passed."
       mutation: "Non-finite guard rejects before serialization; valid two-variant C-71 path writes through the real R1 command."
     human_review: "Addresses M5 P2; M5 re-review requested after push. C-71 verifier now exists and passes."
+  - date: 2026-10-20
+    task: M6-01-C-66
+    branch: m6-c66-projection-bookmark
+    change: "C-66: make the memory projection bookmark session-scoped internally. Add a C-66 independent-session regression, update the correct/faulty fixtures and recovery assertion, and link C-66/INV-06/FR-06 plus the ADR-002/Delta-002 amendment. The frozen MemoryProjectionPort signature and event-store/history ports remain unchanged; no provider or sequence-authority change."
+    requirements: [FR-06]
+    invariants: [INV-06]
+    cases: [C-66]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    verification:
+      focused: "test/offline/m6-storage.test.ts: 64/64; test/offline/m6-recovery.test.ts: 4/4."
+      role: "test:m6 180/13; composition 12/1; readiness 42/3; trace 41/1."
+      full_suite: "pnpm test 986/54; pnpm verify exit 0; typecheck, lint and build passed."
+      mutation: "Session-blind bookmark mutation turned C-66 red with `expected 2 to be +0`; restored and the focused C-66 test passed again."
+    human_review: "M5/consumer review requested for the storage behaviour. C-66 was reserved in #25; no ID self-assignment; the shared port signature is unchanged."

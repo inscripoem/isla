@@ -1,7 +1,7 @@
 # Memory / state design
 
 Status: under review. M6 contributes the persistence portion; memory semantics are owned by M4 and
-live authority by M5. Step A record-shape coordination is under review. Updated: 2026-10-15.
+live authority by M5. Step A record-shape coordination is under review. Updated: 2026-10-20.
 
 ## Scope and ownership
 
@@ -20,7 +20,7 @@ The table describes the persistence target. Current main supplies an in-memory b
 | Committed events (`RuntimeEvent`) | Yes | `event-store` / SQLite `events` | Append-only; `seq` strictly increasing |
 | Delivery outcomes (`CommitDelivery`) | Yes | SQLite `deliveries` | SQLite target; `terminalOutcome` is validated at the write boundary but is not yet part of the in-memory read record (see below) |
 | Confirmed spoken history | Yes | `deliveries` (`fully-delivered` only) | Returned by `HistoryQueryPort` |
-| Memory projection position | Yes | `appliedSeq` | Advances one event at a time; never across a gap |
+| Memory projection position | Yes | in-process `appliedSeq` | One bookmark per session internally; advances one event at a time; never across a gap or across sessions. The shared scalar getter reports the most recently applied session; `apply` returns the event session’s position. |
 | Persona attribution and segment order | Planned for SQLite; present in memory | `personaProfileId`, `personaProfileVersion`, `segmentIndex` | Captured from the original request/segment; M6 must map each field explicitly in its SQLite adapter, retaining legacy unknowns as null |
 | Active turn / pending outputs | No (by design) | — | Restart begins stopped; unresolved outputs stay `unknown` |
 | Raw audio | Separate local files | DB reference only | Never inside event payloads |

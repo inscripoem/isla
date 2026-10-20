@@ -34,6 +34,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-18 | implemented | `test/offline/m6-storage.test.ts` | INV-04 event identity/sequence uniqueness |
 | C-19 | implemented | `test/offline/m6-storage.test.ts` | INV-05 atomic commit persists nothing |
 | C-20 | implemented | `test/offline/m6-storage.test.ts` | INV-06 projection does not advance across a gap |
+| C-66 | implemented | `test/offline/m6-storage.test.ts` | projection bookmark is independent per session |
 | C-21 | implemented | `test/conformance/storage.conformance.ts` | confirmed history is fully-delivered only |
 | C-22 | implemented | `test/offline/m6-storage.test.ts` | JSONL export carries event version attribution |
 | C-23 | implemented | `test/offline/m6-storage.test.ts` | event identity is session-scoped |
@@ -97,7 +98,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-03 | M5 | C-07 | — |
 | INV-04 | M6 | C-18, C-23, C-39, C-40, C-41, C-43, C-44, C-51 | — |
 | INV-05 | M6 | C-19, C-38, C-42 | — |
-| INV-06 | M6 | C-20 | — |
+| INV-06 | M6 | C-20, C-66 | — |
 | INV-07 | M6 | C-24 | — |
 | INV-08 | M6 | C-25 | — |
 | INV-09 | M5 | C-46, C-47 | M4/SQLite consumer rollout |
