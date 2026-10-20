@@ -99,6 +99,9 @@ requirements:
       - kind: deterministic
         description: On restart only confirmed history is restored; unresolved records remain unknown with their outcome and are never replayed.
         cases: [C-32, C-33, C-68]
+      - kind: deterministic
+        description: A late, internally valid fully-delivered/completed claim for an already-cancelled delivery is refused at the storage boundary; the original audit and classification remain unchanged and the contradictory supporting event is retained.
+        cases: [C-67]
 
   - id: NFR-01
     title: Responsiveness and synchronization
@@ -323,7 +326,7 @@ requirements:
     acceptance:
       - kind: deterministic
         description: Delivery records retain the original segment index and generating persona identity/version through normal completion, Stop and late receipts. M6 preserves those values on read and reports a conflict on changed attribution; legacy unknowns remain null rather than being inferred.
-        cases: [C-46, C-47]
+        cases: [C-46, C-47, C-67]
 
   - id: INV-10
     title: Storage configuration and schema version are validated before use

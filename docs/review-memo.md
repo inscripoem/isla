@@ -139,9 +139,9 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
 ## M6 self-review — C-66 session-scoped projection bookmark
 
 - Date: 2026-10-20 · Reviewer: M6 (self) · Verdict: **implementation complete; M5/consumer review pending**
-- Scope: `src/contracts/app/ports.ts`, `src/storage/memory-projection.ts`, the correct/faulty projection
-  fixtures, `m6-storage.test.ts`, `m6-recovery.test.ts`, and the C-66 trace/ADR/Delta evidence. No provider,
-  runtime composition or evaluation table touched.
+- Scope: `src/storage/memory-projection.ts`, the correct/faulty projection fixtures, `m6-storage.test.ts`,
+  `m6-recovery.test.ts`, and the C-66 trace/ADR/Delta evidence. The frozen shared contract was not changed.
+  No provider, runtime composition or evaluation table touched.
 - Behaviour: the bookmark is keyed by `event.sessionId`; gap, idempotence and next-event rules remain per
   session. A projection shared across sessions cannot advance or skip another session.
 - Verification: focused `m6-storage.test.ts` **64/64**, `m6-recovery.test.ts` **4/4**, `test:m6` **180/13**,
@@ -149,3 +149,17 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
   `expected 2 to be +0`; restored and the focused test passed again.
 - Traceability: C-66, INV-06, FR-06, ADR-002 amendment/Delta-002 amendment; no new case ID was invented.
 - Limits: no production caller today; the shared `MemoryProjectionPort` signature is unchanged, but the storage behaviour still needs M5/consumer review.
+## M6 self-review — C-67 late-delivery storage boundary
+
+- Date: 2026-10-20 · Reviewer: M6 (self) · Verdict: **test-only slice complete; M5/consumer review pending**
+- Scope: new `test/offline/m6-late-delivery-conflict.test.ts`, `test:m6` selection and C-67/FR-06/INV-09
+  trace rows; no production source changed.
+- Behaviour: a schema-valid later `fully-delivered`/`completed` claim for the same delivery key as an
+  existing cancelled/`partial-unknown` delivery returns `conflict`; the original record, classification
+  and supporting event remain unchanged, while the contradictory late event is retained as audit evidence.
+- Negative evidence: the test exercises the conflict path rather than an invalid pair; it asserts no
+  confirmed-history promotion and no overwrite.
+- Verification: focused C-67 **1/1**, `test:m6` **180/14**, composition **12/1**, trace **41/1**, full
+  **986/55**, `pnpm verify` exit 0. A permissive duplicate/upgrade mutation turned C-67 red with
+  `expected duplicate to be conflict`; restored.
+- Limits: storage boundary only; C-64 remains M4's admission case; no live provider, table, G4 or S6 claim.
