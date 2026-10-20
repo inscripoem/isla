@@ -63,6 +63,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-46 | implemented | `test/offline/m5-attribution.test.ts` | M6 delivery attribution persistence: strict fields, nulls, ordering and conflicts |
 | C-47 | implemented | `test/offline/m5-attribution.test.ts` | M5 delivery attribution capture and reconstruction: normal, request mutation, Stop, late receipt, shared sessions, explicit indices and stable within-turn ordering (INV-15) |
 | C-48 | implemented | `test/offline/m6-sqlite.test.ts` | legacy delivery attribution migrates safely (NULL preserved; unsafe legacy data refused) |
+| C-67 | implemented | `test/offline/m6-late-delivery-conflict.test.ts` | a late fully-delivered claim for a cancelled delivery conflicts and preserves the original evidence |
 | C-51 | implemented | `test/offline/m6-storage.test.ts` | an event is validated against the schema before append mutates storage |
 | C-52 | implemented | `test/offline/m6-02-metrics.test.ts` | failed and cancelled attempts remain in the aggregate |
 | C-53 | implemented | `test/offline/m6-02-metrics.test.ts` | incomplete usage remains unknown rather than becoming a partial total |
@@ -86,7 +87,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | FR-03 | M1 | C-06, C-11 | — |
 | FR-04 | M1 | C-01, C-04, C-10 | — |
 | FR-05 | M5 | C-03, C-04 | C-08 |
-| FR-06 | M6 | C-12, C-17, C-21, C-22, C-29, C-30, C-31, C-32, C-33, C-45, C-46, C-47, C-68 | application startup/selected-history recovery integration; M6 SQLite module recovery is implemented in merged PR26 |
+| FR-06 | M6 | C-12, C-17, C-21, C-22, C-29, C-30, C-31, C-32, C-33, C-45, C-46, C-47, C-67, C-68 | application startup/selected-history recovery integration; M6 SQLite module recovery is implemented in merged PR26 |
 | NFR-01 | M5 | C-52, C-54, C-55, C-69, C-70, C-71 | metric baseline |
 | NFR-02 | M5 | C-10, C-17 | C-05, C-09, recovery duration |
 | NFR-03 | M3 | — | C-16, human rubric |
@@ -101,7 +102,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-06 | M6 | C-20, C-66 | — |
 | INV-07 | M6 | C-24 | — |
 | INV-08 | M6 | C-25 | — |
-| INV-09 | M5 | C-46, C-47 | M4/SQLite consumer rollout |
+| INV-09 | M5 | C-46, C-47, C-67 | M4/SQLite consumer rollout |
 | INV-10 | M6 | C-26, C-27 | — |
 | INV-11 | M6 | C-27, C-28, C-48 | — |
 | INV-12 | M6 | C-32, C-33, C-68 | — |

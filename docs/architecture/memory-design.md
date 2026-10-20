@@ -31,8 +31,10 @@ The table describes the persistence target. Current main supplies an in-memory b
 1. Events are **append-only**; identity and `seq` are unique (INV-04). Reuse with changed content is
    rejected, never overwritten.
 2. A delivery and its supporting event commit **atomically** (INV-05): both or neither.
-3. Delivery commit is **idempotent**: identical re-commit returns `duplicate`; changed `textHash`, `segmentIndex`, `personaProfileId` or `personaProfileVersion`
-   returns `conflict` (key = `sessionId:turnId:segmentId:modality`).
+3. Delivery commit is **idempotent**: identical re-commit returns `duplicate`; changed `textHash`, `segmentIndex`,
+   `personaProfileId`, `personaProfileVersion`, or a changed delivery classification/outcome for the same key
+   returns `conflict` (key = `sessionId:turnId:segmentId:modality`). The original delivery record remains
+   unchanged; a contradictory supporting event is retained as audit evidence (C-67).
 4. A delivery write is **internally consistent**: `classification`/`terminalOutcome` must pair
    validly (`fully-delivered` ↔ `completed`; a `cancelled`/`failed`/`unknown` outcome may be
    `partial-unknown` or `not-delivered`), and the supporting event's known provenance and
