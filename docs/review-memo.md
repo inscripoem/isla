@@ -184,3 +184,13 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
 - Verification: focused P3 1/1; `test:m6` **182/14**; trace **41/1**; full **1125/63**. A last-advanced
   mutation turned the P3 regression red with `expected 1 to be +0`; restored.
 - Limits: no production consumer; no interface change; no live/G4/S6 claim.
+
+## M6 self-review — INV-16 requirements registration
+
+- Date: 2026-10-20 · Reviewer: M6 (self) · Verdict: **documentation gap closed; review pending**
+- Scope: add the missing `INV-16` row to `docs/req/requirements.yaml` and refresh the stale INV-16 paragraph
+  in `docs/team/REQUIREMENTS.en.md`. No code, test, case or invariant definition changed.
+- Result: INV-16 now links NFR-01/NFR-04 to C-52–C-55 and C-69–C-71 in the requirements registry, matching
+  `docs/architecture/invariants.md` and the existing trace rows.
+- Verification: readiness **42/3**, trace **41/1**, `test:m6` **182/14**, full **1125/63**, `pnpm verify` exit 0.
+- Limits: documentation-only; no new ID, no S6/G4/live claim.
