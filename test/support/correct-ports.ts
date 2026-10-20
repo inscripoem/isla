@@ -736,11 +736,13 @@ export function createFixtureMemoryProjection(): FixtureMemoryProjection {
     appliedSeqs,
     appliedSeq: () => (lastSessionId === null ? 0 : highestFor(lastSessionId)),
     async apply(event) {
+      // Match production: the compatibility getter follows the last attempted
+      // session, including a gap or duplicate that did not advance its bookmark.
+      lastSessionId = event.sessionId
       const highest = highestFor(event.sessionId)
       if (event.seq <= highest) return { appliedSeq: highest }
       if (event.seq > highest + 1) return { appliedSeq: highest }
       highestBySession.set(event.sessionId, event.seq)
-      lastSessionId = event.sessionId
       appliedSeqs.push(event.seq)
       return { appliedSeq: event.seq }
     },

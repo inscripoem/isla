@@ -2844,3 +2844,18 @@ entries:
       Conflict resolution and record-keeping only. No production code, tests,
       dependencies, shared C1-C7 contracts, case IDs or trace rows were added,
       changed or removed beyond the union of the two sides.
+  - date: 2026-10-20
+    task: M6-01-C-66-P3
+    branch: m6-post51-cleanup
+    change: "C-66 review P3: align the correct fixture's scalar appliedSeq() getter with production. Both now follow the last attempted session, including gap/duplicate attempts. Add a shared production/fixture regression. No production source, port signature or case-ID change."
+    requirements: [FR-06]
+    invariants: [INV-06]
+    cases: [C-66]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    verification:
+      focused: "test/offline/m6-storage.test.ts -t P3: 1/1 passed."
+      role: "test:m6 182/14; trace 41/1; readiness 42/3."
+      full_suite: "pnpm test 1125/63; pending final verify after INV-16 docs."
+      mutation: "Last-advanced fixture mutation turned P3 red with expected 1 to be +0; restored."
+    human_review: "M5 P3 finding addressed in fixture; no production contract change."
