@@ -1,176 +1,191 @@
+/*
+ * Console layout glue only.
+ *
+ * Every colour, spacing, radius and font value comes from the animal-island-ui
+ * design tokens, so the console follows the component library instead of
+ * fighting it. Component internals (button, input, select, card, tabs) are not
+ * restyled here.
+ */
+
 .console {
-  max-width: 760px;
+  max-width: 960px;
   margin: 0 auto;
-  padding: 24px 16px 48px;
+  padding: var(--animal-spacing-xl) var(--animal-spacing-md) calc(var(--animal-spacing-xl) * 2);
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--animal-spacing-lg);
+  font-family: var(--animal-font-family);
+  font-size: var(--animal-font-size-base);
+  line-height: var(--animal-line-height-base);
+  color: var(--animal-text-color);
   text-align: left;
 }
 
-.console__header h1 {
-  margin: 0 0 4px;
-  font-size: 28px;
+.console__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--animal-spacing-sm);
 }
 
 .console__subtitle {
-  margin: 0 0 16px;
-  color: #565b66;
+  margin: 0;
+  color: var(--animal-text-color-secondary);
+}
+
+.console__connection {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--animal-spacing-sm);
+}
+
+.console__connection-label {
+  font-size: var(--animal-font-size-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.console__connection-detail {
+  color: var(--animal-text-color-secondary);
+}
+
+.console__stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--animal-spacing-md);
+}
+
+.console__card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--animal-spacing-sm);
+  margin-bottom: var(--animal-spacing-sm);
+}
+
+.console__form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--animal-spacing-md);
+  margin-top: var(--animal-spacing-sm);
+}
+
+.console__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--animal-spacing-xs);
+  width: 100%;
+  max-width: 420px;
+}
+
+.console__label {
+  font-size: var(--animal-font-size-sm);
+  font-weight: 700;
+  color: var(--animal-text-color);
 }
 
 .console__actions {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--animal-spacing-sm);
 }
 
-.console__actions button {
-  font: inherit;
-  padding: 6px 12px;
-  border-radius: 6px;
-  border: 1px solid #c9ccd4;
-  background: #f6f7f9;
-  color: #1b1d22;
-  cursor: pointer;
+.console__hint {
+  margin: 0;
+  font-size: var(--animal-font-size-sm);
+  color: var(--animal-text-color-secondary);
 }
 
-.console__actions button:hover:not(:disabled) {
-  border-color: #7a8394;
+.console__alert {
+  margin: var(--animal-spacing-sm) 0 0;
+  padding: var(--animal-spacing-sm) var(--animal-spacing-md);
+  border-radius: var(--animal-border-radius-sm);
+  background: var(--animal-bg-color-secondary);
+  color: var(--animal-error-color);
 }
 
-.console__actions button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.console__list {
+  list-style: none;
+  margin: var(--animal-spacing-sm) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--animal-spacing-xs);
 }
 
-.panel {
-  border: 1px solid #d7dae0;
-  border-radius: 8px;
-  padding: 16px;
-  background: #fff;
-}
-
-.panel__heading {
+.console__list-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: var(--animal-spacing-sm);
+  padding: var(--animal-spacing-sm) var(--animal-spacing-md);
+  border-radius: var(--animal-border-radius-sm);
+  border: var(--animal-border-width) solid transparent;
+  background: var(--animal-bg-color-secondary);
 }
 
-.panel__heading h2 {
+/* An in-flight request is visibly provisional, never reported as settled. */
+.console__list-item--pending {
+  border-color: var(--animal-focus-yellow);
+}
+
+.console__list-text {
+  flex: 1 1 180px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.console__list-meta {
+  font-size: var(--animal-font-size-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--animal-text-color-secondary);
+}
+
+.console__list-detail {
+  flex-basis: 100%;
+  font-size: var(--animal-font-size-sm);
+  color: var(--animal-text-color-secondary);
+  overflow-wrap: anywhere;
+}
+
+.console__footnote {
   margin: 0;
-  font-size: 18px;
-}
-
-.badge {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid transparent;
-}
-
-.badge--ok {
-  background: #e3f6e8;
-  border-color: #9ad3aa;
-  color: #17612c;
-}
-
-.badge--error {
-  background: #fdeaea;
-  border-color: #e3a2a2;
-  color: #8a1f1f;
-}
-
-.badge--idle {
-  background: #eef0f3;
-  border-color: #c9ccd4;
-  color: #4a4f59;
+  font-size: var(--animal-font-size-sm);
+  color: var(--animal-text-color-secondary);
 }
 
 .facts {
   display: grid;
   grid-template-columns: max-content 1fr;
-  gap: 4px 16px;
+  gap: var(--animal-spacing-xs) var(--animal-spacing-md);
   margin: 0;
 }
 
 .facts dt {
-  color: #565b66;
+  color: var(--animal-text-color-secondary);
 }
 
 .facts dd {
   margin: 0;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
-.message {
-  margin: 0 0 8px;
-  color: #3d4149;
-}
-
-.message--error {
-  color: #8a1f1f;
-}
-
-.reply {
-  margin: 0;
-  padding: 12px;
-  border-radius: 6px;
-  background: #f4f5f7;
-  overflow-x: auto;
-  font-size: 13px;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-@media (prefers-color-scheme: dark) {
-  .console__subtitle,
-  .facts dt {
-    color: #a6acb8;
+@media (max-width: 768px) {
+  .console {
+    padding: var(--animal-spacing-lg) var(--animal-spacing-sm) var(--animal-spacing-xl);
   }
 
-  .console__actions button {
-    background: #23262d;
-    border-color: #3a3f49;
-    color: #eef0f3;
+  .facts {
+    grid-template-columns: 1fr;
+    gap: var(--animal-spacing-xs);
   }
 
-  .panel {
-    background: #1a1c21;
-    border-color: #343943;
-  }
-
-  .badge--ok {
-    background: #16321f;
-    border-color: #2f6b41;
-    color: #a7e0b8;
-  }
-
-  .badge--error {
-    background: #3a1d1d;
-    border-color: #7a3a3a;
-    color: #f0b4b4;
-  }
-
-  .badge--idle {
-    background: #23262d;
-    border-color: #3a3f49;
-    color: #a6acb8;
-  }
-
-  .message {
-    color: #c7ccd5;
-  }
-
-  .message--error {
-    color: #f0b4b4;
-  }
-
-  .reply {
-    background: #23262d;
+  .facts dd {
+    margin-bottom: var(--animal-spacing-xs);
   }
 }
