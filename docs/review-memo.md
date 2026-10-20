@@ -135,3 +135,17 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
 - Traceability: NFR-01/NFR-04, INV-16, ADR-007/Delta-007; C-71 is allocated and its verifier now passes.
   C-69/C-70 rows are registered on this branch and become effective on merge.
 - Limits: no real provider run, no `evaluation-table.md`, G4 not run, no quality/latency/cost claim.
+
+## M6 self-review — C-66 session-scoped projection bookmark
+
+- Date: 2026-10-20 · Reviewer: M6 (self) · Verdict: **implementation complete; M5/consumer review pending**
+- Scope: `src/contracts/app/ports.ts`, `src/storage/memory-projection.ts`, the correct/faulty projection
+  fixtures, `m6-storage.test.ts`, `m6-recovery.test.ts`, and the C-66 trace/ADR/Delta evidence. No provider,
+  runtime composition or evaluation table touched.
+- Behaviour: the bookmark is keyed by `event.sessionId`; gap, idempotence and next-event rules remain per
+  session. A projection shared across sessions cannot advance or skip another session.
+- Verification: focused `m6-storage.test.ts` **64/64**, `m6-recovery.test.ts` **4/4**, `test:m6` **180/13**,
+  full **986/54**, trace **41/1**, `pnpm verify` exit 0. A session-blind mutation turned C-66 red with
+  `expected 2 to be +0`; restored and the focused test passed again.
+- Traceability: C-66, INV-06, FR-06, ADR-002 amendment/Delta-002 amendment; no new case ID was invented.
+- Limits: no production caller today; the shared `MemoryProjectionPort` signature is unchanged, but the storage behaviour still needs M5/consumer review.

@@ -1,7 +1,7 @@
 # Trace matrix
 
 Status: under review. M6 rows contributed here; other owners' rows pending. Shared document —
-Step A and I1 coordination under review. Updated: 2026-10-17.
+Step A and I1 coordination under review. Updated: 2026-10-20.
 
 Every requirement maps to its enforcing component, interface, test/evidence and runtime monitor.
 
@@ -13,7 +13,7 @@ Every requirement maps to its enforcing component, interface, test/evidence and 
 | FR-06 / C-12 | Replay never mutates live state and calls no live provider | `src/storage/replay-reader.ts` | `ReplayReaderPort` | C-12 | `m6-storage.test.ts` (replay-isolation test) | — | — | in review | M6 |
 | INV-04 | Event identity is session-scoped; identity and session sequence are unique within a session; content equality is canonical (key order irrelevant, array order significant) and a payload must be a JSON value | `src/storage/event-store.ts` + `payload.ts` + `backend.ts` | `StorageBackend` | C-18, C-23, C-39, C-40, C-41, C-43, C-44, C-51 | `m6-storage.test.ts`; conformance `append-seq-unique`, `append-session-scoped-identity` | `conflict` / `unsupported_payload` acks | ADR-002 | in review | M6 |
 | INV-05 | A delivery and its supporting event commit together or not at all; a failed commit leaves no partial state (in-memory prepares before publishing; SQLite applies one transaction + rollback) | `src/storage/backend.ts` (`commit`) + `event-store.ts` | `StorageBackend` | C-19, C-38, C-42 | `m6-storage.test.ts::INV-05` (failed commit persists nothing; a later unpublishable mutation leaves no partial state); `m6-sqlite-backend.test.ts` (batch rollback); conformance `atomic-no-partial-mutation` | `storage_unavailable` acks | ADR-001, ADR-002 | in review | M6 |
-| INV-06 | A memory projection never advances across a gap | `src/storage/memory-projection.ts` | `MemoryProjectionPort` | C-20 | `m6-storage.test.ts::INV-06`; conformance `projection-no-gap-claim` | `appliedSeq` | — | in review | M6 |
+| INV-06 | A memory projection never advances across a gap, is idempotent, and keeps its bookmark session-scoped | `src/storage/memory-projection.ts` | `MemoryProjectionPort` | C-20, C-66 | `m6-storage.test.ts::INV-06`; `m6-storage.test.ts` C-66 independent-session test; conformance `projection-no-gap-claim`, `projection-idempotent` | `appliedSeq` / per-session `apply` result | ADR-002 C-66 amendment | in review | M6 |
 | INV-07 | Committed records are isolated from caller mutation | `src/storage/in-memory-backend.ts` | `StorageBackend` | C-24 | `m6-storage.test.ts` (isolation tests) | — | ADR-002 | in review | M6 |
 | INV-08 | Confirmed history is ordered by the supporting event seq | `src/storage/history-query.ts` | `HistoryQueryPort` | C-25 | `m6-storage.test.ts` (ordering test) | — | ADR-002 | in review | M6 |
 | INV-09 / FR-06 | Original index/persona survive delivery and history reads | `coordinator.ts`, `storage.ts`, `event-store.ts` | C6/C7 | C-46, C-47 | `m5-attribution.test.ts` (production M5 + in-memory M6) | delivery conflict acknowledgement | ADR-002 Step A amendment | under review | M5 |

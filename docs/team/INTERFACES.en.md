@@ -80,7 +80,7 @@ A delivery write must be internally consistent. `classification` and `terminalOu
 
 ## C7: persistence, projection and replay
 
-M6 owns SQLite infrastructure, migrations and storage/history APIs; M4 owns memory semantics; M5 retains live authority. M5 constructs the supporting event and calls M6 `commitDeliveryWithEvent(delivery, event)` directly; only after a successful atomic acknowledgement does it call M4 memory admission. Commit delivery and its supporting event atomically before acknowledging persistence. Do not publish a different event with the same seq or commit spoken memory before persistence succeeds.
+M6 owns SQLite infrastructure, migrations and storage/history APIs; M4 owns memory semantics; M5 retains live authority. The memory projection bookmark is session-scoped internally (C-66): a shared projection must not advance or skip another session, and `apply` returns the event session’s position. The existing scalar `appliedSeq()` remains the most recently applied session’s position; it is not a cross-session query. M5 constructs the supporting event and calls M6 `commitDeliveryWithEvent(delivery, event)` directly; only after a successful atomic acknowledgement does it call M4 memory admission. Commit delivery and its supporting event atomically before acknowledging persistence. Do not publish a different event with the same seq or commit spoken memory before persistence succeeds.
 
 Event/delivery/sequence uniqueness is session-scoped. Identity reuse with changed content conflicts. Projections track applied seq and cannot claim current history across a gap. JSONL exports derive from committed records and must agree with them.
 

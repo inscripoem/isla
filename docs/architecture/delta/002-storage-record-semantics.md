@@ -1,7 +1,7 @@
 # Delta Specification 002 — Storage record semantics
 
 Status: under review (M6). Date: 2026-10-13. ADR: ADR-002. Requirements: FR-06.
-Invariants: INV-04, INV-05, INV-07, INV-08. Cases: C-19, C-23, C-24, C-25, C-38, C-39, C-40, C-41, C-43, C-44.
+Invariants: INV-04, INV-05, INV-07, INV-08; C-66 amendment: INV-06. Cases: C-19, C-23, C-24, C-25, C-38, C-39, C-40, C-41, C-43, C-44; C-66 amendment: C-20, C-66. The C-66 amendment leaves the frozen ports unchanged.
 Revision type: ADD-R (PR #9 review; structure passed, contract semantics corrected).
 
 ## OBSOLETED
@@ -48,7 +48,7 @@ Zero imports of the old signatures remain.
 
 | Item | Reason |
 | --- | --- |
-| `src/contracts/app/*` | Shared contracts; unchanged by this revision |
+| `src/contracts/app/*` | Shared contracts; unchanged by the original revision and by C-66 |
 | Other modules (`src/runtime`, `src/console`, ...) | Other owners; untouched |
 | `EventStorePort`, `HistoryQueryPort` | Public port signatures unchanged |
 
@@ -58,3 +58,20 @@ Tier 1 structural: `pnpm typecheck`, `pnpm lint`, `test/offline/boundaries.test.
 Tier 2 regression: `pnpm test` (all prior suites).
 Tier 3 behavioral: pending. Original findings: PR #9 review items 1–3, plus the follow-up
 batch-atomicity finding (INV-05 / D4 / C-38).
+
+## C-66 amendment — session-scoped projection bookmark (2026-10-20, under review)
+
+| Item | Change |
+| --- | --- |
+| `src/storage/memory-projection.ts` | one `appliedSeq` per session internally; `apply` returns that session’s position; gap/idempotence rules remain per session |
+| `src/contracts/app/ports.ts` | unchanged; frozen public `MemoryProjectionPort` signature preserved |
+| `test/support/{correct,faulty}-ports.ts` | fixtures carry per-session state; the faulty fixture remains deliberately non-idempotent/gap-claiming |
+| `test/offline/m6-storage.test.ts` | C-66 independent-session regression; existing INV-06 regression retained |
+| `test/offline/m6-recovery.test.ts` | reads the bookmark for its known session |
+| Traceability | C-66 registered; INV-06, FR-06 and trace rows updated |
+
+FROZEN: `MemoryProjectionPort`, `EventStorePort`, `HistoryQueryPort` and M5 sequence authority. This amendment does not
+introduce a production caller or a dependency.
+
+Verification: focused `m6-storage.test.ts` **64/64** and `m6-recovery.test.ts` **4/4**; role/full/
+verify results are recorded in the handoff. A session-blind mutation is the required negative control.

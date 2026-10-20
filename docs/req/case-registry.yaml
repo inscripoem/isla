@@ -364,6 +364,13 @@ cases:
       file: test/offline/m6-02-report.test.ts
       test: "refuses a fixture text source"
 
+  - id: C-66
+    status: implemented
+    title: The projection bookmark is session-scoped; one session's sequence must never advance or skip another's
+    verifier:
+      file: test/offline/m6-storage.test.ts
+      test: "C-66: keeps the projection bookmark independent per session"
+
   - id: C-68
     status: implemented
     title: Coordinator SQLite reopen restores only confirmed history and keeps interrupted output unresolved
