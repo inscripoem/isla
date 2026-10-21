@@ -1,8 +1,8 @@
 # M5 production composition and durable application lifecycle handoff
 
-Published baseline: [PR48 cbc845c746e426934acc8a55289fe58efefb8ec5](https://github.com/inscripoem/isla/commit/cbc845c746e426934acc8a55289fe58efefb8ec5), incorporating main37c1d9e. M1's [scoped Windows approval](https://github.com/inscripoem/isla/pull/48#pullrequestreview-5583059851) resolves the original response-hold P2 at that head. The current local candidate additionally incorporates main579b14b (merged PR51); publication and verification of that combination are separate. Earlier increment baselines and test counts below retain their original scope. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline) for current status, verification and remaining owner work.
+Published baseline: [PR48 cbc845c746e426934acc8a55289fe58efefb8ec5](https://github.com/inscripoem/isla/commit/cbc845c746e426934acc8a55289fe58efefb8ec5), incorporating main37c1d9e. M1's [scoped Windows approval](https://github.com/inscripoem/isla/pull/48#pullrequestreview-5583059851) resolves the original response-hold P2 at that head. The current local candidate is main f972b32 plus this follow-up (evaluation-test repair integration, CLI shutdown hardening and the supervisory review follow-up); publication and verification of a new head are separate. Earlier increment baselines and test counts below retain their original scope. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline) for current status, verification and remaining owner work.
 
-Revision: 2026-10-20.4. Owner: M5 — CHANG Xuben. Status: cbc845c published; main579b14b reconciliation local and under review. Historical increment branch: `feat/m5-production-composition`, based on the published PR45
+Revision: 2026-10-21.3. Owner: M5 — CHANG Xuben. Status: application merged on main f972b32; local CLI shutdown hardening under review. Historical increment branch: `feat/m5-production-composition`, based on the published PR45
 head `6bcfc2b`. Scope: FR-05/FR-06 production assembly, durable startup/controlled
 shutdown and explicit selected-history recovery over the existing M6 SQLite backend,
 the root Vite entry routing for the application socket and operator bootstrap, and
@@ -62,7 +62,14 @@ production reconstruction entry, and controls the transport and database lifetim
     invalid configuration exits 1 with `configuration_invalid`.
   - Emits one JSON line per lifecycle event (`listening`, `shutdown_started`,
     `shutdown_complete` and structured `*_failed` errors) and performs the
-    controlled shutdown on SIGINT/SIGTERM.
+    controlled shutdown on SIGINT/SIGTERM and on the portable IPC control
+    message `{ type: "isla.runtime.shutdown" }` when a parent supplied an IPC
+    channel. The lifecycle records distinguish the trigger: a real signal
+    reports `trigger: "signal"` with the received name, while the IPC request
+    reports `trigger: "ipc"` and never claims an OS signal. The referenced
+    control channel is released once shutdown settles (including the failure
+    path) and on the listen-failure path, so the process exits naturally;
+    unrelated messages are ignored and the shutdown is idempotent.
 - `src/runtime/composition.ts` — synthesis injection and the audio-resource seam:
   - The composition dependency types (`RuntimeCompositionDeps`,
     `ReconstructedRuntimeDeps`) accept an injected `synthesis` port (for example
@@ -103,8 +110,8 @@ production reconstruction entry, and controls the transport and database lifetim
   two separately spawned production CLI processes run over one real SQLite
   database through the real application transport (WebSocket `/app`). The first
   process produces a confirmed turn (two segments observed as completed receipts
-  and two `delivery.committed` events through the transport) and exits 0 under
-  SIGTERM. The second starts under a fresh live id, explicitly selects the
+  and two `delivery.committed` events through the transport) and exits 0 through
+  the IPC shutdown request. The second starts under a fresh live id, explicitly selects the
   previous live session and the seeded archive through
   `ISLA_TEST_ARCHIVE_SESSIONS`, and continues output in a new turn. The assembled
   dialogue context is observed through the test-only capture hook in the
@@ -133,9 +140,9 @@ The deployment module exports a `ProductionDeploymentFactory` (named
 | `allowedHosts` | Optional exact allowed `Host` values; omitted means loopback-only hosts. |
 
 The factory receives `{ clock, databasePath, env }`. A deployment module for a
-real product does not exist in this checkout yet: the live M1 synthesis
-provider/loader and the M1 audio-resource registry interface, M3
-selection/reaction and the M4 live text source are still owner deliverables. M5
+real product does not exist in this checkout yet. It needs configured M1
+synthesis/registry and owner-supplied M3 selection/reaction and M4 live text;
+merged M1 provider/loader interfaces do not by themselves establish deployment. M5
 owns the dynamic audio HTTP/routing and resource assembly; M2 is the browser
 consumer. `test/support/production-deployment.ts` is a test-only module used by
 the CLI suite; production source never imports it.
@@ -149,25 +156,39 @@ Production shutdown disposes the composition before draining it. A waiting outpu
 ## Supported shutdown verification
 
 The process-level graceful-shutdown and two-process restart evidence is verified
-on briefcase/Linux x86_64 with Node.js 22.23.3. The supported tested trigger is
-SIGTERM sent to the directly spawned runtime PID (`node --import tsx`), with
-`shutdown_started`, awaited owned release, `shutdown_complete`, successful exit
-and SQLite reopen checked. SIGINT is implemented but is not independently
-established by these SIGTERM tests. The existing historical counts below retain
-their original revision and platform scope.
+on briefcase/Linux x86_64 with Node.js 22.23.3. The supported tested triggers are
+SIGTERM sent to the directly spawned runtime PID (`node --import tsx`) and the
+portable IPC control message `{ type: "isla.runtime.shutdown" }` sent to a
+runtime spawned with an IPC channel; both log `shutdown_started`, await the owned
+release, log `shutdown_complete` and exit 0 with no termination signal. The IPC
+path is additionally verified for a genuinely pending owned release (the process
+stays alive with the channel open until the release settles), a failed owned
+release (exit 1 with `shutdown_failed`, still exiting naturally), duplicate and
+unrelated messages (ignored, with exactly-once release) and listen/start failure
+with the channel attached. The ordinary two-process continuation shuts both
+processes down through IPC and checks each actual initial snapshot is stopped
+before Resume; separate CLI tests retain Linux SIGTERM coverage.
+SIGINT is implemented but is not independently established by these tests. The
+existing historical counts below retain their original revision and platform
+scope.
 
 On Windows, Node's [`subprocess.kill`](https://nodejs.org/docs/latest-v22.x/api/child_process.html#subprocesskillsignal)
 for SIGTERM/SIGINT kills the child forcefully; it does not demonstrate execution
 of the application's cooperative shutdown handler. M1's Windows/Node24 failures
-therefore remain a platform/trigger verification gap. Windows deployment needs a
-separately implemented and validated cooperative trigger before equivalent
-process-level shutdown/restart acceptance can be claimed. This follow-up adds no
-such trigger and does not skip or reinterpret the existing failing cases.
+therefore remain a platform/trigger verification gap. The IPC message is the
+platform-neutral cooperative control a Windows deployment needs, but it is
+validated on Linux only here; Windows validation remains required before
+equivalent process-level shutdown/restart acceptance can be claimed. This
+follow-up does not skip or reinterpret the existing failing cases.
 
-The process helper currently maps a null exit code to -1 without returning the
-raw signal. Preserve M1's reported limitation: process exit alone is insufficient
-proof of graceful shutdown; lifecycle and release assertions are required. Raw
-signal reporting remains a separate harness follow-up.
+The shared process helper now returns the raw exit code and signal (no -1
+substitution) and resolves only after both output pipes have drained, so a
+terminal diagnostic is not lost to an `exit`-before-read ordering: a cooperative
+exit reports code 0 with a null signal, and a forceful termination reports no
+code with the actual signal. The lifecycle records name the trigger (`signal`
+plus the received name, or `ipc`) instead of labelling the IPC request as a
+signal. Preserve M1's reported limitation: process exit alone is insufficient
+proof of graceful shutdown; lifecycle and release assertions are required.
 
 ## Evidence
 
@@ -197,14 +218,31 @@ signal reporting remains a separate harness follow-up.
   `allowedHosts` entry makes endpoint construction throw a `RangeError` after the
   initial composition was built, and the cleanup retires that composition and
   leaves no WAL side file.
-- `test/offline/production-cli.test.ts` (5 tests): missing deployment module,
+- `test/offline/production-cli.test.ts` (15 tests): missing deployment module,
   unloadable module and factory-less module fail with exit 1 and the documented
   events; a pre-seeded live id fails startup with `startup_failed` ("already has
-  stored evidence"); a full run logs `listening`, serves `/health` 200 and exits 0
-  on SIGTERM with `shutdown_complete`.
-- `test/offline/m5-process-restart.test.ts` (1 test): the two-process restart
-  acceptance described above, including the dialogue-context capture and the
-  independent post-exit recovery reads.
+  stored evidence") and exits naturally with an IPC channel attached; a full run
+  logs `listening`, serves `/health` 200 and exits 0 on SIGTERM with
+  `"trigger":"signal","signal":"SIGTERM"` and no termination signal; a run
+  spawned with an IPC channel exits 0 on `{ type: "isla.runtime.shutdown" }`
+  with `"trigger":"ipc"` (never `"signal":"ipc"`) and the completion record as
+  its last output line; owned-release success, a genuinely pending release and
+  release failure are covered over both SIGTERM and IPC (the IPC failure still
+  exits naturally with code 1); duplicate and unrelated IPC messages are
+  ignored with exactly-once release; the listen-failure shutdown fault is
+  covered with the channel attached; and a synthetic child pins that output
+  arriving after `exit` is retained until both pipes end.
+- `test/offline/m5-process-restart.test.ts` (2 tests): the two-process restart
+  acceptance described above — both processes shut down through the IPC
+  control message (`"trigger":"ipc"`), with initial stopped snapshots asserted —
+  including the dialogue-context capture and the independent post-exit recovery
+  reads; plus a forceful-kill case where segment 0 is durably committed and
+  segment 1 is held, SIGKILL is observed as no exit code with signal `SIGKILL`,
+  the recovered view shows only the committed prefix with no unresolved
+  promotion, and a fresh live id continues over the same database with only the
+  committed segment carried into the dialogue context. The restarted stopped
+  session is explicitly checked to dispatch no performance message before its
+  own input and to commit only its own turn.
 - `test/offline/m5-coordinator.test.ts` (+2 tests): `settle()` waits for a held
   store append and resolves after disposal; an aborted turn's `provider.call` and
   `result.stale` drain before the write seal, and a late receipt after the seal
@@ -230,6 +268,8 @@ signal reporting remains a separate harness follow-up.
   `test/support/production-deployment-invalid.ts` (CLI deployment modules).
 
 ## Verification
+
+Current local candidate, 2026-10-21.3: independent M5 177/177 (8 files), full verify 1132/1132 (63 files), typecheck, lint and build passed. Actual-change trace 41/41 and G6 passed; G4 reports not run. CLI 15 cases and process restart 2 cases are included. The original evaluation repair stayed byte-identical. Windows, live-provider, browser reruns and acoustic acceptance are not established.
 
 Historical increment results on 2026-10-19 (before PR48 publication):
 
@@ -298,11 +338,11 @@ behavior, not live providers, browser audio or acoustic output.
 
 | Owner | Remaining work |
 | --- | --- |
-| M1 | Live provider/VTS and actual-output observation; Windows cooperative release evidence with M5/M6. PR33/34 implementation is already merged and retained. |
+| M1 | Live provider/VTS and actual-output observation; Windows cooperative release evidence with M5/M6 using the IPC trigger once validated on Windows. PR33/34 implementation is already merged and retained. |
 | M2 | Product transport/strict decoder/status, dynamic audio resolver, recovery controls and notification follow-up in Issue37. |
 | M3 | Production selection/reaction implementations, reviewed cases/rubric and cap policy. |
 | M4 | Live dialogue and usage adoption, reviewed cases, and the two remaining PR35 P2 repairs. |
-| M5 | Verify the main579b14b combination and coordinate deployment adoption; production lifecycle, dynamic audio and evaluation adapter are already implemented in PR48. |
+| M5 | Coordinate deployment adoption; production lifecycle, dynamic audio and evaluation adapter are merged. The local follow-up adds the portable IPC trigger, drained raw exit-code/signal reporting, trigger-vs-signal records, IPC-path coverage (pending/failed release, duplicate/unrelated messages, listen/start failure), IPC restart and the forceful-kill restart case; Windows trigger validation remains open. |
 | M6 | Recorded-run/report adoption and storage support; C-65/C-66/C-67 are on main. The PR51 getter P3 remains separate. |
 
 Retention/deletion policy remains undecided. The [Issue25 reply](https://github.com/inscripoem/isla/issues/25#issuecomment-6286818499) records the controlled recovery evidence and platform/product gaps; the [Issue41 reply](https://github.com/inscripoem/isla/issues/41#issuecomment-6286821631) separates adapter implementation from S6/G4 acceptance.
@@ -315,12 +355,15 @@ Retention/deletion policy remains undecided. The [Issue25 reply](https://github.
   module ownership. No shared contract (`src/contracts/`), frozen path, lockfile or
   dependency changed in this increment.
 - This is application-level durability over the real SQLite backend with
-  controlled shutdown. It does not establish process-crash recovery of an
-  uncommitted tail, live provider behavior, browser audio or complete course
-  acceptance. The two-process restart acceptance uses real child processes, real
-  SQLite and the real application transport, but its peers remain the labeled
-  test substitutes, so it does not establish live provider, acoustic or
-  course-level behavior either. The `session.recover` path is explicit and
+  controlled shutdown. It does not establish live provider behavior, browser
+  audio or complete course acceptance. The forceful-kill case covers restart
+  after an abrupt termination between commits: the committed prefix survives, the
+  held tail is never promoted, the restarted stopped session dispatches nothing
+  before its own input and a fresh session continues; it does not force a torn
+  write, and no Windows behavior is established. The two-process restart
+  acceptance uses real child processes, real SQLite and the real application
+  transport, but its peers remain the labeled test substitutes, so it does not
+  establish live provider, acoustic or course-level behavior either. The `session.recover` path is explicit and
   operator-driven; it never replays old audio and never admits unresolved
   delivery as spoken.
 - No owner review or merge is implied by this document. [DELIVERY-PLAN.en.md](DELIVERY-PLAN.en.md)
