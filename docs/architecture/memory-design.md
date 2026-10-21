@@ -66,6 +66,38 @@ The table describes the persistence target. Current main supplies an in-memory b
 - Replay (`ReplayReaderPort.load`) is an **isolated read model**: it never mutates live state and
   never calls a live provider/renderer (C-12).
 
+### Lexical recall scoring (M4, offline)
+
+Recall over turns that aged out of the recency window is deterministic keyword overlap — no model
+call, no embeddings, no I/O, so it stays free for NFR-03 attribution.
+
+- Tokens are Latin words (3+ characters) and CJK bigrams. A CJK one-character run yields no token at
+  all: a lone 我 is a pronoun, and matching it across turns is a false positive.
+- Stopword tables are per tokenizer (whole Latin words; CJK bigrams), because an English-only list
+  never matched Chinese text. Glue bigrams are kept but weighted **thin**.
+- A token is **informative** (weight 2) when it is a 5+ character Latin word, a number, or a CJK
+  bigram of two content characters; otherwise it is thin (weight 1). Admission needs the weighted
+  score to reach `MIN_RECALL_SCORE` **and** at least one informative token, so two shared glue words
+  cannot drag in an unrelated old turn.
+- This is lexical and therefore coarse by construction; it errs toward precision, because a false
+  recall costs budget and misleads the model.
+
+### Consistency scan (M4, audit only)
+
+Admitted confirmed statements and the profile's standing facts are compared by clause before the
+prompt is rendered: opposite polarity about the same content, incompatible numbers about the same
+content, and opposite attributes about the same object.
+
+- The scan **reports**; it never decides truth, rewrites text, drops a record or changes admission.
+  Silently dropping one side would pick a winner on lexical evidence alone.
+- Findings carry statement ids, the disagreement kind and a shared-token **count** — never statement
+  text, so they stay inside the redaction boundary of the operator inspection payload.
+- `CONFLICT_MARKER` (` [conflicting]`) is opt-in and off by default: it is prompt text and is charged
+  to `maxCharacters`, so enabling it can displace another turn. With it off, the prompt, the budget
+  and the rendered block are unchanged from before the detector existed.
+- Scope limits, stated rather than hidden: clause-level only, lexical (no paraphrase), negation read
+  from a small marker list (so an idiom such as 不错 reads as negated).
+
 ## Retention and privacy
 
 - Default local-only archives with a **proposed 7-day retention**; any different retention is an
@@ -73,6 +105,33 @@ The table describes the persistence target. Current main supplies an in-memory b
 - No raw audio, credentials or personal tokens in event payloads or JSONL exports by default.
 - Deleting stored memory does not claim an external provider's records were deleted.
 - The database, journal files and audio stay **outside OneDrive**.
+
+### "Confirmed by M6" is not "admitted by M4"
+
+These are two independent, intentionally separate questions (issue #44 §3).
+
+- **M6 confirmed** — durable `fully-delivered` evidence, ordered by the supporting event `seq`. This
+  answers "was this durably delivered". It is the audit/durability view.
+- **M4 admitted** — a record that actually enters spoken context after the receipt policy
+  (`required-for-audio`). This answers "may the character recall this as something it said". A record
+  M6 confirms can be refused by M4 (e.g. `fully-delivered` audio with no receipt), and a record M4
+  admits must already be confirmed.
+
+The operator console must show **both, labelled**: "admitted to memory" (M4, with reason) and
+"durable confirmed" (M6, audit). If only one is shown, show M4 admission; M6 confirmed belongs in the
+audit surface. Neither filter is changed to match the other.
+
+### Retraction versus deletion
+
+- **Retracted** — semantic memory is no longer admitted; evidence retained; replay/audit still shows
+  what was said. This is the smallest safe "forget this fact" operation and is an append-only
+  retraction/override record keyed to the source event/delivery, applied by M4.
+- **Deleted** — data erasure; removes evidence/data. A separate data-lifecycle/privacy operation with
+  its own policy and audit consequences. "Delete the whole session" is this operation, not a
+  projection-row delete.
+
+v0.2 builds no user-facing forget action and no evidence deletion; the two words must never be
+conflated.
 
 ## Restart behaviour
 

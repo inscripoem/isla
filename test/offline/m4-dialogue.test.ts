@@ -3,7 +3,8 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { collectDialogueViolations } from '../conformance/dialogue.conformance'
 import * as faulty from '../support/faulty-ports'
-import { createCallContext } from '../support/context'
+import { createCallContext, createGate } from '../support/context'
+import type { CallContextHandle } from '../support/context'
 import {
   FIXTURE_SESSION_ID,
   fixtureCommitDelivery,
@@ -35,6 +36,7 @@ import {
 } from '../../src/dialogue'
 import type {
   AssembledDialogueContext,
+  DialogueOutcomeReport,
   DialogueTextSource,
   DeliveryMemoryStore,
 } from '../../src/dialogue'
@@ -120,6 +122,31 @@ function capturingTextSource(
   }
 }
 
+/** A source whose compose result is re-read for each call. */
+function countingTextSource(read: () => readonly string[]): DialogueTextSource {
+  return {
+    model: 'test-source',
+    modelVersion: 'test-v1',
+    resolvedModel: null,
+    async compose(_view, maxSegments) {
+      return read().slice(0, Math.max(0, maxSegments))
+    },
+  }
+}
+
+/** A sink that aborts the context synchronously on its first accepted segment. */
+function abortingSink(
+  collected: DialogueSegment[],
+  context: CallContextHandle,
+): DialogueSink {
+  return {
+    segment: async (segment) => {
+      collected.push(segment)
+      context.abort()
+    },
+  }
+}
+
 describe('M4 dialogue conformance', () => {
   it('satisfies every dialogue assertion with the real implementation', async () => {
     const memory = createDeliveryMemoryStore()
@@ -183,12 +210,89 @@ describe('M4 generation invariants', () => {
     expect(end.segmentCount).toBe(1)
   })
 
-  it('treats a passed deadline as a timeout and stops generating', async () => {
+  it('treats a passed deadline as a deadline_exceeded timeout and stops generating', async () => {
     const port = createDialoguePort({ clock: { nowMs: () => 10_000 } })
     const outcome = await generate(port, fixtureDialogueRequest(), createCallContext(5_000))
     expect(outcome.segments).toHaveLength(0)
-    expect(outcome.end.status).toBe('cancelled')
+    expect(outcome.end.status).toBe('deadline_exceeded')
     expect(outcome.end.usage.status).toBe('timeout')
+  })
+
+  it('treats a deadline exactly at the clock time as expired (>= boundary)', async () => {
+    const port = createDialoguePort({ clock: { nowMs: () => 5_000 } })
+    const outcome = await generate(port, fixtureDialogueRequest(), createCallContext(5_000))
+    expect(outcome.segments).toHaveLength(0)
+    expect(outcome.end.status).toBe('deadline_exceeded')
+  })
+
+  it('does not emit a segment when the deadline elapses during an awaited step', async () => {
+    const gate = createGate()
+    const source: DialogueTextSource = {
+      model: 'test-source',
+      modelVersion: 'test-v1',
+      resolvedModel: null,
+      async compose(_view) {
+        await gate.promise
+        return ['late reply one', 'late reply two']
+      },
+    }
+    // Clock starts under the deadline, then passes it while compose is awaited.
+    let now = 4_000
+    const port = createDialoguePort({ clock: { nowMs: () => now }, textSource: source })
+    const context = createCallContext(5_000)
+    const segments: DialogueSegment[] = []
+    const pending = port.generate(fixtureDialogueRequest(), context, sinkOf(segments))
+    now = 6_000
+    gate.release()
+    const end = await pending
+    expect(segments).toHaveLength(0)
+    expect(end.status).toBe('deadline_exceeded')
+    expect(end.usage.status).toBe('timeout')
+  })
+
+  it('reports generated vs emitted vs discarded on a completed call', async () => {
+    const reports: DialogueOutcomeReport[] = []
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      textSource: countingTextSource(() => ['one', '...', 'three']),
+      onOutcome: (report) => reports.push(report),
+    })
+    const outcome = await generate(port)
+    expect(outcome.segments).toHaveLength(1)
+    expect(reports).toHaveLength(1)
+    expect(reports[0]).toMatchObject({
+      generated: 2,
+      emitted: 1,
+      discarded: 1,
+      discards: { 'no-speech': 1 },
+      endStatus: 'completed',
+      usageStatus: 'ok',
+    })
+    expect(reports[0]?.requestId).toBe(fixtureDialogueRequest().requestId)
+  })
+
+  it('reports a stop that arrives during a sink write and keeps the emitted segment', async () => {
+    const segments: DialogueSegment[] = []
+    const context = createCallContext()
+    const reports: DialogueOutcomeReport[] = []
+    const portGated = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      textSource: fixedTextSource(['one', 'two', 'three']),
+      onOutcome: (report) => reports.push(report),
+    })
+    // The sink aborts synchronously after the first accepted segment, so the
+    // post-await re-check sees a Stop and must not emit the next segment.
+    const end = await portGated.generate(
+      fixtureDialogueRequest(),
+      context,
+      abortingSink(segments, context),
+    )
+    expect(end.status).toBe('cancelled')
+    expect(segments).toHaveLength(1)
+    expect(reports).toHaveLength(1)
+    expect(reports[0]).toMatchObject({ generated: 2, discarded: 1, endStatus: 'cancelled' })
+    // The first segment was already counted as emitted before the re-check.
+    expect(reports[0]?.emitted).toBe(1)
   })
 
   it('never changes finalized text for a reused segment identity', async () => {

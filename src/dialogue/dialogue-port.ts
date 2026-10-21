@@ -121,6 +121,53 @@ export interface DialoguePortOptions {
   textSource?: DialogueTextSource
   /** Clamped to MAX_DIALOGUE_SEGMENTS whatever value is passed. */
   maxSegments?: number
+  /**
+   * Injected diagnostic boundary for generation/discard accounting.
+   *
+   * M5 owns persistence; M4 never writes to C6 here. This boundary only reports,
+   * after each `generate` call, how many segments were produced, how many were
+   * actually dispatched to the sink, and how many were dropped and why. It lets
+   * an observer see "generated but never dispatched" without that evidence being
+   * inferred from `DialogueEnd.segmentCount` alone. Omitted means no reporting.
+   */
+  onOutcome?: (report: DialogueOutcomeReport) => void
+  /**
+   * Render `[conflicting]` on turns the consistency scan flagged (see
+   * `AssembleDialogueContextInput.markConflictingTurns`).
+   *
+   * Omitted means audit-only: the scan still runs and its findings still reach
+   * `AssembledDialogueContext.conflicts` and `warnings`, but no prompt text is
+   * added, so the character budget and the rendered block are unchanged.
+   */
+  markConflictingTurns?: boolean
+}
+
+/**
+ * Correlated generation/discard accounting for one `generate` call.
+ *
+ * This is deterministic, local computation with no provider call (a hard
+ * constraint alongside NFR-03 attribution). `generated` is the number of
+ * candidates the text source produced; `emitted` is the number actually
+ * delivered to the sink; `discarded` is the remainder. The reason counts sum to
+ * `discarded` and describe why each candidate never reached the sink.
+ */
+export interface DialogueOutcomeReport {
+  requestId: string
+  sessionId: string
+  epoch: number
+  turnId: string
+  /** Candidates produced by the text source for this call. */
+  generated: number
+  /** Segments actually delivered to the sink. */
+  emitted: number
+  /** `generated - emitted`; the candidates that never reached the sink. */
+  discarded: number
+  /** Why candidates were discarded, summing to `discarded`. */
+  discards: Readonly<Record<string, number>>
+  /** Terminal `DialogueEnd.status` for the call. */
+  endStatus: DialogueEnd['status']
+  /** Usage status for the call. */
+  usageStatus: UsageRecord['status']
 }
 
 function clampMaxSegments(requested: number | undefined): number {
@@ -157,6 +204,28 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
       }),
     })
 
+  const report = (input: {
+    request: DialogueRequest
+    endStatus: DialogueEnd['status']
+    usageStatus: UsageRecord['status']
+    generated: number
+    emitted: number
+    discards: Readonly<Record<string, number>>
+  }): void => {
+    options.onOutcome?.({
+      requestId: input.request.requestId,
+      sessionId: input.request.sessionId,
+      epoch: input.request.epoch,
+      turnId: input.request.turnId,
+      generated: input.generated,
+      emitted: input.emitted,
+      discarded: input.generated - input.emitted,
+      discards: input.discards,
+      endStatus: input.endStatus,
+      usageStatus: input.usageStatus,
+    })
+  }
+
   return {
     async generate(
       request: DialogueRequest,
@@ -166,25 +235,26 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
       const startedAtMs = clock.nowMs()
 
       /*
-       * Deadline handling, which is in M4-01 scope.
+       * Deadline and cancellation handling.
        *
-       * Two independent stop conditions are checked at every segment boundary:
+       * Two independent stop conditions are checked at every await boundary:
        *   1. `context.signal.aborted` - M5 revoked the turn (stop or epoch change);
-       *      the usage status reports 'cancelled'.
-       *   2. `context.deadline.atMs` - the server-owned deadline has passed; the
-       *      usage status reports 'timeout'.
-       * Both end as DialogueEnd status 'cancelled', because the end-status enum has
-       * no timeout member; the usage status distinguishes the two causes. Segments
-       * already emitted are untouched: M4 reports what was produced and never
-       * rewrites history.
+       *      the end status reports 'cancelled' and usage 'cancelled'.
+       *   2. `context.deadline.atMs` - the server-owned deadline has passed; the end
+       *      status reports 'deadline_exceeded' and usage 'timeout'.
+       * The end-status enum (see primitives) now distinguishes the two causes, so a
+       * consumer reading `DialogueEnd.status` alone no longer folds a one-ms-off
+       * deadline into a Stop. The boundary uses `>=`, aligned with M1's deadline gate.
+       * Segments already emitted are untouched: M4 reports what was produced and
+       * never rewrites history.
        */
-      const deadlinePassed = (): boolean => clock.nowMs() > context.deadline.atMs
+      const deadlinePassed = (): boolean => clock.nowMs() >= context.deadline.atMs
 
       if (context.signal.aborted) {
         return buildEnd(request, 'cancelled', 0, startedAtMs, 'cancelled')
       }
       if (deadlinePassed()) {
-        return buildEnd(request, 'cancelled', 0, startedAtMs, 'timeout')
+        return buildEnd(request, 'deadline_exceeded', 0, startedAtMs, 'timeout')
       }
 
       const profile = resolveCharacterProfile(
@@ -211,17 +281,56 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
         ...(options.ownerAudienceIdOf === undefined
           ? {}
           : { ownerAudienceIdOf: options.ownerAudienceIdOf }),
+        ...(options.markConflictingTurns === undefined
+          ? {}
+          : { markConflictingTurns: options.markConflictingTurns }),
       })
+
+      /*
+       * Re-check after context assembly: a Stop or deadline that arrived during the
+       * awaited assembly must not compose a reply, and must not emit a first segment
+       * that the caller will then have to revoke.
+       */
+      if (context.signal.aborted) {
+        return buildEnd(request, 'cancelled', 0, startedAtMs, 'cancelled')
+      }
+      if (deadlinePassed()) {
+        return buildEnd(request, 'deadline_exceeded', 0, startedAtMs, 'timeout')
+      }
 
       const candidates = (await source.compose(view, maxSegments)).slice(0, maxSegments)
 
       let emitted = 0
+      const discards: Record<string, number> = {}
+
+      const discard = (reason: string, count: number): void => {
+        if (count > 0) discards[reason] = (discards[reason] ?? 0) + count
+      }
+
       for (const [index, candidate] of candidates.entries()) {
         if (context.signal.aborted) {
+          discard('aborted', candidates.length - index)
+          report({
+            request,
+            endStatus: 'cancelled',
+            usageStatus: 'cancelled',
+            generated: candidates.length,
+            emitted,
+            discards,
+          })
           return buildEnd(request, 'cancelled', emitted, startedAtMs, 'cancelled')
         }
         if (deadlinePassed()) {
-          return buildEnd(request, 'cancelled', emitted, startedAtMs, 'timeout')
+          discard('deadline', candidates.length - index)
+          report({
+            request,
+            endStatus: 'deadline_exceeded',
+            usageStatus: 'timeout',
+            generated: candidates.length,
+            emitted,
+            discards,
+          })
+          return buildEnd(request, 'deadline_exceeded', emitted, startedAtMs, 'timeout')
         }
 
         const text = normalizeFinalText(candidate)
@@ -232,6 +341,16 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
          * emit more content.
          */
         if (!isSubstantiveSpeech(text)) {
+          discard('no-speech', 1)
+          discard('leftover', candidates.length - index - 1)
+          report({
+            request,
+            endStatus: 'completed',
+            usageStatus: 'ok',
+            generated: candidates.length,
+            emitted,
+            discards,
+          })
           return buildEnd(request, 'completed', emitted, startedAtMs, 'ok')
         }
 
@@ -251,9 +370,46 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
         })
 
         await sink.segment(segment)
+        /*
+         * Re-check after the await: a Stop arrived during the sink write must not
+         * let a further segment be emitted. The just-emitted segment stays (it was
+         * delivered), and the remainder is reported as not dispatched.
+         */
         emitted += 1
+        if (context.signal.aborted) {
+          discard('aborted', candidates.length - index - 1)
+          report({
+            request,
+            endStatus: 'cancelled',
+            usageStatus: 'cancelled',
+            generated: candidates.length,
+            emitted,
+            discards,
+          })
+          return buildEnd(request, 'cancelled', emitted, startedAtMs, 'cancelled')
+        }
+        if (deadlinePassed()) {
+          discard('deadline', candidates.length - index - 1)
+          report({
+            request,
+            endStatus: 'deadline_exceeded',
+            usageStatus: 'timeout',
+            generated: candidates.length,
+            emitted,
+            discards,
+          })
+          return buildEnd(request, 'deadline_exceeded', emitted, startedAtMs, 'timeout')
+        }
       }
 
+      report({
+        request,
+        endStatus: 'completed',
+        usageStatus: 'ok',
+        generated: candidates.length,
+        emitted,
+        discards,
+      })
       return buildEnd(request, 'completed', emitted, startedAtMs, 'ok')
     },
   }

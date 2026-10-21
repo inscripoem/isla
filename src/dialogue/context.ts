@@ -10,6 +10,8 @@ import type { RecalledFact } from './persona-recall'
 import { MAX_RECALLED_FACTS } from './persona-recall'
 import type { RecalledTurn, DeliveryRecallPort } from './memory-recall'
 import { MAX_RECALLED_TURNS } from './memory-recall'
+import type { Contradiction, StatementRef } from './consistency'
+import { scanContradictions } from './consistency'
 import { scoreSalience, SALIENCE_PIN_THRESHOLD, MAX_PINNED_TURNS } from './salience'
 import type { SalienceSignal } from './salience'
 import { turnKey, utteranceKey } from './delivery-key'
@@ -68,11 +70,25 @@ export const ITEM_PREFIX = '- '
 export const INTERRUPTED_SPEECH_MARKER = ' [cut off mid-sentence]'
 
 /**
+ * Appended to a turn the consistency scan (./consistency) flagged as
+ * contradicting another admitted statement or a standing fact.
+ *
+ * Opt-in, and OFF by default, because adding text to a rendered line spends
+ * budget: with the marker enabled the extra characters are charged and can push
+ * a turn out of context. With it disabled the scan is audit-only, so the default
+ * behaviour and the character accounting are exactly what they were before the
+ * detector existed.
+ */
+export const CONFLICT_MARKER = ' [conflicting]'
+
+/**
  * Rendered form of one confirmed turn. The single source of truth for both the
  * prompt and the character accounting, so the two cannot drift apart.
  */
 export function renderHistoryLine(turn: AssembledTurn): string {
-  return `${ITEM_PREFIX}${turn.text}${turn.interrupted ? INTERRUPTED_SPEECH_MARKER : ''}`
+  return `${ITEM_PREFIX}${turn.text}${turn.interrupted ? INTERRUPTED_SPEECH_MARKER : ''}${
+    turn.conflicting === true ? CONFLICT_MARKER : ''
+  }`
 }
 
 /**
@@ -102,7 +118,8 @@ export function renderRollupLine(omittedTurns: number): string {
  */
 export function renderRecalledTurnLine(turn: AssembledTurn): string {
   const marker = turn.interrupted ? INTERRUPTED_SPEECH_MARKER : ''
-  return `${ITEM_PREFIX}${turn.text}${marker} (turn: ${turn.sessionId}:${turn.turnId})`
+  const conflict = turn.conflicting === true ? CONFLICT_MARKER : ''
+  return `${ITEM_PREFIX}${turn.text}${marker}${conflict} (turn: ${turn.sessionId}:${turn.turnId})`
 }
 
 /* -------------------------------------------------------------------------- */
@@ -210,6 +227,15 @@ export interface AssembledTurn {
   kind: MemoryKind
   /** Which salience signals fired; empty for an unpinned turn. */
   salienceSignals: readonly SalienceSignal[]
+  /**
+   * True when the consistency scan (./consistency) found this turn contradicting
+   * another admitted statement or a standing fact.
+   *
+   * A review flag, not a verdict: the turn is still admitted and still charged,
+   * and its text is never rewritten. Absent on every turn the scan did not flag,
+   * and on every turn when the scan found nothing.
+   */
+  conflicting?: boolean
   /** Rendered length of this turn inside the context block. */
   characters: number
 }
@@ -276,7 +302,7 @@ export interface AssembledDialogueContext {
    *
    * The counted characters are exactly those charged to `maxCharacters`:
    *   - each kept turn, as `renderHistoryLine` produces it (item prefix, turn
-   *     text, and the interrupted marker when present);
+   *     text, and the interrupted / conflict markers when present);
    *   - each recalled fact, as `renderRecallLine` produces it (item prefix, fact
    *     text, and the provenance suffix);
    *   - each recalled older turn, as `renderRecalledTurnLine` produces it;
@@ -288,6 +314,12 @@ export interface AssembledDialogueContext {
   truncatedByTurnLimit: boolean
   truncatedByCharacterLimit: boolean
   warnings: readonly string[]
+  /**
+   * Contradictions found among admitted statements and standing facts, as ids
+   * and counts only (./consistency). Audit evidence: nothing here changes
+   * admission, ordering or budget, and no statement text is carried.
+   */
+  conflicts?: readonly Contradiction[]
 }
 
 export interface AssembleDialogueContextInput {
@@ -335,6 +367,17 @@ export interface AssembleDialogueContextInput {
    * explicitly selected archives do not consult it.
    */
   ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
+  /**
+   * Render `CONFLICT_MARKER` on turns the consistency scan flagged.
+   *
+   * Off by default and opt-in, because the marker is prompt text: it is charged
+   * to `maxCharacters` and can therefore displace another turn. Leave it off
+   * when the audit record is enough; turn it on for an operator who wants the
+   * model itself to see that an entry is contested. Either way the scan runs and
+   * `conflicts` is populated - this switch only decides whether the marker is
+   * rendered, never whether the contradiction is detected.
+   */
+  markConflictingTurns?: boolean
 }
 
 /**
@@ -507,6 +550,48 @@ export async function assembleDialogueContext(
     turn.characters = renderHistoryLine(turn).length
     return turn
   })
+
+  /*
+   * Consistency scan, BEFORE the recency window and before trimming.
+   *
+   * Running it here rather than on the kept turns has two reasons. First, a
+   * contradiction is evidence about the records, not about the budget: which
+   * turns happen to fit must not decide which contradictions are reported.
+   * Second, an opt-in `CONFLICT_MARKER` lengthens a rendered line, so marking
+   * has to happen before `characters` is used for trimming - otherwise the
+   * marker would quietly push the block past `maxCharacters`, and a cap that
+   * only applies when convenient is not a bound.
+   *
+   * The scan covers admitted confirmed turns plus the profile's standing facts,
+   * which are the two things the model reads as true. It never runs on recalled
+   * persona facts (absent under the `off` policy anyway) and never on the
+   * listener's current message.
+   */
+  const conflicts: readonly Contradiction[] = scanContradictions({
+    statements: [
+      ...allTurns.map((turn) => ({
+        ref: { kind: 'turn', sessionId: turn.sessionId, turnId: turn.turnId } satisfies StatementRef,
+        text: turn.text,
+      })),
+      ...(profile.standingFacts ?? []).map((text, factIndex) => ({
+        ref: { kind: 'persona-fact', factIndex } satisfies StatementRef,
+        text,
+      })),
+    ],
+  })
+  if (input.markConflictingTurns === true && conflicts.length > 0) {
+    const flagged = new Set<string>()
+    for (const conflict of conflicts) {
+      for (const ref of [conflict.left, conflict.right]) {
+        if (ref.kind === 'turn') flagged.add(turnKey(ref))
+      }
+    }
+    for (const turn of allTurns) {
+      if (!flagged.has(turnKey({ sessionId: turn.sessionId, turnId: turn.turnId }))) continue
+      turn.conflicting = true
+      turn.characters = renderHistoryLine(turn).length
+    }
+  }
 
   const recent = maxTurns === 0 ? [] : allTurns.slice(-maxTurns)
   const truncatedByTurnLimit = recent.length < allTurns.length
@@ -689,6 +774,18 @@ export async function assembleDialogueContext(
   if (kept.turns.some((turn) => turn.interrupted)) {
     warnings.push('context contains an interrupted utterance; it is marked, not completed')
   }
+  /*
+   * A contradiction is reported as a count only. The finding itself carries ids
+   * and counts (./consistency), never text, so this warning stays safe to log
+   * and to render in an operator console. Nothing is rewritten or withheld: the
+   * model still sees both statements, which is deliberate - silently dropping
+   * one would pick a winner on lexical evidence alone.
+   */
+  if (conflicts.length > 0) {
+    warnings.push(
+      `${conflicts.length} potential contradiction(s) found among admitted statements or standing facts; recorded for audit and never rewritten`,
+    )
+  }
   if (historySource === 'local-stand-in') {
     warnings.push(
       'confirmed history comes from the in-memory store because no durable history source was supplied',
@@ -752,6 +849,7 @@ export async function assembleDialogueContext(
     truncatedByTurnLimit,
     truncatedByCharacterLimit: kept.truncated,
     warnings,
+    conflicts,
   }
 }
 
