@@ -2885,7 +2885,7 @@ entries:
       remain at main 05b4f13ccc7df214417bc16dfbcae264701dfcc8.
     requirements: [FR-04, FR-06, NFR-01]
     invariants: [INV-01, INV-09, INV-12]
-    commits: []
+    commits: [b0e5db708ea4c95dc6a6baf3bd67b6796bbe4f28]
     agent: opencode/deepseek-v4-flash
     provider: self-api
     model: deepseek-v4-flash
@@ -2948,7 +2948,7 @@ entries:
       case ID or other owner's module changed.
     requirements: [FR-05, FR-06]
     invariants: [INV-05, INV-12]
-    commits: []
+    commits: [b0e5db708ea4c95dc6a6baf3bd67b6796bbe4f28]
     agent: opencode/deepseek-v4-flash
     provider: self-api
     model: deepseek-v4-flash

@@ -1,13 +1,24 @@
 # M5 production composition and durable application lifecycle handoff
 
-Published baseline: [PR48 cbc845c746e426934acc8a55289fe58efefb8ec5](https://github.com/inscripoem/isla/commit/cbc845c746e426934acc8a55289fe58efefb8ec5), incorporating main37c1d9e. M1's [scoped Windows approval](https://github.com/inscripoem/isla/pull/48#pullrequestreview-5583059851) resolves the original response-hold P2 at that head. The current local candidate is main f972b32 plus this follow-up (evaluation-test repair integration, CLI shutdown hardening and the supervisory review follow-up); publication and verification of a new head are separate. Earlier increment baselines and test counts below retain their original scope. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline) for current status, verification and remaining owner work.
+Published baseline: [PR48 cbc845c746e426934acc8a55289fe58efefb8ec5](https://github.com/inscripoem/isla/commit/cbc845c746e426934acc8a55289fe58efefb8ec5), incorporating main37c1d9e. M1's [scoped Windows approval](https://github.com/inscripoem/isla/pull/48#pullrequestreview-5583059851) resolves the original response-hold P2 at that head. The implementation was published in PR53 at b0e5db708ea4c95dc6a6baf3bd67b6796bbe4f28 over main f972b32. The current documentation follow-up repairs its commit pointers and case traceability; M6 review of the new revision remains pending. Earlier increment baselines and test counts below retain their original scope. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline) for current status, verification and remaining owner work.
 
-Revision: 2026-10-21.3. Owner: M5 — CHANG Xuben. Status: application merged on main f972b32; local CLI shutdown hardening under review. Historical increment branch: `feat/m5-production-composition`, based on the published PR45
+Revision: 2026-10-21.4. Owner: M5 — CHANG Xuben. Status: application merged on main f972b32; local CLI shutdown hardening under review. Historical increment branch: `feat/m5-production-composition`, based on the published PR45
 head `6bcfc2b`. Scope: FR-05/FR-06 production assembly, durable startup/controlled
 shutdown and explicit selected-history recovery over the existing M6 SQLite backend,
 the root Vite entry routing for the application socket and operator bootstrap, and
 the two-process restart acceptance over the real application transport.
 Peer provider work (M1 live audio, M3, M4 live text) is not part of this slice.
+
+## PR53 review follow-up
+
+Implementation: [b0e5db708ea4c95dc6a6baf3bd67b6796bbe4f28](https://github.com/inscripoem/isla/commit/b0e5db708ea4c95dc6a6baf3bd67b6796bbe4f28). The two AI-use entries now point to that implementation commit. This documentation follow-up registers the M5 C-73/C-74 mapping coordinated in [Issue25](https://github.com/inscripoem/isla/issues/25), following [M6's scope confirmation](https://github.com/inscripoem/isla/issues/25#issuecomment-6313932602).
+
+- C-73: `production-cli.test.ts` / `production CLI`; controlled lifecycle including IPC, release and startup failures, distinct from operator Stop/Resume. Linked to the new FR-05 lifecycle clause.
+- C-74: `m5-process-restart.test.ts` / `production process restart acceptance`; cooperative continuation and SIGKILL between a committed prefix and held tail. Linked to FR-06/INV-12; no claim that it tests all C-73 release faults.
+- C-32/C-33/C-68 keep their existing verifiers and scopes. The INV-12 YAML and team snapshot now also include the existing C-68 link already present in the architecture register and trace table. INV-12 remains M6-owned; the new C-74 evidence and this revision require M6 review.
+- The duplicated IPC literal is recorded in [the debt register](../debt-register.md#pr53-ipc-literal-follow-up). No application/test code, shared contract, EvalCase or retention case is changed. Historical AI-use descriptions and prior test results keep their original scope.
+
+These are executable suite references, not Windows, live-provider, acoustic, torn-write/power-loss or S6/G4 acceptance. Passing structural checks cannot prove every assertion remains present; suite execution and human review are still required.
 
 ## Implemented behavior
 
