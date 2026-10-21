@@ -408,3 +408,16 @@ requirements:
       - kind: deterministic
         description: Filter records by the exact sessionId and turnId pair, order known segmentIndex values ascending before unknowns, retain input order for ties and unknowns, preserve null indices, and leave the input history order unchanged. The C-47 ordering regression is distinct from the INV-08 history-port read-order check.
         cases: [C-47]
+
+  - id: INV-16
+    title: Every executed attempt is accounted for, including completed, cancelled and failed attempts; missing usage remains unknown, and an empty sample has no failure-rate claim. An explicit not-run result is not an executed attempt
+    category: invariant
+    priority: must
+    owner: M6
+    collaborators: [M3, M4, M5]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Completed, cancelled and failed attempts are counted with a reason; missing usage remains unknown; an empty sample has no failure-rate claim; an explicit not-run result is not an executed attempt (NFR-01/NFR-04; C-52–C-55, C-69–C-71).
+        cases: [C-52, C-53, C-54, C-55, C-69, C-70, C-71]
