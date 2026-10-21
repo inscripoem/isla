@@ -2872,3 +2872,62 @@ entries:
       focused: "requirements/readiness/trace after the row: readiness 42/3; trace 41/1."
       role: "test:m6 182/14; full 1125/63; pnpm verify exit 0."
     human_review: "M4 flagged the missing row; M6 owns it. No new ID."
+
+  - date: 2026-10-21
+    task: M4-03
+    branch: feat/m4-03
+    change: >-
+      Memory quality for the dialogue context, in three independently
+      revertible parts. Recall (memory-recall.ts) replaces one English-only
+      stopword list with per-tokenizer tables - whole Latin words, CJK bigrams,
+      and a CJK glue-character table - because an English list never matched
+      Chinese text; a one-character CJK run now yields no token at all, and
+      tokens are weighted by information content (a 5+ character Latin word, a
+      number, or a bigram of two content characters scores 2, every other token
+      1). A candidate must reach MIN_RECALL_SCORE and share at least one
+      informative token, so two shared glue words can no longer recall an
+      unrelated old turn on their own. Salience (salience.ts) replaces the
+      concrete-detail signal that scored ANY digit with three number shapes - a
+      date or clock time, a quantity with a unit, a multi-digit identifier - so a
+      bare single digit no longer pins a turn, and widens the promise,
+      preference and identity cues with the Chinese emphasis a Chinese listener
+      actually uses (千万要, 务必, 别再忘了, 说好了, 最喜欢, 我的生日); a bare 一定
+      is not a promise, a bare time word is not a detail, and
+      SALIENCE_PIN_THRESHOLD, MAX_PINNED_TURNS and the signal weights are
+      unchanged. The new consistency.ts compares admitted confirmed clauses and
+      the profile's standing facts before the prompt is rendered, reporting
+      negation, incompatible-quantity and opposite-attribute disagreements as
+      audit findings that carry statement ids, the evidence kind and a
+      shared-token count but never statement text. It is audit only: nothing is
+      rewritten, deleted, re-admitted or re-budgeted, and the optional
+      [conflicting] prompt marker is off by default because it spends character
+      budget. No shared C1-C7 contract, storage schema, requirement definition or
+      invariant definition changed.
+    requirements: [FR-02, NFR-03]
+    invariants: []
+    cases: []
+    commits: [572c99c]
+    agent: workbuddy/deepseek-v4.1-flash
+    verification:
+      focused: "test:m4 176/176 across 8 files (recall scoring 14, salience signals 15, consistency 16, plus the pre-existing suites at 131)."
+      mutation: >-
+        Removing the informative-token requirement turned two recall cases red;
+        restoring the concrete-detail signal to a bare digit match turned a
+        salience case red. Forcing the consistency similarity test to true
+        stayed green at first, which exposed two missing negative cases; adding
+        opposite polarity about a different object and two different numbered
+        facts made it turn two red. All mutations restored.
+      static: "typecheck passes; lint reports 0 warnings and 0 errors."
+      full_suite: >-
+        Local pnpm test: 18 failures in 8 files, all pre-existing Windows-only
+        shape issues (spawned cli, path separators, CRLF schema compare) in files
+        this change does not touch; CI ran the same tree and passed G2, G3, trace
+        and G5, so those failures are local-only.
+    human_review: >-
+      Captain owns M4 and set the three-item scope, including the explicit
+      exclusions (no owner/audience field, no cross-session automatic recall, no
+      persisted MemoryKind/expiration/consent, no topicHints/memoryQuery, no
+      seventh intent, no intent-gated admission, PERSONA_RECALL_POLICY still
+      off). No invariant identifier covers lexical recall or an audit-only scan,
+      so none is claimed and no case id was taken. G6 failed on the first push of
+      572c99c because this entry was missing; the entry is added here.
