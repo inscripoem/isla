@@ -3108,7 +3108,7 @@ entries:
     requirements: [FR-01, FR-02, FR-05, NFR-02, NFR-03]
     invariants: [INV-01]
     cases: []
-    commits: []
+    commits: [331c7057e2209ce6c53baf5f31c56db38794d7f5]
     agent: opencode/deepseek-v4-flash
     provider: self-api
     model: deepseek-v4-flash
@@ -3125,9 +3125,9 @@ entries:
       M3 owns actual corpus and reviewed labels; M6 owns corpus/report binding
       and serialized memory.inspect review. M5 owns runtime persistence and
       delivery decisions; generation diagnostics do not prove playback.
-      The empty commit list accurately denotes uncommitted local work; publication
-      must add the actual implementation SHA before pushing. No GitHub action is
-      authorized by this record.
+      Captain approved publication after reviewing the complete implementation
+      and reply bodies. The commit pointer identifies the implementation;
+      owner review and final human merge remain separate.
     verification:
       focused: "Observer/production/evaluation tests 54/3 plus typecheck and lint passed before the multi-input increment."
       final: "Independent combined M5 203/9 and pnpm verify 1223/69 passed, with typecheck, lint and build; see HANDOFF-M5-MENTIONS.en.md."
@@ -3148,7 +3148,7 @@ entries:
     requirements: [FR-01, NFR-02, NFR-03]
     invariants: [INV-01]
     cases: []
-    commits: []
+    commits: [331c7057e2209ce6c53baf5f31c56db38794d7f5]
     agent: opencode/deepseek-v4-flash
     provider: self-api
     model: deepseek-v4-flash
@@ -3160,8 +3160,8 @@ entries:
       checks and read-only input investigation. The supervising assistant reviews
       actual diffs and results and maintains the handoff; no delegated agents.
     human_review: >-
-      Under review and uncommitted; the actual implementation SHA must be added
-      before publication. Runtime-generated identities, times, persona and history
+      Under owner review; Captain approved publication and the commit pointer
+      identifies the implementation. Runtime-generated identities, times, persona and history
       mean this is not full SelectionRequest/corpus replay. M3 retains actual
       corpus, labels and semantic rubric; M6 retains report binding. C-05/C-16 stay
       pending, no global IDs are allocated, and deterministic checks do not produce
