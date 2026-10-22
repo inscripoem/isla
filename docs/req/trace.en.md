@@ -77,11 +77,38 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-73 | implemented | `test/offline/production-cli.test.ts` | `production CLI` — cooperative IPC shutdown, pending/failed release, duplicate/unrelated messages, startup/listen failure and raw exit reporting |
 | C-74 | implemented | `test/offline/m5-process-restart.test.ts` | `production process restart acceptance` — two-process IPC continuation and SIGKILL between a committed prefix and held tail; no replay or promotion |
 
-> C-73/C-74 are M5 suite-level verifiers, coordinated in [Issue25](https://github.com/inscripoem/isla/issues/25) following [M6 scope review](https://github.com/inscripoem/isla/issues/25#issuecomment-6313932602). C-73 covers the separate FR-05 process-lifecycle clause; C-74 covers FR-06/INV-12. Neither proves full product, Windows, torn-write/power-loss or acoustic acceptance. Scope and INV-12 edits remain subject to M6 review of this PR revision.
+> C-73/C-74 are M5 suite-level verifiers, coordinated in [Issue25](https://github.com/inscripoem/isla/issues/25) following [M6 scope review](https://github.com/inscripoem/isla/issues/25#issuecomment-6313932602). C-73 covers the separate FR-05 process-lifecycle clause; C-74 covers FR-06/INV-12. Neither proves full product, Windows, torn-write/power-loss or acoustic acceptance. Scope and INV-12 edits were accepted by [M6 review at `8c36cad`](https://github.com/inscripoem/isla/pull/53#pullrequestreview-5599418482).
 >
 > C-68 is the distinct M6-01 coordinator/SQLite-reopen proof. C-32/C-33 remain
 > the registered unit verifiers for the recovery view and storage-only restart;
 > all three link INV-12.
+
+### C-73/C-74 suite test names
+
+The registry retains one verifier file per case. These are the exact test names at `8c36cad`, accepted as suite-level evidence by M6; this list adds no new acceptance claim.
+
+C-73 — `test/offline/production-cli.test.ts`:
+
+- `fails visibly when no deployment module is configured`
+- `fails visibly when the deployment module cannot be loaded`
+- `fails visibly when the deployment module exports no factory`
+- `fails startup over a seeded live id and exits naturally with an IPC channel attached`
+- `starts over a durable database, serves health, and shuts down on SIGTERM`
+- `shuts down cooperatively through the IPC control message`
+- `awaits a genuinely pending owned release before reporting IPC shutdown completion`
+- `reports an incomplete shutdown and still exits naturally when the owned release fails over IPC`
+- `ignores unrelated and duplicate IPC control messages`
+- `awaits the owned release once when startup fails over a seeded live id`
+- `awaits the owned release once on SIGTERM shutdown`
+- `awaits a genuinely pending owned release before reporting shutdown completion`
+- `reports an incomplete shutdown when the owned release fails`
+- `reports a shutdown fault after a listen failure instead of swallowing it`
+- `retains output that arrives after the exit event until both streams end`
+
+C-74 — `test/offline/m5-process-restart.test.ts`:
+
+- `continues one durable database across two spawned CLI processes without replay or promotion`
+- `restarts after a forceful kill without promoting the interrupted tail`
 
 ## Requirement trace
 
@@ -110,7 +137,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-09 | M5 | C-46, C-47, C-67 | M4/SQLite consumer rollout |
 | INV-10 | M6 | C-26, C-27 | — |
 | INV-11 | M6 | C-27, C-28, C-48, C-65 | — |
-| INV-12 | M6 | C-32, C-33, C-68, C-74 | M6 review of the added C-74 process evidence |
+| INV-12 | M6 | C-32, C-33, C-68, C-74 | C-74 link accepted by [M6 review at `8c36cad`](https://github.com/inscripoem/isla/pull/53#pullrequestreview-5599418482); product/Windows acceptance remains separate |
 | INV-13 | M6 | C-34, C-35, C-37 | — |
 | INV-14 | M6 | C-36 | — |
 | INV-15 | M5 | C-47, C-50 (turn reconstruction ordering and M4 agreement guard) | M4/M6 consumer acceptance |

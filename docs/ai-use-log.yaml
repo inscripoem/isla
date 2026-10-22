@@ -2965,7 +2965,10 @@ entries:
       Local follow-up, including the supervisory review follow-up, remains under
       review. The IPC trigger and raw reporting are validated on Linux only; Windows
       cooperative validation, live providers, acoustic output and S6/G4 remain
-      separate and unaccepted. No case ID was registered.
+      separate and unaccepted. No case ID was registered in the implementation
+      commit b0e5db708ea4c95dc6a6baf3bd67b6796bbe4f28. The later documentation
+      commit 8c36cadadf64da2b543aacd930392090b9e4a7cd registered C-73/C-74; M6
+      accepted their scope and the INV-12 link in review 5599418482.
     verification:
       integration: >-
         Focused evaluation 21/21 and M5 171/8 passed (exit 0) on the integrated tree

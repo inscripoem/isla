@@ -1,7 +1,7 @@
 # Trace matrix
 
 Status: under review. M6 and M5 rows contributed here; other owners' rows pending. Shared document —
-Step A and I1 coordination under review. Updated: 2026-10-20.
+Step A and I1 coordination under review. Updated: 2026-10-22.
 
 Every requirement maps to its enforcing component, interface, test/evidence and runtime monitor.
 
@@ -23,7 +23,7 @@ Every requirement maps to its enforcing component, interface, test/evidence and 
 | FR-06 | Committed data survives reopen (session isolation, ordered history) | `src/storage/sqlite/backend.ts` | `EventStorePort` | C-30 | `m6-sqlite-backend.test.ts` (reopen/isolation) | — | ADR-004 | in review | M6 |
 | FR-06 | Delivery terminal outcome persisted for recovery | `src/storage/sqlite/backend.ts` | `StorageBackend` | C-31 | `m6-sqlite-backend.test.ts` (terminal outcome) | — | ADR-004 | in review | M6 |
 | FR-06 | In-memory and SQLite backends agree end-to-end (committed state, export, history, payload rejection) | `src/storage/sqlite/backend.ts` + `in-memory-backend.ts` | `StorageBackend` | C-45 | `m6-sqlite-backend.test.ts` (cross-backend integration) | — | ADR-004 | in review | M6 |
-| INV-12 | Restart restores only confirmed history; unresolved stays unknown, no replay | `src/storage/recovery-view.ts` | `RecoveryView` (M6 helper) | C-32, C-33 | `m6-recovery.test.ts` | — | ADR-005 | in review | M6 |
+| INV-12 | Restart restores only confirmed history; unresolved stays unknown, no replay | `src/storage/recovery-view.ts` | `RecoveryView` (M6 helper) | C-32, C-33; C-68/C-74 in the FR-06 / INV-12 application row below | `m6-recovery.test.ts`; see the application row for coordinator/process verifiers | — | ADR-005 | in review | M6 |
 | INV-13 | The traceability chain is machine-checked; a broken link fails the gate | `src/evaluation/trace-fitness.ts`, `src/evaluation/frozen-restoration.ts` | `collectTraceViolations` | C-34, C-35 | `trace-fitness.test.ts` | — | ADR-006 | in review | M6 |
 | INV-14 | A code/prompt change updates the AI-use log (gate G6) | `src/evaluation/ai-use-log-gate.ts` | `collectAiUseLogViolations` | C-36 | `ai-use-log-gate.test.ts` | — | ADR-006 | in review | M6 |
 | INV-15 / FR-06 | Reconstruct one turn by explicit indices while preserving unknowns and stable ties | M5 `src/runtime/delivery-order.ts` and M4 context reconstruction | C6/C7 consumer reconstruction | C-47, C-50 | `m5-attribution.test.ts`, `m4-storage-integration.test.ts` | — (pure helper plus agreement guard) | [Issue #25 coordination](https://github.com/inscripoem/isla/issues/25#issuecomment-6188155358) | under review | M5 |
