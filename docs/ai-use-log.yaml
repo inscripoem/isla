@@ -2941,12 +2941,12 @@ entries:
       after Stop/deadline, report supported early and exceptional exits once,
       account for segment-cap overflow and uncertain sink rejection, and isolate
       synchronous/asynchronous observer failures. Add thirteen regressions and
-      include them in the M4 role command. These remain local M5 review proposals;
+      include them in the M4 role command. These are M5 review proposals;
       M4 retains producer ownership. No memory inspection or recall change.
     requirements: [FR-02, FR-05]
     invariants: [INV-01]
     cases: []
-    commits: []
+    commits: [6c72c0ebb1e16976d36ff7ee8b07c64c208a9147]
     agent: opencode/deepseek-v4-flash
     provider: self-api
     model: deepseek-v4-flash
@@ -2963,8 +2963,8 @@ entries:
       unchanged revision. Proposed overflow and sink-uncertain reason semantics
       require M4 review. Generated counts and fulfilled sink writes do not establish
       playback or spoken-history admission. No new case ID is allocated.
-      The commit list is empty because this proposal is uncommitted; publication
-      must anchor it to the actual implementation commit before pushing.
+      Captain approved publication after reviewing the complete proposal. The
+      commit pointer identifies the implementation; M4 semantic review is pending.
     verification:
       focused: "OpenCode: boundary13/13 and M4 role189/9 passed on the combined local tree."
       isolated: "Independent M4-only pnpm verify passed 1190 tests / 68 files, typecheck, lint and build on Linux/Node 22.23.3."
