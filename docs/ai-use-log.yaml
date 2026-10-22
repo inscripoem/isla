@@ -2931,3 +2931,41 @@ entries:
       off). No invariant identifier covers lexical recall or an audit-only scan,
       so none is claimed and no case id was taken. G6 failed on the first push of
       572c99c because this entry was missing; the entry is added here.
+
+  - date: "2026-10-22"
+    task: M5-review-M4-outcome-boundary
+    branch: fix/m4-outcome-proposal-20261022
+    change: >-
+      Propose M4 producer corrections after reviewing the published M4-03
+      revision a678b619e3c4002eae6a79425479f38f3d2cd5e6: check empty results
+      after Stop/deadline, report supported early and exceptional exits once,
+      account for segment-cap overflow and uncertain sink rejection, and isolate
+      synchronous/asynchronous observer failures. Add thirteen regressions and
+      include them in the M4 role command. These remain local M5 review proposals;
+      M4 retains producer ownership. No memory inspection or recall change.
+    requirements: [FR-02, FR-05]
+    invariants: [INV-01]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.1.0
+    session: ses_e9d97e993ffeKyWFpkz35i9lYU
+    supervision: >-
+      Captain approved local follow-up on the GitHub mentions. OpenCode authored
+      code and tests in one build/xhigh session; the supervising assistant reviewed
+      the changes, reproduced failures on the exact upstream source and prepared
+      this isolated proposal plus documentation. No delegated agents.
+    human_review: >-
+      Under review. Upstream source passed 1177/67 existing tests, but the new
+      thirteen checks independently produced twelve failures and one pass on that
+      unchanged revision. Proposed overflow and sink-uncertain reason semantics
+      require M4 review. Generated counts and fulfilled sink writes do not establish
+      playback or spoken-history admission. No new case ID is allocated.
+      The commit list is empty because this proposal is uncommitted; publication
+      must anchor it to the actual implementation commit before pushing.
+    verification:
+      focused: "OpenCode: boundary13/13 and M4 role189/9 passed on the combined local tree."
+      isolated: "Independent M4-only pnpm verify passed 1190 tests / 68 files, typecheck, lint and build on Linux/Node 22.23.3."
+      limits: "Linux and controlled sources only; no Windows, live-provider, acoustic or S6/G4 acceptance."

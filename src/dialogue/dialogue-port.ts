@@ -124,11 +124,15 @@ export interface DialoguePortOptions {
   /**
    * Injected diagnostic boundary for generation/discard accounting.
    *
-   * M5 owns persistence; M4 never writes to C6 here. This boundary only reports,
-   * after each `generate` call, how many segments were produced, how many were
-   * actually dispatched to the sink, and how many were dropped and why. It lets
-   * an observer see "generated but never dispatched" without that evidence being
-   * inferred from `DialogueEnd.segmentCount` alone. Omitted means no reporting.
+   * M5 owns the runtime's persistence and delivery decisions; M6 owns the storage
+   * infrastructure, and M4 writes nothing to it here. This boundary reports exactly
+   * once per resolved `generate` call (including the cancelled, failed and
+   * rethrown paths) how many candidates the source produced, how many sink writes
+   * fulfilled, and how many candidates were dropped and why. It lets an observer
+   * see "generated without a fulfilled sink write" without inferring it from
+   * `DialogueEnd.segmentCount` alone. Omitted means no reporting. A synchronous
+   * throw or a rejected promise from the callback is contained and never changes
+   * the generation result.
    */
   onOutcome?: (report: DialogueOutcomeReport) => void
   /**
@@ -147,9 +151,12 @@ export interface DialoguePortOptions {
  *
  * This is deterministic, local computation with no provider call (a hard
  * constraint alongside NFR-03 attribution). `generated` is the number of
- * candidates the text source produced; `emitted` is the number actually
- * delivered to the sink; `discarded` is the remainder. The reason counts sum to
- * `discarded` and describe why each candidate never reached the sink.
+ * candidates the text source produced; `emitted` is the number of sink writes
+ * that FULFILLED, so a rejected sink write is never counted as a fulfilled write;
+ * `discarded` is the remainder. The reason counts sum to `discarded`. Known
+ * reasons are `aborted`, `deadline`, `no-speech`, `leftover`, `overflow` (produced
+ * beyond the segment cap) and `sink-uncertain` (a sink write was attempted and
+ * rejected, so its delivery is unknown rather than disproved).
  */
 export interface DialogueOutcomeReport {
   requestId: string
@@ -158,11 +165,11 @@ export interface DialogueOutcomeReport {
   turnId: string
   /** Candidates produced by the text source for this call. */
   generated: number
-  /** Segments actually delivered to the sink. */
+  /** Sink writes that fulfilled. A rejected write is not counted here. */
   emitted: number
-  /** `generated - emitted`; the candidates that never reached the sink. */
+  /** `generated - emitted`; the candidates that never reached a fulfilled sink write. */
   discarded: number
-  /** Why candidates were discarded, summing to `discarded`. */
+  /** Why each candidate lacks a fulfilled sink write, summing to `discarded`. */
   discards: Readonly<Record<string, number>>
   /** Terminal `DialogueEnd.status` for the call. */
   endStatus: DialogueEnd['status']
@@ -173,6 +180,14 @@ export interface DialogueOutcomeReport {
 function clampMaxSegments(requested: number | undefined): number {
   if (requested === undefined) return MAX_DIALOGUE_SEGMENTS
   return Math.min(Math.max(0, requested), MAX_DIALOGUE_SEGMENTS)
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { then?: unknown }).then === 'function'
+  )
 }
 
 export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
@@ -212,18 +227,36 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
     emitted: number
     discards: Readonly<Record<string, number>>
   }): void => {
-    options.onOutcome?.({
-      requestId: input.request.requestId,
-      sessionId: input.request.sessionId,
-      epoch: input.request.epoch,
-      turnId: input.request.turnId,
-      generated: input.generated,
-      emitted: input.emitted,
-      discarded: input.generated - input.emitted,
-      discards: input.discards,
-      endStatus: input.endStatus,
-      usageStatus: input.usageStatus,
-    })
+    const observer = options.onOutcome
+    if (observer === undefined) return
+    try {
+      const result: unknown = (observer as (value: DialogueOutcomeReport) => unknown)({
+        requestId: input.request.requestId,
+        sessionId: input.request.sessionId,
+        epoch: input.request.epoch,
+        turnId: input.request.turnId,
+        generated: input.generated,
+        emitted: input.emitted,
+        discarded: input.generated - input.emitted,
+        discards: { ...input.discards },
+        endStatus: input.endStatus,
+        usageStatus: input.usageStatus,
+      })
+      /*
+       * TypeScript permits an `async` callback in this `void` slot, so the result
+       * may be a rejected promise. Attaching a handler keeps it from surfacing as
+       * an unhandled rejection.
+       */
+      if (isThenable(result)) {
+        void Promise.resolve(result).catch(() => {})
+      }
+    } catch {
+      /*
+       * A diagnostic observer must never change the generation outcome. M4 owns
+       * generation; M5 owns persistence and reporting. A fault in the consumer
+       * boundary is contained here rather than converted into a rejected call.
+       */
+    }
   }
 
   return {
@@ -250,11 +283,37 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
        */
       const deadlinePassed = (): boolean => clock.nowMs() >= context.deadline.atMs
 
+      let generated = 0
+      let emitted = 0
+      const discards: Record<string, number> = {}
+      let reported = false
+
+      const discard = (reason: string, count: number): void => {
+        if (count > 0) discards[reason] = (discards[reason] ?? 0) + count
+      }
+
+      /*
+       * One terminal path per invocation. It reports exactly once from the current
+       * counters and builds the matching end, so no branch repeats the payload.
+       * The throwing paths call it for the report and then rethrow the original
+       * error.
+       */
+      const terminal = (
+        endStatus: DialogueEnd['status'],
+        usageStatus: UsageRecord['status'],
+      ): DialogueEnd => {
+        if (!reported) {
+          reported = true
+          report({ request, endStatus, usageStatus, generated, emitted, discards })
+        }
+        return buildEnd(request, endStatus, emitted, startedAtMs, usageStatus)
+      }
+
       if (context.signal.aborted) {
-        return buildEnd(request, 'cancelled', 0, startedAtMs, 'cancelled')
+        return terminal('cancelled', 'cancelled')
       }
       if (deadlinePassed()) {
-        return buildEnd(request, 'deadline_exceeded', 0, startedAtMs, 'timeout')
+        return terminal('deadline_exceeded', 'timeout')
       }
 
       const profile = resolveCharacterProfile(
@@ -264,27 +323,36 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
       if (profile === null) {
         // An unknown character reports failure. Substituting a default character
         // would impersonate one the operator never selected.
-        return buildEnd(request, 'failed', 0, startedAtMs, 'failed')
+        return terminal('failed', 'failed')
       }
 
-      const view = await assembleDialogueContext({
-        request,
-        profile,
-        ...(options.history === undefined ? {} : { history: options.history }),
-        ...(options.memory === undefined ? {} : { memory: options.memory }),
-        ...(options.personaRecall === undefined ? {} : { personaRecall: options.personaRecall }),
-        ...(options.deliveryRecall === undefined ? {} : { deliveryRecall: options.deliveryRecall }),
-        ...(options.audience === undefined ? {} : { audience: options.audience }),
-        ...(options.explicitlySelectedSessionIds === undefined
-          ? {}
-          : { explicitlySelectedSessionIds: options.explicitlySelectedSessionIds }),
-        ...(options.ownerAudienceIdOf === undefined
-          ? {}
-          : { ownerAudienceIdOf: options.ownerAudienceIdOf }),
-        ...(options.markConflictingTurns === undefined
-          ? {}
-          : { markConflictingTurns: options.markConflictingTurns }),
-      })
+      const assemble = async (): Promise<AssembledDialogueContext> => {
+        try {
+          return await assembleDialogueContext({
+            request,
+            profile,
+            ...(options.history === undefined ? {} : { history: options.history }),
+            ...(options.memory === undefined ? {} : { memory: options.memory }),
+            ...(options.personaRecall === undefined ? {} : { personaRecall: options.personaRecall }),
+            ...(options.deliveryRecall === undefined ? {} : { deliveryRecall: options.deliveryRecall }),
+            ...(options.audience === undefined ? {} : { audience: options.audience }),
+            ...(options.explicitlySelectedSessionIds === undefined
+              ? {}
+              : { explicitlySelectedSessionIds: options.explicitlySelectedSessionIds }),
+            ...(options.ownerAudienceIdOf === undefined
+              ? {}
+              : { ownerAudienceIdOf: options.ownerAudienceIdOf }),
+            ...(options.markConflictingTurns === undefined
+              ? {}
+              : { markConflictingTurns: options.markConflictingTurns }),
+          })
+        } catch (error) {
+          // Preserve the original error; the observer still gets one report.
+          terminal('failed', 'failed')
+          throw error
+        }
+      }
+      const view = await assemble()
 
       /*
        * Re-check after context assembly: a Stop or deadline that arrived during the
@@ -292,45 +360,54 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
        * that the caller will then have to revoke.
        */
       if (context.signal.aborted) {
-        return buildEnd(request, 'cancelled', 0, startedAtMs, 'cancelled')
+        return terminal('cancelled', 'cancelled')
       }
       if (deadlinePassed()) {
-        return buildEnd(request, 'deadline_exceeded', 0, startedAtMs, 'timeout')
+        return terminal('deadline_exceeded', 'timeout')
       }
 
-      const candidates = (await source.compose(view, maxSegments)).slice(0, maxSegments)
+      /*
+       * The text source may produce more candidates than the segment cap allows.
+       * Count everything it produced as `generated`, and account the cap overflow
+       * explicitly, so no produced candidate disappears from the report. A source
+       * that throws reports a failed outcome before the call rejects.
+       */
+      const compose = async (): Promise<readonly string[]> => {
+        try {
+          return await source.compose(view, maxSegments)
+        } catch (error) {
+          terminal('failed', 'failed')
+          throw error
+        }
+      }
+      const produced = await compose()
+      generated = produced.length
+      const candidates = produced.slice(0, maxSegments)
+      discard('overflow', produced.length - candidates.length)
 
-      let emitted = 0
-      const discards: Record<string, number> = {}
-
-      const discard = (reason: string, count: number): void => {
-        if (count > 0) discards[reason] = (discards[reason] ?? 0) + count
+      /*
+       * Re-check after the awaited composition: a Stop or deadline that arrived
+       * while the source was composing must decide the end status even when the
+       * source produced nothing, because an empty candidate list never enters the
+       * segment loop below.
+       */
+      if (context.signal.aborted) {
+        discard('aborted', candidates.length)
+        return terminal('cancelled', 'cancelled')
+      }
+      if (deadlinePassed()) {
+        discard('deadline', candidates.length)
+        return terminal('deadline_exceeded', 'timeout')
       }
 
       for (const [index, candidate] of candidates.entries()) {
         if (context.signal.aborted) {
           discard('aborted', candidates.length - index)
-          report({
-            request,
-            endStatus: 'cancelled',
-            usageStatus: 'cancelled',
-            generated: candidates.length,
-            emitted,
-            discards,
-          })
-          return buildEnd(request, 'cancelled', emitted, startedAtMs, 'cancelled')
+          return terminal('cancelled', 'cancelled')
         }
         if (deadlinePassed()) {
           discard('deadline', candidates.length - index)
-          report({
-            request,
-            endStatus: 'deadline_exceeded',
-            usageStatus: 'timeout',
-            generated: candidates.length,
-            emitted,
-            discards,
-          })
-          return buildEnd(request, 'deadline_exceeded', emitted, startedAtMs, 'timeout')
+          return terminal('deadline_exceeded', 'timeout')
         }
 
         const text = normalizeFinalText(candidate)
@@ -343,15 +420,7 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
         if (!isSubstantiveSpeech(text)) {
           discard('no-speech', 1)
           discard('leftover', candidates.length - index - 1)
-          report({
-            request,
-            endStatus: 'completed',
-            usageStatus: 'ok',
-            generated: candidates.length,
-            emitted,
-            discards,
-          })
-          return buildEnd(request, 'completed', emitted, startedAtMs, 'ok')
+          return terminal('completed', 'ok')
         }
 
         const segmentId = deriveSegmentId(request, index)
@@ -369,48 +438,38 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
           modelVersion: source.modelVersion,
         })
 
-        await sink.segment(segment)
+        try {
+          await sink.segment(segment)
+        } catch (error) {
+          /*
+           * The sink write was attempted and rejected. Its delivery is unknown, not
+           * disproved, and the attempt can still have side effects, so it is
+           * reported as uncertain rather than counted as a fulfilled sink write or
+           * as having no effect. The untried remainder is
+           * accounted as leftover. The original error is preserved.
+           */
+          discard('sink-uncertain', 1)
+          discard('leftover', candidates.length - index - 1)
+          terminal('failed', 'failed')
+          throw error
+        }
         /*
          * Re-check after the await: a Stop arrived during the sink write must not
-         * let a further segment be emitted. The just-emitted segment stays (it was
-         * delivered), and the remainder is reported as not dispatched.
+         * let a further segment be emitted. The just-emitted segment stays (its
+         * write fulfilled), and the remainder is reported as not dispatched.
          */
         emitted += 1
         if (context.signal.aborted) {
           discard('aborted', candidates.length - index - 1)
-          report({
-            request,
-            endStatus: 'cancelled',
-            usageStatus: 'cancelled',
-            generated: candidates.length,
-            emitted,
-            discards,
-          })
-          return buildEnd(request, 'cancelled', emitted, startedAtMs, 'cancelled')
+          return terminal('cancelled', 'cancelled')
         }
         if (deadlinePassed()) {
           discard('deadline', candidates.length - index - 1)
-          report({
-            request,
-            endStatus: 'deadline_exceeded',
-            usageStatus: 'timeout',
-            generated: candidates.length,
-            emitted,
-            discards,
-          })
-          return buildEnd(request, 'deadline_exceeded', emitted, startedAtMs, 'timeout')
+          return terminal('deadline_exceeded', 'timeout')
         }
       }
 
-      report({
-        request,
-        endStatus: 'completed',
-        usageStatus: 'ok',
-        generated: candidates.length,
-        emitted,
-        discards,
-      })
-      return buildEnd(request, 'completed', emitted, startedAtMs, 'ok')
+      return terminal('completed', 'ok')
     },
   }
 }
