@@ -1,0 +1,10 @@
+{
+  "caseId": "selection-001",
+  "status": "reviewed",
+  "provenance": "human",
+  "reviewerId": "shallight",
+  "reviewedAt": "2026-10-23",
+  "requestSha256": "90f80ad934f41fc79336c6a94ea5e2c215acebe783a2b5a5115e9285e47728fc",
+  "labelSha256": "3cc6deaaff60bea5a19c159084603ad6064678e2178380f64e726347eae07254",
+  "notes": "Approved candidate scores: message-001 = 2, message-002 = 1, defer = 0. Accepted answer for message-001 and acknowledge for message-002. Intent coverage remains partial; other allowed intents remain unassessed. heldOut remains false. The request does not supply the game name; this approval does not authorize inventing that fact or certify any generated dialogue."
+}
