@@ -17,6 +17,8 @@ import type { DialogueTextSource } from '../dialogue/dialogue-port'
 import type { AssembledTurn } from '../dialogue/context'
 import { createDeliveryMemoryStore } from '../dialogue/memory-commit'
 import type { DeliveryMemoryStore } from '../dialogue/memory-commit'
+import { projectDialogueOutcome } from './dialogue-outcome'
+import type { DialogueOutcomeObserver } from './dialogue-outcome'
 import type { PersonaRecallPort } from '../dialogue/persona-recall'
 import type { DeliveryRecallPort } from '../dialogue/memory-recall'
 import { createFixedSynthesis } from '../performance/fixed-synthesis'
@@ -121,6 +123,20 @@ export interface DialogueCompositionDeps {
    * authorized by the selection instead.
    */
   ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
+  /**
+   * Observational consumer of the dialogue port's per-call generation/discard
+   * accounting. Each raw report is projected before it crosses this boundary
+   * (`projectDialogueOutcome`): the consumer sees either a validated observation
+   * or a `refused` event whose reason is M5-authored, so a producer-chosen reason
+   * key or extra text field on the raw report never reaches it.
+   *
+   * This channel is observational: it adds no storage write of its own (M5 owns
+   * the runtime's persistence and delivery decisions, M6 owns the storage
+   * infrastructure), never counts as a provider attempt, and never enters spoken
+   * history or the dialogue context. A fault in the consumer is contained by the
+   * dialogue port and cannot change generation. Omitted means no reporting.
+   */
+  onDialogueOutcome?: DialogueOutcomeObserver
 }
 
 export interface DialogueComposition {
@@ -131,6 +147,7 @@ export interface DialogueComposition {
 
 export function createDialogueComposition(deps: DialogueCompositionDeps): DialogueComposition {
   const memory = createDeliveryMemoryStore()
+  const onDialogueOutcome = deps.onDialogueOutcome
   const dialogue = createDialoguePort({
     clock: deps.clock,
     history: deps.history,
@@ -142,6 +159,17 @@ export function createDialogueComposition(deps: DialogueCompositionDeps): Dialog
       ? { explicitlySelectedSessionIds: deps.explicitlySelectedSessionIds }
       : {}),
     ...(deps.ownerAudienceIdOf !== undefined ? { ownerAudienceIdOf: deps.ownerAudienceIdOf } : {}),
+    ...(onDialogueOutcome === undefined
+      ? {}
+      : {
+          /*
+           * The expression body forwards the consumer's return value to the port,
+           * so the port's thenable check also contains a rejected async observer.
+           * The port already contains a synchronous throw, so a diagnostic
+           * consumer fault can never change generation.
+           */
+          onOutcome: (report) => onDialogueOutcome(projectDialogueOutcome(report)),
+        }),
   })
   return { dialogue, memory }
 }
@@ -161,6 +189,8 @@ export interface ReconstructedDialogueCompositionDeps {
   personaRecall?: PersonaRecallPort
   deliveryRecall?: DeliveryRecallPort
   ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
+  /** See `DialogueCompositionDeps.onDialogueOutcome`; forwarded unchanged. */
+  onDialogueOutcome?: DialogueOutcomeObserver
 }
 
 export interface ReconstructedDialogueFromSelectionDeps {
@@ -170,6 +200,8 @@ export interface ReconstructedDialogueFromSelectionDeps {
   personaRecall?: PersonaRecallPort
   deliveryRecall?: DeliveryRecallPort
   ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
+  /** See `DialogueCompositionDeps.onDialogueOutcome`; forwarded unchanged. */
+  onDialogueOutcome?: DialogueOutcomeObserver
 }
 
 export interface ReconstructedDialogueComposition extends DialogueComposition {
@@ -199,6 +231,9 @@ export function createReconstructedDialogueFromSelection(
     ...(deps.deliveryRecall !== undefined ? { deliveryRecall: deps.deliveryRecall } : {}),
     explicitlySelectedSessionIds: selection.sources.map((source) => source.sessionId),
     ...(deps.ownerAudienceIdOf !== undefined ? { ownerAudienceIdOf: deps.ownerAudienceIdOf } : {}),
+    ...(deps.onDialogueOutcome !== undefined
+      ? { onDialogueOutcome: deps.onDialogueOutcome }
+      : {}),
   })
   return { ...composed, selection, history: composedHistory }
 }
@@ -262,6 +297,8 @@ export interface ReconstructedRuntimeDeps {
   personaRecall?: PersonaRecallPort
   deliveryRecall?: DeliveryRecallPort
   ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
+  /** See `DialogueCompositionDeps.onDialogueOutcome`; forwarded unchanged. */
+  onDialogueOutcome?: DialogueOutcomeObserver
   /** Any remaining session-profile fields (for example voice). Character identity is always bound to the selection. */
   profile?: Partial<SessionProfileConfig>
   timings?: Partial<CycleTimings>
@@ -308,6 +345,9 @@ export async function createReconstructedRuntimeComposition(
     ...(deps.personaRecall !== undefined ? { personaRecall: deps.personaRecall } : {}),
     ...(deps.deliveryRecall !== undefined ? { deliveryRecall: deps.deliveryRecall } : {}),
     ...(deps.ownerAudienceIdOf !== undefined ? { ownerAudienceIdOf: deps.ownerAudienceIdOf } : {}),
+    ...(deps.onDialogueOutcome !== undefined
+      ? { onDialogueOutcome: deps.onDialogueOutcome }
+      : {}),
   })
 
   const composition = createRuntimeComposition({

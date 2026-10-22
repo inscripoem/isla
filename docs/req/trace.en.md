@@ -180,3 +180,9 @@ The composition and regression suites now run the same assertions against the in
 ## Local I1 application increment
 
 The user approved local I1 implementation on 2026-10-15. The application endpoint composes the real M5 coordinator, M1 fixed synthesis/player and M6 in-memory store with real M4 and explicit M3/dialogue-provider substitutes. New I1 tests cover transport, deadline and lifecycle boundaries; the candidate rebuilt on main `dbbbfcb` with merged PR30/PR31 passed 634 tests / 30 files plus typecheck, lint and build, retaining its ten-case M4/M6 consumption suite. Browser turns, Stop/Resume and disconnect cancellation were independently observed again on this candidate. See the [I1 handoff](../team/HANDOFF-I1-APPLICATION.en.md). This is uncommitted work under review, without remote publication. PR30 already moved the M5 attribution case from C-45 to C-47, preserving C-46 and M6's draft C-45; role ownership and full-course acceptance status remain unchanged.
+
+## M5 mention follow-up (local, 2026-10-22)
+
+The [M5 mention handoff](../team/HANDOFF-M5-MENTIONS.en.md) records outcome/deadline consumer checks and bounded input preparation. `test/offline/m5-dialogue-outcome.test.ts`, `m5-production-application.test.ts` and `m5-evaluation-adapter.test.ts` supply scoped regression evidence. They do not redefine an existing registered case or allocate an ID. C-05/C-16 remain pending until the agreed cross-owner verifiers, real execution conditions and semantic evidence are reviewed. Deterministic boundary tests do not close NFR-03 or establish S6/G4.
+
+The final coordinator regressions cover exact selection/reaction deadlines, accepted clarify intent and exact candidate expiry; their full executable names are in the linked handoff. Coordinator/adapter checks passed 121/2; M5 passed 203/9 and full verification passed 1223/69. These results do not promote C-05/C-16 to registered completed verifiers.

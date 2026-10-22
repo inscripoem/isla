@@ -1,5 +1,7 @@
 # M5 production composition and durable application lifecycle handoff
 
+The local 2026-10-22 outcome-observer wiring through initial and recovered sessions is described in [the M5 mention handoff](HANDOFF-M5-MENTIONS.en.md). Its checks and review status are separate from the published PR53 evidence below.
+
 Published baseline: [PR48 cbc845c746e426934acc8a55289fe58efefb8ec5](https://github.com/inscripoem/isla/commit/cbc845c746e426934acc8a55289fe58efefb8ec5), incorporating main37c1d9e. M1's [scoped Windows approval](https://github.com/inscripoem/isla/pull/48#pullrequestreview-5583059851) resolves the original response-hold P2 at that head. The implementation was published in PR53 at b0e5db708ea4c95dc6a6baf3bd67b6796bbe4f28 over main f972b32. The current documentation follow-up repairs its commit pointers and case traceability; M6 approved the documentation revision at `8c36cad`, and [M1 approved that exact revision within its evidence/traceability scope](https://github.com/inscripoem/isla/pull/53#pullrequestreview-5611526665). M4 review remains pending. These approvals do not cover this unpublished documentation follow-up. Earlier increment baselines and test counts below retain their original scope. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline) for current status, verification and remaining owner work.
 
 Revision: 2026-10-21.4. Owner: M5 — CHANG Xuben. Status: application merged on main f972b32; local CLI shutdown hardening under review. Historical increment branch: `feat/m5-production-composition`, based on the published PR45
@@ -145,7 +147,7 @@ The deployment module exports a `ProductionDeploymentFactory` (named
 
 | Field | Meaning |
 | --- | --- |
-| `peers` | `ProductionPeers`: `selection`, `reaction`, `textSource`, `createRenderer(gate)`, `createSynthesis(gate)`, optional `personaRecall`, `audioResources`, `profile`, `timings` and budgets. The factories receive the composition's own deadline gate and must bind provider work to it. |
+| `peers` | `ProductionPeers`: `selection`, `reaction`, `textSource`, `createRenderer(gate)`, `createSynthesis(gate)`, optional `personaRecall`, `audioResources`, `onDialogueOutcome`, `profile`, `timings` and budgets. The factories receive the composition's own deadline gate and must bind provider work to it. |
 | `initialSelection` | The validated `ArchiveSelectionConfig` for the initial fresh live session (fresh id, selected archives, trusted catalogue). |
 | `allowedOrigins` | Exact canonical origins permitted to open an application socket; at least one is required. |
 | `allowedHosts` | Optional exact allowed `Host` values; omitted means loopback-only hosts. |

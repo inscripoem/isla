@@ -8,9 +8,11 @@ import type {
   EventStorePort,
   HistoryQueryPort,
   ReactionPort,
+  SelectionPort,
+  SelectionRequest,
   TrustedControlContext,
 } from '../../src/contracts'
-import { APPLICATION_CONTRACT_VERSION } from '../../src/contracts'
+import { APPLICATION_CONTRACT_VERSION, MAX_SELECTION_CANDIDATES } from '../../src/contracts'
 import { runComparison } from '../../src/evaluation/comparison'
 import type { EvalCase, Variant } from '../../src/evaluation/comparison'
 import { createAudioResourceRegistry } from '../../src/performance/audio-resources'
@@ -21,15 +23,19 @@ import { createEvaluationAdapter } from '../../src/runtime/evaluation-adapter'
 import type {
   EvaluationAttemptObservation,
   EvaluationConsumer,
+  EvaluationInputPlan,
   EvaluationVariantConfig,
+  PreparedEvaluationInput,
 } from '../../src/runtime/evaluation-adapter'
+import type { DialogueOutcomeEvent } from '../../src/runtime/dialogue-outcome'
 import { createRetainedSynthesis } from '../../src/runtime/physical-synthesis'
 import type { ProductionPeers } from '../../src/runtime/production'
 import { createEventStore } from '../../src/storage/event-store'
 import { createHistoryQuery } from '../../src/storage/history-query'
 import { createSqliteBackend, migrate, openDatabase } from '../../src/storage/sqlite'
-import { createFixtureReactionPort } from '../support/correct-ports'
+import { createFixtureReactionPort, createFixtureSelectionPort } from '../support/correct-ports'
 import { createControlledConsumer } from '../support/evaluation-consumer'
+import { createVirtualClock } from '../support/virtual-clock'
 import {
   M1_FIXTURE_SEGMENT_0_TEXT,
   M1_FIXTURE_VOICE_ID,
@@ -122,7 +128,7 @@ interface AdapterHarness {
   nextSessionId(): string
 }
 
-function createHarness(): AdapterHarness {
+function createHarness(clock: ClockPort = createMonotonicClock()): AdapterHarness {
   const dir = mkdtempSync(join(tmpdir(), 'isla-m5-eval-adapter-'))
   dirs.push(dir)
   const dbPath = join(dir, 'eval.db')
@@ -136,7 +142,7 @@ function createHarness(): AdapterHarness {
   return {
     store: createEventStore(backend),
     history: createHistoryQuery(backend),
-    clock: createMonotonicClock(),
+    clock,
     sessions,
     observations,
     nextSessionId() {
@@ -254,6 +260,8 @@ function buildAdapter(
     consumer?: EvaluationConsumer
     store?: EventStorePort
     nextSessionId?: () => string
+    input?: EvaluationInputPlan
+    onDialogueOutcome?: (event: DialogueOutcomeEvent) => void
   } = {},
 ) {
   return createEvaluationAdapter({
@@ -263,8 +271,42 @@ function buildAdapter(
     ...(options.consumer !== undefined ? { consumer: options.consumer } : {}),
     clock: harness.clock,
     nextSessionId: options.nextSessionId ?? harness.nextSessionId,
+    ...(options.input !== undefined ? { input: options.input } : {}),
     onObservation: (observation) => harness.observations.push(observation),
+    ...(options.onDialogueOutcome !== undefined
+      ? { onDialogueOutcome: options.onDialogueOutcome }
+      : {}),
   })
+}
+
+/**
+ * The fixture selection port with every real request recorded, so a test can
+ * read the exact candidate batch the runtime offered and prove one selection.
+ */
+function capturingSelection(): {
+  selection: SelectionPort
+  requests: SelectionRequest[]
+} {
+  const base = createFixtureSelectionPort()
+  const requests: SelectionRequest[] = []
+  return {
+    requests,
+    selection: {
+      async select(request, context) {
+        requests.push(request)
+        return base.select(request, context)
+      },
+    },
+  }
+}
+
+/** The three fields a prepared input may carry, read back from a candidate. */
+function candidateInput(candidate: {
+  source: string
+  text: string
+  actorId: string
+}): { source: string; text: string; actorId: string } {
+  return { source: candidate.source, text: candidate.text, actorId: candidate.actorId }
 }
 
 /** A synthesis port that fails every preparation, like a rejected provider. */
@@ -981,6 +1023,87 @@ describe('M5 evaluation adapter through the M6 runner', () => {
     expect(events.some((event) => event.type === 'session.stopped')).toBe(true)
   })
 
+  it('records projected dialogue outcome evidence and contains a faulty observer', async () => {
+    const harness = createHarness()
+    const forwarded: DialogueOutcomeEvent[] = []
+    const adapter = buildAdapter(
+      harness,
+      [{ variant: VARIANT, peers: fixturePeers(harness) }],
+      {
+        consumer: autoConsumer({ receiptPrefix: 'outcome' }),
+        onDialogueOutcome: (event) => {
+          forwarded.push(event)
+          throw new Error('observer fault')
+        },
+      },
+    )
+
+    const run = await runComparison(
+      { variants: [VARIANT], cases: [evalCase('case-1')] },
+      { runVariant: adapter.runVariant },
+    )
+
+    // The observer fault is isolated: the attempt still completes normally.
+    expect(run.notRun).toEqual([])
+    expect(run.records).toHaveLength(1)
+    expect(run.records[0].outcome).toBe('completed')
+
+    const observation = harness.observations[0]
+    expect(observation.dialogueOutcomes.length).toBeGreaterThanOrEqual(1)
+    const first = observation.dialogueOutcomes[0]
+    expect(first.sessionId).toBe(harness.sessions[0])
+    expect(first.endStatus).toBe('completed')
+    expect(first.discarded).toBe(first.generated - first.emitted)
+    expect(forwarded).toHaveLength(observation.dialogueOutcomes.length)
+    expect(observation.dialogueOutcomeFailures).toEqual(['observer threw'])
+  })
+
+  it('reports a deadline_exceeded dialogue as a deadline failure even with a delivered prefix', async () => {
+    const clock = createVirtualClock()
+    const harness = createHarness(clock)
+    // Advance the server clock past the dialogue deadline during the first
+    // segment's sink write, so the producer emits one fulfilled segment and then
+    // reports deadline_exceeded. The real deadline timers never fire.
+    let advanced = false
+    const base = createFixtureReactionPort()
+    const reaction: ReactionPort = {
+      async decide(request, context) {
+        const result = await base.decide(request, context)
+        if (!advanced) {
+          advanced = true
+          clock.advance(60_001)
+        }
+        return result
+      },
+    }
+    const adapter = buildAdapter(
+      harness,
+      [{ variant: VARIANT, peers: fixturePeers(harness, { reaction }) }],
+      { consumer: autoConsumer({ receiptPrefix: 'deadline' }) },
+    )
+
+    const run = await runComparison(
+      { variants: [VARIANT], cases: [evalCase('case-1')] },
+      { runVariant: adapter.runVariant },
+    )
+
+    expect(run.notRun).toEqual([])
+    expect(run.records).toHaveLength(1)
+    expect(run.records[0].outcome).toBe('failed')
+    expect(run.records[0].failureReason).toContain('deadline')
+
+    const observation = harness.observations[0]
+    expect(observation.cycleStatus).toBe('cancelled')
+    expect(observation.dialogueEndStatus).toBe('deadline_exceeded')
+    // A delivered prefix is real evidence, but an expired turn is never success.
+    expect(observation.deliveries.length).toBeGreaterThan(0)
+
+    const events = await harness.store.readSession(harness.sessions[0])
+    const results = events.filter((event) => event.type === 'dialogue.result')
+    expect(results).toHaveLength(1)
+    expect((results[0].payload.end as { status: string }).status).toBe('deadline_exceeded')
+  })
+
   it('preserves a real operator Stop during held active playback as cancellation', async () => {
     const harness = createHarness()
     const resolver = createControlledResolver()
@@ -1339,6 +1462,274 @@ describe('M5 evaluation adapter through the M6 runner', () => {
     expect(run.records[0].failureReason).toContain('the store acknowledged failed (unavailable)')
     const events = await harness.store.readSession(harness.sessions[0])
     expect(events.some((event) => event.type === 'evaluation.cleanup.failed')).toBe(false)
+  })
+})
+
+/**
+ * Prepared-input injection. The adapter still drives the real coordinator and
+ * the real M6 runner: only the input preparation step is parameterised. These
+ * tests cover the default single-input path staying unchanged, a full ordered
+ * batch reaching one selection with label isolation, the refusals that must
+ * happen before any runtime or provider work, and a partially admitted batch
+ * becoming a failed record with retained evidence and no selection.
+ */
+describe('M5 evaluation adapter prepared inputs', () => {
+  const prepared = (
+    source: PreparedEvaluationInput['source'],
+    text: string,
+    actorId: string,
+  ): PreparedEvaluationInput => ({ source, text, actorId })
+
+  it('keeps the default single-input path when no plan is configured', async () => {
+    const harness = createHarness()
+    const capture = capturingSelection()
+    const adapter = buildAdapter(
+      harness,
+      [{ variant: VARIANT, peers: fixturePeers(harness, { selection: capture.selection }) }],
+      { consumer: autoConsumer({ receiptPrefix: 'default-input' }) },
+    )
+
+    const run = await runComparison(
+      {
+        variants: [VARIANT],
+        cases: [{ id: 'case-1', input: 'viewer says case-1', labels: { intent: 'greeting' } }],
+      },
+      { runVariant: adapter.runVariant },
+    )
+
+    expect(run.notRun).toEqual([])
+    expect(run.records).toHaveLength(1)
+    expect(run.records[0].outcome).toBe('completed')
+    expect(capture.requests).toHaveLength(1)
+    expect(capture.requests[0].candidates.map(candidateInput)).toEqual([
+      { source: 'local-audience', text: 'viewer says case-1', actorId: 'evaluation-adapter' },
+    ])
+    const events = await harness.store.readSession(harness.sessions[0])
+    const accepted = events.filter((event) => event.type === 'input.accepted')
+    expect(accepted).toHaveLength(1)
+    expect(accepted[0].payload.input).toMatchObject({
+      source: 'local-audience',
+      text: 'viewer says case-1',
+      actorId: 'evaluation-adapter',
+    })
+  })
+
+  it('admits the full ordered prepared batch before exactly one turn', async () => {
+    const harness = createHarness()
+    const capture = capturingSelection()
+    const resolvedCaseIds: string[] = []
+    const batch: PreparedEvaluationInput[] = [
+      prepared('local-audience', 'first mention', 'viewer-1'),
+      prepared('cohost-text', 'second mention', 'cohost-2'),
+      prepared('external-fixture', 'third mention', 'viewer-3'),
+      prepared('local-audience', 'fourth mention', 'viewer-4'),
+      prepared('cohost-text', 'fifth mention', 'cohost-5'),
+    ]
+    expect(batch).toHaveLength(MAX_SELECTION_CANDIDATES)
+    const adapter = buildAdapter(
+      harness,
+      [{ variant: VARIANT, peers: fixturePeers(harness, { selection: capture.selection }) }],
+      {
+        consumer: autoConsumer({ receiptPrefix: 'prepared' }),
+        input: {
+          mode: 'prepared',
+          resolve: async (caseId) => {
+            resolvedCaseIds.push(caseId)
+            return batch
+          },
+        },
+      },
+    )
+
+    const run = await runComparison(
+      {
+        variants: [VARIANT],
+        cases: [
+          {
+            id: 'case-mentions',
+            input: 'ignored default',
+            labels: { intent: 'greeting', note: 'do not leak' },
+          },
+        ],
+      },
+      { runVariant: adapter.runVariant },
+    )
+
+    // The resolver receives only the case id, never the case or its labels.
+    expect(resolvedCaseIds).toEqual(['case-mentions'])
+    expect(run.notRun).toEqual([])
+    expect(run.records).toHaveLength(1)
+    expect(run.records[0].outcome).toBe('completed')
+    // One selection over the whole batch, in order, carrying only the prepared
+    // fields: no label reaches a provider candidate.
+    expect(capture.requests).toHaveLength(1)
+    expect(capture.requests[0].candidates.map(candidateInput)).toEqual(batch)
+    expect(
+      capture.requests[0].candidates.some((candidate) =>
+        JSON.stringify(candidate).includes('do not leak'),
+      ),
+    ).toBe(false)
+    expect(harness.observations[0].portInvocations.selection).toBe(1)
+
+    const events = await harness.store.readSession(harness.sessions[0])
+    const accepted = events.filter((event) => event.type === 'input.accepted')
+    expect(accepted.map((event) => (event.payload.input as { text: string }).text)).toEqual([
+      'first mention',
+      'second mention',
+      'third mention',
+      'fourth mention',
+      'fifth mention',
+    ])
+    // Exactly one turn was run, after every admission.
+    expect(events.filter((event) => event.type === 'turn.started')).toHaveLength(1)
+    const lastAcceptedSeq = Math.max(...accepted.map((event) => event.seq))
+    const turn = events.find((event) => event.type === 'turn.started')
+    expect(turn?.seq ?? -1).toBeGreaterThan(lastAcceptedSeq)
+  })
+
+  it('refuses invalid prepared plans before any runtime or provider work', async () => {
+    const harness = createHarness()
+    const capture = capturingSelection()
+    const peers = fixturePeers(harness, { selection: capture.selection })
+
+    const refusal = async (plan: EvaluationInputPlan, expected: string): Promise<void> => {
+      const adapter = buildAdapter(harness, [{ variant: VARIANT, peers }], {
+        consumer: autoConsumer({ receiptPrefix: 'refusal' }),
+        input: plan,
+      })
+      const run = await runComparison(
+        { variants: [VARIANT], cases: [evalCase('case-refused')] },
+        { runVariant: adapter.runVariant },
+      )
+      expect(run.records).toEqual([])
+      expect(run.notRun).toHaveLength(1)
+      expect(run.notRun[0].reason).toContain(expected)
+      // Refused before any runtime work: no session claimed and no selection.
+      expect(harness.sessions).toEqual([])
+      expect(capture.requests).toEqual([])
+    }
+
+    await refusal(
+      { mode: 'prepared' } as unknown as EvaluationInputPlan,
+      'without a resolve(caseId) function',
+    )
+    await refusal(
+      { mode: 'bogus', resolve: () => [] } as unknown as EvaluationInputPlan,
+      'unknown input mode',
+    )
+    await refusal(
+      {
+        mode: 'prepared',
+        resolve: () => {
+          throw new Error('probe resolver fault')
+        },
+      },
+      'resolver threw: probe resolver fault',
+    )
+    await refusal(
+      { mode: 'prepared', resolve: () => undefined as unknown as readonly PreparedEvaluationInput[] },
+      'did not return an array',
+    )
+    await refusal({ mode: 'prepared', resolve: () => [] }, 'returned no inputs')
+    await refusal(
+      {
+        mode: 'prepared',
+        resolve: () => [prepared('not-a-source' as never, 'text', 'actor-1')],
+      },
+      'invalid source',
+    )
+    await refusal(
+      { mode: 'prepared', resolve: () => [{ source: 'local-audience', text: '', actorId: 'a' }] },
+      'empty text',
+    )
+    await refusal(
+      { mode: 'prepared', resolve: () => [{ source: 'local-audience', text: 't', actorId: '' }] },
+      'empty actorId',
+    )
+    await refusal(
+      {
+        mode: 'prepared',
+        resolve: () => [
+          {
+            source: 'local-audience',
+            text: 'text',
+            actorId: 'actor-1',
+            intent: 'leak',
+          } as unknown as PreparedEvaluationInput,
+        ],
+      },
+      'unsupported field',
+    )
+    await refusal(
+      {
+        mode: 'prepared',
+        resolve: () =>
+          Array.from({ length: 6 }, (_, index) =>
+            prepared('local-audience', `mention ${index}`, `actor-${index}`),
+          ),
+      },
+      'at most 5',
+    )
+    // Across every refusal nothing was admitted, claimed or selected.
+    expect(harness.sessions).toEqual([])
+    expect(capture.requests).toEqual([])
+  })
+
+  it('records a failed attempt for a partially admitted batch and never runs a partial turn', async () => {
+    const harness = createHarness()
+    const capture = capturingSelection()
+    const batch: PreparedEvaluationInput[] = [
+      prepared('local-audience', 'kept one', 'viewer-1'),
+      prepared('cohost-text', 'kept two', 'cohost-2'),
+      prepared('local-audience', 'refused three', 'viewer-3'),
+    ]
+    const adapter = buildAdapter(
+      harness,
+      [
+        {
+          variant: VARIANT,
+          peers: {
+            ...fixturePeers(harness, { selection: capture.selection }),
+            // The queue bound rejects the third input after two were accepted.
+            maxPendingInputs: 2,
+          },
+        },
+      ],
+      {
+        consumer: autoConsumer({ receiptPrefix: 'partial' }),
+        input: { mode: 'prepared', resolve: () => batch },
+      },
+    )
+
+    const run = await runComparison(
+      { variants: [VARIANT], cases: [evalCase('case-partial')] },
+      { runVariant: adapter.runVariant },
+    )
+
+    expect(run.notRun).toEqual([])
+    expect(run.records).toHaveLength(1)
+    expect(run.records[0].outcome).toBe('failed')
+    expect(run.records[0].failureReason).toContain('skipped runTurn')
+    expect(run.records[0].failureReason).toContain('only 2 of 3')
+    expect(run.records[0].failureReason).toContain('too many pending inputs')
+    expect(run.records[0].failureReason).toContain('a partial batch is never run')
+
+    // Zero selection: no provider work happened for the partial batch.
+    expect(capture.requests).toEqual([])
+    const observation = harness.observations[0]
+    expect(observation.cycleStatus).toBeNull()
+    expect(observation.portInvocations.selection).toBe(0)
+    expect(observation.deliveries).toEqual([])
+
+    // The accepted inputs remain as retained admission evidence.
+    const events = await harness.store.readSession(harness.sessions[0])
+    const accepted = events.filter((event) => event.type === 'input.accepted')
+    expect(accepted.map((event) => (event.payload.input as { text: string }).text)).toEqual([
+      'kept one',
+      'kept two',
+    ])
+    expect(events.some((event) => event.type === 'turn.started')).toBe(false)
+    expect(events.some((event) => event.type === 'provider.call')).toBe(false)
   })
 })
 

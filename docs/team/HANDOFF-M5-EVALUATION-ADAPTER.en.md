@@ -2,9 +2,9 @@
 
 Current baseline: [main f972b32d6174b4827eebcb1d421a5b069968226e](https://github.com/inscripoem/isla/commit/f972b32d6174b4827eebcb1d421a5b069968226e), including merged PR35, PR48, PR51 and PR52. PR52 was merged by MichaelLsh at f972b32; its merged tree is identical to the reviewed head `eae51b49` and carries the C-66 P3 fixture getter (`47d9289`) and the INV-16 row (`ec77749`). Earlier increment counts below retain their original scope. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline) for owner work and current PR states.
 
-Revision: 2026-10-21.3. Status: merged application; the local evaluation-test follow-up is integrated on main f972b32 under review, not committed or published.
+Revision: 2026-10-22.1. The deterministic-timing repair below is published in PR53 at `8c36cadadf64da2b543aacd930392090b9e4a7cd`. The new local outcome/deadline and input-preparation increment is described in [the M5 mention handoff](HANDOFF-M5-MENTIONS.en.md); it remains under review and unpublished. Earlier verification counts retain their original scope.
 
-## Local deterministic-timing follow-up
+## PR53 deterministic-timing follow-up
 
 The held-playback regression uses controlled timers installed before the harness clock is created. Each of the two offers waits for explicit ready release; playback must reach the controlled media's started boundary before time advances to the performer's local expiry. Both actual cancelled receipts must remain visible, output confirmation must be confirmed, and committed delivery must remain partial-unknown rather than completed speech.
 
@@ -29,7 +29,7 @@ Call `createEvaluationAdapter` with caller-owned `EventStorePort` and `HistoryQu
 | Variant and peers | Requested `id`, `kind` and `combined` must match the configured variant. Supply M3 selection/reaction, M4 text source, M1 synthesis/renderer factories and the intended character/voice profile explicitly. No fixture fallback is installed by the adapter. |
 | Consumer | `attach(composition)` binds a real output consumer and its bridge/receipt routing. Optional `detach()` releases it and must tolerate a failed attach. The production adapter imports no test performer. M2's product consumer remains owner work. |
 | Storage/history | Existing M6 ports; SQLite is used by the acceptance suite. A session ID already present in the store or already claimed by this adapter is refused before execution. Use the normal sequential M6 comparison runner; concurrent calls sharing one consumer are not an accepted deployment mode. |
-| Case | `input` is submitted unchanged. A supplied `replyIntent` is explicitly refused before any work: this mode evaluates the configured selection port and does not override its decision. Intent-constrained cases require a coordinated M3/M6 execution mode; removing a condition changes the experiment. Human labels and held-out metadata are not scored or enforced here. |
+| Case | The default submits `input` unchanged. The optional `input: { mode: 'prepared', resolve(caseId) }` plan admits a validated batch of up to five source/text/actor entries before one turn; see the [current handoff](HANDOFF-M5-MENTIONS.en.md). A supplied `replyIntent` is explicitly refused before any work: this mode evaluates the configured selection port and does not override its decision. Intent-constrained cases require a coordinated M3/M6 execution mode; removing a condition changes the experiment. Human labels and held-out metadata are not scored or enforced here. |
 | Observation | Optional `onObservation` receives `sessionId`, case/variant identity, raw cycle/dialogue status, delivery classifications, invocation provenance and cleanup diagnostics. Use `sessionId` with the caller's store to retrieve the actual event history. |
 
 Missing peers/consumer, mismatched variant metadata, unsupported case conditions and non-fresh sessions produce explicit not-run reasons. Once input is admitted, a failed or cancelled attempt remains a record. Setup failures are not silently converted into executed provider attempts.

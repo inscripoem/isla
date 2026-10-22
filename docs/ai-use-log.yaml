@@ -3093,3 +3093,80 @@ entries:
       focused: "OpenCode: boundary13/13 and M4 role189/9 passed on the combined local tree."
       isolated: "Independent M4-only pnpm verify passed 1190 tests / 68 files, typecheck, lint and build on Linux/Node 22.23.3."
       limits: "Linux and controlled sources only; no Windows, live-provider, acoustic or S6/G4 acceptance."
+
+  - date: "2026-10-22"
+    task: M5-mentions-outcome-consumers
+    branch: feat/m5-outcome-evaluation-20261022
+    change: >-
+      Consume projected dialogue outcome reports through direct and reconstructed
+      composition, production recovery and evaluation. Preserve originating
+      identity, isolate observers, reject inconsistent counts, fold unknown reason
+      keys and retain deadline_exceeded as execution failure even with a delivered
+      prefix. Add focused regression coverage and a linked handoff. The imported
+      M4-03 implementation keeps its
+      original entries and the producer repair has its own review-proposal entry.
+    requirements: [FR-01, FR-02, FR-05, NFR-02, NFR-03]
+    invariants: [INV-01]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.1.0
+    session: ses_e9d97e993ffeKyWFpkz35i9lYU
+    supervision: >-
+      Captain approved local GitHub-mention follow-up and reserved publication
+      approval. OpenCode authored implementation and tests in the genuine build
+      session with xhigh. The supervising assistant reviewed diffs, requested
+      corrections, performed independent verification and maintained documents.
+      No delegated agents; no fabricated provider, label or playback evidence.
+    human_review: >-
+      Under review. C-05/C-16 remain pending and no new case ID is allocated.
+      M3 owns actual corpus and reviewed labels; M6 owns corpus/report binding
+      and serialized memory.inspect review. M5 owns runtime persistence and
+      delivery decisions; generation diagnostics do not prove playback.
+      The empty commit list accurately denotes uncommitted local work; publication
+      must add the actual implementation SHA before pushing. No GitHub action is
+      authorized by this record.
+    verification:
+      focused: "Observer/production/evaluation tests 54/3 plus typecheck and lint passed before the multi-input increment."
+      final: "Independent combined M5 203/9 and pnpm verify 1223/69 passed, with typecheck, lint and build; see HANDOFF-M5-MENTIONS.en.md."
+      limits: "No live providers, human quality scores, Windows, acoustic, S6 or G4 acceptance."
+
+  - date: "2026-10-22"
+    task: M5-bounded-evaluation-inputs
+    branch: feat/m5-outcome-evaluation-20261022
+    change: >-
+      Add opt-in prepared input batches to the evaluation adapter while preserving
+      single-input execution. Add four test-only coordinator regressions for exact
+      selection/reaction deadlines, accepted clarify intent and candidate expiry.
+      Resolve by case id only, validate and project each
+      source/text/actor entry, refuse unavailable or invalid batches before runtime
+      execution, and preserve failed-attempt evidence after partial admission.
+      Keep M6 EvalCase, FixedConditions, recorded-run schemas and promptVersion
+      semantics unchanged; retain the supplied-replyIntent refusal.
+    requirements: [FR-01, NFR-02, NFR-03]
+    invariants: [INV-01]
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.1.0
+    session: ses_e9d547e42ffeP0a5xN77mMAASP
+    supervision: >-
+      A separate genuine build/xhigh session implements the approved local
+      input-preparation slice. The previous session ended after observer/deadline
+      checks and read-only input investigation. The supervising assistant reviews
+      actual diffs and results and maintains the handoff; no delegated agents.
+    human_review: >-
+      Under review and uncommitted; the actual implementation SHA must be added
+      before publication. Runtime-generated identities, times, persona and history
+      mean this is not full SelectionRequest/corpus replay. M3 retains actual
+      corpus, labels and semantic rubric; M6 retains report binding. C-05/C-16 stay
+      pending, no global IDs are allocated, and deterministic checks do not produce
+      semantic scores or S6/G4 acceptance.
+    verification:
+      focused: "OpenCode coordinator/adapter 121/2 (94 + 27), typecheck and lint passed. Earlier test-authoring type errors were corrected, not treated as passes."
+      final: "Independent M5 203/9 and pnpm verify 1223/69 passed with typecheck, lint and build on Linux/Node22.23.3."
+      limits: "Controlled peers only; no live-provider, Windows, acoustic, S6 or G4 result."
