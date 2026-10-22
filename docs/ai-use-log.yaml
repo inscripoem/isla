@@ -2990,7 +2990,7 @@ entries:
     requirements: [FR-02, NFR-03]
     invariants: []
     cases: []
-    commits: []
+    commits: [382778ab86c7942abdfd55d25d05923baa63d033]
     agent: opencode/deepseek-v4-flash
     provider: self-api
     model: deepseek-v4-flash
@@ -3001,8 +3001,9 @@ entries:
       and tests using build/xhigh; the supervising assistant reviews, independently
       verifies and maintains ordinary documentation. No delegated agents.
     human_review: >-
-      Local proposal under review; no commit or publication authorized for this
-      round, so commits is empty. M4 retains producer and audit-policy ownership.
+      Captain approved publication after reviewing the complete change and reply
+      texts. The commit pointer identifies the implementation. M4 retains
+      producer and audit-policy ownership; adoption remains under review.
       M1 approval of published PR54 at 4bc4c18 does not cover this new revision.
       M2/M6 inspection adoption remains separate. No new case ID is allocated.
     verification:
