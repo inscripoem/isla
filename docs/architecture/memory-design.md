@@ -98,6 +98,34 @@ content, and opposite attributes about the same object.
 - Scope limits, stated rather than hidden: clause-level only, lexical (no paraphrase), negation read
   from a small marker list (so an idiom such as 不错 reads as negated).
 
+### Bounded consistency audit proposal (2026-10-22, under review)
+
+The synchronous scan now has four fixed work ceilings: 128 visited statements, 32,768 UTF-16
+text units, 256 generated claims, and 10,000 pair iterations. Text is charged before splitting or
+tokenizing. Statements that exceed the remaining text or clause allowance are skipped whole;
+they are never truncated into a different claim. Input order and findings within the inspected
+range are retained. The default finding limit remains eight; non-finite values use that default,
+fractional values are rounded down, and non-positive values request no audit.
+
+`scanContradictions` is exported by `src/dialogue/index.ts` and now returns a
+`ConsistencyScanResult` object instead of an array; callers read `.findings`. The production
+caller in `context.ts` and the direct scanner tests are updated. `AssembledDialogueContext`
+adds the required `consistencyAudit` summary, and `MemoryInspectPayload` adds `consistency`.
+Both summaries contain counts and `incomplete`, without memory or persona text. Context warnings
+explicitly identify incomplete scans, including early termination at the findings cap. Reaching
+a limit on the final inspected item does not by itself make an otherwise complete scan partial.
+
+The contraction patterns now require a word boundary before the word run. This prevents a long
+Latin word from restarting the same failed contraction search at each character; supported
+negation markers and ASCII/curly-apostrophe contractions retain their meanings.
+
+These are M4 module API changes, not changes to the shared C1–C7 schemas or the storage schema.
+The inspection builder is not a connected diagnostics endpoint or an M2 panel. Confirmed-history
+admission, outcome reporting and character charges for the optional conflict marker are retained.
+The ceilings are an M5 review proposal awaiting M4 adoption. They limit scan work, not total context
+assembly, storage reads, wall-clock latency, or the rest of the dialogue pipeline. Large histories
+can omit later standing facts from the audit because the existing input order is preserved.
+
 ## Retention and privacy
 
 - Default local-only archives with a **proposed 7-day retention**; any different retention is an

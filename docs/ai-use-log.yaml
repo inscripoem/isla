@@ -3025,8 +3025,15 @@ entries:
       shared-token count but never statement text. It is audit only: nothing is
       rewritten, deleted, re-admitted or re-budgeted, and the optional
       [conflicting] prompt marker is off by default because it spends character
-      budget. No shared C1-C7 contract, storage schema, requirement definition or
-      invariant definition changed.
+      budget. The memory-quality changes do not change the storage schema or requirement/
+      invariant definitions. Scope correction after M1 review 6337257243: this
+      published branch also adds deadline_exceeded to the shared C2 generation
+      status enum in src/contracts/app/primitives.ts, adds the M4 onOutcome
+      option and implements the redacted memory.inspect payload builder. The
+      original no-shared-contract statement did not describe that full branch.
+      The builder is not a wired diagnostics endpoint or an M2 panel. This
+      clarification preserves the original tool/model provenance and 572c99c
+      implementation pointer; it does not claim a new execution of that work.
     requirements: [FR-02, NFR-03]
     invariants: []
     cases: []
@@ -3170,3 +3177,37 @@ entries:
       focused: "OpenCode coordinator/adapter 121/2 (94 + 27), typecheck and lint passed. Earlier test-authoring type errors were corrected, not treated as passes."
       final: "Independent M5 203/9 and pnpm verify 1223/69 passed with typecheck, lint and build on Linux/Node22.23.3."
       limits: "Controlled peers only; no live-provider, Windows, acoustic, S6 or G4 result."
+
+  - date: "2026-10-22"
+    task: M5-review-M4-consistency-budget
+    branch: fix/m4-consistency-budget-20261022
+    change: >-
+      Bound the synchronous consistency audit before prompt trimming, disclose
+      incomplete scans, and carry a redacted completion summary through context
+      assembly and the memory.inspect builder. Update direct scanner consumers
+      for the structured result. Preserve outcome accounting, confirmed-history
+      admission and optional conflict-marker character charges. Correct the
+      historical M4-03 scope description without changing its original provenance.
+    requirements: [FR-02, NFR-03]
+    invariants: []
+    cases: []
+    commits: [382778ab86c7942abdfd55d25d05923baa63d033]
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.1.0
+    session: ses_e9cd43cbbffeVlkBaFW3Iajwjp
+    supervision: >-
+      Captain authorized local implementation. OpenCode authors application code
+      and tests using build/xhigh; the supervising assistant reviews, independently
+      verifies and maintains ordinary documentation. No delegated agents.
+    human_review: >-
+      Captain approved publication after reviewing the complete change and reply
+      texts. The commit pointer identifies the implementation. M4 retains
+      producer and audit-policy ownership; adoption remains under review.
+      M1 approval of published PR54 at 4bc4c18 does not cover this new revision.
+      M2/M6 inspection adoption remains separate. No new case ID is allocated.
+    verification:
+      focused: "OpenCode M4 role: 208 tests / 9 files; scanner and inspection: 38 tests / 2 files. Independent M5 pnpm verify: 1242 tests / 69 files, typecheck, lint and build passed; code/tests/dependencies unchanged during verification."
+      benchmark: "Independent Linux exact-source comparison, 1024 two-clause history turns / 64-character prompt: assembly 1691.9 ms before, 30.8 ms after; timer delay 1691.9 ms before, 31.0 ms after. A 32768-character word: 1469.5 ms before, 0.7 ms after. Single controlled runs, not a latency guarantee."
+      limits: "Count ceilings are not a whole-pipeline latency guarantee; no live-provider, Windows, acoustic or S6/G4 acceptance."
