@@ -103,7 +103,8 @@ C-73 — `test/offline/production-cli.test.ts`:
 - `awaits a genuinely pending owned release before reporting shutdown completion`
 - `reports an incomplete shutdown when the owned release fails`
 - `reports a shutdown fault after a listen failure instead of swallowing it`
-- `retains output that arrives after the exit event until both streams end`
+
+Same-file supporting coverage, outside the registered `production CLI` suite: `collectUntilExit output drain` / `retains output that arrives after the exit event until both streams end`. The registered suite contains 14 lifecycle tests; whole-file execution also runs this helper regression.
 
 C-74 — `test/offline/m5-process-restart.test.ts`:
 
