@@ -2872,3 +2872,40 @@ entries:
       focused: "requirements/readiness/trace after the row: readiness 42/3; trace 41/1."
       role: "test:m6 182/14; full 1125/63; pnpm verify exit 0."
     human_review: "M4 flagged the missing row; M6 owns it. No new ID."
+
+  - date: "2026-10-23"
+    task: "M1-02-C-VTS-offline"
+    branch: "feat/m1-02-vts-adapter"
+    member: "Pioneer141 (M1)"
+    change: "Add a deterministic VTS JSON client and hotkey RendererDriver with an injected exclusively owned connected transport, current-session/model/hotkey preflight, immutable configuration, acceptance-only mapped capabilities, bounded correlation/cleanup and honest post-trigger unknown outcomes. Append actual implementation regressions without changing existing M1 tests or public C4/C5."
+    requirements: ["FR-03", "FR-04", "FR-05", "NFR-06"]
+    invariants: ["INV-01", "INV-02"]
+    commits: ["305656452dcf92106b911ad55b0223b420b6ec23"]
+    agent: "opencode/deepseek-flash"
+    provider: "deepseek"
+    model: "deepseek-flash"
+    opencode_version: "1.18.34"
+    launch_flags: ["--pure", "--agent", "build", "--variant", "xhigh", "--format", "json", "--auto"]
+    sessions: ["ses_e9ad720e8ffe3SThnZ3IlKtHTm", "ses_e9accc034ffeOhjG38dSC6BpTn"]
+    supervision: "OpenCode/official DeepSeek authored the production client/driver, controlled transport helper, role-test additions and performance README. Codex scoped the approved task, captured original bytes, ran baseline/final checks and a private actual-driver probe, reviewed the changes and prepared factual metadata/publication. The bounded authoring permissions prohibited Git/publication, shared changes, credential/config reads and subagents."
+    human_review: "The user explicitly authorized increment C and its task branch, full transcripts, commit/push/PR, M5 review request and Issue2 progress. M5 consumer review remains pending; the independent AI inspection is same-family/provisional, not a human approval. No agent merge, auto-merge, enqueue or course submission."
+    transcript_record: "Two genuine native Windows OpenCode sessions, three development rounds and two read-only review invocations, with 20 unabridged event/export/stderr originals and five passing central provider/model/session audits; byte-identical archive copies retained privately. The first review invocation ended at the length limit without final text; its original is preserved and the same session produced the concise review in the second invocation."
+    development_sequence: "Source-first implementation. R1 had 233 passed/2 failed new cancellation expectations, then 235 passed after matching the existing conservative mapped-renderer abort semantics while retaining zero-trigger assertions. A separate Codex actual-driver probe then demonstrated caller-owned modelId mutation retargeting revision1 (one trigger/accepted). R2 captured the original model and added two regressions; 237 passed after correcting a test that wrongly expected capabilityRevision on a C5 receipt. R3 corrected README status/correlation/trigger wording, documented exclusive transport ownership, and added held-preflight close/error/timeout cleanup plus an excessive timer bound; 238 passed. No test-first history is claimed. The private probe first had an ESM entry-format error, then genuinely reproduced the defect and passed unchanged after the fix."
+    verification:
+      platform: "Windows x64; Node 24.14.1; project pnpm 12; native OpenCode 1.18.34"
+      starting_head: "f972b32d6174b4827eebcb1d421a5b069968226e"
+      frozen_install: "passed"
+      baseline_m1: "214 passed"
+      baseline_full: "1108 passed / 17 failed; verify exit1; separate build passed"
+      m1: "238 passed (24 added; all original M1 test lines retained)"
+      composition: "12 passed; actual offline composition"
+      trace: "41 passed; actual Git checkout"
+      readiness: "39 passed / 3 existing Windows negative-path failures, also present in full baseline"
+      typecheck: "passed"
+      lint: "passed"
+      build: "passed"
+      full_suite: "1133 passed / 16 failed / 1149 total; verify exit1; no added failure names against the fresh main baseline. The unchanged held-playback failure was not reproduced; it is not claimed fixed."
+      independent_review: "Fresh read-only DeepSeek session inspected actual client/driver/mapped consumer and new tests; no P1/P2 in finite offline C scope. Its optional documentation/test suggestions were handled in R3 and checked by Codex; both production source hashes remain identical to the reviewed and probed code. The reviewer ran no tests and did not grant human approval."
+      private_probe: "Actual client/driver with fixture transport: R1 mutable-model probe failed with accepted/one trigger; identical ESM probe passed after model capture with failed/vts_model_mismatch/zero triggers."
+      ci: "Not yet run at metadata creation; the exact published-head checks are reported separately in the PR/Issue progress."
+    scope: "Only offline C candidate; transport/device responses are controlled fixtures, not live VTS. No endpoint discovery, socket construction, pairing or credential persistence; D/M5 supplies the real exclusively owned connection and verified assets. A trigger response means accepted, never animation started/completed or physical silence. External model-change TOCTOU, controlled stopped/settled replacement, scheduling/global dedup/epoch and production composition remain owner work. Shared contracts, dependencies/manifests/lock, browser entry and other modules/register IDs are unchanged. D, Windows shutdown/restart, real measurement and G4/S6 remain pending; Issue2 stays Open with unfinished tasks unchecked."
