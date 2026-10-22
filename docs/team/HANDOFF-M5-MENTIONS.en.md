@@ -34,3 +34,22 @@ Additional deterministic checks in `test/offline/m5-coordinator.test.ts`:
 - `defers a malformed selection returned exactly at candidate expiry while its deadline is live`
 
 C-05/C-16 remain pending; no new global ID is allocated. M6 retains serialized `memory.inspect` review. Real text-provider integration, reviewed corpus/labels, Windows, acoustic measurements, S6 and G4 remain outstanding. Final PR merge is human-owned.
+
+## Consistency audit follow-up (2026-10-22, under review)
+
+The dependent M4 proposal now bounds statement visits, text preprocessing, claims and pair
+comparisons, fixes long-word contraction matching, and reports incomplete audits through
+context and the redacted inspection builder. See [memory design](../architecture/memory-design.md#bounded-consistency-audit-proposal-2026-10-22-under-review) for ceilings and the exported API changes.
+M5 integrates the same reviewed code and tests; existing outcome/deadline handling, recovered
+session wiring and prepared evaluation inputs are retained. PR53's three documentation
+corrections are included. M4 retains ownership of the limits and API adoption; M2/M6 inspection
+adoption remains separate.
+
+Independent Linux verification: M4 1209 tests / 68 files; this M5 combination 1242 / 69;
+typecheck, lint and build passed with unchanged source/test/dependency hashes. The same
+1024-turn, two-clause history and 64-character prompt took 1691.9 ms before and 30.8 ms after
+in one controlled assembly comparison; timer delay was 1691.9 versus 31.0 ms. These observations
+are not a whole-pipeline latency guarantee. No live provider, Windows, acoustic or S6/G4
+acceptance is claimed. The previous M1 approval of PR54 at 4bc4c18 does not cover this
+revision. Captain approved publication of this update; owner adoption and final PR merge
+remain separate.

@@ -1,10 +1,10 @@
 # M5 production composition and durable application lifecycle handoff
 
-The local 2026-10-22 outcome-observer wiring through initial and recovered sessions is described in [the M5 mention handoff](HANDOFF-M5-MENTIONS.en.md). Its checks and review status are separate from the published PR53 evidence below.
+The outcome-observer wiring published in Draft PR55 on 2026-10-22 through initial and recovered sessions is described in [the M5 mention handoff](HANDOFF-M5-MENTIONS.en.md). Its checks and review status are separate from the published PR53 evidence below.
 
-Published baseline: [PR48 cbc845c746e426934acc8a55289fe58efefb8ec5](https://github.com/inscripoem/isla/commit/cbc845c746e426934acc8a55289fe58efefb8ec5), incorporating main37c1d9e. M1's [scoped Windows approval](https://github.com/inscripoem/isla/pull/48#pullrequestreview-5583059851) resolves the original response-hold P2 at that head. The implementation was published in PR53 at b0e5db708ea4c95dc6a6baf3bd67b6796bbe4f28 over main f972b32. The current documentation follow-up repairs its commit pointers and case traceability; M6 approved the documentation revision at `8c36cad`, and [M1 approved that exact revision within its evidence/traceability scope](https://github.com/inscripoem/isla/pull/53#pullrequestreview-5611526665). M4 review remains pending. These approvals do not cover this unpublished documentation follow-up. Earlier increment baselines and test counts below retain their original scope. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline) for current status, verification and remaining owner work.
+Published baseline: [PR48 cbc845c746e426934acc8a55289fe58efefb8ec5](https://github.com/inscripoem/isla/commit/cbc845c746e426934acc8a55289fe58efefb8ec5), incorporating main37c1d9e. M1's [scoped Windows approval](https://github.com/inscripoem/isla/pull/48#pullrequestreview-5583059851) resolves the original response-hold P2 at that head. PR53 implementation is b0e5db708ea4c95dc6a6baf3bd67b6796bbe4f28 over main f972b32; documentation through [bc294bf60e55ae9a45a50aa47bcbe118d8629e90](https://github.com/inscripoem/isla/commit/bc294bf60e55ae9a45a50aa47bcbe118d8629e90) is published. [M1 approved bc294bf within the documentation scope](https://github.com/inscripoem/isla/pull/53#pullrequestreview-5612384602); [M6 approval](https://github.com/inscripoem/isla/pull/53#pullrequestreview-5599418482) remains bound to 8c36cad. M6 review of the later documentation and M4 review remain pending. Earlier increment baselines and test counts retain their original scope. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline) for the dated publication and owner-work snapshot.
 
-Revision: 2026-10-21.4. Owner: M5 — CHANG Xuben. Status: application merged on main f972b32; local CLI shutdown hardening under review. Historical increment branch: `feat/m5-production-composition`, based on the published PR45
+Revision: 2026-10-22.2. Publication snapshot: 2026-10-22 10:30 UTC. Owner: M5 — CHANG Xuben. Status: application merged on main f972b32; CLI shutdown hardening published in open PR53. Historical increment branch: `feat/m5-production-composition`, based on the published PR45
 head `6bcfc2b`. Scope: FR-05/FR-06 production assembly, durable startup/controlled
 shutdown and explicit selected-history recovery over the existing M6 SQLite backend,
 the root Vite entry routing for the application socket and operator bootstrap, and
@@ -13,7 +13,7 @@ Peer provider work (M1 live audio, M3, M4 live text) is not part of this slice.
 
 ## PR53 review follow-up
 
-Implementation: [b0e5db708ea4c95dc6a6baf3bd67b6796bbe4f28](https://github.com/inscripoem/isla/commit/b0e5db708ea4c95dc6a6baf3bd67b6796bbe4f28). The two AI-use entries now point to that implementation commit. This documentation follow-up registers the M5 C-73/C-74 mapping coordinated in [Issue25](https://github.com/inscripoem/isla/issues/25), following [M6's scope confirmation](https://github.com/inscripoem/isla/issues/25#issuecomment-6313932602).
+Implementation: [b0e5db708ea4c95dc6a6baf3bd67b6796bbe4f28](https://github.com/inscripoem/isla/commit/b0e5db708ea4c95dc6a6baf3bd67b6796bbe4f28). The two AI-use entries now point to that implementation commit. Documentation commit 8c36cad registered the M5 C-73/C-74 mapping coordinated in [Issue25](https://github.com/inscripoem/isla/issues/25), following [M6's scope confirmation](https://github.com/inscripoem/isla/issues/25#issuecomment-6313932602).
 
 - C-73: `production-cli.test.ts` / `production CLI`; controlled lifecycle including IPC, release and startup failures, distinct from operator Stop/Resume. Linked to the new FR-05 lifecycle clause.
 - C-74: `m5-process-restart.test.ts` / `production process restart acceptance`; cooperative continuation and SIGKILL between a committed prefix and held tail. Linked to FR-06/INV-12; no claim that it tests all C-73 release faults.
@@ -349,14 +349,16 @@ behavior, not live providers, browser audio or acoustic output.
 
 ## Remaining integration dependencies
 
+Status as of 2026-10-22 10:30 UTC; historical verification sections above retain their original version and platform limits.
+
 | Owner | Remaining work |
 | --- | --- |
-| M1 | Live provider/VTS and actual-output observation; Windows cooperative release evidence with M5/M6 using the IPC trigger once validated on Windows. PR33/34 implementation is already merged and retained. |
+| M1 | Live provider/VTS and actual-output observation. M1 reported controlled Windows IPC lifecycle/ordinary continuation evidence at b0e5db7; the original force-kill SIGTERM failure and separate passing private IPC-tail variant remain distinct. Remaining signal/process/startup and new-combination checks stay open. PR33/34 implementation is merged. |
 | M2 | Product transport/strict decoder/status, dynamic audio resolver, recovery controls and notification follow-up in Issue37. |
 | M3 | Production selection/reaction implementations, reviewed cases/rubric and cap policy. |
-| M4 | Live dialogue and usage adoption, reviewed cases, and the two remaining PR35 P2 repairs. |
-| M5 | Coordinate deployment adoption; production lifecycle, dynamic audio and evaluation adapter are merged. The local follow-up adds the portable IPC trigger, drained raw exit-code/signal reporting, trigger-vs-signal records, IPC-path coverage (pending/failed release, duplicate/unrelated messages, listen/start failure), IPC restart and the forceful-kill restart case; Windows trigger validation remains open. |
-| M6 | Recorded-run/report adoption and storage support; C-65/C-66/C-67 are on main. The PR51 getter P3 remains separate. |
+| M4 | Live dialogue/usage and reviewed cases; adoption of PR54 outcome units/reasons; repair the inherited long-history consistency-scan P2 and original M4-03 AI-use scope wording. The earlier two PR35 P2 repairs are merged and no longer pending. |
+| M5 | Coordinate deployment adoption and PR53/54/55 exact-version review. PR53 publishes IPC/raw-exit reporting and controlled process tests; PR55 proposes outcome/deadline consumers and bounded input preparation. Remaining Windows combination, product and real-output verification stay open. |
+| M6 | Recorded-run/report binding, serialized memory.inspect review and storage support. C-65/C-66/C-67 and the C-66 P3 fixture-getter correction are on main through PR52; the latter is no longer pending. |
 
 Retention/deletion policy remains undecided. The [Issue25 reply](https://github.com/inscripoem/isla/issues/25#issuecomment-6286818499) records the controlled recovery evidence and platform/product gaps; the [Issue41 reply](https://github.com/inscripoem/isla/issues/41#issuecomment-6286821631) separates adapter implementation from S6/G4 acceptance.
 
