@@ -68,6 +68,9 @@ requirements:
       - kind: deterministic
         description: Late results cannot restart output; Stop is immediate and Resume requires confirmed evidence.
         cases: [C-03, C-04]
+      - kind: deterministic
+        description: A controlled process shutdown awaits owned release, reports a failed release as a shutdown fault and exits explicitly; an IPC trigger is not recorded as a POSIX signal. This lifecycle clause includes startup/listen failure and is distinct from operator Stop/Resume acceptance.
+        cases: [C-73]
       - kind: pending-metric
         description: Reconnect-while-audio-pending recovery remains an implemented-by-later-module case pending its own test.
         cases: [C-08]
@@ -98,7 +101,7 @@ requirements:
         cases: [C-29, C-30, C-31]
       - kind: deterministic
         description: On restart only confirmed history is restored; unresolved records remain unknown with their outcome and are never replayed.
-        cases: [C-32, C-33, C-68]
+        cases: [C-32, C-33, C-68, C-74]
       - kind: deterministic
         description: A late, internally valid fully-delivered/completed claim for an already-cancelled delivery is refused at the storage boundary; the original audit and classification remain unchanged and the contradictory supporting event is retained.
         cases: [C-67]
@@ -368,7 +371,7 @@ requirements:
     acceptance:
       - kind: deterministic
         description: After a restart, only fully-delivered history is restored; unresolved records remain unknown with their terminal outcome and are never replayed (FR-06; C7, C-17).
-        cases: [C-32, C-33]
+        cases: [C-32, C-33, C-68, C-74]
 
   - id: INV-13
     title: The traceability chain is machine-checked
