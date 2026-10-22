@@ -10,8 +10,8 @@ import type { RecalledFact } from './persona-recall'
 import { MAX_RECALLED_FACTS } from './persona-recall'
 import type { RecalledTurn, DeliveryRecallPort } from './memory-recall'
 import { MAX_RECALLED_TURNS } from './memory-recall'
-import type { Contradiction, StatementRef } from './consistency'
-import { scanContradictions } from './consistency'
+import type { ConsistencyAuditSummary, Contradiction, StatementRef } from './consistency'
+import { scanContradictions, summarizeConsistencyAudit } from './consistency'
 import { scoreSalience, SALIENCE_PIN_THRESHOLD, MAX_PINNED_TURNS } from './salience'
 import type { SalienceSignal } from './salience'
 import { turnKey, utteranceKey } from './delivery-key'
@@ -317,9 +317,17 @@ export interface AssembledDialogueContext {
   /**
    * Contradictions found among admitted statements and standing facts, as ids
    * and counts only (./consistency). Audit evidence: nothing here changes
-   * admission, ordering or budget, and no statement text is carried.
+   * admission, ordering or budget, and no statement text is carried. PARTIAL
+   * when `consistencyAudit.incomplete` is true.
    */
   conflicts?: readonly Contradiction[]
+  /**
+   * Redacted completion summary of the consistency audit (./consistency):
+   * counts and a completeness flag only, never statement text. `incomplete` is
+   * true when a work ceiling or the findings cap stopped the scan, in which case
+   * `conflicts` covers only the inspected part of the history.
+   */
+  consistencyAudit: ConsistencyAuditSummary
 }
 
 export interface AssembleDialogueContextInput {
@@ -566,8 +574,15 @@ export async function assembleDialogueContext(
    * which are the two things the model reads as true. It never runs on recalled
    * persona facts (absent under the `off` policy anyway) and never on the
    * listener's current message.
+   *
+   * The scan is itself bounded (./consistency): it visits a fixed maximum of
+   * statements, text units, claims and comparisons, independent of
+   * `maxCharacters`.
+   * A tiny prompt budget therefore cannot make the scan unbounded; it can only
+   * make the audit partial, and that partiality is reported through
+   * `consistencyAudit.incomplete` and the warnings rather than hidden.
    */
-  const conflicts: readonly Contradiction[] = scanContradictions({
+  const consistencyScan = scanContradictions({
     statements: [
       ...allTurns.map((turn) => ({
         ref: { kind: 'turn', sessionId: turn.sessionId, turnId: turn.turnId } satisfies StatementRef,
@@ -579,6 +594,8 @@ export async function assembleDialogueContext(
       })),
     ],
   })
+  const conflicts: readonly Contradiction[] = consistencyScan.findings
+  const consistencyAudit = summarizeConsistencyAudit(consistencyScan)
   if (input.markConflictingTurns === true && conflicts.length > 0) {
     const flagged = new Set<string>()
     for (const conflict of conflicts) {
@@ -786,6 +803,16 @@ export async function assembleDialogueContext(
       `${conflicts.length} potential contradiction(s) found among admitted statements or standing facts; recorded for audit and never rewritten`,
     )
   }
+  /*
+   * An incomplete audit is reported separately from its findings: the count
+   * above is then partial, and an operator must not read it as "no further
+   * contradictions exist".
+   */
+  if (consistencyAudit.incomplete) {
+    warnings.push(
+      'consistency audit is incomplete: some admitted statements or comparisons were not examined, so reported contradictions are partial',
+    )
+  }
   if (historySource === 'local-stand-in') {
     warnings.push(
       'confirmed history comes from the in-memory store because no durable history source was supplied',
@@ -850,6 +877,7 @@ export async function assembleDialogueContext(
     truncatedByCharacterLimit: kept.truncated,
     warnings,
     conflicts,
+    consistencyAudit,
   }
 }
 

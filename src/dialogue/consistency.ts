@@ -32,6 +32,19 @@ import { contentTokensOf } from './memory-recall'
  *   - negation is read from a small marker list, so an idiom such as "不错"
  *     ("not bad", i.e. good) is read as negated.
  *
+ * Work bound. The scan runs synchronously during context assembly, before the
+ * prompt budget is applied, so its cost must not grow with the whole admitted
+ * history while only a handful of turns can reach the prompt. It visits at most
+ * `MAX_CONSISTENCY_STATEMENTS` statements, preprocesses at most
+ * `MAX_CONSISTENCY_TEXT_UNITS` UTF-16 units, generates at most
+ * `MAX_CONSISTENCY_CLAIMS` claims and performs at most
+ * `MAX_CONSISTENCY_COMPARISONS` pair iterations. A statement that does not fit
+ * is skipped WHOLE - never truncated: a cut-off clause is a different claim
+ * from the one the speaker made, and could manufacture a contradiction the
+ * record does not contain. Whenever a ceiling or the findings cap stops the
+ * scan early, the result reports `incomplete`, so an uninspected audit is never
+ * presented as complete.
+ *
  * The result is AUDIT evidence: ids and counts, never statement text, so it can
  * be handed to the operator console without crossing the redaction boundary of
  * `memory.inspect`.
@@ -84,6 +97,87 @@ export interface Contradiction {
 /** Default cap on findings per scan. */
 export const MAX_CONSISTENCY_FINDINGS = 8
 
+/**
+ * Hard ceilings on the work one scan may perform.
+ *
+ * They exist because the scan is synchronous inside context assembly: an
+ * unbounded pair loop blocks Stop/deadline handling for as long as the admitted
+ * history is long, even when the prompt renders only a few turns. The ceilings
+ * are counts, not wall-clock budgets, so the result is reproducible on any
+ * machine; reaching one does not throw, it reports `incomplete`.
+ *
+ * Starting values for owner review, sized against the measured pair rate (the
+ * benchmark under `test/bench` compares them with the pre-repair scan):
+ *   - statements: 128, roughly a long context window plus standing facts;
+ *   - text: 32768 UTF-16 units, roughly 128 statements of 256 characters;
+ *   - claims: 256, roughly two clauses per visited statement;
+ *   - comparisons: 10000, the full pair space of about 141 claims.
+ */
+export const MAX_CONSISTENCY_STATEMENTS = 128
+export const MAX_CONSISTENCY_TEXT_UNITS = 32_768
+export const MAX_CONSISTENCY_CLAIMS = 256
+export const MAX_CONSISTENCY_COMPARISONS = 10_000
+
+/**
+ * What one bounded scan produced.
+ *
+ * `incomplete` is true when at least one offered statement was not examined,
+ * when at least one clause pair was not compared, or when reporting stopped at
+ * the findings cap. It is never true merely because the input was small enough
+ * to fit every ceiling.
+ */
+export interface ConsistencyScanResult {
+  findings: readonly Contradiction[]
+  /** See the interface note: true whenever the scan did not cover its input. */
+  incomplete: boolean
+  /** Statements offered to the scan. */
+  statementsOffered: number
+  /** Statements considered before the visit ceiling stopped the scan. */
+  statementsVisited: number
+  /** Statements that passed the size gates and produced claims. */
+  statementsExamined: number
+  /** UTF-16 units of statement text preprocessed. */
+  textUnits: number
+  /** Claims generated from the examined statements. */
+  claims: number
+  /** Pair iterations attempted, bounded by MAX_CONSISTENCY_COMPARISONS. */
+  comparisons: number
+}
+
+/**
+ * Redacted completion summary of one scan: counts and a completeness flag,
+ * never statement text. Safe to carry through context assembly and the
+ * `memory.inspect` payload.
+ */
+export interface ConsistencyAuditSummary {
+  /** Contradictions reported; partial when `incomplete`. */
+  findings: number
+  /** True when some offered statement or pair was not examined, or reporting stopped at the findings cap. */
+  incomplete: boolean
+  statementsOffered: number
+  statementsVisited: number
+  statementsExamined: number
+  textUnits: number
+  claims: number
+  comparisons: number
+}
+
+/** Reduce a scan result to the redacted completion summary. */
+export function summarizeConsistencyAudit(
+  result: ConsistencyScanResult,
+): ConsistencyAuditSummary {
+  return {
+    findings: result.findings.length,
+    incomplete: result.incomplete,
+    statementsOffered: result.statementsOffered,
+    statementsVisited: result.statementsVisited,
+    statementsExamined: result.statementsExamined,
+    textUnits: result.textUnits,
+    claims: result.claims,
+    comparisons: result.comparisons,
+  }
+}
+
 /*
  * Negation markers. English is matched as words (with the contraction tail
  * `n't`); Chinese as the markers that actually flip a statement.
@@ -93,9 +187,18 @@ export const MAX_CONSISTENCY_FINDINGS = 8
  * so both are left out: a detector that fires on those is noise, and noise is
  * how an operator learns to ignore the audit.
  */
-const NEGATION_PATTERN = /(?:\bnot\b|\bno\b|\bnever\b|\bcannot\b|\w+n['’]t\b)|不|没|别再|从未|未曾/i
+/*
+ * The contraction branch is anchored with `\b` before `\w+`. Without it the
+ * engine starts the `\w+` run at every character of a long word and backtracks
+ * through the whole run looking for the literal `n`, which is quadratic in the
+ * word length ("x".repeat(32768) took ~1.5 s). `\b` makes a long word enter the
+ * run once, at its start, so the branch is linear in the text length. The
+ * anchor changes no match: an apostrophe is a non-word character, so `n't` can
+ * only end a word and a match always began at that word's start.
+ */
+const NEGATION_PATTERN = /(?:\bnot\b|\bno\b|\bnever\b|\bcannot\b|\b\w+n['’]t\b)|不|没|别再|从未|未曾/i
 /** Characters removed before tokenizing, so negated and plain clauses align. */
-const NEGATION_STRIP_PATTERN = /(?:\bnot\b|\bno\b|\bnever\b|\bcannot\b|\w+n['’]t\b)|[不没]/gi
+const NEGATION_STRIP_PATTERN = /(?:\bnot\b|\bno\b|\bnever\b|\bcannot\b|\b\w+n['’]t\b)|[不没]/gi
 
 /**
  * Attribute pairs that mean opposite things about the same object. A closed
@@ -215,20 +318,83 @@ function refKey(ref: StatementRef): string {
 }
 
 /**
- * Scan the supplied statements for contradictions.
+ * Scan the supplied statements for contradictions under the hard ceilings
+ * documented above.
  *
- * Order is the caller's order, and the output is stable for a given input, so a
- * review can diff two runs. Comparisons are pairwise over clauses, which is
- * quadratic in the number of clauses - bounded in practice by the handful of
- * turns in a context plus `MAX_STANDING_FACTS`.
+ * Statements are visited in caller order. Each is either examined (its clauses
+ * become claims) or skipped whole; a statement is skipped when the remaining
+ * text or claim budget cannot hold it, and the visit ceiling stops the loop.
+ * Comparisons then run over the claims in the same order, bounded by the pair
+ * ceiling and the findings cap.
+ *
+ * The output is stable for a given input and ordering is the caller's order,
+ * so a review can diff two runs. `incomplete` is derived from the work actually
+ * done, not from the size of the input: it stays false only when every offered
+ * statement was examined and the whole pair space was compared.
  */
-export function scanContradictions(input: ConsistencyScanInput): readonly Contradiction[] {
-  const maxFindings = input.maxFindings ?? MAX_CONSISTENCY_FINDINGS
-  if (maxFindings <= 0) return []
+export function scanContradictions(input: ConsistencyScanInput): ConsistencyScanResult {
+  const requestedFindings = input.maxFindings ?? MAX_CONSISTENCY_FINDINGS
+  /*
+   * A non-finite budget would make every `>=` comparison false and silently
+   * remove the findings cap, so it falls back to the default; a fractional one
+   * is floored. A budget of zero or less requests no findings, which means no
+   * audit happened, so any offered statement makes the result incomplete.
+   */
+  const maxFindings = Number.isFinite(requestedFindings)
+    ? Math.floor(requestedFindings)
+    : MAX_CONSISTENCY_FINDINGS
+  if (maxFindings <= 0) {
+    return {
+      findings: [],
+      incomplete: input.statements.length > 0,
+      statementsOffered: input.statements.length,
+      statementsVisited: 0,
+      statementsExamined: 0,
+      textUnits: 0,
+      claims: 0,
+      comparisons: 0,
+    }
+  }
 
   const claims: Claim[] = []
+  let statementsVisited = 0
+  let statementsExamined = 0
+  let textUnits = 0
+  let incomplete = false
+
   for (const statement of input.statements) {
-    for (const clause of clausesOf(statement.text)) {
+    if (statementsVisited >= MAX_CONSISTENCY_STATEMENTS) {
+      incomplete = true
+      break
+    }
+    statementsVisited += 1
+
+    /*
+     * Charge the text BEFORE splitting it, so preprocessing and tokenizing stay
+     * inside the same ceiling as the comparisons. A statement that does not fit
+     * is skipped whole: truncating it would present a clause the speaker never
+     * completed as a complete claim.
+     */
+    if (textUnits + statement.text.length > MAX_CONSISTENCY_TEXT_UNITS) {
+      incomplete = true
+      continue
+    }
+    textUnits += statement.text.length
+
+    const clauses = clausesOf(statement.text)
+    /*
+     * The gate is the CLAUSE count, an upper bound on the claims the statement
+     * can produce, so the claim ceiling holds even when some clauses yield no
+     * claim. Exceeding it skips the statement whole rather than admitting a
+     * partial statement.
+     */
+    if (claims.length + clauses.length > MAX_CONSISTENCY_CLAIMS) {
+      incomplete = true
+      continue
+    }
+
+    statementsExamined += 1
+    for (const clause of clauses) {
       const claim = claimOf(statement.ref, clause)
       if (claim !== null) claims.push(claim)
     }
@@ -239,10 +405,17 @@ export function scanContradictions(input: ConsistencyScanInput): readonly Contra
   // specific description of the disagreement, and repeating the pair would only
   // inflate the warning count.
   const seenPairs = new Set<string>()
+  let comparisons = 0
+  let stopped = false
   for (let leftIndex = 0; leftIndex < claims.length; leftIndex += 1) {
     const left = claims[leftIndex]
     if (left === undefined) continue
     for (let rightIndex = leftIndex + 1; rightIndex < claims.length; rightIndex += 1) {
+      if (comparisons >= MAX_CONSISTENCY_COMPARISONS) {
+        stopped = true
+        break
+      }
+      comparisons += 1
       const right = claims[rightIndex]
       if (right === undefined) continue
       if (refKey(left.ref) === refKey(right.ref)) continue
@@ -253,10 +426,32 @@ export function scanContradictions(input: ConsistencyScanInput): readonly Contra
       if (finding === null) continue
       seenPairs.add(pairKey)
       findings.push(finding)
-      if (findings.length >= maxFindings) return findings
+      if (findings.length >= maxFindings) {
+        stopped = true
+        break
+      }
     }
+    if (stopped) break
   }
-  return findings
+
+  /*
+   * `comparisons` reaches the full pair count only when the pair space was
+   * exhausted. Any other value means a ceiling or the findings cap stopped the
+   * scan early, so the audit is incomplete even when it found what it reported;
+   * a findings cap that fired on the very last pair inspected everything and
+   * stays complete.
+   */
+  const totalPairs = (claims.length * (claims.length - 1)) / 2
+  return {
+    findings,
+    incomplete: incomplete || comparisons !== totalPairs,
+    statementsOffered: input.statements.length,
+    statementsVisited,
+    statementsExamined,
+    textUnits,
+    claims: claims.length,
+    comparisons,
+  }
 }
 
 /** Compare one ordered pair of clauses; null when they do not disagree. */

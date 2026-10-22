@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createCallContext } from '../support/context'
 import { FIXTURE_SESSION_ID, fixtureCommitDelivery, fixtureDialogueRequest } from '../support/fixture-data'
 import {
+  MAX_CONSISTENCY_STATEMENTS,
   buildMemoryInspect,
   createDeliveryMemoryStore,
   createDialoguePort,
@@ -113,5 +114,33 @@ describe('M4 memory.inspect diagnostic', () => {
     }
     expect(payload.budget.estimatedCharacters).toBeGreaterThan(0)
     expect(Array.isArray(payload.warnings)).toBe(true)
+  })
+
+  it('carries the redacted consistency summary and never memory text', async () => {
+    const memory = createDeliveryMemoryStore()
+    await commitTurn(memory, 'turn-a', 'I like coffee.')
+    await commitTurn(memory, 'turn-b', 'I do not like coffee.')
+    const context = await assemble(memory)
+    const payload = buildMemoryInspect(context, FIXTURE_SESSION_ID, 'turn-current')
+
+    expect(payload.consistency.findings).toBe(1)
+    expect(payload.consistency.incomplete).toBe(false)
+    expect(payload.consistency.claims).toBeGreaterThan(0)
+    expect(JSON.stringify(payload.consistency)).not.toContain('coffee')
+  })
+
+  it('reports an incomplete audit through the inspection payload', async () => {
+    const memory = createDeliveryMemoryStore()
+    for (let index = 0; index < MAX_CONSISTENCY_STATEMENTS + 10; index += 1) {
+      await commitTurn(memory, `turn-${index}`, `topic${index} alpha${index} beta${index}`)
+    }
+    const context = await assemble(memory)
+    const payload = buildMemoryInspect(context, FIXTURE_SESSION_ID, 'turn-current')
+
+    expect(payload.consistency.incomplete).toBe(true)
+    expect(payload.consistency.statementsVisited).toBe(MAX_CONSISTENCY_STATEMENTS)
+    expect(
+      payload.warnings.some((warning) => warning.includes('consistency audit is incomplete')),
+    ).toBe(true)
   })
 })

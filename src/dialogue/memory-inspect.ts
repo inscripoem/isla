@@ -1,4 +1,5 @@
 import type { AssembledDialogueContext, ContextExclusionReason, HistorySource } from './context'
+import type { ConsistencyAuditSummary } from './consistency'
 import type { ReplyIntent } from '../contracts'
 
 /**
@@ -10,9 +11,10 @@ import type { ReplyIntent } from '../contracts'
  *
  * Redaction boundary, by default: this payload carries identifiers, counts,
  * reasons and character counts, and NEVER the text of a memory or of persona
- * content. A debugging workflow that needs text must use an explicit
- * operator-mode switch; the redaction boundary belongs here (the port), not in
- * the consumer.
+ * content. The consistency audit summary (./consistency) follows the same
+ * boundary: counts and a completeness flag only. A debugging workflow that
+ * needs text must use an explicit operator-mode switch; the redaction boundary
+ * belongs here (the port), not in the consumer.
  *
  * The two admission views are deliberately separate and labelled:
  *   - `admission` (M4) — what this module admitted into spoken context, and why
@@ -67,6 +69,13 @@ export interface MemoryInspectPayload {
     truncatedByTurnLimit: boolean
     truncatedByCharacterLimit: boolean
   }
+  /**
+   * Redacted completion summary of the consistency audit (./consistency):
+   * counts and a completeness flag only, never statement text. `incomplete`
+   * means the audit was cut short by a work ceiling or the findings cap, so the
+   * reported finding count is partial.
+   */
+  consistency: ConsistencyAuditSummary
   historySource: HistorySource
   warnings: readonly string[]
 }
@@ -133,6 +142,7 @@ export function buildMemoryInspect(
       truncatedByTurnLimit: context.truncatedByTurnLimit,
       truncatedByCharacterLimit: context.truncatedByCharacterLimit,
     },
+    consistency: { ...context.consistencyAudit },
     historySource: context.historySource,
     warnings: [...context.warnings],
   }
