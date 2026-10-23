@@ -3010,3 +3010,37 @@ entries:
       focused: "OpenCode M4 role: 208 tests / 9 files; scanner and inspection: 38 tests / 2 files. Independent M4 pnpm verify: 1209 tests / 68 files, typecheck, lint and build passed; code/tests/dependencies unchanged during verification."
       benchmark: "Independent Linux exact-source comparison, 1024 two-clause history turns / 64-character prompt: assembly 1691.9 ms before, 30.8 ms after; timer delay 1691.9 ms before, 31.0 ms after. A 32768-character word: 1469.5 ms before, 0.7 ms after. Single controlled runs, not a latency guarantee."
       limits: "Count ceilings are not a whole-pipeline latency guarantee; no live-provider, Windows, acoustic or S6/G4 acceptance."
+
+  - date: "2026-10-23"
+    task: M4-03-adopt-outcome-and-bounded-audit
+    branch: feat/m4-03
+    change: >-
+      M4 owner adoption of the M5-reviewed PR54 producer and audit changes:
+      accept and record the outcome unit/reason vocabulary
+      (generated/emitted/discarded; aborted, deadline, no-speech, leftover,
+      overflow, sink-uncertain), accept the four consistency ceilings
+      (128 statements, 32768 UTF-16 units, 256 claims, 10000 comparisons) as
+      M4 policy values, and adopt the partial-audit semantic contract that an
+      incomplete scan is never an all-clear. Documentation and comment records
+      only; no behavioural change to the adopted implementation.
+    requirements: [FR-02, NFR-03]
+    invariants: []
+    cases: []
+    commits: [382778ab86c7942abdfd55d25d05923baa63d033]
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.1.0
+    session: ses_pending
+    supervision: >-
+      Captain authorized adoption at owner request. OpenCode authors the
+      adoption notes and verifies the combined tree; the Captain supplies the
+      commit pointer and publication decision.
+    human_review: >-
+      M4 owner acceptance of the PR54 producer/audit scope. M1 approvals of
+      4bc4c18 and 39e5fca remain version-bound and are not replaced or extended
+      by this entry. M2/M6 inspection integration, Windows, live-provider,
+      acoustic and S6/G4 acceptance remain separate. No new case ID is allocated.
+    verification:
+      focused: "M4 role 208 tests / 9 files passed on the combined feat/m4-03 tree."
+      limits: "Doc/comment adoption only; no runtime, provider, Windows, acoustic or S6/G4 acceptance claimed."

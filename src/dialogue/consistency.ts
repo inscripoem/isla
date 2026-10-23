@@ -106,12 +106,21 @@ export const MAX_CONSISTENCY_FINDINGS = 8
  * are counts, not wall-clock budgets, so the result is reproducible on any
  * machine; reaching one does not throw, it reports `incomplete`.
  *
- * Starting values for owner review, sized against the measured pair rate (the
- * benchmark under `test/bench` compares them with the pre-repair scan):
+ * These are M4's adopted policy values (owner review, M4-03). They are counts,
+ * not latency guarantees, and may be revisited with recorded evidence; changing
+ * one is a policy change, not a bug fix. They were sized against the measured
+ * pair rate (the benchmark under `test/bench` compares them with the pre-repair
+ * scan):
  *   - statements: 128, roughly a long context window plus standing facts;
  *   - text: 32768 UTF-16 units, roughly 128 statements of 256 characters;
  *   - claims: 256, roughly two clauses per visited statement;
  *   - comparisons: 10000, the full pair space of about 141 claims.
+ *
+ * A ceiling stops the scan; it never throws and never silently truncates. The
+ * result then carries `incomplete: true`, and every consumer MUST treat the
+ * finding count as partial rather than as an all-clear. That contract is
+ * explained on `ConsistencyScanResult` and surfaced through
+ * `AssembledDialogueContext.consistencyAudit` and `MemoryInspectPayload`.
  */
 export const MAX_CONSISTENCY_STATEMENTS = 128
 export const MAX_CONSISTENCY_TEXT_UNITS = 32_768
@@ -125,6 +134,12 @@ export const MAX_CONSISTENCY_COMPARISONS = 10_000
  * when at least one clause pair was not compared, or when reporting stopped at
  * the findings cap. It is never true merely because the input was small enough
  * to fit every ceiling.
+ *
+ * Consumer contract: `incomplete` true means the audit is PARTIAL. An empty
+ * `findings` array with `incomplete` true is NOT "no contradictions" - it means
+ * some evidence was never compared. A consumer may report the count as partial;
+ * it may not present it as a clean or complete audit. `false` is the only value
+ * that licenses reading the findings as covering the whole input.
  */
 export interface ConsistencyScanResult {
   findings: readonly Contradiction[]

@@ -98,7 +98,7 @@ content, and opposite attributes about the same object.
 - Scope limits, stated rather than hidden: clause-level only, lexical (no paraphrase), negation read
   from a small marker list (so an idiom such as 不错 reads as negated).
 
-### Bounded consistency audit proposal (2026-10-22, under review)
+### Bounded consistency audit (adopted by M4, 2026-10-23)
 
 The synchronous scan now has four fixed work ceilings: 128 visited statements, 32,768 UTF-16
 text units, 256 generated claims, and 10,000 pair iterations. Text is charged before splitting or
@@ -106,6 +106,9 @@ tokenizing. Statements that exceed the remaining text or clause allowance are sk
 they are never truncated into a different claim. Input order and findings within the inspected
 range are retained. The default finding limit remains eight; non-finite values use that default,
 fractional values are rounded down, and non-positive values request no audit.
+
+These ceilings are M4's adopted policy values, not a reviewer proposal. They are counts, not
+latency guarantees; changing one is a policy change and should carry recorded evidence.
 
 `scanContradictions` is exported by `src/dialogue/index.ts` and now returns a
 `ConsistencyScanResult` object instead of an array; callers read `.findings`. The production
@@ -115,6 +118,13 @@ Both summaries contain counts and `incomplete`, without memory or persona text. 
 explicitly identify incomplete scans, including early termination at the findings cap. Reaching
 a limit on the final inspected item does not by itself make an otherwise complete scan partial.
 
+**The partial-audit contract is adopted as a semantic rule, not merely a field.** `incomplete`
+true means the audit is partial: an empty `findings` array alongside `incomplete: true` is *not*
+"no contradictions" and must never be reported as a clean or complete audit. Only `incomplete:
+false` licenses reading the findings as covering the whole input. The inspection payload and the
+context warnings carry the same distinction so a consumer cannot silently present a partial scan
+as an all-clear.
+
 The contraction patterns now require a word boundary before the word run. This prevents a long
 Latin word from restarting the same failed contraction search at each character; supported
 negation markers and ASCII/curly-apostrophe contractions retain their meanings.
@@ -122,7 +132,7 @@ negation markers and ASCII/curly-apostrophe contractions retain their meanings.
 These are M4 module API changes, not changes to the shared C1–C7 schemas or the storage schema.
 The inspection builder is not a connected diagnostics endpoint or an M2 panel. Confirmed-history
 admission, outcome reporting and character charges for the optional conflict marker are retained.
-The ceilings are an M5 review proposal awaiting M4 adoption. They limit scan work, not total context
+The ceilings limit scan work, not total context
 assembly, storage reads, wall-clock latency, or the rest of the dialogue pipeline. Large histories
 can omit later standing facts from the audit because the existing input order is preserved.
 

@@ -157,6 +157,14 @@ export interface DialoguePortOptions {
  * reasons are `aborted`, `deadline`, `no-speech`, `leftover`, `overflow` (produced
  * beyond the segment cap) and `sink-uncertain` (a sink write was attempted and
  * rejected, so its delivery is unknown rather than disproved).
+ *
+ * These units and reasons are M4's adopted producer contract (owner review,
+ * M4-03): `generated - emitted = discarded`, and the reason keys are the
+ * vocabulary a consumer may switch on. They are DIAGNOSTICS, not evidence of
+ * playback, delivery or admission: `emitted` is a fulfilled sink write, not an
+ * audio receipt, and `sink-uncertain` means delivery is unknown - never that
+ * the segment was not delivered. A consumer must not fold these counts into a
+ * delivery outcome or a spoken-memory admission decision.
  */
 export interface DialogueOutcomeReport {
   requestId: string
