@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
   ClockPort,
   ControlStopMessage,
@@ -58,16 +58,20 @@ import type { TestProductionPeersOptions } from '../support/production-kit'
  * Coverage of the honesty boundaries: completion requires effective delivery
  * evidence; a synthesis rejection and a failed dialogue are execution failures
  * rather than cancellations; held playback is an incomplete delivery with real
- * cancelled receipts; a consumer that confirms nothing yields no terminal
- * evidence; a real operator Stop stays a cancellation; late usage joins its own
- * invocation; cleanup faults stay observable without replacing the record; and a
- * session id that is not fresh is refused before any attempt.
+ * cancelled receipts; a ready that arrives past the conservative local
+ * lifetime expires the grant before playback and yields no delivery; a
+ * consumer that confirms nothing yields no terminal evidence; a real operator
+ * Stop stays a cancellation; late usage joins its own invocation; cleanup
+ * faults stay observable without replacing the record; and a session id that
+ * is not fresh is refused before any attempt.
  */
 
 const dirs: string[] = []
 const databases: Array<ReturnType<typeof openDatabase>> = []
 /** Failure-safe teardown for the combined acceptance's real worker thread. */
 const physicalCleanups: Array<() => Promise<void>> = []
+/** Best-effort machine disposal for a consumer whose attempt never settles. */
+const consumerCleanups: Array<() => void> = []
 
 const OPERATOR_CONTEXT: TrustedControlContext = {
   connectionId: 'evaluation-adapter-test-control',
@@ -77,6 +81,17 @@ const OPERATOR_CONTEXT: TrustedControlContext = {
 }
 
 afterEach(async () => {
+  // A test that times out while awaiting a gate leaves its async function
+  // pending, so its `finally` is not guaranteed to run; restore real timers
+  // here so a later test never inherits the fake clock.
+  vi.useRealTimers()
+  for (const cleanup of consumerCleanups.splice(0)) {
+    try {
+      cleanup()
+    } catch {
+      // Best-effort teardown; a cleanup fault must not wedge the suite.
+    }
+  }
   // The real thread is terminated first so a caller-owned provider close can
   // settle even when the test failed before its explicit release.
   for (const cleanup of physicalCleanups.splice(0)) {
@@ -190,6 +205,46 @@ function autoConsumer(
     resolver,
     receiptPrefix: options.receiptPrefix ?? 'eval',
   })
+}
+
+/**
+ * Explicit ready boundaries for the delayed-execution handshake. `hook` is the
+ * consumer's `beforeReady`: it records that an offer was observed and waits
+ * until the test releases that specific ready, so no wall-clock delay decides
+ * when the handshake proceeds. The test advances the controlled clock between
+ * `waitFor` and `release` to make the offer -> ready delay deterministic.
+ */
+interface ReadyGates {
+  hook(): Promise<void>
+  waitFor(index: number): Promise<void>
+  release(index: number): void
+}
+
+function createReadyGates(): ReadyGates {
+  const pending: Array<() => void> = []
+  const waiters: Array<() => void> = []
+  const notify = (): void => {
+    for (const waiter of waiters.splice(0)) waiter()
+  }
+  return {
+    async hook() {
+      let release!: () => void
+      const released = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      pending.push(release)
+      notify()
+      await released
+    },
+    async waitFor(index) {
+      while (pending.length <= index) {
+        await new Promise<void>((resolve) => waiters.push(resolve))
+      }
+    },
+    release(index) {
+      pending[index]?.()
+    },
+  }
 }
 
 function buildAdapter(
@@ -656,63 +711,187 @@ describe('M5 evaluation adapter through the M6 runner', () => {
   })
 
   it('records held playback as incomplete delivery, never as completed speech', async () => {
-    const harness = createHarness()
-    const resolver = createControlledResolver()
-    resolver.setAutoResolve()
-    const media = createControlledMediaDriver({ autoEvents: true, holdEndedFrom: 0 })
-    const consumer = createControlledConsumer({
-      media,
-      resolver,
-      receiptPrefix: 'held',
-      // The machine's own local expiry is `offer + (deadline - ready)`, so it
-      // fires earlier than the coordinator's playback deadline by the offer ->
-      // ready delay. A short, real ready delay keeps the machine's cancelled
-      // receipt (and the coordinator's commit of the partial delivery) ahead of
-      // the deadline deterministically instead of racing two timers in the same
-      // millisecond.
-      beforeReady: async () => {
-        await new Promise((resolve) => setTimeout(resolve, 15))
-      },
-    })
-    const adapter = buildAdapter(
-      harness,
-      [{ variant: VARIANT, peers: { ...fixturePeers(harness), timings: { playbackMs: 60 } } }],
-      { consumer },
-    )
+    // Controlled time: fake timers install before the harness so the
+    // coordinator's monotonic clock, the performer's clock and every timer
+    // share one deterministic domain. The test decides when each ready is sent
+    // and when the machine's conservative local expiry is reached.
+    vi.useFakeTimers()
+    try {
+      const harness = createHarness()
+      const resolver = createControlledResolver()
+      resolver.setAutoResolve()
+      // Playback starts and never ends: the controlled media holds `ended` for
+      // every handle, so only the machine's conservative local expiry can end a
+      // segment.
+      const media = createControlledMediaDriver({ autoEvents: true, holdEndedFrom: 0 })
+      const gates = createReadyGates()
+      const consumer = createControlledConsumer({
+        media,
+        resolver,
+        receiptPrefix: 'held',
+        beforeReady: () => gates.hook(),
+      })
+      consumerCleanups.push(() => consumer.detach())
+      const playbackMs = 60
+      // The machine's local expiry is `offer + (deadline - ready)`, i.e. the
+      // coordinator's playback deadline minus the offer -> ready delay. In this
+      // handshake that delay is also the elapsed time the machine measures at
+      // grant receipt, so releasing each ready after exactly readyAdvanceMs of
+      // the controlled clock leaves a remaining local lifetime of
+      // playbackMs - 2 * readyAdvanceMs > 0, and the machine's own expiry is
+      // due readyAdvanceMs before the coordinator's deadline. The test advances
+      // only to the machine's expiry, never to the deadline: the cancellation
+      // is the real machine's, not a race between two timers.
+      const readyAdvanceMs = 20
+      const localExpiryMs = playbackMs - 2 * readyAdvanceMs
+      const adapter = buildAdapter(
+        harness,
+        [{ variant: VARIANT, peers: { ...fixturePeers(harness), timings: { playbackMs } } }],
+        { consumer },
+      )
 
-    const run = await runComparison(
-      { variants: [VARIANT], cases: [evalCase('case-1')] },
-      { runVariant: adapter.runVariant },
-    )
+      const runPromise = runComparison(
+        { variants: [VARIANT], cases: [evalCase('case-1')] },
+        { runVariant: adapter.runVariant },
+      )
 
-    expect(run.records).toHaveLength(1)
-    expect(run.records[0].outcome).toBe('failed')
-    expect(run.records[0].failureReason).toContain('without completed delivery evidence')
-    expect(run.summary.failureRate).toBe(1)
+      // Both dialogue segments follow the same explicit handshake: wait for the
+      // offer, advance the controlled clock, release the ready, confirm started
+      // playback, then advance to the machine's conservative local expiry.
+      for (const segment of [0, 1] as const) {
+        await gates.waitFor(segment)
+        await vi.advanceTimersByTimeAsync(readyAdvanceMs)
+        gates.release(segment)
+        await media.startedGate(segment)
+        expect(media.handles()[segment]?.started()).toBe(true)
+        await vi.advanceTimersByTimeAsync(localExpiryMs + 1)
+      }
+      const run = await runPromise
 
-    const observation = harness.observations[0]
-    expect(observation.cycleStatus).toBe('cancelled')
-    // The real machine published cancelled receipts, so the coordinator
-    // truthfully reports confirmed cancellation; that is not completed speech.
-    expect(observation.outputConfirmation).toBe('confirmed')
-    expect(observation.deliveries.length).toBeGreaterThan(0)
-    expect(
-      observation.deliveries.every(
-        (delivery) =>
-          delivery.classification === 'partial-unknown' && delivery.terminalOutcome === 'cancelled',
-      ),
-    ).toBe(true)
-    expect(consumer.receipts().some((receipt) => receipt.stage === 'cancelled')).toBe(true)
-    expect(consumer.receipts().some((receipt) => receipt.stage === 'completed')).toBe(false)
+      expect(run.records).toHaveLength(1)
+      expect(run.records[0].outcome).toBe('failed')
+      expect(run.records[0].failureReason).toContain('without completed delivery evidence')
+      expect(run.summary.failureRate).toBe(1)
 
-    const events = await harness.store.readSession(harness.sessions[0])
-    expect(events.some((event) => event.type === 'delivery.committed')).toBe(true)
-    expect(
-      events.every(
+      // Both segments reached real, started playback on the controlled media.
+      expect(media.createCount()).toBe(2)
+      expect(media.handles().every((handle) => handle.started())).toBe(true)
+
+      const observation = harness.observations[0]
+      expect(observation.cycleStatus).toBe('cancelled')
+      // The real machine published cancelled receipts, so the coordinator
+      // truthfully reports confirmed cancellation; that is not completed speech.
+      expect(observation.outputConfirmation).toBe('confirmed')
+      expect(observation.deliveries.length).toBeGreaterThan(0)
+      expect(
+        observation.deliveries.every(
+          (delivery) =>
+            delivery.classification === 'partial-unknown' && delivery.terminalOutcome === 'cancelled',
+        ),
+      ).toBe(true)
+      expect(consumer.receipts().filter((receipt) => receipt.stage === 'cancelled')).toHaveLength(2)
+      expect(consumer.receipts().some((receipt) => receipt.stage === 'completed')).toBe(false)
+
+      const events = await harness.store.readSession(harness.sessions[0])
+      expect(events.some((event) => event.type === 'delivery.committed')).toBe(true)
+      expect(
+        events.every(
+          (event) =>
+            event.type !== 'delivery.committed' || event.payload.classification === 'partial-unknown',
+        ),
+      ).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('expires a grant before playback when the ready arrives past the conservative local lifetime', async () => {
+    // The probe's failure mode as its own case: in this handshake the ready
+    // delay equals the elapsed time the machine measures at grant receipt, so a
+    // ready released after more than half the playback budget leaves
+    // remainingLocal = playbackMs - 2 * expiryAdvanceMs non-positive; the
+    // machine discards the delivered grant as `offer_expired` without ever
+    // playing.
+    vi.useFakeTimers()
+    try {
+      const harness = createHarness()
+      const resolver = createControlledResolver()
+      resolver.setAutoResolve()
+      const media = createControlledMediaDriver({ autoEvents: true, holdEndedFrom: 0 })
+      const gates = createReadyGates()
+      const consumer = createControlledConsumer({
+        media,
+        resolver,
+        receiptPrefix: 'expired-ready',
+        beforeReady: () => gates.hook(),
+      })
+      consumerCleanups.push(() => consumer.detach())
+      const playbackMs = 60
+      // Advancing the controlled clock past playbackMs / 2 before the ready
+      // makes the machine's remaining local lifetime non-positive; this is this
+      // setup's arithmetic, not a general property of the local expiry.
+      const expiryAdvanceMs = Math.floor(playbackMs / 2) + 1
+      const adapter = buildAdapter(
+        harness,
+        [{ variant: VARIANT, peers: { ...fixturePeers(harness), timings: { playbackMs } } }],
+        { consumer },
+      )
+
+      const runPromise = runComparison(
+        { variants: [VARIANT], cases: [evalCase('case-1')] },
+        { runVariant: adapter.runVariant },
+      )
+      await gates.waitFor(0)
+      await vi.advanceTimersByTimeAsync(expiryAdvanceMs)
+      gates.release(0)
+      // The machine discards the grant synchronously, but the bridge marks the
+      // operation granted only after the grant send returns; the machine's
+      // synchronous `offer_expired` receipt is emitted but not accepted while
+      // the operation is still in `offered` phase. Advance the controlled clock
+      // past the coordinator's playback deadline to settle the granted
+      // operation with no accepted terminal evidence.
+      await vi.advanceTimersByTimeAsync(playbackMs)
+      const run = await runPromise
+
+      // The ready arrived and the grant was sent, but no media was ever created
+      // or started: the machine refused the grant before playback.
+      expect(media.createCount()).toBe(0)
+      expect(media.handles()).toEqual([])
+      expect(consumer.receipts()).toEqual([])
+
+      expect(run.records).toHaveLength(1)
+      expect(run.records[0].outcome).toBe('failed')
+      expect(run.records[0].failureReason).toContain('without terminal delivery evidence')
+      expect(run.summary.failureRate).toBe(1)
+
+      const observation = harness.observations[0]
+      expect(observation.cycleStatus).toBe('cancelled')
+      // No accepted terminal evidence exists: the runtime cannot claim
+      // confirmed cancellation, and it must not invent a delivery.
+      expect(observation.outputConfirmation).toBe('unknown')
+      expect(observation.deliveries).toEqual([])
+
+      const events = await harness.store.readSession(harness.sessions[0])
+      expect(events.some((event) => event.type === 'delivery.committed')).toBe(false)
+      // The durable record proves the operation was granted (a never-granted
+      // one settles as `not_dispatched`) and then expired at the coordinator's
+      // deadline: the machine's synchronous `offer_expired` receipt was emitted
+      // but not accepted, no accepted playback receipt exists, and no delivery
+      // was committed.
+      const expired = events.find(
         (event) =>
-          event.type !== 'delivery.committed' || event.payload.classification === 'partial-unknown',
-      ),
-    ).toBe(true)
+          event.type === 'output.receipt' &&
+          event.payload.stage === 'unknown' &&
+          (event.payload.receipt as { reasonCode?: unknown } | undefined)?.reasonCode ===
+            'expired_or_revoked',
+      )
+      expect(expired).toBeDefined()
+      expect((expired?.payload.receipt as { source?: unknown } | undefined)?.source).toBe(
+        'm5-performer-bridge',
+      )
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('records missing terminal delivery evidence as failed, not completion', async () => {
