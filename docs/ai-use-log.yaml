@@ -2954,6 +2954,19 @@ entries:
     invariants: [INV-01]
     cases: []
     commits: [6c72c0ebb1e16976d36ff7ee8b07c64c208a9147]
+  - date: "2026-10-20"
+    task: M5-evaluation-deterministic-timing
+    branch: fix/m5-evaluation-timing
+    change: >-
+      Replace the held-playback evaluation test's real 15 ms readiness wait with
+      explicit ready/start boundaries and controlled timers over the actual
+      performer, coordinator, comparison runner and SQLite store. Add separate
+      pre-playback expiry coverage. Preserve confirmed cancellation and partial
+      delivery assertions. Production code, dependencies and shared contracts
+      remain at main 05b4f13ccc7df214417bc16dfbcae264701dfcc8.
+    requirements: [FR-04, FR-06, NFR-01]
+    invariants: [INV-01, INV-09, INV-12]
+    commits: [b0e5db708ea4c95dc6a6baf3bd67b6796bbe4f28]
     agent: opencode/deepseek-v4-flash
     provider: self-api
     model: deepseek-v4-flash
@@ -2991,6 +3004,65 @@ entries:
     invariants: []
     cases: []
     commits: [382778ab86c7942abdfd55d25d05923baa63d033]
+    session: ses_ea64bf454ffeCizP5ooUs5nqzM
+    supervision: >-
+      Captain approved local repair and verification. OpenCode authored test
+      changes; the supervisor independently investigated, reviewed, tested and
+      maintained paired handoffs. The same session received follow-up review
+      for timeout-safe cleanup and a cancellation-evidence negative control.
+      No subagent, production change, commit or push is part of this increment.
+    human_review: >-
+      Local follow-up remains under review. Historical PR48 results are separate
+      from this test-only repair; the synchronous test route does not establish
+      product-console, network, Windows or acoustic acceptance. Genuine native
+      session records and independent check results are held outside the checkout.
+    verification:
+      independent: >-
+        Focused adapter 21/21; the two timing cases passed ten consecutive runs;
+        M5 171/8; pnpm verify 1125/63, typecheck, lint and build passed.
+      negative_controls: >-
+        Corrupting only the second routed cancellation to unknown causes the
+        held case to time out: prior started evidence prevents regression and
+        leaves it awaiting the coordinator deadline. Additionally withholding
+        that output's intermediate receipts makes unknown effective and fails
+        the confirmed assertion. Both controls preserve actual media starts.
+        A 31 ms ready control times out before start; the next real-timer test
+        still passes, verifying afterEach restoration. All modified test/helper
+        bytes were restored and the complete final suite passed.
+      limits: >-
+        Controlled media and SQLite on Linux only. No new browser, Windows,
+        acoustic, live-provider or S6/G4 acceptance is claimed.
+      gates: "Actual base-to-working-tree G6 and trace41 passed; G4 explicitly not run."
+      transcript: >-
+        The native message endpoint was paginated through an empty final page:
+        135 unique records, first/last identities checked against the live API,
+        with succeeded/idle session metadata. The direct CLI export was
+        incomplete and is not represented as a valid transcript.
+  - date: "2026-10-21"
+    task: M5-local-followup-integration-shutdown
+    branch: fix/m5-local-followup-20261021
+    change: >-
+      Integrate the reviewed deterministic-timing repair from fix/m5-evaluation-timing
+      onto main f972b32 while preserving the merged M6 log entries, resolve the
+      delivery-plan and handoff wording to the current main, then extend the production
+      CLI and its shared child-process harness: a portable IPC cooperative shutdown
+      trigger (`{ type: "isla.runtime.shutdown" }`) that routes through the same
+      controlled shutdown with a distinct `ipc` trigger record; raw exit-code and
+      signal reporting from collectUntilExit without the -1 substitution; and a
+      forceful-kill restart case proving the committed prefix survives, the held tail
+      is never promoted and a fresh session continues over the crashed database. A
+      supervisory review then required bounded hardening in the same increment:
+      collectUntilExit drains both output pipes before resolving while preserving raw
+      code/signal, lifecycle records distinguish the shutdown trigger from a real
+      signal (`trigger: "signal"` with the received name, or `trigger: "ipc"`), the
+      IPC path is covered for a pending owned release, a failed owned release,
+      duplicate/unrelated messages and listen/start failure, and the two-process
+      continuation shuts both processes down over IPC, asserting each actual initial
+      snapshot is stopped before Resume and checking no replay before new input. No shared contract, dependency,
+      case ID or other owner's module changed.
+    requirements: [FR-05, FR-06]
+    invariants: [INV-05, INV-12]
+    commits: [b0e5db708ea4c95dc6a6baf3bd67b6796bbe4f28]
     agent: opencode/deepseek-v4-flash
     provider: self-api
     model: deepseek-v4-flash
@@ -3044,3 +3116,46 @@ entries:
     verification:
       focused: "M4 role 208 tests / 9 files passed on the combined feat/m4-03 tree."
       limits: "Doc/comment adoption only; no runtime, provider, Windows, acoustic or S6/G4 acceptance claimed."
+    session: ses_ea305b8c0ffeckeiKtsr3ipgCT
+    supervision: >-
+      Captain approved the local plan and directed the integration, gap inspection
+      and implementation order; the supervisor's review required the bounded follow-up
+      (output drain, IPC-path coverage, trigger-vs-signal records, IPC restart), which
+      OpenCode implemented. OpenCode authored the changes; the supervisor maintains
+      project configuration and final coordination documents and performs independent
+      review. No subagent, commit, push or deployment is part of this increment.
+    human_review: >-
+      Local follow-up, including the supervisory review follow-up, remains under
+      review. The IPC trigger and raw reporting are validated on Linux only; Windows
+      cooperative validation, live providers, acoustic output and S6/G4 remain
+      separate and unaccepted. No case ID was registered in the implementation
+      commit b0e5db708ea4c95dc6a6baf3bd67b6796bbe4f28. The later documentation
+      commit 8c36cadadf64da2b543aacd930392090b9e4a7cd registered C-73/C-74; M6
+      accepted their scope and the INV-12 link in review 5599418482.
+    verification:
+      integration: >-
+        Focused evaluation 21/21 and M5 171/8 passed (exit 0) on the integrated tree
+        before the CLI changes.
+      final: >-
+        Independent M5 177/8 and full verify 1132/63 passed (exit 0), including
+        CLI 15/15 and process restart 2/2, with typecheck, lint and build.
+        Actual-change trace41 and G6 against the f972b32 base log passed;
+        G4 explicitly reports not run. Source/test bytes stayed unchanged;
+        the evaluation test remains byte-identical to the reviewed repair.
+      transcript: >-
+        The complete native export contains 199 unique records, paginated to an
+        empty final page, all assistant records using build/self-api/
+        deepseek-v4-flash/xhigh and no delegation tools. Session metadata is
+        succeeded/idle. The final CLI run exited 1 after a recovered ECONNRESET
+        transport error although its requested two tests passed; this result is
+        preserved separately from independent verification. Large API responses
+        were captured directly to files after pipe capture truncated JSON.
+      probe: >-
+        A pre-fix manual probe showed the IPC message ran the controlled shutdown but
+        the process stayed alive on the referenced channel; after the disconnect fix
+        the same probe exited 0 with signal null. This is a live probe, not a test
+        mutation.
+      limits: >-
+        Controlled peers, real child processes and SQLite on Linux only. The kill
+        lands between commits and does not force a torn write; no Windows,
+        live-provider, acoustic or G4 acceptance is claimed.
