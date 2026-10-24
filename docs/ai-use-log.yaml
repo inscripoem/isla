@@ -3149,16 +3149,16 @@ entries:
     requirements: [FR-02, NFR-03]
     invariants: []
     cases: []
-    commits: [382778ab86c7942abdfd55d25d05923baa63d033]
+    commits: [382778ab86c7942abdfd55d25d05923baa63d033, 73dbba887788238c50eed61a92b57cdf7b3901de]
     agent: opencode/deepseek-v4-flash
     provider: self-api
     model: deepseek-v4-flash
     opencode_version: 2.1.0
-    session: ses_pending
+    session: ses_e99674d80ffeVxQB2bVG12Yx4Z
     supervision: >-
-      Captain authorized adoption at owner request. OpenCode authors the
-      adoption notes and verifies the combined tree; the Captain supplies the
-      commit pointer and publication decision.
+      Captain authorized adoption at owner request. OpenCode authored the
+      adoption notes, verified the combined tree and recorded the commit
+      pointers; the Captain authorized publication.
     human_review: >-
       M4 owner acceptance of the PR54 producer/audit scope. M1 approvals of
       4bc4c18 and 39e5fca remain version-bound and are not replaced or extended
