@@ -6,7 +6,7 @@ Revision: 2026-10-22.1. The deterministic-timing repair below is published in PR
 
 ## Current M5-only review follow-up (2026-10-24)
 
-This local candidate is based directly on published Draft PR55 at b4be30e7a49f5a15bef735a85f3afeadca67086b. The prior introductory status above is the historical 2026-10-22 snapshot: PR53 is now merged on main at 0868e0a, and the original outcome/input-preparation increment is already published in PR55. This follow-up changes only M5 runtime code, its tests, this handoff and a separate M5 development record. It does not retarget the PR or edit another owner's source or original evidence entries.
+This M5 follow-up is based directly on published PR55 at b4be30e7a49f5a15bef735a85f3afeadca67086b. The prior introductory status above is the historical 2026-10-22 snapshot: PR53 is now merged on main at 0868e0a, and the original outcome/input-preparation increment is already published in PR55. This follow-up changes only M5 runtime code, its tests, this handoff and a separate M5 development record. It does not retarget the PR or edit another owner's source or original evidence entries.
 
 Addresses [M1 review 5626125615](https://github.com/inscripoem/isla/pull/55#pullrequestreview-5626125615). The diagnostic cutoff is the copy of dialogueOutcomes/dialogueOutcomeFailures immediately before onObservation is invoked. A forwarded onDialogueOutcome promise may reject later; its rejection is contained but cannot amend those captured arrays or the already decided execution result. Never wait for an unbounded diagnostic observer during Stop or attempt completion.
 
@@ -14,7 +14,7 @@ Two regressions reject a controllable onDialogueOutcome promise only after the c
 
 The exact source/test changes were authored in OpenCode 2.1.2 session ses_e93d60c5fffeh3Wdrwp9hdjZ5E, build/self-api/deepseek-v4-flash/xhigh. They are copied byte-for-byte from that verified development candidate; no new code-authoring session is claimed for this extraction. Earlier 1246/69 M5-combination and 1316/69 cross-module results keep their original scope. Independent verification of this separate PR55-only candidate passed M5 207 tests / 9 files and full pnpm verify 1246 / 69, including typecheck, lint and build. The actual four-file b4-to-candidate G6 and diff checks passed; all other tracked files and the original AI-use log prefix remain unchanged.
 
-This candidate remains local, uncommitted and under review. Previous approval stays tied to b4be30e; new publication requires Captain's confirmation. No new shared contract, corpus mapping, scorer, VTS connection or memory inspection panel is introduced. C-05/C-16, Windows/live-provider/acoustic and S6/G4 acceptance remain separate. Other owners retain their repairs and branch updates.
+Implementation: [03513851e2ae82c180269bf19a02908544c35617](https://github.com/inscripoem/isla/commit/03513851e2ae82c180269bf19a02908544c35617). Captain approved publication and opening PR55 for scoped review after remote CI passes. Previous approval stays tied to b4be30e; this follow-up remains under review and final merge remains human-owned. No new shared contract, corpus mapping, scorer, VTS connection or memory inspection panel is introduced. C-05/C-16, Windows/live-provider/acoustic and S6/G4 acceptance remain separate. Other owners retain their repairs and branch updates.
 
 ## PR53 deterministic-timing follow-up
 

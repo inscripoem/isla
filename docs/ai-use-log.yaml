@@ -3225,7 +3225,7 @@ entries:
     requirements: [FR-05, FR-06]
     invariants: [INV-01]
     cases: []
-    commits: []
+    commits: [03513851e2ae82c180269bf19a02908544c35617]
     agent: build
     provider: self-api
     model: deepseek-v4-flash
@@ -3241,9 +3241,10 @@ entries:
       authoring session, code change or original-owner evidence rewrite is
       claimed for the extraction.
     human_review: >-
-      Local and uncommitted, under review. PR55 publication requires a separate
-      confirmation of this four-file candidate. The PR base and other owner
-      branches remain unchanged. Prior M1 approval remains tied to b4be30e.
+      Captain approved publication of this four-file candidate and opening PR55
+      for scoped review after remote CI passes. The PR base and other owner
+      branches remain unchanged. Prior M1 approval remains tied to b4be30e;
+      this follow-up remains subject to review. Final merge remains human-owned.
     verification:
       extraction: "The two source/test files match the genuine session's final candidate byte-for-byte."
       independent: "M5 207/9; pnpm verify 1246/69, typecheck, lint and build passed on this four-file b4-based candidate; actual incremental G6 and diff checks passed."
