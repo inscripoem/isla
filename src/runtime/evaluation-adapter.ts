@@ -1185,7 +1185,7 @@ export function createEvaluationAdapter(options: EvaluationAdapterOptions): Eval
       let observationFailure: string | null = null
       if (onObservation !== undefined) {
         try {
-          onObservation({
+          const observationResult: unknown = onObservation({
             sessionId,
             variantId: requested.id,
             caseId: evalCase.id,
@@ -1216,11 +1216,29 @@ export function createEvaluationAdapter(options: EvaluationAdapterOptions): Eval
               reaction: metrics.reactionAttempts,
               dialogue: metrics.dialogueAttempts,
             },
+            /*
+             * The diagnostic cutoff: these two arrays are copied immediately
+             * before onObservation runs. A later rejection of the forwarded
+             * onDialogueOutcome promise may append to the live failure array, but
+             * it cannot revise this completed snapshot.
+             */
             dialogueOutcomes: [...dialogueOutcomes],
             dialogueOutcomeFailures: [...dialogueOutcomeFailures],
             drainFailure,
             teardownFailure,
           })
+          /*
+           * The diagnostic array copies were made immediately above, before this
+           * callback is invoked; later changes to the adapter's live arrays do
+           * not revise them. The returned thenable is contained without awaiting,
+           * so completion and Stop do not wait for it, and a later rejection
+           * neither revises the captured arrays nor the returned execution
+           * result. This is not a claim that the whole observation object is
+           * deeply immutable.
+           */
+          if (isThenable(observationResult)) {
+            void Promise.resolve(observationResult).catch(() => {})
+          }
         } catch (error) {
           // The observation is diagnostics; a callback fault never drops the record.
           observationFailure = describeError(error)

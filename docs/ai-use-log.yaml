@@ -3211,3 +3211,44 @@ entries:
       focused: "OpenCode M4 role: 208 tests / 9 files; scanner and inspection: 38 tests / 2 files. Independent M5 pnpm verify: 1242 tests / 69 files, typecheck, lint and build passed; code/tests/dependencies unchanged during verification."
       benchmark: "Independent Linux exact-source comparison, 1024 two-clause history turns / 64-character prompt: assembly 1691.9 ms before, 30.8 ms after; timer delay 1691.9 ms before, 31.0 ms after. A 32768-character word: 1469.5 ms before, 0.7 ms after. Single controlled runs, not a latency guarantee."
       limits: "Count ceilings are not a whole-pipeline latency guarantee; no live-provider, Windows, acoustic or S6/G4 acceptance."
+
+  - date: "2026-10-24"
+    task: M5-observation-cutoff-only-followup
+    branch: review/m5-only-followup-20261024
+    change: >-
+      Address M1 review 5626125615 of PR55: document the pre-onObservation
+      diagnostic array cutoff, cover late and never-settling forwarded
+      onDialogueOutcome callbacks, and separately contain thenables returned
+      by onObservation without awaiting them. Add four runtime regressions.
+      Extract only these M5 source/test changes and their handoff onto the
+      existing published PR55 head b4be30e; preserve all prior evidence entries.
+    requirements: [FR-05, FR-06]
+    invariants: [INV-01]
+    cases: []
+    commits: []
+    agent: build
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    opencode_version: 2.1.2
+    session: ses_e93d60c5fffeh3Wdrwp9hdjZ5E
+    supervision: >-
+      Captain approved narrowing the local work to M5 and separately publishing
+      the scoped PR56 review; other owners' work is deferred. The source and
+      tests were authored by the recorded OpenCode session and are copied
+      byte-for-byte from that candidate. The supervisor performs this mechanical
+      extraction, ordinary documentation and independent verification. No new
+      authoring session, code change or original-owner evidence rewrite is
+      claimed for the extraction.
+    human_review: >-
+      Local and uncommitted, under review. PR55 publication requires a separate
+      confirmation of this four-file candidate. The PR base and other owner
+      branches remain unchanged. Prior M1 approval remains tied to b4be30e.
+    verification:
+      extraction: "The two source/test files match the genuine session's final candidate byte-for-byte."
+      independent: "M5 207/9; pnpm verify 1246/69, typecheck, lint and build passed on this four-file b4-based candidate; actual incremental G6 and diff checks passed."
+      limits: >-
+        Earlier verification results retain their original tree scopes; the
+        narrow candidate is checked independently. Controlled peers and Linux
+        results do not establish Windows, live-provider, acoustic or S6/G4
+        acceptance. C-05/C-16 remain pending.

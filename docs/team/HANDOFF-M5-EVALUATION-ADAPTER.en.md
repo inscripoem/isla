@@ -4,6 +4,18 @@ Current baseline: [main f972b32d6174b4827eebcb1d421a5b069968226e](https://github
 
 Revision: 2026-10-22.1. The deterministic-timing repair below is published in PR53 at `8c36cadadf64da2b543aacd930392090b9e4a7cd`. The new local outcome/deadline and input-preparation increment is described in [the M5 mention handoff](HANDOFF-M5-MENTIONS.en.md); it remains under review and unpublished. Earlier verification counts retain their original scope.
 
+## Current M5-only review follow-up (2026-10-24)
+
+This local candidate is based directly on published Draft PR55 at b4be30e7a49f5a15bef735a85f3afeadca67086b. The prior introductory status above is the historical 2026-10-22 snapshot: PR53 is now merged on main at 0868e0a, and the original outcome/input-preparation increment is already published in PR55. This follow-up changes only M5 runtime code, its tests, this handoff and a separate M5 development record. It does not retarget the PR or edit another owner's source or original evidence entries.
+
+Addresses [M1 review 5626125615](https://github.com/inscripoem/isla/pull/55#pullrequestreview-5626125615). The diagnostic cutoff is the copy of dialogueOutcomes/dialogueOutcomeFailures immediately before onObservation is invoked. A forwarded onDialogueOutcome promise may reject later; its rejection is contained but cannot amend those captured arrays or the already decided execution result. Never wait for an unbounded diagnostic observer during Stop or attempt completion.
+
+Two regressions reject a controllable onDialogueOutcome promise only after the comparison completes, and hold a never-settling callback while real Stop completes. They check the unchanged diagnostic snapshot, execution outcome, delivery evidence and confirmed history. Separate hardening contains rejected thenables returned by onObservation itself without awaiting them, with corresponding late-rejection and never-settling regressions. This does not claim that the entire observation object is deeply immutable.
+
+The exact source/test changes were authored in OpenCode 2.1.2 session ses_e93d60c5fffeh3Wdrwp9hdjZ5E, build/self-api/deepseek-v4-flash/xhigh. They are copied byte-for-byte from that verified development candidate; no new code-authoring session is claimed for this extraction. Earlier 1246/69 M5-combination and 1316/69 cross-module results keep their original scope. Independent verification of this separate PR55-only candidate passed M5 207 tests / 9 files and full pnpm verify 1246 / 69, including typecheck, lint and build. The actual four-file b4-to-candidate G6 and diff checks passed; all other tracked files and the original AI-use log prefix remain unchanged.
+
+This candidate remains local, uncommitted and under review. Previous approval stays tied to b4be30e; new publication requires Captain's confirmation. No new shared contract, corpus mapping, scorer, VTS connection or memory inspection panel is introduced. C-05/C-16, Windows/live-provider/acoustic and S6/G4 acceptance remain separate. Other owners retain their repairs and branch updates.
+
 ## PR53 deterministic-timing follow-up
 
 The held-playback regression uses controlled timers installed before the harness clock is created. Each of the two offers waits for explicit ready release; playback must reach the controlled media's started boundary before time advances to the performer's local expiry. Both actual cancelled receipts must remain visible, output confirmation must be confirmed, and committed delivery must remain partial-unknown rather than completed speech.

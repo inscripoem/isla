@@ -1279,6 +1279,314 @@ describe('M5 evaluation adapter through the M6 runner', () => {
     expect(cleanup[0].payload.failureReason).toBeNull()
   })
 
+  // Separately discovered hardening, not the original M1 finding: the
+  // onObservation return value itself was not isolated. The M1 finding concerns
+  // the forwarded onDialogueOutcome promise and is covered by the two tests below.
+  it('keeps the completed snapshot when the onObservation promise rejects later', async () => {
+    const harness = createHarness()
+    let rejectObservation!: (reason?: unknown) => void
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason)
+    }
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const adapter = createEvaluationAdapter({
+        store: harness.store,
+        history: harness.history,
+        variants: [{ variant: VARIANT, peers: fixturePeers(harness) }],
+        consumer: autoConsumer({ receiptPrefix: 'late-observer' }),
+        clock: harness.clock,
+        nextSessionId: harness.nextSessionId,
+        onObservation: (observation) => {
+          harness.observations.push(observation)
+          return new Promise<void>((_resolve, reject) => {
+            rejectObservation = reject
+          })
+        },
+      })
+
+      const run = await runComparison(
+        { variants: [VARIANT], cases: [evalCase('case-1')] },
+        { runVariant: adapter.runVariant },
+      )
+
+      expect(run.notRun).toEqual([])
+      expect(run.records[0].outcome).toBe('completed')
+      expect(run.records[0].failureReason).toBeNull()
+      expect(harness.observations).toHaveLength(1)
+
+      // The comparison has already resolved, so the attempt and its observation
+      // are complete. Reject only now; no wall-clock delay is involved.
+      rejectObservation(new Error('late observation rejection'))
+      await tick()
+      expect(unhandled).toEqual([])
+
+      // The snapshot handed out before the rejection is unchanged.
+      const observation = harness.observations[0]
+      expect(observation.cycleStatus).toBe('completed')
+      expect(observation.outputConfirmation).toBe('confirmed')
+      expect(observation.deliveries.length).toBeGreaterThan(0)
+      expect(
+        observation.deliveries.every(
+          (delivery) =>
+            delivery.classification === 'fully-delivered' &&
+            delivery.terminalOutcome === 'completed',
+        ),
+      ).toBe(true)
+
+      // Delivery and confirmed history remain the completed attempt's facts.
+      const events = await harness.store.readSession(harness.sessions[0])
+      expect(events.some((event) => event.type === 'delivery.committed')).toBe(true)
+      const history = await harness.history.confirmedHistory(harness.sessions[0])
+      expect(history.length).toBeGreaterThan(0)
+      expect(history.every((record) => record.classification === 'fully-delivered')).toBe(true)
+      expect(run.records[0].outcome).toBe('completed')
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
+  it('isolates a late onDialogueOutcome rejection without revising the observation snapshot', async () => {
+    const harness = createHarness()
+    let rejectDialogueOutcome!: (reason?: unknown) => void
+    let dialogueOutcomeCalls = 0
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason)
+    }
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const adapter = buildAdapter(
+        harness,
+        [{ variant: VARIANT, peers: fixturePeers(harness) }],
+        {
+          consumer: autoConsumer({ receiptPrefix: 'late-dialogue-outcome' }),
+          onDialogueOutcome: () => {
+            dialogueOutcomeCalls += 1
+            if (dialogueOutcomeCalls > 1) return
+            return new Promise<void>((_resolve, reject) => {
+              rejectDialogueOutcome = reject
+            })
+          },
+        },
+      )
+
+      const run = await runComparison(
+        { variants: [VARIANT], cases: [evalCase('case-1')] },
+        { runVariant: adapter.runVariant },
+      )
+
+      expect(run.notRun).toEqual([])
+      expect(run.records[0].outcome).toBe('completed')
+      expect(run.records[0].failureReason).toBeNull()
+      expect(dialogueOutcomeCalls).toBeGreaterThan(0)
+
+      // The adapter copies dialogueOutcomeFailures immediately before invoking
+      // onObservation. This snapshot is therefore final for this attempt.
+      const observation = harness.observations[0]
+      expect(observation.dialogueOutcomes.length).toBeGreaterThan(0)
+      const failuresSnapshot = [...observation.dialogueOutcomeFailures]
+      expect(failuresSnapshot).not.toContain('observer rejected')
+
+      // Deterministic late rejection: the comparison and its observation are done.
+      rejectDialogueOutcome(new Error('late dialogue-outcome rejection'))
+      await tick()
+      expect(unhandled).toEqual([])
+      expect(observation.dialogueOutcomeFailures).toEqual(failuresSnapshot)
+
+      // The completed outcome, delivery evidence and confirmed history stand.
+      expect(observation.cycleStatus).toBe('completed')
+      expect(observation.deliveries.length).toBeGreaterThan(0)
+      expect(
+        observation.deliveries.every(
+          (delivery) =>
+            delivery.classification === 'fully-delivered' &&
+            delivery.terminalOutcome === 'completed',
+        ),
+      ).toBe(true)
+      const events = await harness.store.readSession(harness.sessions[0])
+      expect(events.some((event) => event.type === 'delivery.committed')).toBe(true)
+      const history = await harness.history.confirmedHistory(harness.sessions[0])
+      expect(history.length).toBeGreaterThan(0)
+      expect(history.every((record) => record.classification === 'fully-delivered')).toBe(true)
+      expect(run.records[0].outcome).toBe('completed')
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
+  it('does not wait for a never-settling onDialogueOutcome through a real Stop', async () => {
+    const harness = createHarness()
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const media = createControlledMediaDriver({ autoEvents: true, holdEndedFrom: 0 })
+    let attachedComposition: RuntimeComposition | null = null
+    const currentComposition = (): RuntimeComposition | null => attachedComposition
+    let dialogueOutcomeCalls = 0
+    const neverSettles = new Promise<void>(() => {})
+    const consumer = createControlledConsumer({
+      media,
+      resolver,
+      receiptPrefix: 'never-dialogue-outcome',
+      onAttach: (attached) => {
+        attachedComposition = attached
+      },
+    })
+    const adapter = buildAdapter(
+      harness,
+      [
+        {
+          variant: VARIANT,
+          peers: { ...fixturePeers(harness), timings: { playbackMs: 300 } },
+        },
+      ],
+      {
+        consumer,
+        onDialogueOutcome: () => {
+          dialogueOutcomeCalls += 1
+          return neverSettles
+        },
+      },
+    )
+
+    const runPromise = runComparison(
+      { variants: [VARIANT], cases: [evalCase('case-1')] },
+      { runVariant: adapter.runVariant },
+    )
+    // Stop through the real control path once active playback has started.
+    await media.startedGate(0)
+    const current = currentComposition()
+    if (current === null) throw new Error('the consumer never attached the composition')
+    const snapshot = await current.coordinator.endpoint.snapshot()
+    const stop: ControlStopMessage = {
+      protocolVersion: APPLICATION_CONTRACT_VERSION,
+      messageId: 'never-dialogue-outcome-stop-1',
+      sessionId: snapshot.sessionId,
+      epoch: snapshot.epoch,
+      kind: 'control.stop',
+      payload: { requestId: 'never-dialogue-outcome-stop-request-1' },
+    }
+    const ack = await current.coordinator.endpoint.control(stop, OPERATOR_CONTEXT)
+    expect(ack.status).toBe('applied')
+
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const waitedTooLong = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), 3000)
+    })
+    try {
+      const run = await Promise.race([runPromise, waitedTooLong])
+      if (run === null) throw new Error('the adapter waited for a never-settling observer')
+      expect(run.notRun).toEqual([])
+      expect(run.records).toHaveLength(1)
+      expect(run.records[0].outcome).toBe('cancelled')
+      expect(run.records[0].failureReason).toBeNull()
+      expect(dialogueOutcomeCalls).toBeGreaterThan(0)
+
+      const observation = harness.observations[0]
+      expect(observation.cycleStatus).toBe('cancelled')
+      expect(
+        observation.deliveries.every(
+          (delivery) => delivery.classification !== 'fully-delivered',
+        ),
+      ).toBe(true)
+
+      const events = await harness.store.readSession(harness.sessions[0])
+      expect(events.some((event) => event.type === 'session.stopped')).toBe(true)
+      expect(await harness.history.confirmedHistory(harness.sessions[0])).toEqual([])
+    } finally {
+      clearTimeout(timer)
+    }
+  })
+
+  // Separately discovered hardening: the onObservation return value is not
+  // awaited, so a never-settling promise cannot delay completion or Stop.
+  it('does not wait for a never-settling observer and preserves a real Stop', async () => {
+    const harness = createHarness()
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const media = createControlledMediaDriver({ autoEvents: true, holdEndedFrom: 0 })
+    let attachedComposition: RuntimeComposition | null = null
+    const currentComposition = (): RuntimeComposition | null => attachedComposition
+    let observerCalls = 0
+    const neverSettles = new Promise<void>(() => {})
+    const consumer = createControlledConsumer({
+      media,
+      resolver,
+      receiptPrefix: 'never-observer',
+      onAttach: (attached) => {
+        attachedComposition = attached
+      },
+    })
+    const adapter = createEvaluationAdapter({
+      store: harness.store,
+      history: harness.history,
+      variants: [
+        {
+          variant: VARIANT,
+          peers: { ...fixturePeers(harness), timings: { playbackMs: 300 } },
+        },
+      ],
+      consumer,
+      clock: harness.clock,
+      nextSessionId: harness.nextSessionId,
+      onObservation: (observation) => {
+        observerCalls += 1
+        harness.observations.push(observation)
+        return neverSettles
+      },
+    })
+
+    const runPromise = runComparison(
+      { variants: [VARIANT], cases: [evalCase('case-1')] },
+      { runVariant: adapter.runVariant },
+    )
+    // Stop through the real control path once active playback has started.
+    await media.startedGate(0)
+    const current = currentComposition()
+    if (current === null) throw new Error('the consumer never attached the composition')
+    const snapshot = await current.coordinator.endpoint.snapshot()
+    const stop: ControlStopMessage = {
+      protocolVersion: APPLICATION_CONTRACT_VERSION,
+      messageId: 'never-observer-stop-1',
+      sessionId: snapshot.sessionId,
+      epoch: snapshot.epoch,
+      kind: 'control.stop',
+      payload: { requestId: 'never-observer-stop-request-1' },
+    }
+    const ack = await current.coordinator.endpoint.control(stop, OPERATOR_CONTEXT)
+    expect(ack.status).toBe('applied')
+
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const waitedTooLong = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), 3000)
+    })
+    try {
+      const run = await Promise.race([runPromise, waitedTooLong])
+      if (run === null) throw new Error('the adapter waited for a never-settling observer')
+      expect(run.notRun).toEqual([])
+      expect(run.records).toHaveLength(1)
+      expect(run.records[0].outcome).toBe('cancelled')
+      expect(run.records[0].failureReason).toBeNull()
+      expect(observerCalls).toBe(1)
+
+      // The snapshot still describes the Stop; no delivery was promoted.
+      const observation = harness.observations[0]
+      expect(observation.cycleStatus).toBe('cancelled')
+      expect(
+        observation.deliveries.every(
+          (delivery) => delivery.classification !== 'fully-delivered',
+        ),
+      ).toBe(true)
+
+      const events = await harness.store.readSession(harness.sessions[0])
+      expect(events.some((event) => event.type === 'session.stopped')).toBe(true)
+      expect(await harness.history.confirmedHistory(harness.sessions[0])).toEqual([])
+    } finally {
+      clearTimeout(timer)
+    }
+  })
+
   it('keeps the original execution failure and attempted usage when teardown fails', async () => {
     const harness = createHarness()
     const inner = autoConsumer({ receiptPrefix: 'faults' })
