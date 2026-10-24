@@ -11,6 +11,9 @@ import type { ReconstructedRuntimeComposition } from '../../src/runtime/composit
 import { createRuntimeAuthorizer } from '../../src/runtime/control-policy'
 import { createDeadlineGate } from '../../src/runtime/deadline'
 import type { RuntimeDeadlineGate } from '../../src/runtime/deadline'
+import type { DialogueOutcomeEvent } from '../../src/runtime/dialogue-outcome'
+import type { DialogueOutcomeObservation } from '../../src/runtime/dialogue-outcome'
+import type { DialogueOutcomeObserver } from '../../src/runtime/dialogue-outcome'
 import { createProductionApplication, validateProductionPeers } from '../../src/runtime/production'
 import type {
   ProductionApplication,
@@ -213,6 +216,7 @@ interface StartApplicationOptions {
   peers?: ProductionPeers
   textSource?: DialogueTextSource
   audioResources?: ProductionAudioResources
+  onDialogueOutcome?: DialogueOutcomeObserver
   recovery?: { nextSessionId?: () => string; maxSources?: number }
 }
 
@@ -226,6 +230,9 @@ async function startApplication(options: StartApplicationOptions = {}): Promise<
       clock,
       ...(options.textSource !== undefined ? { textSource: options.textSource } : {}),
       ...(options.audioResources !== undefined ? { audioResources: options.audioResources } : {}),
+      ...(options.onDialogueOutcome !== undefined
+        ? { onDialogueOutcome: options.onDialogueOutcome }
+        : {}),
       onGate: (gate, role) => {
         gates.push({ gate, role })
       },
@@ -284,6 +291,9 @@ async function startApplication(options: StartApplicationOptions = {}): Promise<
     },
     bootstrapOperator,
     async boot(client: PerformerClient) {
+      // The performer machine refuses to build an envelope until it has received
+      // the runtime's session snapshot, so wait for it before the first message.
+      await client.snapshot
       const ack = await client.bootstrapOperator(await bootstrapOperator())
       expect(ack.kind).toBe('operator.ack')
       expect((await client.attach()).kind).toBe('session.attach.ack')
@@ -614,6 +624,78 @@ describe('production application explicit recovery', () => {
 
     await fixture.app.stop()
     expect(audio.retireSessionCalls).toEqual([LIVE_1, successor])
+  })
+
+  it('reports dialogue outcomes for the initial session and each recovery successor', async () => {
+    const observed: DialogueOutcomeEvent[] = []
+    const successorIds: string[] = []
+    const observationsOf = (sessionId: string) =>
+      observed
+        .filter(
+          (event): event is Extract<DialogueOutcomeEvent, { kind: 'observed' }> =>
+            event.kind === 'observed',
+        )
+        .map((event) => event.observation)
+        .filter((observation) => observation.sessionId === sessionId)
+
+    const fixture = await startApplication({
+      liveSessionId: LIVE_1,
+      onDialogueOutcome: (event) => observed.push(event),
+      recovery: {
+        nextSessionId: () => {
+          const id = `session-successor-${successorIds.length + 1}`
+          successorIds.push(id)
+          return id
+        },
+      },
+    })
+
+    const performer = fixture.newClient(LIVE_1)
+    await fixture.boot(performer)
+    await performer.input('a turn before recovery')
+    await until(() => observationsOf(LIVE_1).length, (n) => n >= 1)
+    const initialObservations = observationsOf(LIVE_1)
+    expect(initialObservations).toHaveLength(1)
+    expect(initialObservations[0]).toMatchObject({ sessionId: LIVE_1, endStatus: 'completed' })
+    // The retired session's exact report identity and counts, as evidence that a
+    // later successor turn does not rewrite what was already reported.
+    const initialSnapshot = structuredClone(initialObservations)
+
+    const operator = fixture.newClient(LIVE_1)
+    await operator.snapshot
+    await operator.bootstrapOperator(await fixture.bootstrapOperator())
+    const ack = await operator.recover()
+    expect(ack.kind).toBe('session.recovery.ack')
+    const successor = 'session-successor-1'
+    expect(ack.payload).toMatchObject({ status: 'applied', successorSessionId: successor })
+
+    // The successor composition reports on the same channel with the successor's
+    // own live-session identity, and the retired session's report is unchanged.
+    const successorPerformer = fixture.newClient(successor)
+    await fixture.boot(successorPerformer)
+    await successorPerformer.input('a turn after recovery')
+    await until(() => observationsOf(successor).length, (n) => n >= 1)
+    const successorObservations = observationsOf(successor)
+    expect(successorObservations).toHaveLength(1)
+    expect(successorObservations[0]).toMatchObject({ sessionId: successor, endStatus: 'completed' })
+    /*
+     * Compare the full identity, not the request id alone: the request id can be a
+     * session-local counter, so two compositions may both report `dialogue-13`.
+     * Session, request, epoch and turn together are what identify a report; the
+     * successor's quadruple differs from the retired one, and the retired
+     * session's already-reported identity and counts are unchanged.
+     */
+    const identityOf = (observation: DialogueOutcomeObservation | undefined) => [
+      observation?.sessionId,
+      observation?.requestId,
+      observation?.epoch,
+      observation?.turnId,
+    ]
+    expect(identityOf(successorObservations[0])).not.toEqual(identityOf(initialSnapshot[0]))
+    expect(observationsOf(LIVE_1)).toHaveLength(initialSnapshot.length)
+    expect(observationsOf(LIVE_1)).toEqual(initialSnapshot)
+
+    await fixture.app.stop()
   })
 })
 

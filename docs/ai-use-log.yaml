@@ -2873,6 +2873,130 @@ entries:
       role: "test:m6 182/14; full 1125/63; pnpm verify exit 0."
     human_review: "M4 flagged the missing row; M6 owns it. No new ID."
 
+  - date: "2026-10-20"
+    task: M5-evaluation-deterministic-timing
+    branch: fix/m5-evaluation-timing
+    change: >-
+      Replace the held-playback evaluation test's real 15 ms readiness wait with
+      explicit ready/start boundaries and controlled timers over the actual
+      performer, coordinator, comparison runner and SQLite store. Add separate
+      pre-playback expiry coverage. Preserve confirmed cancellation and partial
+      delivery assertions. Production code, dependencies and shared contracts
+      remain at main 05b4f13ccc7df214417bc16dfbcae264701dfcc8.
+    requirements: [FR-04, FR-06, NFR-01]
+    invariants: [INV-01, INV-09, INV-12]
+    commits: [b0e5db708ea4c95dc6a6baf3bd67b6796bbe4f28]
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.1.0
+    session: ses_ea64bf454ffeCizP5ooUs5nqzM
+    supervision: >-
+      Captain approved local repair and verification. OpenCode authored test
+      changes; the supervisor independently investigated, reviewed, tested and
+      maintained paired handoffs. The same session received follow-up review
+      for timeout-safe cleanup and a cancellation-evidence negative control.
+      No subagent, production change, commit or push is part of this increment.
+    human_review: >-
+      Local follow-up remains under review. Historical PR48 results are separate
+      from this test-only repair; the synchronous test route does not establish
+      product-console, network, Windows or acoustic acceptance. Genuine native
+      session records and independent check results are held outside the checkout.
+    verification:
+      independent: >-
+        Focused adapter 21/21; the two timing cases passed ten consecutive runs;
+        M5 171/8; pnpm verify 1125/63, typecheck, lint and build passed.
+      negative_controls: >-
+        Corrupting only the second routed cancellation to unknown causes the
+        held case to time out: prior started evidence prevents regression and
+        leaves it awaiting the coordinator deadline. Additionally withholding
+        that output's intermediate receipts makes unknown effective and fails
+        the confirmed assertion. Both controls preserve actual media starts.
+        A 31 ms ready control times out before start; the next real-timer test
+        still passes, verifying afterEach restoration. All modified test/helper
+        bytes were restored and the complete final suite passed.
+      limits: >-
+        Controlled media and SQLite on Linux only. No new browser, Windows,
+        acoustic, live-provider or S6/G4 acceptance is claimed.
+      gates: "Actual base-to-working-tree G6 and trace41 passed; G4 explicitly not run."
+      transcript: >-
+        The native message endpoint was paginated through an empty final page:
+        135 unique records, first/last identities checked against the live API,
+        with succeeded/idle session metadata. The direct CLI export was
+        incomplete and is not represented as a valid transcript.
+  - date: "2026-10-21"
+    task: M5-local-followup-integration-shutdown
+    branch: fix/m5-local-followup-20261021
+    change: >-
+      Integrate the reviewed deterministic-timing repair from fix/m5-evaluation-timing
+      onto main f972b32 while preserving the merged M6 log entries, resolve the
+      delivery-plan and handoff wording to the current main, then extend the production
+      CLI and its shared child-process harness: a portable IPC cooperative shutdown
+      trigger (`{ type: "isla.runtime.shutdown" }`) that routes through the same
+      controlled shutdown with a distinct `ipc` trigger record; raw exit-code and
+      signal reporting from collectUntilExit without the -1 substitution; and a
+      forceful-kill restart case proving the committed prefix survives, the held tail
+      is never promoted and a fresh session continues over the crashed database. A
+      supervisory review then required bounded hardening in the same increment:
+      collectUntilExit drains both output pipes before resolving while preserving raw
+      code/signal, lifecycle records distinguish the shutdown trigger from a real
+      signal (`trigger: "signal"` with the received name, or `trigger: "ipc"`), the
+      IPC path is covered for a pending owned release, a failed owned release,
+      duplicate/unrelated messages and listen/start failure, and the two-process
+      continuation shuts both processes down over IPC, asserting each actual initial
+      snapshot is stopped before Resume and checking no replay before new input. No shared contract, dependency,
+      case ID or other owner's module changed.
+    requirements: [FR-05, FR-06]
+    invariants: [INV-05, INV-12]
+    commits: [b0e5db708ea4c95dc6a6baf3bd67b6796bbe4f28]
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.1.0
+    session: ses_ea305b8c0ffeckeiKtsr3ipgCT
+    supervision: >-
+      Captain approved the local plan and directed the integration, gap inspection
+      and implementation order; the supervisor's review required the bounded follow-up
+      (output drain, IPC-path coverage, trigger-vs-signal records, IPC restart), which
+      OpenCode implemented. OpenCode authored the changes; the supervisor maintains
+      project configuration and final coordination documents and performs independent
+      review. No subagent, commit, push or deployment is part of this increment.
+    human_review: >-
+      Local follow-up, including the supervisory review follow-up, remains under
+      review. The IPC trigger and raw reporting are validated on Linux only; Windows
+      cooperative validation, live providers, acoustic output and S6/G4 remain
+      separate and unaccepted. No case ID was registered in the implementation
+      commit b0e5db708ea4c95dc6a6baf3bd67b6796bbe4f28. The later documentation
+      commit 8c36cadadf64da2b543aacd930392090b9e4a7cd registered C-73/C-74; M6
+      accepted their scope and the INV-12 link in review 5599418482.
+    verification:
+      integration: >-
+        Focused evaluation 21/21 and M5 171/8 passed (exit 0) on the integrated tree
+        before the CLI changes.
+      final: >-
+        Independent M5 177/8 and full verify 1132/63 passed (exit 0), including
+        CLI 15/15 and process restart 2/2, with typecheck, lint and build.
+        Actual-change trace41 and G6 against the f972b32 base log passed;
+        G4 explicitly reports not run. Source/test bytes stayed unchanged;
+        the evaluation test remains byte-identical to the reviewed repair.
+      transcript: >-
+        The complete native export contains 199 unique records, paginated to an
+        empty final page, all assistant records using build/self-api/
+        deepseek-v4-flash/xhigh and no delegation tools. Session metadata is
+        succeeded/idle. The final CLI run exited 1 after a recovered ECONNRESET
+        transport error although its requested two tests passed; this result is
+        preserved separately from independent verification. Large API responses
+        were captured directly to files after pipe capture truncated JSON.
+      probe: >-
+        A pre-fix manual probe showed the IPC message ran the controlled shutdown but
+        the process stayed alive on the referenced channel; after the disconnect fix
+        the same probe exited 0 with signal null. This is a live probe, not a test
+        mutation.
+      limits: >-
+        Controlled peers, real child processes and SQLite on Linux only. The kill
+        lands between commits and does not force a torn write; no Windows,
+        live-provider, acoustic or G4 acceptance is claimed.
+
   - date: 2026-10-21
     task: M4-03
     branch: feat/m4-03
@@ -2978,6 +3102,83 @@ entries:
       limits: "Linux and controlled sources only; no Windows, live-provider, acoustic or S6/G4 acceptance."
 
   - date: "2026-10-22"
+    task: M5-mentions-outcome-consumers
+    branch: feat/m5-outcome-evaluation-20261022
+    change: >-
+      Consume projected dialogue outcome reports through direct and reconstructed
+      composition, production recovery and evaluation. Preserve originating
+      identity, isolate observers, reject inconsistent counts, fold unknown reason
+      keys and retain deadline_exceeded as execution failure even with a delivered
+      prefix. Add focused regression coverage and a linked handoff. The imported
+      M4-03 implementation keeps its
+      original entries and the producer repair has its own review-proposal entry.
+    requirements: [FR-01, FR-02, FR-05, NFR-02, NFR-03]
+    invariants: [INV-01]
+    cases: []
+    commits: [331c7057e2209ce6c53baf5f31c56db38794d7f5]
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.1.0
+    session: ses_e9d97e993ffeKyWFpkz35i9lYU
+    supervision: >-
+      Captain approved local GitHub-mention follow-up and reserved publication
+      approval. OpenCode authored implementation and tests in the genuine build
+      session with xhigh. The supervising assistant reviewed diffs, requested
+      corrections, performed independent verification and maintained documents.
+      No delegated agents; no fabricated provider, label or playback evidence.
+    human_review: >-
+      Under review. C-05/C-16 remain pending and no new case ID is allocated.
+      M3 owns actual corpus and reviewed labels; M6 owns corpus/report binding
+      and serialized memory.inspect review. M5 owns runtime persistence and
+      delivery decisions; generation diagnostics do not prove playback.
+      Captain approved publication after reviewing the complete implementation
+      and reply bodies. The commit pointer identifies the implementation;
+      owner review and final human merge remain separate.
+    verification:
+      focused: "Observer/production/evaluation tests 54/3 plus typecheck and lint passed before the multi-input increment."
+      final: "Independent combined M5 203/9 and pnpm verify 1223/69 passed, with typecheck, lint and build; see HANDOFF-M5-MENTIONS.en.md."
+      limits: "No live providers, human quality scores, Windows, acoustic, S6 or G4 acceptance."
+
+  - date: "2026-10-22"
+    task: M5-bounded-evaluation-inputs
+    branch: feat/m5-outcome-evaluation-20261022
+    change: >-
+      Add opt-in prepared input batches to the evaluation adapter while preserving
+      single-input execution. Add four test-only coordinator regressions for exact
+      selection/reaction deadlines, accepted clarify intent and candidate expiry.
+      Resolve by case id only, validate and project each
+      source/text/actor entry, refuse unavailable or invalid batches before runtime
+      execution, and preserve failed-attempt evidence after partial admission.
+      Keep M6 EvalCase, FixedConditions, recorded-run schemas and promptVersion
+      semantics unchanged; retain the supplied-replyIntent refusal.
+    requirements: [FR-01, NFR-02, NFR-03]
+    invariants: [INV-01]
+    cases: []
+    commits: [331c7057e2209ce6c53baf5f31c56db38794d7f5]
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.1.0
+    session: ses_e9d547e42ffeP0a5xN77mMAASP
+    supervision: >-
+      A separate genuine build/xhigh session implements the approved local
+      input-preparation slice. The previous session ended after observer/deadline
+      checks and read-only input investigation. The supervising assistant reviews
+      actual diffs and results and maintains the handoff; no delegated agents.
+    human_review: >-
+      Under owner review; Captain approved publication and the commit pointer
+      identifies the implementation. Runtime-generated identities, times, persona and history
+      mean this is not full SelectionRequest/corpus replay. M3 retains actual
+      corpus, labels and semantic rubric; M6 retains report binding. C-05/C-16 stay
+      pending, no global IDs are allocated, and deterministic checks do not produce
+      semantic scores or S6/G4 acceptance.
+    verification:
+      focused: "OpenCode coordinator/adapter 121/2 (94 + 27), typecheck and lint passed. Earlier test-authoring type errors were corrected, not treated as passes."
+      final: "Independent M5 203/9 and pnpm verify 1223/69 passed with typecheck, lint and build on Linux/Node22.23.3."
+      limits: "Controlled peers only; no live-provider, Windows, acoustic, S6 or G4 result."
+
+  - date: "2026-10-22"
     task: M5-review-M4-consistency-budget
     branch: fix/m4-consistency-budget-20261022
     change: >-
@@ -3007,6 +3208,48 @@ entries:
       M1 approval of published PR54 at 4bc4c18 does not cover this new revision.
       M2/M6 inspection adoption remains separate. No new case ID is allocated.
     verification:
-      focused: "OpenCode M4 role: 208 tests / 9 files; scanner and inspection: 38 tests / 2 files. Independent M4 pnpm verify: 1209 tests / 68 files, typecheck, lint and build passed; code/tests/dependencies unchanged during verification."
+      focused: "OpenCode M4 role: 208 tests / 9 files; scanner and inspection: 38 tests / 2 files. Independent M5 pnpm verify: 1242 tests / 69 files, typecheck, lint and build passed; code/tests/dependencies unchanged during verification."
       benchmark: "Independent Linux exact-source comparison, 1024 two-clause history turns / 64-character prompt: assembly 1691.9 ms before, 30.8 ms after; timer delay 1691.9 ms before, 31.0 ms after. A 32768-character word: 1469.5 ms before, 0.7 ms after. Single controlled runs, not a latency guarantee."
       limits: "Count ceilings are not a whole-pipeline latency guarantee; no live-provider, Windows, acoustic or S6/G4 acceptance."
+
+  - date: "2026-10-24"
+    task: M5-observation-cutoff-only-followup
+    branch: review/m5-only-followup-20261024
+    change: >-
+      Address M1 review 5626125615 of PR55: document the pre-onObservation
+      diagnostic array cutoff, cover late and never-settling forwarded
+      onDialogueOutcome callbacks, and separately contain thenables returned
+      by onObservation without awaiting them. Add four runtime regressions.
+      Extract only these M5 source/test changes and their handoff onto the
+      existing published PR55 head b4be30e; preserve all prior evidence entries.
+    requirements: [FR-05, FR-06]
+    invariants: [INV-01]
+    cases: []
+    commits: [03513851e2ae82c180269bf19a02908544c35617]
+    agent: build
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    opencode_version: 2.1.2
+    session: ses_e93d60c5fffeh3Wdrwp9hdjZ5E
+    supervision: >-
+      Captain approved narrowing the local work to M5 and separately publishing
+      the scoped PR56 review; other owners' work is deferred. The source and
+      tests were authored by the recorded OpenCode session and are copied
+      byte-for-byte from that candidate. The supervisor performs this mechanical
+      extraction, ordinary documentation and independent verification. No new
+      authoring session, code change or original-owner evidence rewrite is
+      claimed for the extraction.
+    human_review: >-
+      Captain approved publication of this four-file candidate and opening PR55
+      for scoped review after remote CI passes. The PR base and other owner
+      branches remain unchanged. Prior M1 approval remains tied to b4be30e;
+      this follow-up remains subject to review. Final merge remains human-owned.
+    verification:
+      extraction: "The two source/test files match the genuine session's final candidate byte-for-byte."
+      independent: "M5 207/9; pnpm verify 1246/69, typecheck, lint and build passed on this four-file b4-based candidate; actual incremental G6 and diff checks passed."
+      limits: >-
+        Earlier verification results retain their original tree scopes; the
+        narrow candidate is checked independently. Controlled peers and Linux
+        results do not establish Windows, live-provider, acoustic or S6/G4
+        acceptance. C-05/C-16 remain pending.

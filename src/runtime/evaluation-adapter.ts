@@ -6,12 +6,18 @@ import type {
   DeliveryClassification,
   EventStorePort,
   HistoryQueryPort,
+  InputSource,
   InputSubmitMessage,
   RuntimeEvent,
   TrustedControlContext,
   UsageRecord,
 } from '../contracts'
-import { APPLICATION_CONTRACT_VERSION, usageRecordSchema } from '../contracts'
+import {
+  APPLICATION_CONTRACT_VERSION,
+  MAX_SELECTION_CANDIDATES,
+  inputSourceSchema,
+  usageRecordSchema,
+} from '../contracts'
 import type { EvalCase, Variant, VariantRun } from '../evaluation/comparison'
 import type { AttemptOutcome, AttemptRecord, AttemptUsage, StageTiming } from '../evaluation/metrics'
 import { createMonotonicClock } from './clock'
@@ -20,6 +26,11 @@ import type { RuntimeComposition } from './composition'
 import { createRuntimeAuthorizer } from './control-policy'
 import type { CycleOutcome, CycleStatus } from './coordinator'
 import { createDeadlineGate } from './deadline'
+import type {
+  DialogueOutcomeEvent,
+  DialogueOutcomeObservation,
+  DialogueOutcomeObserver,
+} from './dialogue-outcome'
 import { validateProductionPeers } from './production'
 import type { ProductionPeers } from './production'
 
@@ -44,6 +55,18 @@ import type { ProductionPeers } from './production'
  *    first provider invocation: building the composition, attaching the
  *    consumer, Resume and input admission never invoke a selection, reaction,
  *    dialogue or synthesis provider.
+ *  - **Prepared inputs are an explicit opt-in and stay bounded.** Without an
+ *    input plan the adapter submits `EvalCase.input` once, as it always has.
+ *    With an explicit `prepared` plan a resolver keyed by the case id supplies a
+ *    batch that is validated, copied to `source`/`text`/`actorId` only and
+ *    admitted in order before exactly one `runTurn`; an unknown plan mode, a
+ *    missing resolver, a resolver error, or a missing, invalid, empty or
+ *    oversized (> `MAX_SELECTION_CANDIDATES`) batch is a not-run before any
+ *    runtime or provider work. A batch whose admission fails after at least one
+ *    input was accepted is recorded as a failed attempt with its retained
+ *    admission evidence and no selection; `runTurn` is skipped rather than run
+ *    over a partial batch. The runtime still generates ids, timestamps, persona
+ *    and history, so this prepares bounded inputs, not a corpus replay.
  *  - **A supplied `replyIntent` is refused, not ignored.** ADR-007 D8 makes
  *    `EvalCase.replyIntent` the actual prompt condition that renders the reply —
  *    M3's selection decision — and distinct from the human `labels.intent`.
@@ -166,11 +189,59 @@ export interface EvaluationAttemptObservation {
   }[]
   readonly invocations: readonly EvaluationInvocationObservation[]
   readonly portInvocations: EvaluationPortInvocations
+  /**
+   * The dialogue port's projected generation/discard accounting for this attempt,
+   * in order. Observational only: it adds no storage write of its own (M5 owns the
+   * runtime's persistence and delivery decisions, M6 owns the storage
+   * infrastructure), is never a provider attempt, and is never part of spoken
+   * history. Each frozen observation keeps the identity of its own request, so a
+   * report that arrives outside the current turn is still attributed to the
+   * request that produced it.
+   */
+  readonly dialogueOutcomes: readonly DialogueOutcomeObservation[]
+  /**
+   * Reports the M5 projection refused, as M5-authored reasons (never raw producer
+   * data), plus a fixed label when a consumer-visible observer fault was isolated.
+   */
+  readonly dialogueOutcomeFailures: readonly string[]
   /** Set when the admitted drain threw despite its contract; the record is unaffected. */
   readonly drainFailure: string | null
   /** Consumer detach and composition disposal faults; the record is unaffected. */
   readonly teardownFailure: string | null
 }
+
+/**
+ * One prepared input the adapter may admit. Only the three fields the adapter
+ * owns are carried: the input contract's `source`/`text` payload plus the
+ * `actorId` of the trusted input context. The runtime still generates the event
+ * id, timestamps, trust classification and every other `InputEvent` field, so a
+ * prepared input is not a replayed event.
+ */
+export interface PreparedEvaluationInput {
+  readonly source: InputSource
+  readonly text: string
+  readonly actorId: string
+}
+
+/**
+ * How the adapter produces the inputs it admits for one case before its single
+ * `runTurn`.
+ *
+ * - `case-input` (the default when no plan is configured) submits
+ *   `EvalCase.input` once, exactly as before.
+ * - `prepared` is the explicit opt-in: the resolver receives **only the case
+ *   id** — never the `EvalCase` or its labels — and returns the bounded batch to
+ *   admit in order. Only the validated `source`/`text`/`actorId` are copied, and
+ *   an extra field on a returned input is refused rather than carried.
+ */
+export type EvaluationInputPlan =
+  | { readonly mode: 'case-input' }
+  | {
+      readonly mode: 'prepared'
+      readonly resolve: (
+        caseId: string,
+      ) => readonly PreparedEvaluationInput[] | Promise<readonly PreparedEvaluationInput[]>
+    }
 
 export interface EvaluationAdapterOptions {
   /** Shared M6 store. Owned by the caller: the adapter never closes it. */
@@ -182,7 +253,22 @@ export interface EvaluationAdapterOptions {
   readonly clock?: ClockPort
   /** Fresh session id per attempt; defaults to a random evaluation id. */
   readonly nextSessionId?: () => string
+  /**
+   * Input execution plan for every case. Omitted (or `case-input`) keeps the
+   * original single-input path; `prepared` opts into a resolver-supplied batch
+   * (see `EvaluationInputPlan`). An unknown mode, a missing resolver or a bad
+   * batch is a not-run, never a fallback to the single input.
+   */
+  readonly input?: EvaluationInputPlan
   readonly onObservation?: (observation: EvaluationAttemptObservation) => void
+  /**
+   * Observational consumer of each attempt's projected dialogue generation/discard
+   * events (see `DialogueOutcomeObserver`). It is called in addition to the
+   * per-attempt `dialogueOutcomes`/`dialogueOutcomeFailures` evidence. It adds no
+   * storage write of its own and is never a provider attempt; a synchronous throw
+   * or a rejected promise from it is isolated and cannot change the attempt.
+   */
+  readonly onDialogueOutcome?: DialogueOutcomeObserver
 }
 
 export interface EvaluationAdapter {
@@ -237,6 +323,14 @@ interface AttemptEvidence {
 
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { then?: unknown }).then === 'function'
+  )
 }
 
 function stringOf(value: unknown): string | null {
@@ -393,6 +487,24 @@ function mapOutcome(
     }
   }
   if (cycle.status === 'cancelled') {
+    /*
+     * `deadline_exceeded` is checked before the recorded-stop branch: M4 checks
+     * the abort signal before the deadline at every await boundary, so a
+     * `deadline_exceeded` end means the clock, not a delivered Stop, ended the
+     * call. A delivered prefix can never turn an expired call into a success: an
+     * expired end is never `completed`, so this stays a failure with a clear
+     * deadline reason.
+     */
+    if (
+      evidence.dialogueEndStatus === 'deadline_exceeded' ||
+      evidence.turnEndStatus === 'deadline_exceeded'
+    ) {
+      return {
+        outcome: 'failed',
+        failureReason:
+          'the dialogue deadline expired before the turn completed (recorded dialogue end status deadline_exceeded)',
+      }
+    }
     if (evidence.stopped) {
       // A recorded operator Stop is the confirmed cancellation.
       return { outcome: 'cancelled', failureReason: null }
@@ -515,6 +627,130 @@ function assertAdapterOptions(options: EvaluationAdapterOptions): void {
 }
 
 /**
+ * The default single input for a case: the source, text and actor context the
+ * adapter has always submitted.
+ */
+function caseInput(evalCase: EvalCase): PreparedEvaluationInput {
+  return { source: 'local-audience', text: evalCase.input, actorId: INPUT_CONTEXT.actorId }
+}
+
+const PREPARED_INPUT_FIELDS: readonly string[] = ['source', 'text', 'actorId']
+
+/**
+ * Validates one resolver-supplied input against the input contract and copies
+ * only `source`/`text`/`actorId`. A strict field check means an extra field
+ * (for example a label) is refused rather than carried toward a provider, and
+ * the returned object shares nothing with the resolver's value.
+ */
+function readPreparedInput(
+  value: unknown,
+  index: number,
+): { readonly input: PreparedEvaluationInput } | { readonly invalid: string } {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return { invalid: `prepared input ${index + 1} is not an object` }
+  }
+  const record = value as Record<string, unknown>
+  const unexpected = Object.keys(record).filter((key) => !PREPARED_INPUT_FIELDS.includes(key))
+  if (unexpected.length > 0) {
+    return {
+      invalid:
+        `prepared input ${index + 1} carries unsupported field(s): ${unexpected.join(', ')}; ` +
+        'only source, text and actorId may be admitted',
+    }
+  }
+  const source = inputSourceSchema.safeParse(record.source)
+  if (!source.success) {
+    return {
+      invalid: `prepared input ${index + 1} has a missing or invalid source (expected one of ${inputSourceSchema.options.join(', ')})`,
+    }
+  }
+  if (typeof record.text !== 'string' || record.text.length === 0) {
+    return { invalid: `prepared input ${index + 1} has a missing or empty text` }
+  }
+  if (typeof record.actorId !== 'string' || record.actorId.length === 0) {
+    return { invalid: `prepared input ${index + 1} has a missing or empty actorId` }
+  }
+  return { input: { source: source.data, text: record.text, actorId: record.actorId } }
+}
+
+type ResolvedInputPlan =
+  | { readonly kind: 'resolved'; readonly inputs: readonly PreparedEvaluationInput[] }
+  | { readonly kind: 'refused'; readonly reason: string }
+
+/**
+ * Resolves the case's input plan before any runtime work. The default plan (and
+ * an explicit `case-input` plan) is the single `EvalCase.input`. A `prepared`
+ * plan is refused — never downgraded to the default — when the resolver is
+ * missing or throws, or when the batch is missing, invalid, empty or larger than
+ * `MAX_SELECTION_CANDIDATES`. The resolver receives only the case id.
+ */
+async function resolveInputs(
+  plan: EvaluationInputPlan | undefined,
+  evalCase: EvalCase,
+): Promise<ResolvedInputPlan> {
+  if (plan === undefined) return { kind: 'resolved', inputs: [caseInput(evalCase)] }
+  const candidate = plan as { mode?: unknown; resolve?: unknown }
+  if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return {
+      kind: 'refused',
+      reason:
+        `case ${evalCase.id} requested an input plan that is not a recognized object; ` +
+        "expected mode 'case-input' or 'prepared'",
+    }
+  }
+  if (candidate.mode === 'case-input') return { kind: 'resolved', inputs: [caseInput(evalCase)] }
+  if (candidate.mode !== 'prepared') {
+    return {
+      kind: 'refused',
+      reason:
+        `case ${evalCase.id} requested unknown input mode '${String(candidate.mode)}'; ` +
+        "expected 'case-input' or 'prepared'",
+    }
+  }
+  if (typeof candidate.resolve !== 'function') {
+    return {
+      kind: 'refused',
+      reason: `case ${evalCase.id} selected prepared input mode without a resolve(caseId) function`,
+    }
+  }
+  let batch: unknown
+  try {
+    batch = await candidate.resolve(evalCase.id)
+  } catch (error) {
+    return {
+      kind: 'refused',
+      reason: `case ${evalCase.id} prepared input resolver threw: ${describeError(error)}`,
+    }
+  }
+  if (!Array.isArray(batch)) {
+    return {
+      kind: 'refused',
+      reason: `case ${evalCase.id} prepared input resolver did not return an array`,
+    }
+  }
+  if (batch.length === 0) {
+    return { kind: 'refused', reason: `case ${evalCase.id} prepared input resolver returned no inputs` }
+  }
+  if (batch.length > MAX_SELECTION_CANDIDATES) {
+    return {
+      kind: 'refused',
+      reason:
+        `case ${evalCase.id} prepared input resolver returned ${batch.length} inputs; ` +
+        `at most ${MAX_SELECTION_CANDIDATES} may be admitted before one turn`,
+    }
+  }
+  const inputs: PreparedEvaluationInput[] = []
+  for (let index = 0; index < batch.length; index += 1) {
+    const read = readPreparedInput(batch[index], index)
+    if ('invalid' in read) {
+      return { kind: 'refused', reason: `case ${evalCase.id} ${read.invalid}` }
+    }
+    inputs.push(read.input)
+  }
+  return { kind: 'resolved', inputs }
+}
+
+/**
  * Close a runtime that never reached an attempt: drain admitted work, detach the
  * consumer if it was ever attached, and dispose. Every step is best-effort, but
  * its faults are returned rather than swallowed: a not-run has no record, so the
@@ -571,6 +807,7 @@ export function createEvaluationAdapter(options: EvaluationAdapterOptions): Eval
   const nextSessionId = options.nextSessionId ?? (() => `session-eval-${randomUUID()}`)
   const consumer = options.consumer
   const onObservation = options.onObservation
+  const inputPlan = options.input
   /** Session ids this adapter has already claimed: an event namespace is used once. */
   const claimedSessionIds = new Set<string>()
 
@@ -669,6 +906,16 @@ export function createEvaluationAdapter(options: EvaluationAdapterOptions): Eval
         )
       }
 
+      // The input plan is resolved before any runtime is built. A prepared plan
+      // that is unknown, has no resolver, throws or yields a missing, invalid,
+      // empty or oversized batch is a not-run: it never falls back to the
+      // default single input, and no session is claimed.
+      const planned = await resolveInputs(inputPlan, evalCase)
+      if (planned.kind === 'refused') {
+        return notRun(planned.reason)
+      }
+      const preparedInputs = planned.inputs
+
       // A fresh session id is a documented precondition: reusing one would mix
       // this attempt's events with earlier evidence. Both a repeated id and an id
       // that already holds persisted events are refused before any attempt.
@@ -697,6 +944,32 @@ export function createEvaluationAdapter(options: EvaluationAdapterOptions): Eval
       claimedSessionIds.add(sessionId)
 
       // ---- build the attempt runtime (setup only; no provider attempt) ----
+      /*
+       * Per-attempt dialogue generation/discard evidence. The collector records
+       * every projected event and forwards it to the caller-visible observer, if
+       * any. Each event and observation is frozen by the projection, so a consumer
+       * that mutates what it was handed cannot corrupt the evidence collected here
+       * (the outer arrays are copies as well).
+       */
+      const dialogueOutcomes: DialogueOutcomeObservation[] = []
+      const dialogueOutcomeFailures: string[] = []
+      const forwardDialogueOutcome = options.onDialogueOutcome
+      const collectDialogueOutcome = (event: DialogueOutcomeEvent): void => {
+        if (event.kind === 'observed') dialogueOutcomes.push(event.observation)
+        else dialogueOutcomeFailures.push(event.reason)
+        if (forwardDialogueOutcome === undefined) return
+        // A diagnostic consumer fault is isolated: it never changes the attempt.
+        try {
+          const result: unknown = forwardDialogueOutcome(event)
+          if (isThenable(result)) {
+            void Promise.resolve(result).catch(() => {
+              dialogueOutcomeFailures.push('observer rejected')
+            })
+          }
+        } catch {
+          dialogueOutcomeFailures.push('observer threw')
+        }
+      }
       const gate = createDeadlineGate(clock)
       let composition: RuntimeComposition
       try {
@@ -707,6 +980,7 @@ export function createEvaluationAdapter(options: EvaluationAdapterOptions): Eval
           ...(config.peers.personaRecall !== undefined
             ? { personaRecall: config.peers.personaRecall }
             : {}),
+          onDialogueOutcome: collectDialogueOutcome,
         })
         composition = createRuntimeComposition({
           clock,
@@ -802,47 +1076,66 @@ export function createEvaluationAdapter(options: EvaluationAdapterOptions): Eval
         )
       }
 
-      const input: InputSubmitMessage = {
-        protocolVersion: APPLICATION_CONTRACT_VERSION,
-        messageId: `${sessionId}-input-1`,
-        sessionId,
-        epoch: composition.coordinator.epoch(),
-        kind: 'input.submit',
-        payload: { source: 'local-audience', text: evalCase.input },
+      // Prime every prepared input through the real endpoint, in order, before
+      // the single turn. Each input is admitted under its own actor context, and
+      // only the validated source/text/actorId reach admission.
+      const inputsToAdmit: Array<{
+        readonly message: InputSubmitMessage
+        readonly context: TrustedControlContext
+      }> = preparedInputs.map((prepared, index) => ({
+        message: {
+          protocolVersion: APPLICATION_CONTRACT_VERSION,
+          messageId: `${sessionId}-input-${index + 1}`,
+          sessionId,
+          epoch: composition.coordinator.epoch(),
+          kind: 'input.submit',
+          payload: { source: prepared.source, text: prepared.text },
+        },
+        context: { ...INPUT_CONTEXT, actorId: prepared.actorId },
+      }))
+
+      let acceptedInputs = 0
+      let admissionFailure: string | null = null
+      for (let index = 0; index < inputsToAdmit.length; index += 1) {
+        const { message, context } = inputsToAdmit[index]
+        let ack: Awaited<ReturnType<typeof composition.coordinator.endpoint.submitInput>>
+        try {
+          ack = await composition.coordinator.endpoint.submitInput(message, context)
+        } catch (error) {
+          admissionFailure =
+            `could not admit case input ${index + 1} of ${inputsToAdmit.length}: ${describeError(error)}`
+          break
+        }
+        if (ack.status === 'rejected') {
+          admissionFailure =
+            `case input ${index + 1} of ${inputsToAdmit.length} was rejected before selection (${ack.code}): ${ack.message}`
+          break
+        }
+        acceptedInputs += 1
       }
-      let inputAck: Awaited<ReturnType<typeof composition.coordinator.endpoint.submitInput>>
-      try {
-        inputAck = await composition.coordinator.endpoint.submitInput(input, INPUT_CONTEXT)
-      } catch (error) {
+
+      // Nothing was accepted: the case is still a not-run, exactly as the single
+      // input path always was.
+      if (admissionFailure !== null && acceptedInputs === 0) {
         const cleanup = await closeBeforeAttempt(composition, consumer, detach)
         return notRun(
-          withCleanupFailure(
-            `variant ${requested.id} could not admit the case input: ${describeError(error)}`,
-            cleanup,
-          ),
-        )
-      }
-      if (inputAck.status === 'rejected') {
-        const cleanup = await closeBeforeAttempt(composition, consumer, detach)
-        return notRun(
-          withCleanupFailure(
-            `variant ${requested.id} case input was rejected before any attempt (${inputAck.code}): ${inputAck.message}`,
-            cleanup,
-          ),
+          withCleanupFailure(`variant ${requested.id} ${admissionFailure}`, cleanup),
         )
       }
 
-      // ---- the attempt boundary: the case input is admitted ----
+      // ---- the attempt boundary: at least one case input is admitted ----
       // From here the case is an attempt. A degraded admission write, a thrown
       // turn, a non-completed status or a teardown fault all stay records.
       let cycle: CycleOutcome | null = null
       let turnThrew = false
       let turnFailure: unknown = null
-      try {
-        cycle = await composition.coordinator.runTurn()
-      } catch (error) {
-        turnThrew = true
-        turnFailure = error
+      if (admissionFailure === null) {
+        try {
+          cycle = await composition.coordinator.runTurn()
+        } catch (error) {
+          turnThrew = true
+          turnFailure = error
+        }
       }
 
       // The admitted drain: seal operation admission, drain every admitted
@@ -864,7 +1157,15 @@ export function createEvaluationAdapter(options: EvaluationAdapterOptions): Eval
       const invocations = joinInvocations(events)
       const evidence = readEvidence(events, deliveries, cycle?.turnId ?? null)
 
-      const mapped = mapOutcome(cycle, turnThrew, turnFailure, evidence)
+      const mapped =
+        admissionFailure === null
+          ? mapOutcome(cycle, turnThrew, turnFailure, evidence)
+          : {
+              outcome: 'failed' as const,
+              failureReason:
+                `the runtime skipped runTurn because only ${acceptedInputs} of ${inputsToAdmit.length} prepared inputs were admitted ` +
+                `(${admissionFailure}); a partial batch is never run`,
+            }
 
       // Teardown is best-effort: a fault here never replaces or drops the record,
       // and it is collected so it can be reported rather than swallowed.
@@ -884,7 +1185,7 @@ export function createEvaluationAdapter(options: EvaluationAdapterOptions): Eval
       let observationFailure: string | null = null
       if (onObservation !== undefined) {
         try {
-          onObservation({
+          const observationResult: unknown = onObservation({
             sessionId,
             variantId: requested.id,
             caseId: evalCase.id,
@@ -915,9 +1216,29 @@ export function createEvaluationAdapter(options: EvaluationAdapterOptions): Eval
               reaction: metrics.reactionAttempts,
               dialogue: metrics.dialogueAttempts,
             },
+            /*
+             * The diagnostic cutoff: these two arrays are copied immediately
+             * before onObservation runs. A later rejection of the forwarded
+             * onDialogueOutcome promise may append to the live failure array, but
+             * it cannot revise this completed snapshot.
+             */
+            dialogueOutcomes: [...dialogueOutcomes],
+            dialogueOutcomeFailures: [...dialogueOutcomeFailures],
             drainFailure,
             teardownFailure,
           })
+          /*
+           * The diagnostic array copies were made immediately above, before this
+           * callback is invoked; later changes to the adapter's live arrays do
+           * not revise them. The returned thenable is contained without awaiting,
+           * so completion and Stop do not wait for it, and a later rejection
+           * neither revises the captured arrays nor the returned execution
+           * result. This is not a claim that the whole observation object is
+           * deeply immutable.
+           */
+          if (isThenable(observationResult)) {
+            void Promise.resolve(observationResult).catch(() => {})
+          }
         } catch (error) {
           // The observation is diagnostics; a callback fault never drops the record.
           observationFailure = describeError(error)

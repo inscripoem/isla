@@ -13,6 +13,7 @@ import type { RendererDriver } from '../../src/performance/mapped-renderer'
 import { createMappedRenderer } from '../../src/performance/mapped-renderer'
 import { createFixedSynthesis } from '../../src/performance/fixed-synthesis'
 import type { RuntimeDeadlineGate } from '../../src/runtime/deadline'
+import type { DialogueOutcomeObserver } from '../../src/runtime/dialogue-outcome'
 import type {
   ProductionAudioResources,
   ProductionDeployment,
@@ -61,6 +62,8 @@ export interface TestProductionPeersOptions {
    * each successor.
    */
   onGate?: (gate: RuntimeDeadlineGate, role: 'renderer' | 'synthesis') => void
+  /** Observational dialogue generation/discard consumer; see `ProductionPeers`. */
+  onDialogueOutcome?: DialogueOutcomeObserver
 }
 
 export function createTestProductionPeers(options: TestProductionPeersOptions): ProductionPeers {
@@ -101,6 +104,9 @@ export function createTestProductionPeers(options: TestProductionPeersOptions): 
       return synthesisFactory(gate)
     },
     ...(options.audioResources !== undefined ? { audioResources: options.audioResources } : {}),
+    ...(options.onDialogueOutcome !== undefined
+      ? { onDialogueOutcome: options.onDialogueOutcome }
+      : {}),
     profile: {
       voiceProfileId: M1_FIXTURE_VOICE_ID,
       voiceProfileVersion: M1_FIXTURE_VOICE_VERSION,

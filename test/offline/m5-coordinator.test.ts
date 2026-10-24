@@ -198,6 +198,41 @@ describe('M5 coordinator cycle control (production)', () => {
     expect(runner.deliveries()).toHaveLength(0)
     expect(runner.rejectedLate()).toBeGreaterThanOrEqual(1)
   })
+
+  it('treats a valid selection returned exactly at its deadline as stale without fallback dispatch', async () => {
+    const gate = createGate()
+    const entered = createGate()
+    let selectionDeadlineAtMs = 0
+    const gated = createGatedSelectionPort(gate.promise, () => entered.release())
+    const selection: SelectionPort = {
+      async select(request, context) {
+        // The request carries the same deadline the call context holds.
+        selectionDeadlineAtMs = request.deadline.atMs
+        return gated.select(request, context)
+      },
+    }
+    const dialogue = createCapturingDialoguePort(correct.createFixtureDialoguePort())
+    const player = createCountingPlayer(correct.createFixturePlayer())
+    const renderer = correct.createCountingRenderer(correct.createFixtureRendererPort())
+    const runner = createCoordinatorRunner({ selection, dialogue, player, renderer })
+    await runner.resume()
+    await runner.accept('deadline exact selection')
+    const turnPromise = runner.runTurn()
+    await entered.promise
+    // Release the valid result exactly when the deadline is reached:
+    // isDeadlineExpired treats now >= atMs as expired, so the held result must
+    // be rejected rather than used or replaced by the fallback.
+    runner.clock.advance(selectionDeadlineAtMs - runner.clock.nowMs())
+    gate.release()
+    const turn = await turnPromise
+    expect(turn.status).toBe('stale')
+    expect(turn.plan).toBeNull()
+    expect(dialogue.requests()).toEqual([])
+    expect(player.executeCalls()).toBe(0)
+    expect(renderer.calls()).toBe(0)
+    expect(runner.deliveries()).toHaveLength(0)
+    expect(runner.rejectedLate()).toBeGreaterThanOrEqual(1)
+  })
 })
 
 describe('M5 coordinator reactions (production)', () => {
@@ -242,6 +277,41 @@ describe('M5 coordinator reactions (production)', () => {
     expect(renderer.calls()).toBe(0)
     expect(player.executeCalls()).toBe(1)
     expect(runner.deliveries()).toHaveLength(1)
+  })
+
+  it('accepts valid speech when the reaction returns exactly at its deadline', async () => {
+    const gate = createGate()
+    const entered = createGate()
+    let reactionDeadlineAtMs = 0
+    const gated = createGatedReactionPort(gate.promise, () => entered.release())
+    const reaction: ReactionPort = {
+      async decide(request, context) {
+        reactionDeadlineAtMs = request.deadline.atMs
+        return gated.decide(request, context)
+      },
+    }
+    const player = createCountingPlayer(correct.createFixturePlayer())
+    const renderer = correct.createCountingRenderer(correct.createFixtureRendererPort())
+    const runner = createCoordinatorRunner({ reaction, player, renderer })
+    await runner.resume()
+    await runner.accept('deadline exact reaction')
+    const turnPromise = runner.runTurn()
+    await entered.promise
+    // Return the decision exactly when the reaction deadline is reached.
+    runner.clock.advance(reactionDeadlineAtMs - runner.clock.nowMs())
+    gate.release()
+    const turn = await turnPromise
+    expect(turn.status).toBe('completed')
+    // The expired reaction is dropped to its no-op: no renderer dispatch...
+    expect(renderer.calls()).toBe(0)
+    expect(providerCall(runner, 'reaction')?.disposition).toBe('timeout')
+    // ...while the otherwise valid speech still plays and the cycle deadline
+    // (60s) remains live well past the reaction boundary.
+    expect(player.executeCalls()).toBe(1)
+    expect(runner.deliveries()).toHaveLength(1)
+    expect(runner.deliveries()[0]?.classification).toBe('fully-delivered')
+    expect(runner.clock.nowMs()).toBe(reactionDeadlineAtMs)
+    expect(runner.clock.nowMs()).toBeLessThan(60_000)
   })
 })
 
@@ -1828,6 +1898,64 @@ describe('M5 coordinator residual boundary defects (production)', () => {
     await runner.accept('fallback disallowed')
     const turn = await runner.runTurn()
     expect(turn.status).toBe('deferred')
+    expect(runner.deliveries()).toHaveLength(0)
+  })
+
+  it('captures an accepted non-default reply intent unchanged in the dialogue request', async () => {
+    const dialogue = createCapturingDialoguePort(correct.createFixtureDialoguePort())
+    const runner = createCoordinatorRunner({
+      selection: correct.createAlternateSelectionPort(),
+      dialogue,
+      profile: { allowedIntents: ['answer', 'clarify'] },
+    })
+    await runner.resume()
+    await runner.accept('clarify intent')
+    const turn = await runner.runTurn()
+    expect(turn.status).toBe('completed')
+    expect(turn.plan?.replyIntent).toBe('clarify')
+    expect(providerCall(runner, 'selection')?.disposition).toBe('accepted')
+    // The provider's accepted intent reaches the dialogue request unchanged.
+    expect(dialogue.requests()).toHaveLength(1)
+    expect(dialogue.requests()[0]?.responsePlan.replyIntent).toBe('clarify')
+    expect(runner.deliveries()).toHaveLength(1)
+    expect(runner.deliveries()[0]?.classification).toBe('fully-delivered')
+  })
+
+  it('defers a malformed selection returned exactly at candidate expiry while its deadline is live', async () => {
+    const gate = createGate()
+    const entered = createGate()
+    const malformed = createMalformedSelectionPort()
+    const selection: SelectionPort = {
+      async select(request, context) {
+        entered.release()
+        await gate.promise
+        return malformed.select(request, context)
+      },
+    }
+    const dialogue = createCapturingDialoguePort(correct.createFixtureDialoguePort())
+    const player = createCountingPlayer(correct.createFixturePlayer())
+    const renderer = correct.createCountingRenderer(correct.createFixtureRendererPort())
+    const runner = createCoordinatorRunner({
+      selection,
+      dialogue,
+      player,
+      renderer,
+      inputTtlMs: 1000,
+      timings: { selectionMs: 5000 },
+    })
+    await runner.resume()
+    await runner.accept('candidate expiry')
+    const turnPromise = runner.runTurn()
+    await entered.promise
+    // Return the malformed result exactly when the single candidate expires,
+    // while the selection deadline (5000ms) is still live: no fallback speech.
+    runner.clock.advance(1000)
+    gate.release()
+    const turn = await turnPromise
+    expect(turn.status).toBe('deferred')
+    expect(dialogue.requests()).toEqual([])
+    expect(player.executeCalls()).toBe(0)
+    expect(renderer.calls()).toBe(0)
     expect(runner.deliveries()).toHaveLength(0)
   })
 
