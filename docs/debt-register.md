@@ -13,3 +13,14 @@ agent-induced bloat, evaluation debt, guardrail debt, human/cognitive debt.
 | DEBT-05 | untouchable code | `src/contracts/app/*` frozen | coordination cost | M5 | by design (ADR-006) |
 | DEBT-06 | agent-induced bloat | multiple stacked PRs pending merge (#9/#23/#24) | rebase churn | team | sequence merges |
 | DEBT-07 | guardrail debt | M4 reports 5 Windows-only `test:m6` failures (`m6-sqlite` ×3, `m6-02-boundary` ×2); Linux passes 181/14 and the cleanup branch 182/14 | no Windows test claim; CI is Linux-only | M6 | separate platform investigation; do not claim Windows coverage |
+
+## PR53 IPC literal follow-up
+
+Owner: M5. Status: open, non-blocking, as identified in the
+[M6 review](https://github.com/inscripoem/isla/pull/53#pullrequestreview-5598159923).
+`src/runtime/production-cli.ts` and `test/support/production-cli-kit.ts` each define
+`isla.runtime.shutdown`. They can drift because there is no explicit agreement
+check. A follow-up should use a shared side-effect-free constant or add an
+agreement test, preserving shutdown success, pending/failed release, duplicate
+message and startup-failure coverage. This entry records the debt; it does not
+claim the duplication is fixed or allocate a new stable ID.
