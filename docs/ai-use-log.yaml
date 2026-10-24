@@ -3033,3 +3033,39 @@ entries:
       private_probe: "Actual client/driver with fixture transport: R1 mutable-model probe failed with accepted/one trigger; identical ESM probe passed after model capture with failed/vts_model_mismatch/zero triggers."
       ci: "Not yet run at metadata creation; the exact published-head checks are reported separately in the PR/Issue progress."
     scope: "Only offline C candidate; transport/device responses are controlled fixtures, not live VTS. No endpoint discovery, socket construction, pairing or credential persistence; D/M5 supplies the real exclusively owned connection and verified assets. A trigger response means accepted, never animation started/completed or physical silence. External model-change TOCTOU, controlled stopped/settled replacement, scheduling/global dedup/epoch and production composition remain owner work. Shared contracts, dependencies/manifests/lock, browser entry and other modules/register IDs are unchanged. D, Windows shutdown/restart, real measurement and G4/S6 remain pending; Issue2 stays Open with unfinished tasks unchecked."
+
+  - date: "2026-10-24"
+    task: M1-02-C-main-synchronization
+    branch: feat/m1-02-vts-adapter
+    change: >-
+      Integrate reviewed main 0868e0a into the existing M1-02 C branch without
+      rewriting its published history. OpenCode resolves only the AI-use-log
+      append conflict, preserving all original entry associations and both
+      main additions plus the M1 C entry. No M1 source, test, README, dependency,
+      shared interface or runtime behavior is authored by this synchronization;
+      incoming M5 code retains its original ownership and provenance.
+    requirements: [FR-03, FR-04, FR-05, NFR-06]
+    invariants: []
+    cases: []
+    commits: [1cb4dd10b68fb2494fcbd50b59a93f03cbf9a13c]
+    agent: OpenCode
+    provider: deepseek
+    model: deepseek-flash
+    opencode_version: "1.18.34"
+    session: ses_e92e566f4ffe2wNq61TA7zf0Xt
+    supervision: >-
+      Codex scopes the approved integration, performs Git operations and actual
+      validation, and appends this factual metadata. The genuine native Windows
+      OpenCode run uses pure/build/xhigh, edits only the conflict, and retains
+      four full raw originals with a passing central archive audit privately.
+    human_review: >-
+      M5 approval (PR56 review 5636947721) remains bound to ed9b2ed.
+      The synchronized delta is pending M5
+      re-review. The user authorized routine conflict repair, tested PR update
+      and Issue2 synchronization; no PR merge, D implementation or live run.
+    verification:
+      metadata: "Strict YAML has no duplicate keys; base106 plus main2 plus C1 entries retained intact before this appended synchronization entry. Five original M1 files retain their blobs and hashes."
+      focused: "Actual Windows/Node24 M1 238/238 and composition12/12 passed; candidate pnpm verify passed typecheck/lint then exited1 at full1140 passed/16 failed. Separate build and actual six-path G6 passed."
+      comparison: "Fresh exact-main0868 snapshot full1115/17; all16 candidate failure names are common. The one baseline-only canonical-Git-context trace failure reflects the Git-less snapshot. No runtime fix is inferred for that context difference."
+      tooling: "The copied baseline default lint selected no files under a parent-ignored notes directory; its raw failure is retained and explicit pinned-file lint passed."
+      limits: "Windows path/import/CLI/signal/SQLite and original force-kill SIGTERM limits remain. No VTS pairing/model/visible action, acoustic, production, D or G4/S6 acceptance. Prior evidence and approvals are not rebound."
