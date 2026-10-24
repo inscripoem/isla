@@ -721,14 +721,63 @@ The tests for this increment live in
 and use [`test/support/m1-vts-kit.ts`](../../test/support/m1-vts-kit.ts) as the
 controlled transport peer. `pnpm test:m1` includes them without script changes.
 
+### Connection handle (M1-02 increment D offline)
+
+[`vts-connection.ts`](vts-connection.ts) adapts one injected, already OPEN Node
+`ws` socket to the existing `VtsTransport` seam.
+`createVtsConnectionHandle({ socket, closeTimeoutMs })` validates the OPEN ready
+state and a finite positive cleanup bound before taking ownership; a rejected
+factory call leaves the caller's socket untouched. It creates no endpoint,
+performs no discovery, pairing or authentication, and reads no credential. The
+caller still owns the private connection decision, and the C client still
+performs its own `APIStateResponse` checks.
+
+The handle exposes `{ transport, close(), closed }`. `transport.send` forwards
+one serialized request to the socket. A synchronous send throw and an
+asynchronous `ws` send-callback error both become one safe `error` transport
+event; the adapter never retries, replays or exposes raw exception text.
+`message` handlers normalize string, `Buffer`, `ArrayBuffer` and `Buffer[]` text
+frames to a UTF-8 string; malformed UTF-8 and unexpected binary frames are
+ignored. `close` and `error` are forwarded once without the raw close reason or
+error object. One application subscriber is allowed at a time; its unsubscribe
+is idempotent, and subscriber exceptions are contained. Only listeners added by
+this adapter are removed.
+
+Closing has three distinct facts:
+
+- **Close initiation** is the idempotent local request made by `close()` or
+  `transport.dispose()`. Both share one path and call `socket.close()` at most
+  once. Initiation alone is not evidence that the physical socket closed.
+- **Closed completion** is reported only after the socket's actual `close`
+  event is observed and the adapter's owned listeners and timer are released.
+  `closed` resolves `{ kind: 'closed' }`, and `close()` returns that same
+  Promise. A normal remote close reaches the same completion.
+- **Failed cleanup (quarantined)** resolves
+  `{ kind: 'failed', code: 'close_timeout' | 'close_failed' }` when the cleanup
+  budget expires or `socket.close()` throws.
+  The Promise never rejects with a raw error. The adapter does not retry,
+  reconnect or call `terminate`, and it refuses replacement sends and
+  subscribers through the failed handle. A later real close releases the
+  retained guards but does not rewrite the failed outcome.
+
+`closeTimeoutMs` is an independent cleanup budget, not a renderer or request
+timeout, and this module invents no production default. The Node-only module is
+not exported from `browser/index.ts` and is not composed into a production
+entrypoint in this checkout. The offline tests in
+[`test/offline/m1-performance.test.ts`](../../test/offline/m1-performance.test.ts)
+use [`test/support/m1-vts-connection-kit.ts`](../../test/support/m1-vts-connection-kit.ts)
+for controlled sockets and one local `127.0.0.1` ephemeral fixture server; they
+do not contact VTS, port 8001, a provider or credentials. Real pairing,
+authentication, model/hotkey verification and device actions remain
+unimplemented in increment D and require separate acceptance.
+
 ## Not yet implemented
 
 - Live VTube Studio attachment/pairing, authentication, live model/hotkey
   verification, a production connection and device-facing integration
-  (M1-02 increment D). The offline C client and hotkey driver above are
-  implemented and tested only against an injected, exclusively owned transport;
-  no live session, animation start/completion or physical device proof is
-  claimed.
+  (M1-02 increment D). The offline C client, hotkey driver and connection handle
+  above target injected or locally fabricated sockets only; no live session,
+  animation start/completion or physical device proof is claimed.
 - The authoritative `DeadlineGate` (M5) and the browser receipt transport (M2).
   The registry above is composed and invalidated by M5 later; it grants no
   dispatch authority.

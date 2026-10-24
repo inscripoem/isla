@@ -133,6 +133,15 @@ import {
   fixtureVtsApiError,
   fixtureVtsResponse,
 } from '../support/m1-vts-kit'
+import { createVtsConnectionHandle } from '../../src/performance/vts-connection'
+import {
+  M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+  M1_VTS_CONNECTION_RAW_TEXT,
+  closeM1VtsFixtureClient,
+  createFixtureVtsSocket,
+  openM1VtsFixtureClient,
+  startM1VtsFixtureServer,
+} from '../support/m1-vts-connection-kit'
 
 /** Deterministically drain queued microtasks without wall-clock waits. */
 async function microtasks(rounds = 8): Promise<void> {
@@ -5498,5 +5507,592 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
       capabilityRevision: 1,
     })
     adapter.dispose()
+  })
+})
+
+describe('M1 VTS connection handle', () => {
+  interface FixtureWireRequest {
+    readonly requestID: string
+    readonly messageType: string
+    readonly data: unknown
+  }
+
+  function wireReply(
+    request: FixtureWireRequest,
+    messageType: string,
+    data: unknown,
+  ): string {
+    return JSON.stringify({
+      apiName: 'VTubeStudioPublicAPI',
+      apiVersion: '1.0',
+      timestamp: 1,
+      requestID: request.requestID,
+      messageType,
+      data,
+    })
+  }
+
+  it('validates the injected OPEN socket and cleanup bound before ownership', () => {
+    const socket = createFixtureVtsSocket()
+    const foreignMessage = (): void => undefined
+    let foreignCloseCalls = 0
+    const foreignClose = (): void => {
+      foreignCloseCalls += 1
+    }
+    const foreignError = (): void => undefined
+    socket.on('message', foreignMessage)
+    socket.on('close', foreignClose)
+    socket.on('error', foreignError)
+    expect(socket.listenerCount('message')).toBe(1)
+    expect(socket.listenerCount('close')).toBe(1)
+    expect(socket.listenerCount('error')).toBe(1)
+    const handle = createVtsConnectionHandle({
+      socket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+
+    expect(typeof handle.transport.send).toBe('function')
+    expect(typeof handle.transport.subscribe).toBe('function')
+    expect(typeof handle.transport.dispose).toBe('function')
+    expect(typeof handle.close).toBe('function')
+    expect(handle.closed).toBeInstanceOf(Promise)
+    expect(socket.listenerCount('message')).toBe(2)
+    expect(socket.listenerCount('close')).toBe(2)
+    expect(socket.listenerCount('error')).toBe(2)
+    expect(socket.sendCount()).toBe(0)
+    expect(socket.closeCount()).toBe(0)
+    expect(socket.terminateCount()).toBe(0)
+
+    for (const readyState of [0, 2, 3]) {
+      const rejected = createFixtureVtsSocket({ readyState })
+      expect(() =>
+        createVtsConnectionHandle({
+          socket: rejected,
+          closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+        }),
+      ).toThrow()
+      expect(rejected.listenerCount('message')).toBe(0)
+      expect(rejected.listenerCount('close')).toBe(0)
+      expect(rejected.listenerCount('error')).toBe(0)
+      expect(rejected.sendCount()).toBe(0)
+      expect(rejected.closeCount()).toBe(0)
+      expect(rejected.terminateCount()).toBe(0)
+    }
+
+    for (const closeTimeoutMs of [
+      0,
+      -1,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      2_147_483_648,
+      '50',
+    ]) {
+      const rejected = createFixtureVtsSocket()
+      expect(() =>
+        createVtsConnectionHandle({
+          socket: rejected,
+          closeTimeoutMs: closeTimeoutMs as number,
+        }),
+      ).toThrow()
+      expect(rejected.listenerCount('message')).toBe(0)
+      expect(rejected.listenerCount('close')).toBe(0)
+      expect(rejected.listenerCount('error')).toBe(0)
+      expect(rejected.closeCount()).toBe(0)
+      expect(rejected.sendCount()).toBe(0)
+    }
+
+    handle.close()
+    socket.emitClose()
+    expect(foreignCloseCalls).toBe(1)
+    expect(socket.listenerCount('message')).toBe(1)
+    expect(socket.listenerCount('close')).toBe(1)
+    expect(socket.listenerCount('error')).toBe(1)
+  })
+
+  it('allows one subscriber, contains subscriber exceptions and unsubscribes idempotently', () => {
+    const socket = createFixtureVtsSocket()
+    const handle = createVtsConnectionHandle({
+      socket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+    const unsubscribe = handle.transport.subscribe(() => {
+      throw new Error('fixture subscriber failure')
+    })
+
+    expect(() => handle.transport.subscribe(() => undefined)).toThrow()
+    expect(() => socket.emitMessage('contained subscriber exception')).not.toThrow()
+
+    unsubscribe()
+    unsubscribe()
+
+    const received: VtsTransportEvent[] = []
+    handle.transport.subscribe((event) => {
+      received.push(event)
+    })
+    socket.emitMessage('after unsubscribe')
+    expect(received).toEqual([{ type: 'message', data: 'after unsubscribe' }])
+
+    handle.close()
+    socket.emitClose()
+  })
+
+  it('normalizes text frames from strings, Buffers, ArrayBuffers and Buffer arrays', () => {
+    const socket = createFixtureVtsSocket()
+    const handle = createVtsConnectionHandle({
+      socket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+    const received: string[] = []
+    handle.transport.subscribe((event) => {
+      if (event.type === 'message' && typeof event.data === 'string') {
+        received.push(event.data)
+      }
+    })
+
+    const text = '{"fixture":"UTF-8 text \u65e5\u672c\u8a9e"}'
+    const bytes = Buffer.from(text, 'utf8')
+    const arrayBuffer = bytes.buffer.slice(
+      bytes.byteOffset,
+      bytes.byteOffset + bytes.byteLength,
+    ) as ArrayBuffer
+    const split = Math.floor(bytes.length / 2)
+
+    socket.emitMessage(text)
+    socket.emitMessage(bytes)
+    socket.emitMessage(arrayBuffer)
+    socket.emitMessage([bytes.subarray(0, split), bytes.subarray(split)])
+
+    expect(received).toEqual([text, text, text, text])
+
+    handle.close()
+    socket.emitClose()
+  })
+
+  it('rejects malformed encoding and ignores binary or unrelated frames', () => {
+    const socket = createFixtureVtsSocket()
+    const handle = createVtsConnectionHandle({
+      socket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+    const received: VtsTransportEvent[] = []
+    handle.transport.subscribe((event) => {
+      received.push(event)
+    })
+
+    socket.emitMessage(Buffer.from([0xff, 0xfe]))
+    socket.emitMessage(Buffer.from([0xe2, 0x82]))
+    socket.emitMessage(Buffer.from('binary text must be ignored', 'utf8'), true)
+    socket.emitMessage({ unexpected: true })
+    socket.emitMessage(null)
+    socket.emitMessage([Buffer.from('a'), 'not a buffer'])
+    socket.emitMessage(new Uint8Array([0x61]))
+    socket.emitMessage('accepted after rejected frames')
+
+    expect(received).toEqual([{ type: 'message', data: 'accepted after rejected frames' }])
+
+    handle.close()
+    socket.emitClose()
+  })
+
+  it('contains synchronous and asynchronous send failures without raw text or retry', async () => {
+    const syncSocket = createFixtureVtsSocket({ sendFailure: 'sync-throw' })
+    const syncHandle = createVtsConnectionHandle({
+      socket: syncSocket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+    const syncEvents: VtsTransportEvent[] = []
+    syncHandle.transport.subscribe((event) => {
+      syncEvents.push(event)
+    })
+
+    expect(() => syncHandle.transport.send('{"fixture":"sync send"}')).not.toThrow()
+    expect(syncEvents).toEqual([{ type: 'error' }])
+    expect(JSON.stringify(syncEvents)).not.toContain(M1_VTS_CONNECTION_RAW_TEXT)
+    expect(syncSocket.sendCount()).toBe(1)
+    expect(syncSocket.sentRaw()).toEqual(['{"fixture":"sync send"}'])
+
+    syncHandle.close()
+    syncSocket.emitClose()
+
+    const asyncSocket = createFixtureVtsSocket({ sendFailure: 'async-callback-error' })
+    const asyncHandle = createVtsConnectionHandle({
+      socket: asyncSocket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+    const asyncEvents: VtsTransportEvent[] = []
+    asyncHandle.transport.subscribe((event) => {
+      asyncEvents.push(event)
+    })
+
+    asyncHandle.transport.send('{"fixture":"async send"}')
+    await microtasks()
+    expect(asyncEvents).toEqual([{ type: 'error' }])
+    expect(JSON.stringify(asyncEvents)).not.toContain(M1_VTS_CONNECTION_RAW_TEXT)
+    expect(asyncSocket.sendCount()).toBe(1)
+    expect(asyncSocket.sentRaw()).toEqual(['{"fixture":"async send"}'])
+
+    asyncHandle.close()
+    asyncSocket.emitClose()
+  })
+
+  it('shares one close-initiation path without claiming physical closure early', async () => {
+    const socket = createFixtureVtsSocket()
+    const handle = createVtsConnectionHandle({
+      socket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+    let completed: unknown = null
+    void handle.closed.then((result) => {
+      completed = result
+    })
+
+    const firstClose = handle.close()
+    handle.transport.dispose()
+    const secondClose = handle.close()
+
+    expect(secondClose).toBe(firstClose)
+    expect(handle.closed).toBe(firstClose)
+    expect(socket.closeCount()).toBe(1)
+    await microtasks()
+    expect(completed).toBeNull()
+    expect(() => handle.transport.subscribe(() => undefined)).toThrow()
+
+    const sendsBeforeClose = socket.sendCount()
+    handle.transport.send('{"fixture":"after close initiation"}')
+    expect(socket.sendCount()).toBe(sendsBeforeClose)
+
+    socket.emitClose()
+    await expect(handle.closed).resolves.toEqual({ kind: 'closed' })
+    expect(completed).toEqual({ kind: 'closed' })
+    expect(socket.closeCount()).toBe(1)
+    expect(socket.terminateCount()).toBe(0)
+    expect(socket.listenerCount('message')).toBe(0)
+    expect(socket.listenerCount('close')).toBe(0)
+    expect(socket.listenerCount('error')).toBe(0)
+  })
+
+  it('resolves closed and forwards one safe close on a remote close', async () => {
+    const socket = createFixtureVtsSocket()
+    const handle = createVtsConnectionHandle({
+      socket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+    const events: VtsTransportEvent[] = []
+    handle.transport.subscribe((event) => {
+      events.push(event)
+    })
+
+    socket.emitClose(1006, Buffer.from(`${M1_VTS_CONNECTION_RAW_TEXT} remote close reason`))
+    await expect(handle.closed).resolves.toEqual({ kind: 'closed' })
+
+    expect(events).toEqual([{ type: 'close' }])
+    expect(JSON.stringify(events)).not.toContain(M1_VTS_CONNECTION_RAW_TEXT)
+    expect(socket.listenerCount('message')).toBe(0)
+    expect(socket.listenerCount('close')).toBe(0)
+    expect(socket.listenerCount('error')).toBe(0)
+
+    handle.close()
+    expect(socket.closeCount()).toBe(0)
+  })
+
+  it('forwards one safe error while unclosed and keeps completion pending', async () => {
+    const socket = createFixtureVtsSocket()
+    const handle = createVtsConnectionHandle({
+      socket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+    const events: VtsTransportEvent[] = []
+    handle.transport.subscribe((event) => {
+      events.push(event)
+    })
+
+    socket.emitError(new Error(`${M1_VTS_CONNECTION_RAW_TEXT} first socket error`))
+    socket.emitError(new Error(`${M1_VTS_CONNECTION_RAW_TEXT} second socket error`))
+    expect(events).toEqual([{ type: 'error' }])
+    expect(JSON.stringify(events)).not.toContain(M1_VTS_CONNECTION_RAW_TEXT)
+
+    let completed: unknown = null
+    void handle.closed.then((result) => {
+      completed = result
+    })
+    await microtasks()
+    expect(completed).toBeNull()
+
+    socket.emitClose()
+    await expect(handle.closed).resolves.toEqual({ kind: 'closed' })
+    expect(events).toEqual([{ type: 'error' }, { type: 'close' }])
+  })
+
+  it('clears the close timer when the socket emits close synchronously', async () => {
+    vi.useFakeTimers()
+    try {
+      const socket = createFixtureVtsSocket({ closeEmission: 'synchronous' })
+      const handle = createVtsConnectionHandle({
+        socket,
+        closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+      })
+      const events: VtsTransportEvent[] = []
+      handle.transport.subscribe((event) => {
+        events.push(event)
+      })
+
+      handle.close()
+
+      await expect(handle.closed).resolves.toEqual({ kind: 'closed' })
+      expect(events).toEqual([{ type: 'close' }])
+      expect(vi.getTimerCount()).toBe(0)
+      expect(socket.closeCount()).toBe(1)
+      expect(socket.listenerCount('message')).toBe(0)
+      expect(socket.listenerCount('close')).toBe(0)
+      expect(socket.listenerCount('error')).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('fails on close timeout and keeps a late close quarantined without reversal', async () => {
+    vi.useFakeTimers()
+    try {
+      const socket = createFixtureVtsSocket()
+      const handle = createVtsConnectionHandle({
+        socket,
+        closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+      })
+
+      handle.close()
+      await vi.advanceTimersByTimeAsync(M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS)
+      await expect(handle.closed).resolves.toEqual({
+        kind: 'failed',
+        code: 'close_timeout',
+      })
+      expect(vi.getTimerCount()).toBe(0)
+      expect(socket.closeCount()).toBe(1)
+      expect(socket.listenerCount('message')).toBe(1)
+      expect(socket.listenerCount('close')).toBe(1)
+      expect(socket.listenerCount('error')).toBe(1)
+
+      expect(() =>
+        socket.emitError(new Error(`${M1_VTS_CONNECTION_RAW_TEXT} timeout socket error`)),
+      ).not.toThrow()
+      expect(socket.listenerCount('message')).toBe(1)
+      expect(socket.listenerCount('close')).toBe(1)
+      expect(socket.listenerCount('error')).toBe(1)
+      await expect(handle.closed).resolves.toEqual({
+        kind: 'failed',
+        code: 'close_timeout',
+      })
+
+      const sendsBeforeLateClose = socket.sendCount()
+      handle.transport.send('{"fixture":"after timeout"}')
+      expect(socket.sendCount()).toBe(sendsBeforeLateClose)
+      expect(() => handle.transport.subscribe(() => undefined)).toThrow()
+      handle.close()
+      expect(socket.closeCount()).toBe(1)
+
+      socket.emitClose()
+      await microtasks()
+      expect(socket.listenerCount('message')).toBe(0)
+      expect(socket.listenerCount('close')).toBe(0)
+      expect(socket.listenerCount('error')).toBe(0)
+      expect(socket.terminateCount()).toBe(0)
+      await expect(handle.closed).resolves.toEqual({
+        kind: 'failed',
+        code: 'close_timeout',
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('fails safely when close throws and releases guards on a later close', async () => {
+    vi.useFakeTimers()
+    try {
+      const socket = createFixtureVtsSocket({ closeThrows: true })
+      const handle = createVtsConnectionHandle({
+        socket,
+        closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+      })
+      const events: VtsTransportEvent[] = []
+      handle.transport.subscribe((event) => {
+        events.push(event)
+      })
+
+      expect(() => handle.close()).not.toThrow()
+      await expect(handle.closed).resolves.toEqual({
+        kind: 'failed',
+        code: 'close_failed',
+      })
+      expect(events).toEqual([])
+      expect(JSON.stringify(events)).not.toContain(M1_VTS_CONNECTION_RAW_TEXT)
+      expect(vi.getTimerCount()).toBe(0)
+      expect(socket.closeCount()).toBe(1)
+      expect(socket.listenerCount('message')).toBe(1)
+      expect(socket.listenerCount('close')).toBe(1)
+      expect(socket.listenerCount('error')).toBe(1)
+
+      expect(() =>
+        socket.emitError(new Error(`${M1_VTS_CONNECTION_RAW_TEXT} close failure socket error`)),
+      ).not.toThrow()
+      expect(events).toEqual([{ type: 'error' }])
+      expect(JSON.stringify(events)).not.toContain(M1_VTS_CONNECTION_RAW_TEXT)
+      expect(socket.listenerCount('message')).toBe(1)
+      expect(socket.listenerCount('close')).toBe(1)
+      expect(socket.listenerCount('error')).toBe(1)
+      await expect(handle.closed).resolves.toEqual({
+        kind: 'failed',
+        code: 'close_failed',
+      })
+
+      socket.emitClose()
+      await microtasks()
+      expect(events).toEqual([{ type: 'error' }, { type: 'close' }])
+      expect(socket.listenerCount('message')).toBe(0)
+      expect(socket.listenerCount('close')).toBe(0)
+      expect(socket.listenerCount('error')).toBe(0)
+      await expect(handle.closed).resolves.toEqual({
+        kind: 'failed',
+        code: 'close_failed',
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it.each(['async-callback-error', 'sync-throw'] as const)(
+    'integrates with the actual VTS client and renderer after %s without replay',
+    async (failureMode) => {
+      const socket = createFixtureVtsSocket()
+      const handle = createVtsConnectionHandle({
+        socket,
+        closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+      })
+      const requests: FixtureWireRequest[] = []
+      let triggerRequest: FixtureWireRequest | null = null
+
+      socket.setOnSend((context) => {
+        const request = JSON.parse(context.serialized) as FixtureWireRequest
+        requests.push(request)
+        switch (request.messageType) {
+          case 'APIStateRequest':
+            context.reply(
+              wireReply(request, 'APIStateResponse', {
+                active: true,
+                vTubeStudioVersion: 'fixture-vts-offline',
+                currentSessionAuthenticated: true,
+              }),
+            )
+            return
+          case 'CurrentModelRequest':
+            context.reply(
+              wireReply(request, 'CurrentModelResponse', {
+                modelLoaded: true,
+                modelID: M1_VTS_FIXTURE_MODEL_ID,
+              }),
+            )
+            return
+          case 'HotkeysInCurrentModelRequest':
+            context.reply(
+              wireReply(request, 'HotkeysInCurrentModelResponse', {
+                modelLoaded: true,
+                modelID: M1_VTS_FIXTURE_MODEL_ID,
+                availableHotkeys: [{ hotkeyID: M1_VTS_FIXTURE_HOTKEY_SMILE }],
+              }),
+            )
+            return
+          case 'HotkeyTriggerRequest':
+            triggerRequest = request
+            if (failureMode === 'sync-throw') {
+              context.failSynchronously()
+            } else {
+              context.failAsynchronously()
+            }
+            return
+          default:
+            context.failAsynchronously()
+        }
+      })
+
+      const renderer = createVtsRenderer({
+        transport: handle.transport,
+        modelId: M1_VTS_FIXTURE_MODEL_ID,
+        rendererId: M1_VTS_FIXTURE_RENDERER_ID,
+        characterId: M1_VTS_FIXTURE_CHARACTER_ID,
+        capabilityRevision: 1,
+        mappings: [{ actionId: 'smile', hotkeyId: M1_VTS_FIXTURE_HOTKEY_SMILE }],
+        timeoutMs: 1000,
+        maxPending: 4,
+        deadlineGate: createTestDeadlineGate(),
+        receipts: createTestReceiptTools('vts-connection-integration'),
+      })
+
+      const receipt = await renderer.renderer.execute(
+        fixturePerformanceCommand({ actionId: 'smile' }),
+        createCallContext(),
+      )
+      expect(receipt).toMatchObject({ stage: 'unknown', reasonCode: 'vts_trigger_unknown' })
+
+      const trigger = triggerRequest
+      if (trigger === null) throw new Error('fixture: trigger request was not sent')
+      const sendsBeforeLateFrame = socket.sendCount()
+      const requestsBeforeLateFrame = requests.length
+
+      socket.emitMessage(
+        wireReply(trigger, 'HotkeyTriggerResponse', {
+          hotkeyID: M1_VTS_FIXTURE_HOTKEY_SMILE,
+        }),
+      )
+      await microtasks()
+      expect(socket.sendCount()).toBe(sendsBeforeLateFrame)
+      expect(requests.length).toBe(requestsBeforeLateFrame)
+      expect(
+        requests.filter((request) => request.messageType === 'HotkeyTriggerRequest'),
+      ).toHaveLength(1)
+
+      renderer.dispose()
+      expect(socket.closeCount()).toBe(1)
+      socket.emitClose()
+      await expect(handle.closed).resolves.toEqual({ kind: 'closed' })
+      expect(socket.terminateCount()).toBe(0)
+    },
+  )
+
+  it('adapts message and close from a real offline ws fixture peer on 127.0.0.1', async () => {
+    const server = await startM1VtsFixtureServer()
+    try {
+      const client = await openM1VtsFixtureClient(server.url)
+      try {
+        await server.waitForClient()
+        const handle = createVtsConnectionHandle({ socket: client, closeTimeoutMs: 1000 })
+        const events: VtsTransportEvent[] = []
+        let resolveMessage!: (text: string) => void
+        const messageArrived = new Promise<string>((resolve) => {
+          resolveMessage = resolve
+        })
+
+        handle.transport.subscribe((event) => {
+          events.push(event)
+          if (event.type === 'message' && typeof event.data === 'string') {
+            resolveMessage(event.data)
+          }
+        })
+
+        const text = '{"offlineFixture":"real-ws-message"}'
+        server.sendText(text)
+        await expect(messageArrived).resolves.toBe(text)
+
+        server.sendBinary(Buffer.from('binary frame must not become text', 'utf8'))
+        server.closeClient()
+        await expect(handle.closed).resolves.toEqual({ kind: 'closed' })
+
+        expect(events.filter((event) => event.type === 'message')).toEqual([
+          { type: 'message', data: text },
+        ])
+        expect(events.at(-1)).toEqual({ type: 'close' })
+      } finally {
+        await closeM1VtsFixtureClient(client)
+      }
+    } finally {
+      await server.close()
+    }
   })
 })
