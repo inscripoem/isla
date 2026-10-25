@@ -185,3 +185,10 @@ The user approved local I1 implementation on 2026-10-15. The application endpoin
 ## M1-02 D offline connection prerequisite
 
 `src/performance/vts-connection.ts` and its helper `test/support/m1-vts-connection-kit.ts` are an offline module-level prerequisite for a future D/M5 connection composition. The appended suite in `test/offline/m1-performance.test.ts` is selected by the existing M1 role command `pnpm test:m1`. This note adds no registered case or requirement row and assigns no ID. Existing case-verifier rows, requirement ownership and pending product status are unchanged; live pairing, authentication, model/hotkey verification, device actions and production physical-close recovery remain unimplemented and require M5/M6 review and separate acceptance.
+
+
+## M1-02 D2 offline pairing prerequisite
+
+[`src/performance/vts-pairing.ts`](../../src/performance/vts-pairing.ts) supplies the private protocol prerequisite for M1-02 authenticated-connection handoff, supporting FR-03/FR-04/FR-05 and NFR-06 at module scope. The controlled peer/provider helper is [`test/support/m1-vts-pairing-kit.ts`](../../test/support/m1-vts-pairing-kit.ts); actual primitive, cancellation/cleanup and same-handle C-client regressions are appended to [`test/offline/m1-performance.test.ts`](../../test/offline/m1-performance.test.ts), selected by the existing `pnpm test:m1` command. These are prerequisite checks, not a newly registered global case or closure of an existing product verifier.
+
+M5 supplies the finite overall acquisition signal, deployment budgets and identity/target-bound credential provider, including serialization while a shared-record save is unsettled. A test-only caller/provider illustrates that boundary; it does not implement or validate M5 production storage/composition. The original case rows, requirement owners, D1/C APIs and registered identifiers are unchanged. Live VTS pairing/authentication, verified model/hotkey actions, physical output, Windows recovery, real measurements and G4/S6 acceptance remain separate and unclaimed.
