@@ -3091,3 +3091,103 @@ entries:
     development_sequence: "Source-first implementation. The first implementation ran251 M1 tests successfully; a fresh read-only same-family static review found no P1/P2 and three Low coverage gaps. The author then added actual error emission during timeout/close-throw quarantine, synchronous plus asynchronous trigger-send integration, and foreign message/close/error listener preservation, without changing the adapter source or any original test body."
     verification: {"platform": "Actual Windows x64 / Node24.14.1 / installed ws8.22.0; native OpenCode1.18.34", "base": "e384f06d5c2c76a1e3457f1bb30ed438b085ed70; main tree equals the previously tested954 tree", "baseline": "Fresh M1 238/238 and composition12/12 passed. The full baseline1140passed/16failed is reused from R087 actual primary954, not claimed rerun here.", "focused": "Final M1 252/252 (14 added), composition12/12, typecheck/lint/build passed. All77 original top-level statements, including existing test bodies, remain byte-identical and ordered.", "full_suite": "1154 passed /16 failed /1170 total, exit1. All16 failure names exactly match the prior same-tree baseline; no additions or removals. Earlier candidate1153/16 remains preserved. Existing Windows path/import/CLI/signal/SQLite/force-kill limitations remain. The required pnpm verify passes typecheck/lint then exits1 with the same1154/16 and3 existing tsx ENOENT errors; a separate build passed.", "static_review": "Independent read-only DeepSeek session found no P1/P2 in the finite D1 scope; its three Low test suggestions were implemented and the follow-up confirms all addressed with no new concrete P1/P2. Same-family AI assistance is provisional, not human/owner acceptance. The model executed no tests; Codex ran and recorded validation separately.", "preservation": "C client/driver/mapped renderer, worker-entry tests, dependency manifest/lock and shared contracts/registered case rows are unchanged. Only new imports and a separate describe were added to the selected M1 role-test file.", "ci": "Not yet published at metadata preparation; exact-head CI and M5 request will be reported in PR and Issue2."}
     scope: "Offline module prerequisite only. The local ws test uses127.0.0.1 and an ephemeral fixture port, never VTS/8001 or a provider. This adapter neither creates a socket nor authenticates it; real pairing/acquisition, verified model/hotkey assets, stopped/settled replacement policy, M5 production composition and device recovery remain separate. An observed socket close is not animation cancellation or physical silence. No real VTS/model/action/acoustic, Windows production recovery, G4/S6, joint or course acceptance. Issues stay Open with existing checklist marks unchanged; original C and Windows evidence/approvals remain version-bound."
+
+
+  - date: 2026-10-25
+    task: M1-02-D2-private-pairing-offline
+    branch: feat/m1-02-vts-pairing
+    member: Pioneer141 (M1)
+    change: Add private VTS pairing/authentication over an injected D1 handle, explicit prompting modes and
+      credential provider, separate protocol budgets, cancellation without waiting for an unsettled
+      provider, safe cleanup facts and same-handle C handoff. Append actual regressions and English
+      documentation; record a module-level prerequisite trace without new registered IDs.
+    requirements:
+      - FR-03
+      - FR-04
+      - FR-05
+      - NFR-06
+    invariants:
+      - INV-01
+      - INV-02
+    cases: []
+    commits:
+      - 83b556055161cddfce025f45968bd39d9c63da25
+    agent: OpenCode
+    provider: deepseek
+    model: deepseek-flash
+    opencode_version: 1.18.34
+    launch_flags:
+      - --pure
+      - --agent
+      - build
+      - --variant
+      - xhigh
+      - --format
+      - json
+      - --auto
+    sessions:
+      - ses_e8c863f7fffea0upObYIjB90CU
+      - ses_e8c6a4c8affeIuer4ZM1zy6NbJ
+    supervision: OpenCode/official DeepSeek authored the production primitive, fixture helper, appended role
+      tests and performance README. Codex supplied the user-approved P002-D03 v03 task, captured originals,
+      ran actual Windows checks and a private actual-module probe, adjudicated the read-only review, added
+      factual trace/AI-use metadata and performed Git/publication. Model edits were allowlisted;
+      shell/network/config/credential/delegation operations and unrelated changes were denied. --auto
+      applied only within explicit permissions and never overrode deny rules.
+    human_review: The user explicitly approved v03 offline implementation and sixteen local acceptance
+      scenarios before implementation, complete transcripts, feat/m1-02-vts-pairing commit/push/PR, M5
+      review request and Issue2/58 synchronization. M5 static Issue58 review6398674128 and M1
+      confirmation6398766740 settle design requirements only, not this implementation. New-code consumer
+      review remains pending; no human implementation approval, real VTS/live, merge/auto-merge/enqueue or
+      coursework submission is claimed.
+    transcript_record: "Two genuine native Windows OpenCode sessions: seven author invocations and three
+      read-only review invocations; forty unabridged event/export/run-stderr/export-stderr originals,
+      byte-identical private archive copies and ten passing central session/provider/model audits. Author
+      round01 and reviewer round01 reached the length limit; their full originals remain. External
+      private-plan reads were denied; the approved requirements were supplied in bounded English tasks,
+      including the exact sixteen-scenario mapping for the final review."
+    development_sequence: Source-first implementation. Round02 authored the module; unchanged252 role tests
+      did not validate D2. A corrected private probe then reproduced authenticated returned after a
+      physical close during delegated unsubscribe. The author added a completion fence and real regression;
+      the identical probe changed from red to green. Core tests passed269. Further tests initially had
+      three fixed-microtask save-admission setup failures (282/3); observable provider save-entry promises
+      corrected them without weakening pending-save/cancellation assertions (285). Read-only review found
+      no P1/P2 and a Low synchronous abort-then-throw classification race; the author fixed it and added
+      abort-race, closed/failed-handle and invalid-credential regressions (289). No test-first history is
+      claimed. The first probe invocation had a Windows file-URL loader error; only the corrected probe is
+      behavioral evidence.
+    verification:
+      platform: Actual Windows x64 / Node24.14.1 / project pnpm12 / native OpenCode1.18.34; frozen-lockfile
+        install passed
+      base: a020417d93bf87514b72554df9401a08d765b463
+      baseline: Fresh M1 252/252, composition12/12, typecheck/lint/build passed; full1154 passed/16 failed.
+        Baseline JSON has no separate unhandled-errors field and is not evidence of a zero runtime-error
+        count.
+      focused: Final M1 289/289, thirty-seven added actual regressions, composition12/12, typecheck/lint/build
+        passed. Original41 non-import statements/test bodies retain text/order after LF normalization.
+        D1/C/helpers/worker-entry tests/manifests/lock/AGENTS retain original hashes.
+      trace: 41 passed; readiness39 passed/3 same known Windows negative-path failures. No requirement, case or
+        invariant register row/ID changed.
+      full_suite: 1191 passed/16 failed/1207 total; all16 failure names exactly equal fresh baseline, no
+        additions/removals. Required pnpm verify passes typecheck/lint then exits1 with the same1191/16 and
+        three existing tsx ENOENT errors; separate build passed. No all-green Windows or process-recovery
+        claim.
+      independent_static_review: Fresh read-only DeepSeek session found no P1/P2 in finite offline scope; final
+        targeted review confirms the Low abort/throw fix and entry coverage, with no new P1/P2.
+        Non-standard signal-removal behavior and one closed-observer closure per handle remain non-blocking
+        Low observations. Same-family/provisional assistance, no reviewer test execution or human/M5
+        approval.
+      private_probe: "Actual D1+pairing controlled peer: post-unsubscribe synchronous physical close returned
+        authenticated before fix; identical corrected probe returns safe failure with actual closed cleanup
+        after fix."
+      ci: Not published at metadata preparation; exact published-head CI and reviewer state are reported
+        separately in PR and Issue progress.
+    scope: Offline module prerequisite only, with fixture credentials/peers and test-only M5 caller/provider
+      illustrations. M5 owns finite overall acquisition deadline/cause/timer, actual budgets,
+      identity/target-bound provider and shared-record pending-save serialization/storage; no M5 production
+      code is implemented here. D1/C APIs, shared contracts, dependency files, browser entry and registered
+      IDs are unchanged. The completion fence covers an already-recorded close during pairing release, not
+      future post-handoff liveness; M5 rechecks and C retains APIState. No real credential file/store, VTS
+      connection/pairing/live/model/hotkey action, physical animation/silence, acoustic timing, Windows
+      production recovery or G4/S6 acceptance. Issues remain Open with existing checklists unchanged;
+      earlier evidence and approvals remain version-bound.
