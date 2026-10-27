@@ -1,7 +1,8 @@
 # Memory / state design
 
 Status: under review. M6 contributes the persistence portion; memory semantics are owned by M4 and
-live authority by M5. Step A record-shape coordination is under review. Updated: 2026-10-20.
+live authority by M5. Step A record-shape coordination is under review. D2.5 clarifies persistence,
+retention and the M6/M4 visibility boundary. Updated: 2026-10-22.
 
 ## Scope and ownership
 
@@ -10,6 +11,11 @@ live authority by M5. Step A record-shape coordination is under review. Updated:
 - **M4:** memory *semantics* — what enters dialogue context, admission and trimming rules
   (`src/dialogue/*` on `m4v1`).
 - **M5:** live authority and event `seq` assignment.
+
+**Visibility boundary.** “Confirmed by M6” means the record is persisted and readable through the storage
+ports; it is not “admitted by M4” into spoken memory. Where both states are shown, they are labelled
+separately; M4 admission is preferred when only one is shown. Audience/actor identity is a claim, not an
+identity key, and M6 does not store it as a key.
 
 ## What state survives
 
@@ -20,7 +26,7 @@ The table describes the persistence target. Current main supplies an in-memory b
 | Committed events (`RuntimeEvent`) | Yes | `event-store` / SQLite `events` | Append-only; `seq` strictly increasing |
 | Delivery outcomes (`CommitDelivery`) | Yes | SQLite `deliveries` | SQLite target; `terminalOutcome` is validated at the write boundary but is not yet part of the in-memory read record (see below) |
 | Confirmed spoken history | Yes | `deliveries` (`fully-delivered` only) | Returned by `HistoryQueryPort` |
-| Memory projection position | Yes | in-process `appliedSeq` | One bookmark per session internally; advances one event at a time; never across a gap or across sessions. The shared scalar getter reports the last attempted session, including a gap or duplicate that did not advance; `apply` returns the event session’s position. |
+| Memory projection position | No — in-process only; a new projection starts at 0 on restart | in-process `appliedSeq` | One bookmark per session internally; advances one event at a time; never across a gap or across sessions. The shared scalar getter reports the last attempted session, including a gap or duplicate that did not advance; `apply` returns the event session’s position. The bookmark is not persisted, so restart does not restore it; a durable cursor is deferred. A public per-session getter (`appliedSeq(sessionId)`) is a proposal only, not the frozen `MemoryProjectionPort` contract. |
 | Persona attribution and segment order | Planned for SQLite; present in memory | `personaProfileId`, `personaProfileVersion`, `segmentIndex` | Captured from the original request/segment; M6 must map each field explicitly in its SQLite adapter, retaining legacy unknowns as null |
 | Active turn / pending outputs | No (by design) | — | Restart begins stopped; unresolved outputs stay `unknown` |
 | Raw audio | Separate local files | DB reference only | Never inside event payloads |
@@ -34,7 +40,10 @@ The table describes the persistence target. Current main supplies an in-memory b
 3. Delivery commit is **idempotent**: identical re-commit returns `duplicate`; changed `textHash`, `segmentIndex`,
    `personaProfileId`, `personaProfileVersion`, or a changed delivery classification/outcome for the same key
    returns `conflict` (key = `sessionId:turnId:segmentId:modality`). The original delivery record remains
-   unchanged; a contradictory supporting event is retained as audit evidence (C-67).
+   unchanged; a contradictory supporting event is retained as audit evidence (C-67). `textHash` is a
+   **write-time integrity/idempotency aid**, not a read-time authorization check. If M4 validates a
+   retraction against it, M4 recomputes the hash from the text and compares; a read-time mismatch
+   rejection requires a new invariant and ADR.
 4. A delivery write is **internally consistent**: `classification`/`terminalOutcome` must pair
    validly (`fully-delivered` ↔ `completed`; a `cancelled`/`failed`/`unknown` outcome may be
    `partial-unknown` or `not-delivered`), and the supporting event's known provenance and
@@ -63,15 +72,30 @@ The table describes the persistence target. Current main supplies an in-memory b
   `seq` ascending (enforced by INV-08 / case C-25; each delivery retains its supporting `event_seq`),
   independent of insertion order; partial/unknown and generated-only text excluded.
 - Turn reconstruction uses explicit `segmentIndex` within `(sessionId, turnId)`; it does not reorder the single-session history port or infer ordering from identifier spelling. Unknown indices remain unknown.
+- Cross-session aggregation is **out of v0.2**. There is no cross-session port until M3/M4/M5 define
+  identity, consent and retention.
 - Replay (`ReplayReaderPort.load`) is an **isolated read model**: it never mutates live state and
   never calls a live provider/renderer (C-12).
 
 ## Retention and privacy
 
-- Default local-only archives with a **proposed 7-day retention**; any different retention is an
-  explicit, recorded configuration (threshold still pending a reviewed policy — NFR-05).
+- **Retention:** automatic expiry/deletion is **deferred for v0.2**. Do not claim an enforced seven-day
+  default; no default retention period is adopted. Local archives persist until an explicit supported
+  storage operation is agreed and implemented. NFR-05 retention/deletion acceptance remains pending.
+- **Rendering budgets are not retention.** `maxTurns` and `maxCharacters` drop content from a rendered
+  context; they do not delete stored evidence or make a turn unreachable later.
+- **Scope:** the stricter of session scope and any configured retention limit applies. A session-only
+  turn must not outlive its session under a longer global window.
+- **Retraction:** a withdrawal marker plus recall suppression, not row deletion. Evidence remains
+  append-only, and replay/audit can show what was said. M4 applies the semantic marker; it must suppress
+  both automatic recall and explicit archive selection, with a reason-bearing exclusion, and must not
+  rewrite a terminal outcome.
+- **Deletion:** physical erasure is a separate privacy operation with its own policy and audit
+  consequences; it is not implemented in v0.2. Deriving a projection from evidence does not by itself
+  preserve forgetting.
+- **No user-facing forget action** exists in v0.2.
 - No raw audio, credentials or personal tokens in event payloads or JSONL exports by default.
-- Deleting stored memory does not claim an external provider's records were deleted.
+- Deleting local stored records does not claim an external provider's records were deleted.
 - The database, journal files and audio stay **outside OneDrive**.
 
 ## Restart behaviour
@@ -100,3 +124,5 @@ turns pending recovery; **Stop and local cancellation never wait for a database 
   `seq`) from `unresolved` (partial/unknown or not-delivered, with their terminal outcome).
 - **Only confirmed history is restored**; unresolved records remain `unknown` and are **never
   replayed** (INV-11). M5 owns the lifecycle (new stopped session, blocked turns); M6 owns the data.
+- **`unknown` is terminal for the record in v0.2.** There is no `resolveUnknown` port; late evidence does
+  not upgrade a confirmed fact. A later-resolution contract requires M3/M4/M5 agreement and an ADR.
