@@ -3,6 +3,56 @@
 # One entry per supervised change. English only.
 version: 1
 entries:
+  - date: "2026-10-28"
+    task: M4-memory-quality-tables-and-live-skeleton
+    change: >-
+      Extend M4's deterministic quality tables without touching policy
+      constants: salience gains CJK-weekday concrete detail and wider
+      commitment, preference and identity cue forms (the polite refusal
+      下次一定 stays unpinned); recall tokenization gains the CJK filler
+      bigrams 感觉/自己/其实/以后 and Latin conversational filler; the
+      consistency antonym table gains ten unambiguous quality pairs. Every
+      addition is pinned by positive and negative cases plus mutation checks.
+      Add the test/live skeleton: an opt-in vitest config scoped to test/live,
+      an environment-only provider configuration whose unavailability reasons
+      never echo values, and the M4-02 live acceptance harness as executable
+      placeholders.
+    requirements: [NFR-03]
+    invariants: []
+    commits: []
+    agent: zcode/glm-5.3-flash
+    provider: zai-plan
+    model: glm-5.3-flash
+    supervision: >-
+      ZCode (GLM-5.3-Flash) authored the table extensions, the test cases and
+      the live skeleton in one supervised session. The member approved the
+      slice plan before implementation; policy constants, contracts, the
+      package manifest and the case registry were declared out of scope and
+      untouched.
+    human_review: >-
+      Captain (M4) approved the plan in session and requested the work.
+      Results remain under review until the member confirms. No git operation
+      of any kind was performed.
+    transcript_record: >-
+      The conversation is retained in the ZCode session; no separate export
+      was created.
+    verification:
+      base: working tree over feat/m4-03 at 7cf782e (uncommitted)
+      independent: >-
+        pnpm test:m4 222 passed (10 files); typecheck and lint clean; pnpm test
+        1318 passed / 17 failed (70 files) with the failures exactly the known
+        Windows environment set (boundaries, cli, m5-process-restart,
+        m6-02-boundary, m6-sqlite, production-cli, requirements); build passed.
+        Live suite: 6 passed / 3 todo / 1 skipped file without credentials.
+      mutation: >-
+        Removing one new cue (承诺), one stopword (感觉) and one antonym pair
+        (好玩/无聊) each turned their pinning cases red; restoration returned
+        each suite to green.
+    scope: >-
+      M4-owned data tables and test assets only. Provider wiring (M4-02) waits
+      for the I1 delivery; contracts, manifest, storage and the case registry
+      were not touched. The live suite never runs under the offline gates.
+
   - date: "2026-10-16"
     task: I1-01-PR36-consumer-repair
     change: >-

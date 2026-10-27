@@ -43,9 +43,16 @@ describe('M4 concrete-detail signal', () => {
 
   it('does not fire on a bare time word', () => {
     // A time word carries no number and appears in ordinary chatter; scoring it
-    // would re-create the noise the digit rule was supposed to remove.
+    // would re-create the noise the digit rule was supposed to remove. 周末
+    // names no day at all, so it stays in this company.
     expect(signalsOf('明天见。')).toEqual([])
     expect(signalsOf('晚上再聊。')).toEqual([])
+    expect(signalsOf('周末再聊。')).toEqual([])
+  })
+
+  it('fires on a CJK weekday, which names a specific day', () => {
+    expect(signalsOf('周五晚上连麦。')).toContain('concrete-detail')
+    expect(signalsOf('星期三见。')).toContain('concrete-detail')
   })
 })
 
@@ -62,14 +69,43 @@ describe('M4 promise / preference / identity cues', () => {
     expect(signalsOf('那一定很好。')).toEqual([])
   })
 
+  it('does not read the polite refusal 下次一定 as a promise', () => {
+    // A common livestream deflection: the literal 一定 is present, but the
+    // sentence dodges the commitment instead of making one.
+    expect(signalsOf('下次一定。')).toEqual([])
+  })
+
+  it('recognises commitment forms beyond the 记住 family', () => {
+    expect(signalsOf('我承诺下周玩这个游戏。')).toContain('promise')
+    expect(signalsOf('一言为定。')).toContain('promise')
+    expect(signalsOf('说定了，周五见。')).toContain('promise')
+    expect(signalsOf('包在我身上。')).toContain('promise')
+    expect(signalsOf('I swear I will be there.')).toContain('promise')
+    expect(signalsOf('You have my word.')).toContain('promise')
+  })
+
   it('recognises a Chinese preference', () => {
     expect(signalsOf('我讨厌下雨天。')).toContain('preference')
     expect(signalsOf('我最喜欢这只猫。')).toContain('preference')
   })
 
+  it('recognises preference forms beyond the 喜欢 family', () => {
+    expect(signalsOf('最爱这个游戏。')).toContain('preference')
+    expect(signalsOf('我对这首歌着迷。')).toContain('preference')
+    expect(signalsOf('排队排得烦死了。')).toContain('preference')
+    expect(signalsOf('I am obsessed with this song.')).toContain('preference')
+  })
+
   it('recognises a name or birthday statement as identity', () => {
     expect(signalsOf('大家都叫我小艾。')).toContain('identity')
     expect(signalsOf('我的生日在六月。')).toContain('identity')
+  })
+
+  it('recognises naming and origin forms beyond the 我叫 shape', () => {
+    expect(signalsOf('请叫我小艾。')).toContain('identity')
+    expect(signalsOf('观众都叫我阿艾。')).toContain('identity')
+    expect(signalsOf('我来自东北。')).toContain('identity')
+    expect(signalsOf("I'm called Alex.")).toContain('identity')
   })
 
   it('keeps a preference plus nothing else below the pin threshold', () => {

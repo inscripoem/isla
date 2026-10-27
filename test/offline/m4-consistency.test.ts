@@ -199,6 +199,69 @@ describe('M4 consistency scan: detection', () => {
     ])
   })
 
+  it('detects CJK quality antonyms about the same object', () => {
+    // Every pair added to the closed table: one scan per pair, same object,
+    // exactly one attribute finding and nothing else.
+    const examples: readonly (readonly [string, string, string])[] = [
+      ['好玩', '无聊', '这个游戏'],
+      ['有趣', '无聊', '这首歌'],
+      ['好看', '难看', '这件外套'],
+      ['好听', '难听', '这段旋律'],
+      ['简单', '困难', '这道题'],
+      ['容易', '困难', '这道题'],
+      ['开心', '难过', '她今天'],
+      ['高兴', '难过', '我今天'],
+    ]
+    for (const [first, second, subject] of examples) {
+      const result = scanContradictions({
+        statements: statements([
+          [turnRef('t1'), `${subject}很${first}。`],
+          [turnRef('t2'), `${subject}很${second}。`],
+        ]),
+      })
+      expect(result.findings.map((finding) => [finding.kind, finding.evidence])).toEqual([
+        ['attribute', 'antonym'],
+      ])
+      expect(result.incomplete).toBe(false)
+    }
+  })
+
+  it('detects English quality antonyms about the same object', () => {
+    for (const [first, second, subject] of [
+      ['easy', 'hard', 'This game is'],
+      ['interesting', 'boring', 'The stream was'],
+    ] as const) {
+      const result = scanContradictions({
+        statements: statements([
+          [turnRef('t1'), `${subject} ${first}.`],
+          [turnRef('t2'), `${subject} ${second}.`],
+        ]),
+      })
+      expect(result.findings.map((finding) => [finding.kind, finding.evidence])).toEqual([
+        ['attribute', 'antonym'],
+      ])
+    }
+  })
+
+  it('does not flag quality antonyms about different objects', () => {
+    // The shared-object rule guards the new pairs the same way: an opposite
+    // word about a different thing is two opinions, not a disagreement.
+    const games = scanContradictions({
+      statements: statements([
+        [turnRef('t1'), '这个游戏真好玩。'],
+        [turnRef('t2'), '那道题很无聊。'],
+      ]),
+    })
+    expect(games.findings).toEqual([])
+    const english = scanContradictions({
+      statements: statements([
+        [turnRef('t1'), 'This game is easy.'],
+        [turnRef('t2'), 'That question is hard.'],
+      ]),
+    })
+    expect(english.findings).toEqual([])
+  })
+
   it('detects a turn contradicting a standing fact', () => {
     const result = scanContradictions({
       statements: statements([

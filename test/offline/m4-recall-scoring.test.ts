@@ -79,6 +79,22 @@ describe('M4 recall tokenization', () => {
     // 说了 contains 了, a glue character: still a token, but a thin one.
     expect(contentTokensOf('说了').get('说了')).toBe(1)
   })
+
+  it('drops the CJK filler bigrams 感觉/自己/其实/以后', () => {
+    // Each word standalone IS the bigram, so a clean drop leaves no token at
+    // all. 自己/其实/以后 sit outside the glue-character table, so before they
+    // were listed the tokenizer scored them as informative.
+    expect(contentTokensOf('感觉').size).toBe(0)
+    expect(contentTokensOf('自己').size).toBe(0)
+    expect(contentTokensOf('其实').size).toBe(0)
+    expect(contentTokensOf('以后').size).toBe(0)
+  })
+
+  it('drops Latin filler that used to clear the informative bar', () => {
+    // "maybe"/"perhaps"/"gonna" are 5+ characters: before they were listed they
+    // scored as informative and could carry a recall on their own.
+    expect(contentTokensOf('maybe gonna wanna lol lmao perhaps').size).toBe(0)
+  })
 })
 
 describe('M4 recall admission rule', () => {
@@ -99,6 +115,18 @@ describe('M4 recall admission rule', () => {
   it('does not recall when only the query glue words match', () => {
     const onlyGlue = ['You said that about it.', 'The concert was loud.']
     expect(recall('What did you say about the concert', onlyGlue)).toEqual(['The concert was loud.'])
+  })
+
+  it('does not recall on shared filler alone', () => {
+    // Both sides carry only filler tokens, so the query tokenizes to nothing
+    // and no candidate can score.
+    expect(recall('maybe 感觉', ['Maybe 感觉 was all.'])).toEqual([])
+  })
+
+  it('still recalls on the informative token beside the filler', () => {
+    expect(recall('maybe the garden', ['Maybe the garden was quiet.'])).toEqual([
+      'Maybe the garden was quiet.',
+    ])
   })
 
   it('does not recall a CJK turn on shared glue bigrams', () => {

@@ -218,15 +218,32 @@ const NEGATION_STRIP_PATTERN = /(?:\bnot\b|\bno\b|\bnever\b|\bcannot\b|\b\w+n['�
 /**
  * Attribute pairs that mean opposite things about the same object. A closed
  * list, not a thesaurus: only pairs where the disagreement is unambiguous.
+ *
+ * The quality pairs added here pass the same bar as the originals: each word is
+ * an evaluation with no reading that flips under a common compound (unlike
+ * 大/小, which shift with the noun, or 无, which is excluded from the negation
+ * table for exactly this reason). The shared-object rule below still guards
+ * every pair, so an opposite word about a different thing is not a finding.
  */
 const ANTONYM_PAIRS: readonly (readonly [string, string])[] = [
   ['喜欢', '讨厌'],
   ['喜欢', '厌恶'],
   ['爱', '恨'],
   ['同意', '反对'],
+
+  ['好玩', '无聊'],
+  ['有趣', '无聊'],
+  ['好看', '难看'],
+  ['好听', '难听'],
+  ['简单', '困难'],
+  ['容易', '困难'],
+  ['开心', '难过'],
+  ['高兴', '难过'],
   ['like', 'hate'],
   ['love', 'hate'],
   ['agree', 'disagree'],
+  ['easy', 'hard'],
+  ['interesting', 'boring'],
 ]
 
 /** Split a statement into clauses; a contradiction lives inside one clause. */

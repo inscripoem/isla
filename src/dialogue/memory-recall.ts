@@ -205,11 +205,14 @@ const LATIN_STOPWORDS = new Set([
   'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'do', 'does',
   'did', 'done', 'have', 'has', 'had', 'will', 'would', 'shall', 'should',
   'can', 'could', 'may', 'might', 'must',
-  // Conversational filler, and the debris of contractions.
+  // Conversational filler, and the debris of contractions. "maybe"/"perhaps"/
+  // "gonna" are 5+ characters, so before they were listed they scored as
+  // INFORMATIVE - exactly the false relevance this table exists to prevent.
   'very', 'really', 'just', 'also', 'too', 'not', 'no', 'yes', 'ok', 'okay',
   'yeah', 'oh', 'well', 'now', 'some', 'any', 'all', 'more', 'most', 'much',
   'many', 'don', 'doesn', 'didn', 'isn', 'aren', 'wasn', 'weren', 'can', 'couldn',
   'wouldn', 'shouldn', 'won', 'haven', 'hasn', 'hadn', 'n\'t',
+  'maybe', 'perhaps', 'gonna', 'wanna', 'lol', 'lmao',
   // Verbs that report a conversation instead of carrying its topic. "What did
   // you say about X" is a request to RECALL a topic, not a topic itself.
   'say', 'says', 'said', 'tell', 'told', 'talk', 'talks', 'talked', 'ask',
@@ -234,6 +237,11 @@ const CJK_STOPWORDS = new Set([
   '对的', '嗯嗯', '哈哈', '谢谢', '你好', '再见', '拜拜', '已经', '一直', '还有',
   '告诉', '说的', '说要', '是在', '了吗', '了呢', '了对', '了没', '是吧', '对不对',
   '有没有', '是不是', '好不好', '怎么办', '我记得', '记得', '上次', '刚才', '之前',
+  // 感觉/其实 are hedging filler; 自己 is self-reference; 以后 is the mirror of
+  // the already-listed 之前. None of the four carries a topic, and because their
+  // characters sit outside CJK_FUNCTION_CHARS the bigram tokenizer used to score
+  // all of them as informative.
+  '感觉', '自己', '其实', '以后',
 ])
 
 /**
