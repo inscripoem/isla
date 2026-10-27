@@ -2,7 +2,7 @@
 
 Status: under review. M6 contributes the persistence portion; memory semantics are owned by M4 and
 live authority by M5. Step A record-shape coordination is under review. D2.5 clarifies persistence,
-retention and the M6/M4 visibility boundary. Updated: 2026-10-22.
+retention and the M6/M4 visibility boundary. Updated: 2026-10-27.
 
 ## Scope and ownership
 
@@ -19,8 +19,9 @@ identity key, and M6 does not store it as a key.
 
 ## What state survives
 
-The table separates what is durable today from what is only in process: the `Survives restart?` column
-answers for the current code, and the Notes name anything still planned. SQLite is implemented
+The table separates what is durable today, what is only in process, and what is planned: the
+`Survives restart?` column states the position for the current code, and the Notes explain anything
+planned or deliberately absent. SQLite is implemented
 (`src/storage/sqlite/*`) and is what the production composition uses (`src/runtime/production.ts:342-343`);
 `createEventStore` falls back to the in-memory backend only when no backend is supplied. SQLite reopen
 restores only confirmed history (M6-01); application/process restart acceptance remains M5's (#25).
@@ -30,7 +31,7 @@ restores only confirmed history (M6-01); application/process restart acceptance 
 | Committed events (`RuntimeEvent`) | Yes | `event-store` / SQLite `events` | Append-only; `seq` strictly increasing |
 | Delivery outcomes (`CommitDelivery`) | Yes | SQLite `deliveries` | SQLite target; `terminalOutcome` is validated at the write boundary but is not yet part of the in-memory read record (see below) |
 | Confirmed spoken history | Yes | `deliveries` (`fully-delivered` only) | Returned by `HistoryQueryPort` |
-| Memory projection position | No — in-process only; a new projection starts at 0 on restart | in-process `appliedSeq` | One bookmark per session internally; advances one event at a time; never across a gap or across sessions. The shared scalar getter reports the last attempted session, including a gap or duplicate that did not advance; `apply` returns the event session’s position. The bookmark is not persisted, so restart does not restore it; a durable cursor is deferred. A public per-session getter (`appliedSeq(sessionId)`) is a proposal only, not the frozen `MemoryProjectionPort` contract. |
+| Memory projection position | No — in-process only; a new projection starts at 0 on restart | in-process `appliedSeq` | One bookmark per session internally; advances one event at a time; never across a gap or across sessions. The shared scalar getter reports the last attempted session, including a gap or duplicate that did not advance; `apply` returns the event session’s position. The bookmark is not persisted, so restart does not restore it; a durable cursor is deferred. A public per-session getter (`appliedSeq(sessionId)`) is a proposal only, not the frozen `MemoryProjectionPort` contract. The component has no production caller today; it is exercised by tests only. |
 | Persona attribution and segment order | Planned for SQLite; present in memory | `personaProfileId`, `personaProfileVersion`, `segmentIndex` | Captured from the original request/segment; M6 must map each field explicitly in its SQLite adapter, retaining legacy unknowns as null |
 | Active turn / pending outputs | No (by design) | — | Restart begins stopped; unresolved outputs stay `unknown` |
 | Raw audio | Separate local files | DB reference only | Never inside event payloads |
@@ -76,8 +77,10 @@ restores only confirmed history (M6-01); application/process restart acceptance 
   `seq` ascending (enforced by INV-08 / case C-25; each delivery retains its supporting `event_seq`),
   independent of insertion order; partial/unknown and generated-only text excluded.
 - Turn reconstruction uses explicit `segmentIndex` within `(sessionId, turnId)`; it does not reorder the single-session history port or infer ordering from identifier spelling. Unknown indices remain unknown.
-- Cross-session aggregation is **out of v0.2**. There is no cross-session port until M3/M4/M5 define
-  identity, consent and retention.
+- Cross-session aggregation is **out of v0.2**. There is no cross-session storage port until M3/M4/M5
+  define identity, consent and retention. M4 maintains a per-memory scope and recall *policy* for
+  audience-bound memory; that policy is not a cross-session storage port and not aggregation, and no
+  cross-session data path exists in v0.2.
 - Replay (`ReplayReaderPort.load`) is an **isolated read model**: it never mutates live state and
   never calls a live provider/renderer (C-12).
 
@@ -91,9 +94,10 @@ restores only confirmed history (M6-01); application/process restart acceptance 
 - **Scope:** the stricter of session scope and any configured retention limit applies. A session-only
   turn must not outlive its session under a longer global window.
 - **Retraction:** a withdrawal marker plus recall suppression, not row deletion. Evidence remains
-  append-only, and replay/audit can show what was said. M4 applies the semantic marker; it must suppress
-  both automatic recall and explicit archive selection, with a reason-bearing exclusion, and must not
-  rewrite a terminal outcome.
+  append-only, and replay/audit can show what was said. M4 owns the semantic marker; it is **not
+  implemented in v0.2**. When implemented, it must suppress both automatic recall and explicit archive
+  selection, with a reason-bearing exclusion, and must not rewrite a terminal outcome. No case row or
+  verifier exists yet; an ID must be allocated in #25 before this requirement is traceable.
 - **Deletion:** physical erasure is a separate privacy operation with its own policy and audit
   consequences; it is not implemented in v0.2. Deriving a projection from evidence does not by itself
   preserve forgetting.
