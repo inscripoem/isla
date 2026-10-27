@@ -106,3 +106,7 @@ Direct `SelectionPort` execution is module evidence. It does not establish M5
 prepared-input replay, M4 dialogue adherence, live-provider quality, an
 evaluation table, G4 or S6. Labels, draft records and synthetic mechanics do not
 establish a quality score.
+
+- The rule port's usage record is synthetic: `elapsedMs: 0` and
+  `usageMissing: true` are schema placeholders, never a measured provider
+  duration or latency observation.

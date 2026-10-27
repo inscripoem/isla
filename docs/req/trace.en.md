@@ -112,6 +112,13 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-15 | M5 | C-47, C-50 (turn reconstruction ordering and M4 agreement guard) | M4/M6 consumer acceptance |
 | INV-16 | M6 | C-52, C-53, C-54, C-55, C-69, C-70, C-71 | — |
 
+> **M3-01 module-level prerequisite.** `src/decision/selection.ts` and
+> `test/offline/m3-decision.test.ts` provide FR-01 module-level evidence for the
+> rule port, corpus loading and exact-one/deadline/failure observations. This is
+> not a registered composition case: C-13 remains the registered
+> selection-to-delivery verifier. No new case ID is assigned; C-05/C-16 remain
+> pending. Direct runner evidence is not full-pipeline S6 evidence.
+
 ## Ordering trace correction (2026-10-15)
 
 The [issue #25 coordination](https://github.com/inscripoem/isla/issues/25#issuecomment-6188155358) separates two existing guarantees. The helper header previously cited INV-08 in error; its within-turn rule is now INV-15, owned by M5. INV-08 and C-25 continue to describe M6 supporting-event read order. Runtime behavior and assertions are unchanged. The existing ordering suite now shares the `M5 delivery attribution capture (C-47)` verifier prefix, so the C-47 test-name filter selects both capture and reconstruction checks. No case ID is added.

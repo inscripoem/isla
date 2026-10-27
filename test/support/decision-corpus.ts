@@ -70,10 +70,18 @@ const relativePathSchema = z
 
 const hashSchema = z.string().regex(/^[0-9a-f]{64}$/, 'expected a lowercase SHA-256 hex digest')
 
+function isRealUtcCalendarDate(value: string): boolean {
+  const date = new Date(`${value}T00:00:00.000Z`)
+  return (
+    Number.isFinite(date.getTime()) &&
+    date.toISOString().slice(0, 10) === value
+  )
+}
+
 const dateSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'review dates must use YYYY-MM-DD')
-  .refine((value) => Number.isFinite(Date.parse(`${value}T00:00:00Z`)), 'review date is invalid')
+  .refine(isRealUtcCalendarDate, 'review date is not a real UTC calendar date')
 
 export const decisionCorpusManifestSchema = z.strictObject({
   schemaVersion: z.literal(1),

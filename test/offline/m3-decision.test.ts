@@ -25,6 +25,7 @@ import { createCallContext } from '../support/context'
 import {
   DecisionCorpusError,
   decisionReferenceLabelSchema,
+  decisionReviewRecordSchema,
   findDecisionCase,
   loadDecisionCorpus,
   toEvalCase,
@@ -67,6 +68,18 @@ function ruleRequest(overrides: Partial<SelectionRequest> = {}): SelectionReques
 function ruleSelection() {
   return {
     createSelection: (clock: ClockPort) => createRuleSelectionPort({ clock }),
+  }
+}
+
+function reviewedRecord(reviewedAt: string) {
+  return {
+    caseId: 'selection-001',
+    status: 'reviewed' as const,
+    provenance: 'human' as const,
+    reviewerId: 'reviewer',
+    reviewedAt,
+    requestSha256: 'a'.repeat(64),
+    labelSha256: 'b'.repeat(64),
   }
 }
 
@@ -322,6 +335,31 @@ describe('M3 rule SelectionPort (actual implementation)', () => {
     await expect(port.select(ruleRequest(), context)).rejects.toMatchObject({
       code: 'aborted',
     })
+  })
+})
+
+describe('M3 review-date validation', () => {
+  it('accepts real UTC calendar dates for reviewedAt', () => {
+    for (const reviewedAt of ['2024-02-29', '2026-02-28', '2026-12-31']) {
+      expect(decisionReviewRecordSchema.safeParse(reviewedRecord(reviewedAt)).success).toBe(
+        true,
+      )
+    }
+  })
+
+  it('rejects impossible UTC calendar dates for reviewedAt', () => {
+    for (const reviewedAt of [
+      '2026-02-31',
+      '2025-02-29',
+      '2026-04-31',
+      '2026-13-01',
+      '2026-00-10',
+      '2026-2-03',
+    ]) {
+      expect(decisionReviewRecordSchema.safeParse(reviewedRecord(reviewedAt)).success).toBe(
+        false,
+      )
+    }
   })
 })
 

@@ -2890,7 +2890,9 @@ entries:
     requirements: [FR-01, NFR-03]
     invariants: []
     cases: []
-    commits: []
+    commits: [7cd9af5, d04cddc]
+    pull_request: 57
+    publication: "PR #57 opened; not merged."
     agent: build
     provider: deepseek
     model: deepseek-flash
@@ -2920,6 +2922,10 @@ entries:
       snapshot: >-
         The export ends before this record-update request and does not include
         this update.
+    m6_review: >-
+      M6 reviewed d04cddc and requested commit/PR provenance, FR-01
+      module-level trace links and real-calendar reviewedAt validation. The
+      elapsedMs zero note is non-blocking.
     supervision: >-
       The M3 owner approved the revised implementation plan and acceptance
       tests. OpenCode implemented and ran the M3 suite, typecheck, lint, build,
@@ -2932,8 +2938,10 @@ entries:
       message-001 and acknowledge for message-002. Intent coverage stays
       partial, heldOut stays false, and no game name or generated-dialogue
       quality is inferred. The review is bound to the exact request and label
-      hashes. selection-002 remains draft. Results remain under review; no
-      commit, push, publication or merge was performed.
+      hashes. selection-002 remains draft. The implementation and AI-log move
+      were committed and pushed as 7cd9af5 and d04cddc; PR #57 is open for
+      review and has not been merged. This repair remains under review; no merge
+      approval is claimed.
     transcript_record: >-
       Verified Desktop session export m3-selectionport-investigation-and-slice-plan.json,
       SHA-256 E479EFCCD3AE74B6BD4C1CE6965ECDA5E6F6BC7B1A63758AA2699A35BE1DC4BA.
@@ -2947,6 +2955,13 @@ entries:
       changed_m3: "pnpm test:m3: 45 passed / 1 file."
       changed_verify: "pnpm verify exit 1; 1151 passed / 17 failed / 1168 tests; 3 unhandled spawn ENOENT errors; failing test identities and error categories equal to baseline; build not reached."
       changed_build: "pnpm build exit 0."
+      repair_m3: "pnpm test:m3: 47 passed / 1 file."
+      repair_verify: "pnpm verify exit 1; 1153 passed / 17 failed / 1170 tests; 3 unhandled spawn ENOENT errors; failing test identities and error categories equal to baseline; build not reached."
+      repair_static: "pnpm typecheck and pnpm lint passed; pnpm build exit 0."
+      repair_trace: "pnpm test:trace: 41 passed / 1 file."
+      repair_readiness: "pnpm test:readiness: 38 passed / 4 failed / 42 tests; the four failures are the existing Windows boundaries x3 and requirements CRLF identity."
+      repair_diff_check: "git diff --check clean."
+      repair_g6: "AI-use log YAML/shape check passed."
       boundary: "targeted production-to-test import boundary: 1 passed / 8 skipped."
       readiness: "pnpm test:readiness: 38 passed / 4 failed / 42 tests; the four failures are the pre-existing Windows boundaries x3 and requirements CRLF identity, not new M3 failures."
       trace: "pnpm test:trace: 41 passed / 1 file."
