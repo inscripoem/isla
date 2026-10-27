@@ -40,6 +40,12 @@ The report command takes an explicit `--provenance <path>` and requires the comp
 the run's `runId`; a mismatch is refused. No sibling-file guessing, no text or order matching. Without a
 companion, every quality result for that run is `unscored` with reason `no-provenance-record`.
 
+## Format and refusal
+
+The companion is **JSON**, one object per run. The report refuses it unless its
+`(caseId, variantId, attempt)` set equals the run's record set; a missing or extra entry is a refusal, not
+a partial join.
+
 ## Unscored rule
 
 `correlation !== exact` for a case means that case's quality result is `unscored` with reason

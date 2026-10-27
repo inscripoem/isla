@@ -5,9 +5,10 @@ claims no S6 evidence. Updated: 2026-10-27.
 
 ## Why this exists
 
-M5's 2026-10-24 reply records that C-03/C-14/C-15 do not complete C-05/C-16 and asks for the existing
-evidence to be mapped before anything new is requested. This map states what the registered evidence
-actually covers, so a later case allocation starts from facts rather than from an impression.
+M5's 2026-10-21 reply records that *“C-03/C-14/C-15 cover stale results, fallback and attempt accounting;
+they do not complete pending C-05/C-16”*
+(https://github.com/inscripoem/isla/issues/41#issuecomment-6309787640). M6 maps the existing evidence
+before requesting any new case, so a later allocation starts from facts rather than from an impression.
 
 ## Method
 
