@@ -427,3 +427,17 @@ cases:
     verifier:
       file: test/offline/m6-02-bench.test.ts
       test: "writes a runBench recording through the R1 report command without losing attempts or not-run entries"
+
+  - id: C-73
+    status: implemented
+    title: Production CLI lifecycle awaits owned release and reports shutdown honestly
+    verifier:
+      file: test/offline/production-cli.test.ts
+      test: "production CLI"
+
+  - id: C-74
+    status: implemented
+    title: Cross-process restart restores only confirmed history and never replays held output
+    verifier:
+      file: test/offline/m5-process-restart.test.ts
+      test: "production process restart acceptance"

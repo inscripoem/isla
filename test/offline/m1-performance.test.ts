@@ -118,6 +118,41 @@ import {
 import { isKokoroWorkerRuntime } from '../../src/performance/kokoro-worker'
 import { createControlledWorkerKit } from '../support/m1-kokoro-worker-kit'
 import { measureTimerCallbacks } from '../support/m1-kokoro-timing'
+import type { VtsTransportEvent } from '../../src/performance/vts-client'
+import { createVtsClient } from '../../src/performance/vts-client'
+import type { VtsActionMapping, VtsRendererDeps } from '../../src/performance/vts-driver'
+import { createVtsRenderer } from '../../src/performance/vts-driver'
+import {
+  M1_VTS_DEFAULT_MAPPINGS,
+  M1_VTS_FIXTURE_CHARACTER_ID,
+  M1_VTS_FIXTURE_HOTKEY_SMILE,
+  M1_VTS_FIXTURE_MODEL_ID,
+  M1_VTS_FIXTURE_RENDERER_ID,
+  createFixtureVtsPeer,
+  createM1VtsRendererKit,
+  fixtureVtsApiError,
+  fixtureVtsResponse,
+} from '../support/m1-vts-kit'
+import { createVtsConnectionHandle } from '../../src/performance/vts-connection'
+import { pairVtsConnection } from '../../src/performance/vts-pairing'
+import {
+  M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+  M1_VTS_CONNECTION_RAW_TEXT,
+  closeM1VtsFixtureClient,
+  createFixtureVtsSocket,
+  openM1VtsFixtureClient,
+  startM1VtsFixtureServer,
+} from '../support/m1-vts-connection-kit'
+import {
+  M1_VTS_PAIRING_FIXTURE_PLUGIN_DEVELOPER,
+  M1_VTS_PAIRING_FIXTURE_PLUGIN_NAME,
+  M1_VTS_PAIRING_FIXTURE_TOKEN,
+  M1_VTS_PAIRING_PROVIDER_SENTINEL,
+  createM1VtsControlledCredentials,
+  createM1VtsPairingCountingSignal,
+  createM1VtsPairingKit,
+  createM1VtsPairingOffFailureSocket,
+} from '../support/m1-vts-pairing-kit'
 
 /** Deterministically drain queued microtasks without wall-clock waits. */
 async function microtasks(rounds = 8): Promise<void> {
@@ -4569,5 +4604,3024 @@ describe('M1-02 increment B worker timer statistic (B02)', () => {
     expect(empty.maxDelayMs).toBe(0)
     expect(empty.maxPendingDelayMs).toBe(0)
     expect(empty.pendingCallbacks).toBe(0)
+  })
+})
+
+/* ------------------------------------------------------------------------- *
+ * M1-02 increment C: the real deterministic VTube Studio protocol client and
+ * hotkey driver over an explicitly scripted, already connected transport. The
+ * peer identifiers are fixtures; no live VTS connection, authentication or
+ * animation completion is claimed.
+ * ------------------------------------------------------------------------- */
+
+const FIXTURE_VTS_API_STATE = {
+  active: true,
+  vTubeStudioVersion: 'fixture-vts-1.0',
+  currentSessionAuthenticated: true,
+} as const
+
+async function startHeldVtsTrigger(
+  kit: ReturnType<typeof createM1VtsRendererKit>,
+  overrides: Partial<PerformanceCommand> = {},
+): Promise<{
+  execution: Promise<PerformanceReceipt>
+  context: ReturnType<typeof createCallContext>
+  triggerRequest: { messageType: string; data: unknown }
+}> {
+  kit.peer.transport.setHoldTypes(['HotkeyTriggerRequest'])
+  const context = createCallContext()
+  const execution = kit.renderer.renderer.execute(
+    fixturePerformanceCommand({ actionId: 'smile', ...overrides }),
+    context,
+  )
+  await microtasks(48)
+  const triggerRequest = kit.peer.transport.requests().at(-1)
+  expect(triggerRequest?.messageType).toBe('HotkeyTriggerRequest')
+  return { execution, context, triggerRequest: triggerRequest! }
+}
+
+/** Counts abort listeners added to and removed from the bound signal. */
+function createCountingDeadlineGate(): ReturnType<typeof createTestDeadlineGate> & {
+  addCount(): number
+  removeCount(): number
+} {
+  const controller = new AbortController()
+  let adds = 0
+  let removes = 0
+  let binds = 0
+  let releases = 0
+  const signal = {
+    get aborted() {
+      return controller.signal.aborted
+    },
+    addEventListener(
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions,
+    ) {
+      adds += 1
+      controller.signal.addEventListener(type, listener as EventListener, options)
+    },
+    removeEventListener(
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | EventListenerOptions,
+    ) {
+      removes += 1
+      controller.signal.removeEventListener(type, listener as EventListener, options)
+    },
+  } as unknown as AbortSignal
+  return {
+    addCount: () => adds,
+    removeCount: () => removes,
+    bindCount: () => binds,
+    releaseCount: () => releases,
+    bind() {
+      binds += 1
+      return {
+        signal,
+        release() {
+          releases += 1
+        },
+      }
+    },
+  }
+}
+
+describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)', () => {
+  it('accepts one full mapped sequence and reports acceptance only', async () => {
+    const kit = createM1VtsRendererKit()
+    kit.receipts.setNow(4321)
+    const command = fixturePerformanceCommand({ actionId: 'smile' })
+    const receipt = await kit.renderer.renderer.execute(command, createCallContext())
+
+    expect(receipt).toMatchObject({
+      stage: 'accepted',
+      modality: 'avatar',
+      source: 'm1-mapped-renderer',
+      outputId: command.outputId,
+      sessionId: command.sessionId,
+      epoch: command.epoch,
+      turnId: command.turnId,
+      segmentId: command.segmentId,
+      localTimeMs: 4321,
+    })
+    expect(performanceReceiptSchema.safeParse(receipt).success).toBe(true)
+
+    const requests = kit.peer.transport.requests()
+    expect(requests.map((request) => request.messageType)).toEqual([
+      'APIStateRequest',
+      'CurrentModelRequest',
+      'HotkeysInCurrentModelRequest',
+      'HotkeyTriggerRequest',
+    ])
+    expect(requests.at(-1)?.data).toEqual({ hotkeyID: M1_VTS_FIXTURE_HOTKEY_SMILE })
+    const requestIds = requests.map((request) => request.requestID)
+    expect(new Set(requestIds).size).toBe(requestIds.length)
+    for (const requestId of requestIds) {
+      expect(requestId.length).toBeGreaterThan(0)
+      expect(requestId.length).toBeLessThan(64)
+    }
+
+    const capabilities = kit.renderer.capabilities()
+    expect(capabilities.actions.map((action) => action.actionId)).toEqual(['neutral', 'smile'])
+    for (const action of capabilities.actions) {
+      expect(action.observability).toBe('acceptance-only')
+      expect(action.parameterBounds).toEqual([])
+    }
+    expect(receipt.stage).not.toBe('started')
+    expect(receipt.stage).not.toBe('completed')
+
+    // A duplicate frame after settlement is ignored and cannot create evidence.
+    const triggerRequest = requests.at(-1)!
+    kit.peer.transport.emit(fixtureVtsApiError(triggerRequest))
+    await microtasks()
+    expect(kit.receipts.issued()).toHaveLength(1)
+    expect(kit.renderer.renderer.capabilities().actions).toHaveLength(2)
+  })
+
+  it('refuses inactive, unauthenticated, unloaded, mismatched and missing hotkey states with zero triggers', async () => {
+    const scenarios: Array<{
+      name: string
+      mutate: (state: ReturnType<typeof createFixtureVtsPeer>['state']) => void
+      reasonCode: string
+      requestCount: number
+    }> = [
+      {
+        name: 'inactive API',
+        mutate: (state) => {
+          state.active = false
+        },
+        reasonCode: 'vts_api_inactive',
+        requestCount: 1,
+      },
+      {
+        name: 'unauthenticated session',
+        mutate: (state) => {
+          state.currentSessionAuthenticated = false
+        },
+        reasonCode: 'vts_session_unauthorized',
+        requestCount: 1,
+      },
+      {
+        name: 'no current model',
+        mutate: (state) => {
+          state.currentModelLoaded = false
+        },
+        reasonCode: 'vts_model_unavailable',
+        requestCount: 2,
+      },
+      {
+        name: 'different current model',
+        mutate: (state) => {
+          state.currentModelID = 'fixture-other-model'
+        },
+        reasonCode: 'vts_model_mismatch',
+        requestCount: 2,
+      },
+      {
+        name: 'no hotkey model',
+        mutate: (state) => {
+          state.hotkeysModelLoaded = false
+        },
+        reasonCode: 'vts_model_unavailable',
+        requestCount: 3,
+      },
+      {
+        name: 'different hotkey model',
+        mutate: (state) => {
+          state.hotkeysModelID = 'fixture-other-model'
+        },
+        reasonCode: 'vts_model_mismatch',
+        requestCount: 3,
+      },
+      {
+        name: 'missing configured hotkey',
+        mutate: (state) => {
+          state.availableHotkeys = state.availableHotkeys.filter(
+            (hotkey) => hotkey.hotkeyID !== M1_VTS_FIXTURE_HOTKEY_SMILE,
+          )
+        },
+        reasonCode: 'vts_hotkey_missing',
+        requestCount: 3,
+      },
+    ]
+
+    for (const scenario of scenarios) {
+      const peer = createFixtureVtsPeer()
+      scenario.mutate(peer.state)
+      const kit = createM1VtsRendererKit({ peer })
+      const receipt = await kit.renderer.renderer.execute(
+        fixturePerformanceCommand({ actionId: 'smile' }),
+        createCallContext(),
+      )
+      expect(receipt, scenario.name).toMatchObject({ stage: 'failed', reasonCode: scenario.reasonCode })
+      expect(performanceReceiptSchema.safeParse(receipt).success).toBe(true)
+      const types = peer.transport.requests().map((request) => request.messageType)
+      expect(types, scenario.name).toHaveLength(scenario.requestCount)
+      expect(types, scenario.name).not.toContain('HotkeyTriggerRequest')
+    }
+  })
+
+  it('rechecks the live model and hotkey inventory on every dispatch', async () => {
+    const kit = createM1VtsRendererKit()
+    const first = await kit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile' }),
+      createCallContext(),
+    )
+    expect(first).toMatchObject({ stage: 'accepted' })
+
+    kit.peer.state.currentModelID = 'fixture-other-model'
+    const second = await kit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile' }),
+      createCallContext(),
+    )
+    expect(second).toMatchObject({ stage: 'failed', reasonCode: 'vts_model_mismatch' })
+    expect(kit.peer.transport.requests().map((request) => request.messageType)).toEqual([
+      'APIStateRequest',
+      'CurrentModelRequest',
+      'HotkeysInCurrentModelRequest',
+      'HotkeyTriggerRequest',
+      'APIStateRequest',
+      'CurrentModelRequest',
+    ])
+  })
+
+  it('treats a correlated wrong type, malformed data or malformed APIError as protocol failure', async () => {
+    const variants: Array<
+      (request: Parameters<typeof fixtureVtsResponse>[0]) => VtsTransportEvent
+    > = [
+      (request) =>
+        fixtureVtsResponse(request, 'CurrentModelResponse', {
+          modelLoaded: true,
+          modelID: M1_VTS_FIXTURE_MODEL_ID,
+        }),
+      (request) =>
+        fixtureVtsResponse(request, 'APIStateResponse', {
+          active: 'yes',
+          vTubeStudioVersion: 'fixture',
+          currentSessionAuthenticated: true,
+        }),
+      (request) => fixtureVtsResponse(request, 'APIError', { message: 'missing error id' }),
+    ]
+
+    for (const makeEvent of variants) {
+      const peer = createFixtureVtsPeer()
+      peer.transport.setAutoRespond(false)
+      const kit = createM1VtsRendererKit({ peer })
+      const execution = kit.renderer.renderer.execute(
+        fixturePerformanceCommand({ actionId: 'smile' }),
+        createCallContext(),
+      )
+      await microtasks()
+      const request = peer.transport.pendingRequests()[0]
+      expect(request?.messageType).toBe('APIStateRequest')
+      peer.transport.emit(makeEvent(request!))
+      const receipt = await execution
+      expect(receipt).toMatchObject({ stage: 'failed', reasonCode: 'vts_protocol_error' })
+      expect(peer.transport.sendCount()).toBe(1)
+      expect(peer.transport.requests().map((entry) => entry.messageType)).not.toContain(
+        'HotkeyTriggerRequest',
+      )
+    }
+  })
+
+  it('ignores malformed envelopes and wrong request IDs instead of settling or rejecting', async () => {
+    const peer = createFixtureVtsPeer()
+    peer.transport.setAutoRespond(false)
+    const client = createVtsClient({ transport: peer.transport, timeoutMs: 1000, maxPending: 4 })
+    const pending = client.apiState(createCallContext().signal)
+    await microtasks()
+    const request = peer.transport.requests()[0]!
+    peer.transport.emitRaw('not-json')
+    peer.transport.emit(
+      fixtureVtsResponse(request, 'APIStateResponse', FIXTURE_VTS_API_STATE, {
+        apiName: 'NotVTubeStudio',
+      }),
+    )
+    peer.transport.emit(
+      fixtureVtsResponse(request, 'APIStateResponse', FIXTURE_VTS_API_STATE, {
+        requestID: 'vts-unrelated',
+      }),
+    )
+    let settled = false
+    void pending.then(() => {
+      settled = true
+    })
+    await microtasks()
+    expect(settled).toBe(false)
+
+    peer.transport.releaseNext()
+    await expect(pending).resolves.toMatchObject({ kind: 'ok', data: { active: true } })
+    client.dispose()
+  })
+
+  it('correlates out-of-order replies and never lets a late old ID settle the next request', async () => {
+    const peer = createFixtureVtsPeer()
+    peer.transport.setAutoRespond(false)
+    const client = createVtsClient({ transport: peer.transport, timeoutMs: 1000, maxPending: 4 })
+
+    const statePending = client.apiState(createCallContext().signal)
+    const modelPending = client.currentModel(createCallContext().signal)
+    await microtasks()
+    const [stateRequest, modelRequest] = peer.transport.requests()
+    peer.transport.respondTo(
+      modelRequest!,
+      fixtureVtsResponse(modelRequest!, 'CurrentModelResponse', {
+        modelLoaded: true,
+        modelID: 'fixture-model-b',
+      }),
+    )
+    peer.transport.respondTo(
+      stateRequest!,
+      fixtureVtsResponse(stateRequest!, 'APIStateResponse', FIXTURE_VTS_API_STATE),
+    )
+    await expect(modelPending).resolves.toMatchObject({
+      kind: 'ok',
+      data: { modelID: 'fixture-model-b' },
+    })
+    await expect(statePending).resolves.toMatchObject({ kind: 'ok', data: { active: true } })
+
+    const nextPending = client.currentModel(createCallContext().signal)
+    await microtasks()
+    peer.transport.emit(
+      fixtureVtsResponse(stateRequest!, 'APIStateResponse', FIXTURE_VTS_API_STATE),
+    )
+    let nextSettled = false
+    void nextPending.then(() => {
+      nextSettled = true
+    })
+    await microtasks()
+    expect(nextSettled).toBe(false)
+    peer.transport.releaseNext()
+    await expect(nextPending).resolves.toMatchObject({ kind: 'ok' })
+    client.dispose()
+  })
+
+  it('sends nothing for a pre-aborted dispatch and stops after the preflight query without a trigger', async () => {
+    const preAbortedKit = createM1VtsRendererKit()
+    const preAborted = createCallContext()
+    preAborted.abort()
+    const preAbortedReceipt = await preAbortedKit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile' }),
+      preAborted,
+    )
+    expect(preAbortedReceipt).toMatchObject({ stage: 'cancelled' })
+    expect(preAbortedKit.peer.transport.sendCount()).toBe(0)
+
+    const peer = createFixtureVtsPeer()
+    peer.transport.setAutoRespond(false)
+    const kit = createM1VtsRendererKit({ peer })
+    const context = createCallContext()
+    const execution = kit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile' }),
+      context,
+    )
+    await microtasks()
+    expect(peer.transport.requests().map((request) => request.messageType)).toEqual([
+      'APIStateRequest',
+    ])
+    context.abort()
+    const receipt = await execution
+    // The mapped renderer already reports an abort after dispatch began as
+    // unknown. The trigger was never sent, which is the safety property here.
+    expect(receipt).toMatchObject({ stage: 'unknown' })
+    expect(peer.transport.requests().map((request) => request.messageType)).not.toContain(
+      'HotkeyTriggerRequest',
+    )
+    expect(peer.transport.sendCount()).toBe(1)
+    peer.transport.releaseNext()
+    await microtasks()
+    expect(peer.transport.sendCount()).toBe(1)
+    kit.renderer.dispose()
+  })
+
+  it('holds post-trigger abort, close and error as unknown without retry or replay', async () => {
+    for (const mode of ['abort', 'close', 'error'] as const) {
+      const kit = createM1VtsRendererKit()
+      const { execution, context } = await startHeldVtsTrigger(kit)
+      if (mode === 'abort') context.abort()
+      else if (mode === 'close') kit.peer.transport.emitClose()
+      else kit.peer.transport.emitError()
+
+      const receipt = await execution
+      expect(receipt, mode).toMatchObject({ stage: 'unknown' })
+      expect(performanceReceiptSchema.safeParse(receipt).success).toBe(true)
+      const triggerCalls = kit.peer.transport
+        .requests()
+        .filter((request) => request.messageType === 'HotkeyTriggerRequest')
+      expect(triggerCalls, mode).toHaveLength(1)
+
+      kit.peer.transport.releaseNext()
+      await microtasks()
+      await expect(execution, mode).resolves.toBe(receipt)
+      expect(
+        kit.peer.transport
+          .requests()
+          .filter((request) => request.messageType === 'HotkeyTriggerRequest'),
+        mode,
+      ).toHaveLength(1)
+    }
+  })
+
+  it('holds a post-trigger timeout as unknown rather than cancelled', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const kit = createM1VtsRendererKit({ timeoutMs: 50 })
+      const { execution } = await startHeldVtsTrigger(kit)
+      await vi.advanceTimersByTimeAsync(50)
+      const receipt = await execution
+      expect(receipt).toMatchObject({ stage: 'unknown' })
+      expect(performanceReceiptSchema.safeParse(receipt).success).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('fails preflight close, error and timeout without trigger and cleans request resources', async () => {
+    for (const mode of ['close', 'error', 'timeout'] as const) {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      try {
+        const peer = createFixtureVtsPeer()
+        peer.transport.setAutoRespond(false)
+        const counting = createCountingDeadlineGate()
+        const kit = createM1VtsRendererKit({ peer, gate: counting, timeoutMs: 50 })
+        const execution = kit.renderer.renderer.execute(
+          fixturePerformanceCommand({ actionId: 'smile' }),
+          createCallContext(),
+        )
+        await microtasks()
+        expect(peer.transport.requests().map((request) => request.messageType)).toEqual([
+          'APIStateRequest',
+        ])
+        expect(peer.transport.pendingRequests().map((request) => request.messageType)).toEqual([
+          'APIStateRequest',
+        ])
+        expect(
+          peer.transport
+            .requests()
+            .some((request) => request.messageType === 'HotkeyTriggerRequest'),
+        ).toBe(false)
+        expect(vi.getTimerCount()).toBe(1)
+        expect(counting.addCount()).toBe(2)
+
+        if (mode === 'close') peer.transport.emitClose()
+        else if (mode === 'error') peer.transport.emitError()
+        else await vi.advanceTimersByTimeAsync(50)
+
+        const receipt = await execution
+        expect(receipt).toMatchObject({
+          stage: 'failed',
+          reasonCode: mode === 'timeout' ? 'vts_timeout' : 'vts_unavailable',
+        })
+        expect(performanceReceiptSchema.safeParse(receipt).success).toBe(true)
+        expect(
+          peer.transport
+            .requests()
+            .filter((request) => request.messageType === 'HotkeyTriggerRequest'),
+        ).toHaveLength(0)
+        expect(peer.transport.sendCount()).toBe(1)
+        expect(vi.getTimerCount()).toBe(0)
+        expect(counting.addCount()).toBe(counting.removeCount())
+
+        if (mode === 'timeout') {
+          // A single request timeout keeps the reusable connection subscription.
+          expect(peer.transport.hasListener()).toBe(true)
+          expect(peer.transport.unsubscribeCount()).toBe(0)
+        } else {
+          // Close/error permanently end this client and release its subscription.
+          expect(peer.transport.hasListener()).toBe(false)
+          expect(peer.transport.unsubscribeCount()).toBe(1)
+        }
+
+        // A late/held frame cannot replay the failed preflight as a trigger.
+        peer.transport.releaseNext()
+        await microtasks()
+        expect(peer.transport.sendCount()).toBe(1)
+        expect(
+          peer.transport
+            .requests()
+            .filter((request) => request.messageType === 'HotkeyTriggerRequest'),
+        ).toHaveLength(0)
+
+        kit.renderer.dispose()
+        expect(peer.transport.hasListener()).toBe(false)
+        expect(peer.transport.unsubscribeCount()).toBe(1)
+      } finally {
+        vi.useRealTimers()
+      }
+    }
+  })
+
+  it('maps a known APIError refusal to failed and a mismatched successful hotkey to unknown', async () => {
+    const refusalKit = createM1VtsRendererKit()
+    refusalKit.peer.state.apiErrorMessageTypes.push('HotkeyTriggerRequest')
+    const refusal = await refusalKit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile' }),
+      createCallContext(),
+    )
+    expect(refusal).toMatchObject({ stage: 'failed', reasonCode: 'vts_api_error' })
+    expect(JSON.stringify(refusal)).not.toContain('fixture refusal')
+
+    const mismatchKit = createM1VtsRendererKit()
+    mismatchKit.peer.state.triggerHotkeyID = 'fixture-hotkey-other'
+    const mismatch = await mismatchKit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile' }),
+      createCallContext(),
+    )
+    expect(mismatch).toMatchObject({ stage: 'unknown', reasonCode: 'vts_trigger_unknown' })
+  })
+
+  it('settles a malformed or synchronous trigger reply honestly and ignores a later duplicate', async () => {
+    const missingKit = createM1VtsRendererKit()
+    missingKit.peer.transport.setOnSend((request) => {
+      if (request.messageType === 'HotkeyTriggerRequest') {
+        missingKit.peer.transport.emit(
+          fixtureVtsResponse(request, 'HotkeyTriggerResponse', {}),
+        )
+      }
+    })
+    const missing = await missingKit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile' }),
+      createCallContext(),
+    )
+    expect(missing).toMatchObject({ stage: 'unknown', reasonCode: 'vts_trigger_unknown' })
+
+    const synchronousKit = createM1VtsRendererKit()
+    synchronousKit.peer.transport.setOnSend((request) => {
+      if (request.messageType === 'HotkeyTriggerRequest') {
+        synchronousKit.peer.transport.emit(
+          fixtureVtsResponse(request, 'HotkeyTriggerResponse', {
+            hotkeyID: M1_VTS_FIXTURE_HOTKEY_SMILE,
+          }),
+        )
+      }
+    })
+    const synchronous = await synchronousKit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile' }),
+      createCallContext(),
+    )
+    expect(synchronous).toMatchObject({ stage: 'accepted' })
+    expect(
+      synchronousKit.peer.transport
+        .requests()
+        .filter((request) => request.messageType === 'HotkeyTriggerRequest'),
+    ).toHaveLength(1)
+  })
+
+  it('never reports an attempted send fault as certainly unsent', async () => {
+    const preflightPeer = createFixtureVtsPeer()
+    preflightPeer.transport.setSendThrowsFor(['APIStateRequest'])
+    const preflightKit = createM1VtsRendererKit({ peer: preflightPeer })
+    const preflight = await preflightKit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile' }),
+      createCallContext(),
+    )
+    expect(preflight).toMatchObject({ stage: 'failed', reasonCode: 'vts_unavailable' })
+    expect(preflightPeer.transport.sendCount()).toBe(1)
+    expect(
+      preflightPeer.transport
+        .requests()
+        .filter((request) => request.messageType === 'HotkeyTriggerRequest'),
+    ).toHaveLength(0)
+
+    const triggerPeer = createFixtureVtsPeer()
+    triggerPeer.transport.setSendThrowsFor(['HotkeyTriggerRequest'])
+    const triggerKit = createM1VtsRendererKit({ peer: triggerPeer })
+    const trigger = await triggerKit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile' }),
+      createCallContext(),
+    )
+    expect(trigger).toMatchObject({ stage: 'unknown', reasonCode: 'vts_trigger_unknown' })
+    expect(
+      triggerPeer.transport
+        .requests()
+        .filter((request) => request.messageType === 'HotkeyTriggerRequest'),
+    ).toHaveLength(1)
+  })
+
+  it('admits one operation at a time and performs no extra request while busy', async () => {
+    const peer = createFixtureVtsPeer()
+    peer.transport.setAutoRespond(false)
+    const kit = createM1VtsRendererKit({ peer })
+    const firstContext = createCallContext()
+    const first = kit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile' }),
+      firstContext,
+    )
+    await microtasks()
+    expect(peer.transport.sendCount()).toBe(1)
+
+    const busy = await kit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'neutral', outputId: 'busy-output' }),
+      createCallContext(),
+    )
+    expect(busy).toMatchObject({ stage: 'failed', reasonCode: 'vts_busy' })
+    expect(peer.transport.sendCount()).toBe(1)
+
+    firstContext.abort()
+    await expect(first).resolves.toMatchObject({ stage: 'unknown' })
+    kit.renderer.dispose()
+  })
+
+  it('disables stale and duplicate-mapped instances without dispatching', async () => {
+    const kit = createM1VtsRendererKit()
+    const stale = await kit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile', capabilityRevision: 2 }),
+      createCallContext(),
+    )
+    expect(stale).toMatchObject({ stage: 'failed', reasonCode: 'stale_capability' })
+    const noOp = await kit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: NO_OP_ACTION }),
+      createCallContext(),
+    )
+    expect(noOp).toMatchObject({ stage: 'failed', reasonCode: 'no_op_not_dispatched' })
+    const unmapped = await kit.renderer.driver.dispatch(
+      'fixture-unmapped-hotkey',
+      createCallContext().signal,
+    )
+    expect(unmapped).toMatchObject({ stage: 'failed', reasonCode: 'vts_unknown_mapping' })
+    expect(kit.peer.transport.sendCount()).toBe(0)
+  })
+
+  it('copies mappings and revision at construction and keeps the original exact hotkey', async () => {
+    const mappings: VtsActionMapping[] = M1_VTS_DEFAULT_MAPPINGS.map((mapping) => ({ ...mapping }))
+    const kit = createM1VtsRendererKit({ mappings })
+    ;(mappings[1] as { actionId: string }).actionId = 'mutated-action'
+    ;(mappings[1] as { hotkeyId: string }).hotkeyId = 'mutated-hotkey'
+    mappings.push({ actionId: 'surprise', hotkeyId: 'mutated-extra' })
+
+    const receipt = await kit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile' }),
+      createCallContext(),
+    )
+    expect(receipt).toMatchObject({ stage: 'accepted' })
+    expect(kit.peer.transport.requests().at(-1)?.data).toEqual({
+      hotkeyID: M1_VTS_FIXTURE_HOTKEY_SMILE,
+    })
+    expect(kit.renderer.capabilities().actions.map((action) => action.actionId)).toEqual([
+      'neutral',
+      'smile',
+    ])
+    expect(kit.renderer.capabilities().capabilityRevision).toBe(1)
+  })
+
+  it('rejects invalid, empty, duplicate, no-op and unbounded mappings before subscribing', () => {
+    const peer = createFixtureVtsPeer()
+    const base = {
+      transport: peer.transport,
+      modelId: M1_VTS_FIXTURE_MODEL_ID,
+      rendererId: M1_VTS_FIXTURE_RENDERER_ID,
+      characterId: M1_VTS_FIXTURE_CHARACTER_ID,
+      capabilityRevision: 1,
+      mappings: M1_VTS_DEFAULT_MAPPINGS,
+      timeoutMs: 1000,
+      maxPending: 4,
+      deadlineGate: createTestDeadlineGate(),
+      receipts: createTestReceiptTools('vts-invalid'),
+    }
+    const invalid: Array<Record<string, unknown>> = [
+      { mappings: [] },
+      { mappings: [{ actionId: '', hotkeyId: 'h' }] },
+      { mappings: [{ actionId: 'a', hotkeyId: '' }] },
+      { mappings: [{ actionId: NO_OP_ACTION, hotkeyId: 'h' }] },
+      { mappings: [{ actionId: 'a', hotkeyId: NO_OP_ACTION }] },
+      {
+        mappings: [
+          { actionId: 'a', hotkeyId: 'h' },
+          { actionId: 'a', hotkeyId: 'h2' },
+        ],
+      },
+      {
+        mappings: [
+          { actionId: 'a', hotkeyId: 'h' },
+          { actionId: 'b', hotkeyId: 'h' },
+        ],
+      },
+      { modelId: '' },
+      { rendererId: '' },
+      { characterId: '' },
+      { capabilityRevision: -1 },
+      { timeoutMs: 0 },
+      { timeoutMs: Number.NaN },
+      { timeoutMs: Number.POSITIVE_INFINITY },
+      { timeoutMs: 2_147_483_648 },
+      { maxPending: 0 },
+      { maxPending: 1.5 },
+      { maxPending: 2048 },
+    ]
+    for (const override of invalid) {
+      expect(() =>
+        createVtsRenderer({ ...base, ...override } as Parameters<typeof createVtsRenderer>[0]),
+      ).toThrow()
+      expect(peer.transport.subscribeCount()).toBe(0)
+    }
+  })
+
+  it('permanently invalidates on request and disposes its owned transport once', async () => {
+    const kit = createM1VtsRendererKit()
+    kit.renderer.invalidate()
+    expect(kit.renderer.driver.isInvalidated()).toBe(true)
+    expect(kit.renderer.driver.isDisposed()).toBe(true)
+    expect(kit.peer.transport.disposeCount()).toBe(1)
+
+    const receipt = await kit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile' }),
+      createCallContext(),
+    )
+    expect(receipt).toMatchObject({ stage: 'failed', reasonCode: 'vts_instance_invalidated' })
+    expect(kit.peer.transport.sendCount()).toBe(0)
+
+    kit.renderer.dispose()
+    expect(kit.peer.transport.disposeCount()).toBe(1)
+  })
+
+  it('invalidates an in-flight preflight with zero triggers and an idempotent cleanup', async () => {
+    const peer = createFixtureVtsPeer()
+    peer.transport.setAutoRespond(false)
+    const kit = createM1VtsRendererKit({ peer })
+    const execution = kit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile' }),
+      createCallContext(),
+    )
+    await microtasks()
+    expect(peer.transport.sendCount()).toBe(1)
+
+    kit.renderer.invalidate()
+    const receipt = await execution
+    expect(receipt).toMatchObject({ stage: 'failed', reasonCode: 'vts_instance_invalidated' })
+    expect(peer.transport.requests().map((request) => request.messageType)).not.toContain(
+      'HotkeyTriggerRequest',
+    )
+    expect(peer.transport.disposeCount()).toBe(1)
+    kit.renderer.invalidate()
+    expect(peer.transport.disposeCount()).toBe(1)
+  })
+
+  it('bounds pending client work, clears its timer and releases the subscription once on dispose', async () => {
+    const peer = createFixtureVtsPeer()
+    peer.transport.setAutoRespond(false)
+    const client = createVtsClient({ transport: peer.transport, timeoutMs: 1000, maxPending: 1 })
+    const clearTimer = vi.spyOn(globalThis, 'clearTimeout')
+    try {
+      const first = client.apiState(createCallContext().signal)
+      const busy = await client.currentModel(createCallContext().signal)
+      expect(busy).toEqual({ kind: 'failed', code: 'busy', attempted: false })
+      expect(peer.transport.sendCount()).toBe(1)
+
+      peer.transport.releaseNext()
+      await expect(first).resolves.toMatchObject({ kind: 'ok' })
+      expect(clearTimer).toHaveBeenCalled()
+
+      client.dispose()
+      expect(peer.transport.unsubscribeCount()).toBe(1)
+      expect(peer.transport.disposeCount()).toBe(1)
+      expect(client.disposed).toBe(true)
+      const afterDispose = await client.apiState(createCallContext().signal)
+      expect(afterDispose).toEqual({ kind: 'failed', code: 'disposed', attempted: false })
+      expect(peer.transport.sendCount()).toBe(1)
+      client.dispose()
+      expect(peer.transport.disposeCount()).toBe(1)
+    } finally {
+      clearTimer.mockRestore()
+    }
+  })
+
+  it('settles a pending request on disposal without claiming it was unsent', async () => {
+    const peer = createFixtureVtsPeer()
+    peer.transport.setAutoRespond(false)
+    const client = createVtsClient({ transport: peer.transport, timeoutMs: 1000, maxPending: 2 })
+    const pending = client.apiState(createCallContext().signal)
+    await microtasks()
+    expect(peer.transport.sendCount()).toBe(1)
+
+    client.dispose()
+    await expect(pending).resolves.toEqual({
+      kind: 'failed',
+      code: 'disposed',
+      attempted: true,
+    })
+    expect(peer.transport.unsubscribeCount()).toBe(1)
+    expect(peer.transport.disposeCount()).toBe(1)
+    expect(peer.transport.emitRaw({ malformed: true })).toBe(false)
+    client.dispose()
+    expect(peer.transport.disposeCount()).toBe(1)
+  })
+
+  it('fails closed on synchronous subscribe faults and cleans up a close raised during subscribe', async () => {
+    const throwingPeer = createFixtureVtsPeer()
+    throwingPeer.transport.setSubscribeThrows(true)
+    const throwingKit = createM1VtsRendererKit({ peer: throwingPeer })
+    const throwingReceipt = await throwingKit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile' }),
+      createCallContext(),
+    )
+    expect(throwingReceipt).toMatchObject({ stage: 'failed', reasonCode: 'vts_unavailable' })
+    expect(throwingPeer.transport.sendCount()).toBe(0)
+    throwingKit.renderer.dispose()
+    expect(throwingPeer.transport.disposeCount()).toBe(1)
+
+    const closingPeer = createFixtureVtsPeer()
+    closingPeer.transport.emitDuringSubscribe([{ type: 'close' }])
+    const closingKit = createM1VtsRendererKit({ peer: closingPeer })
+    expect(closingPeer.transport.unsubscribeCount()).toBe(1)
+    const closingReceipt = await closingKit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile' }),
+      createCallContext(),
+    )
+    expect(closingReceipt).toMatchObject({ stage: 'failed', reasonCode: 'vts_unavailable' })
+    expect(closingPeer.transport.sendCount()).toBe(0)
+    closingKit.renderer.dispose()
+    expect(closingPeer.transport.disposeCount()).toBe(1)
+  })
+
+  it('captures the validated model identity and refuses a retargeted caller object during held preflight', async () => {
+    const peer = createFixtureVtsPeer()
+    peer.transport.setAutoRespond(false)
+    const deps: VtsRendererDeps = {
+      transport: peer.transport,
+      modelId: M1_VTS_FIXTURE_MODEL_ID,
+      rendererId: M1_VTS_FIXTURE_RENDERER_ID,
+      characterId: M1_VTS_FIXTURE_CHARACTER_ID,
+      capabilityRevision: 1,
+      mappings: M1_VTS_DEFAULT_MAPPINGS,
+      timeoutMs: 1000,
+      maxPending: 4,
+      deadlineGate: createTestDeadlineGate(),
+      receipts: createTestReceiptTools('vts-immutable-held'),
+    }
+    const adapter = createVtsRenderer(deps)
+    const capabilitiesBefore = adapter.capabilities()
+    const execution = adapter.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile' }),
+      createCallContext(),
+    )
+    await microtasks()
+    expect(peer.transport.requests().map((request) => request.messageType)).toEqual([
+      'APIStateRequest',
+    ])
+
+    // Mutate the caller-owned dependency object while its read-only APIState
+    // query is held, and make the peer report a different loaded model.
+    ;(deps as { modelId: string }).modelId = 'fixture-other-model'
+    peer.state.currentModelID = 'fixture-other-model'
+    peer.state.hotkeysModelID = 'fixture-other-model'
+    peer.transport.setAutoRespond(true)
+    expect(peer.transport.releaseNext()?.messageType).toBe('APIStateRequest')
+
+    const receipt = await execution
+    expect(receipt).toMatchObject({ stage: 'failed', reasonCode: 'vts_model_mismatch' })
+    expect(
+      peer.transport
+        .requests()
+        .filter((request) => request.messageType === 'HotkeyTriggerRequest'),
+    ).toEqual([])
+    expect(adapter.capabilities()).toEqual(capabilitiesBefore)
+    expect(adapter.capabilities().capabilityRevision).toBe(1)
+    adapter.dispose()
+  })
+
+  it('keeps the original model and capability revision usable when only caller storage is mutated', async () => {
+    const peer = createFixtureVtsPeer()
+    const deps: VtsRendererDeps = {
+      transport: peer.transport,
+      modelId: M1_VTS_FIXTURE_MODEL_ID,
+      rendererId: M1_VTS_FIXTURE_RENDERER_ID,
+      characterId: M1_VTS_FIXTURE_CHARACTER_ID,
+      capabilityRevision: 1,
+      mappings: M1_VTS_DEFAULT_MAPPINGS,
+      timeoutMs: 1000,
+      maxPending: 4,
+      deadlineGate: createTestDeadlineGate(),
+      receipts: createTestReceiptTools('vts-immutable-useful'),
+    }
+    const adapter = createVtsRenderer(deps)
+    const capabilitiesBefore = adapter.capabilities()
+    ;(deps as { modelId: string }).modelId = 'fixture-other-model'
+    ;(deps as { rendererId: string }).rendererId = 'mutated-renderer'
+    ;(deps as { characterId: string }).characterId = 'mutated-character'
+    ;(deps as { capabilityRevision: number }).capabilityRevision = 2
+
+    const receipt = await adapter.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile', capabilityRevision: 1 }),
+      createCallContext(),
+    )
+    expect(receipt).toMatchObject({ stage: 'accepted' })
+    expect(receipt.outputId).toBe('output-fixture-1')
+    expect(peer.transport.requests().at(-1)?.data).toEqual({
+      hotkeyID: M1_VTS_FIXTURE_HOTKEY_SMILE,
+    })
+    expect(adapter.capabilities()).toEqual(capabilitiesBefore)
+    expect(adapter.capabilities()).toMatchObject({
+      rendererId: M1_VTS_FIXTURE_RENDERER_ID,
+      characterId: M1_VTS_FIXTURE_CHARACTER_ID,
+      capabilityRevision: 1,
+    })
+    adapter.dispose()
+  })
+})
+
+describe('M1 VTS connection handle', () => {
+  interface FixtureWireRequest {
+    readonly requestID: string
+    readonly messageType: string
+    readonly data: unknown
+  }
+
+  function wireReply(
+    request: FixtureWireRequest,
+    messageType: string,
+    data: unknown,
+  ): string {
+    return JSON.stringify({
+      apiName: 'VTubeStudioPublicAPI',
+      apiVersion: '1.0',
+      timestamp: 1,
+      requestID: request.requestID,
+      messageType,
+      data,
+    })
+  }
+
+  it('validates the injected OPEN socket and cleanup bound before ownership', () => {
+    const socket = createFixtureVtsSocket()
+    const foreignMessage = (): void => undefined
+    let foreignCloseCalls = 0
+    const foreignClose = (): void => {
+      foreignCloseCalls += 1
+    }
+    const foreignError = (): void => undefined
+    socket.on('message', foreignMessage)
+    socket.on('close', foreignClose)
+    socket.on('error', foreignError)
+    expect(socket.listenerCount('message')).toBe(1)
+    expect(socket.listenerCount('close')).toBe(1)
+    expect(socket.listenerCount('error')).toBe(1)
+    const handle = createVtsConnectionHandle({
+      socket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+
+    expect(typeof handle.transport.send).toBe('function')
+    expect(typeof handle.transport.subscribe).toBe('function')
+    expect(typeof handle.transport.dispose).toBe('function')
+    expect(typeof handle.close).toBe('function')
+    expect(handle.closed).toBeInstanceOf(Promise)
+    expect(socket.listenerCount('message')).toBe(2)
+    expect(socket.listenerCount('close')).toBe(2)
+    expect(socket.listenerCount('error')).toBe(2)
+    expect(socket.sendCount()).toBe(0)
+    expect(socket.closeCount()).toBe(0)
+    expect(socket.terminateCount()).toBe(0)
+
+    for (const readyState of [0, 2, 3]) {
+      const rejected = createFixtureVtsSocket({ readyState })
+      expect(() =>
+        createVtsConnectionHandle({
+          socket: rejected,
+          closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+        }),
+      ).toThrow()
+      expect(rejected.listenerCount('message')).toBe(0)
+      expect(rejected.listenerCount('close')).toBe(0)
+      expect(rejected.listenerCount('error')).toBe(0)
+      expect(rejected.sendCount()).toBe(0)
+      expect(rejected.closeCount()).toBe(0)
+      expect(rejected.terminateCount()).toBe(0)
+    }
+
+    for (const closeTimeoutMs of [
+      0,
+      -1,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      2_147_483_648,
+      '50',
+    ]) {
+      const rejected = createFixtureVtsSocket()
+      expect(() =>
+        createVtsConnectionHandle({
+          socket: rejected,
+          closeTimeoutMs: closeTimeoutMs as number,
+        }),
+      ).toThrow()
+      expect(rejected.listenerCount('message')).toBe(0)
+      expect(rejected.listenerCount('close')).toBe(0)
+      expect(rejected.listenerCount('error')).toBe(0)
+      expect(rejected.closeCount()).toBe(0)
+      expect(rejected.sendCount()).toBe(0)
+    }
+
+    handle.close()
+    socket.emitClose()
+    expect(foreignCloseCalls).toBe(1)
+    expect(socket.listenerCount('message')).toBe(1)
+    expect(socket.listenerCount('close')).toBe(1)
+    expect(socket.listenerCount('error')).toBe(1)
+  })
+
+  it('allows one subscriber, contains subscriber exceptions and unsubscribes idempotently', () => {
+    const socket = createFixtureVtsSocket()
+    const handle = createVtsConnectionHandle({
+      socket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+    const unsubscribe = handle.transport.subscribe(() => {
+      throw new Error('fixture subscriber failure')
+    })
+
+    expect(() => handle.transport.subscribe(() => undefined)).toThrow()
+    expect(() => socket.emitMessage('contained subscriber exception')).not.toThrow()
+
+    unsubscribe()
+    unsubscribe()
+
+    const received: VtsTransportEvent[] = []
+    handle.transport.subscribe((event) => {
+      received.push(event)
+    })
+    socket.emitMessage('after unsubscribe')
+    expect(received).toEqual([{ type: 'message', data: 'after unsubscribe' }])
+
+    handle.close()
+    socket.emitClose()
+  })
+
+  it('normalizes text frames from strings, Buffers, ArrayBuffers and Buffer arrays', () => {
+    const socket = createFixtureVtsSocket()
+    const handle = createVtsConnectionHandle({
+      socket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+    const received: string[] = []
+    handle.transport.subscribe((event) => {
+      if (event.type === 'message' && typeof event.data === 'string') {
+        received.push(event.data)
+      }
+    })
+
+    const text = '{"fixture":"UTF-8 text \u65e5\u672c\u8a9e"}'
+    const bytes = Buffer.from(text, 'utf8')
+    const arrayBuffer = bytes.buffer.slice(
+      bytes.byteOffset,
+      bytes.byteOffset + bytes.byteLength,
+    ) as ArrayBuffer
+    const split = Math.floor(bytes.length / 2)
+
+    socket.emitMessage(text)
+    socket.emitMessage(bytes)
+    socket.emitMessage(arrayBuffer)
+    socket.emitMessage([bytes.subarray(0, split), bytes.subarray(split)])
+
+    expect(received).toEqual([text, text, text, text])
+
+    handle.close()
+    socket.emitClose()
+  })
+
+  it('rejects malformed encoding and ignores binary or unrelated frames', () => {
+    const socket = createFixtureVtsSocket()
+    const handle = createVtsConnectionHandle({
+      socket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+    const received: VtsTransportEvent[] = []
+    handle.transport.subscribe((event) => {
+      received.push(event)
+    })
+
+    socket.emitMessage(Buffer.from([0xff, 0xfe]))
+    socket.emitMessage(Buffer.from([0xe2, 0x82]))
+    socket.emitMessage(Buffer.from('binary text must be ignored', 'utf8'), true)
+    socket.emitMessage({ unexpected: true })
+    socket.emitMessage(null)
+    socket.emitMessage([Buffer.from('a'), 'not a buffer'])
+    socket.emitMessage(new Uint8Array([0x61]))
+    socket.emitMessage('accepted after rejected frames')
+
+    expect(received).toEqual([{ type: 'message', data: 'accepted after rejected frames' }])
+
+    handle.close()
+    socket.emitClose()
+  })
+
+  it('contains synchronous and asynchronous send failures without raw text or retry', async () => {
+    const syncSocket = createFixtureVtsSocket({ sendFailure: 'sync-throw' })
+    const syncHandle = createVtsConnectionHandle({
+      socket: syncSocket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+    const syncEvents: VtsTransportEvent[] = []
+    syncHandle.transport.subscribe((event) => {
+      syncEvents.push(event)
+    })
+
+    expect(() => syncHandle.transport.send('{"fixture":"sync send"}')).not.toThrow()
+    expect(syncEvents).toEqual([{ type: 'error' }])
+    expect(JSON.stringify(syncEvents)).not.toContain(M1_VTS_CONNECTION_RAW_TEXT)
+    expect(syncSocket.sendCount()).toBe(1)
+    expect(syncSocket.sentRaw()).toEqual(['{"fixture":"sync send"}'])
+
+    syncHandle.close()
+    syncSocket.emitClose()
+
+    const asyncSocket = createFixtureVtsSocket({ sendFailure: 'async-callback-error' })
+    const asyncHandle = createVtsConnectionHandle({
+      socket: asyncSocket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+    const asyncEvents: VtsTransportEvent[] = []
+    asyncHandle.transport.subscribe((event) => {
+      asyncEvents.push(event)
+    })
+
+    asyncHandle.transport.send('{"fixture":"async send"}')
+    await microtasks()
+    expect(asyncEvents).toEqual([{ type: 'error' }])
+    expect(JSON.stringify(asyncEvents)).not.toContain(M1_VTS_CONNECTION_RAW_TEXT)
+    expect(asyncSocket.sendCount()).toBe(1)
+    expect(asyncSocket.sentRaw()).toEqual(['{"fixture":"async send"}'])
+
+    asyncHandle.close()
+    asyncSocket.emitClose()
+  })
+
+  it('shares one close-initiation path without claiming physical closure early', async () => {
+    const socket = createFixtureVtsSocket()
+    const handle = createVtsConnectionHandle({
+      socket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+    let completed: unknown = null
+    void handle.closed.then((result) => {
+      completed = result
+    })
+
+    const firstClose = handle.close()
+    handle.transport.dispose()
+    const secondClose = handle.close()
+
+    expect(secondClose).toBe(firstClose)
+    expect(handle.closed).toBe(firstClose)
+    expect(socket.closeCount()).toBe(1)
+    await microtasks()
+    expect(completed).toBeNull()
+    expect(() => handle.transport.subscribe(() => undefined)).toThrow()
+
+    const sendsBeforeClose = socket.sendCount()
+    handle.transport.send('{"fixture":"after close initiation"}')
+    expect(socket.sendCount()).toBe(sendsBeforeClose)
+
+    socket.emitClose()
+    await expect(handle.closed).resolves.toEqual({ kind: 'closed' })
+    expect(completed).toEqual({ kind: 'closed' })
+    expect(socket.closeCount()).toBe(1)
+    expect(socket.terminateCount()).toBe(0)
+    expect(socket.listenerCount('message')).toBe(0)
+    expect(socket.listenerCount('close')).toBe(0)
+    expect(socket.listenerCount('error')).toBe(0)
+  })
+
+  it('resolves closed and forwards one safe close on a remote close', async () => {
+    const socket = createFixtureVtsSocket()
+    const handle = createVtsConnectionHandle({
+      socket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+    const events: VtsTransportEvent[] = []
+    handle.transport.subscribe((event) => {
+      events.push(event)
+    })
+
+    socket.emitClose(1006, Buffer.from(`${M1_VTS_CONNECTION_RAW_TEXT} remote close reason`))
+    await expect(handle.closed).resolves.toEqual({ kind: 'closed' })
+
+    expect(events).toEqual([{ type: 'close' }])
+    expect(JSON.stringify(events)).not.toContain(M1_VTS_CONNECTION_RAW_TEXT)
+    expect(socket.listenerCount('message')).toBe(0)
+    expect(socket.listenerCount('close')).toBe(0)
+    expect(socket.listenerCount('error')).toBe(0)
+
+    handle.close()
+    expect(socket.closeCount()).toBe(0)
+  })
+
+  it('forwards one safe error while unclosed and keeps completion pending', async () => {
+    const socket = createFixtureVtsSocket()
+    const handle = createVtsConnectionHandle({
+      socket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+    const events: VtsTransportEvent[] = []
+    handle.transport.subscribe((event) => {
+      events.push(event)
+    })
+
+    socket.emitError(new Error(`${M1_VTS_CONNECTION_RAW_TEXT} first socket error`))
+    socket.emitError(new Error(`${M1_VTS_CONNECTION_RAW_TEXT} second socket error`))
+    expect(events).toEqual([{ type: 'error' }])
+    expect(JSON.stringify(events)).not.toContain(M1_VTS_CONNECTION_RAW_TEXT)
+
+    let completed: unknown = null
+    void handle.closed.then((result) => {
+      completed = result
+    })
+    await microtasks()
+    expect(completed).toBeNull()
+
+    socket.emitClose()
+    await expect(handle.closed).resolves.toEqual({ kind: 'closed' })
+    expect(events).toEqual([{ type: 'error' }, { type: 'close' }])
+  })
+
+  it('clears the close timer when the socket emits close synchronously', async () => {
+    vi.useFakeTimers()
+    try {
+      const socket = createFixtureVtsSocket({ closeEmission: 'synchronous' })
+      const handle = createVtsConnectionHandle({
+        socket,
+        closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+      })
+      const events: VtsTransportEvent[] = []
+      handle.transport.subscribe((event) => {
+        events.push(event)
+      })
+
+      handle.close()
+
+      await expect(handle.closed).resolves.toEqual({ kind: 'closed' })
+      expect(events).toEqual([{ type: 'close' }])
+      expect(vi.getTimerCount()).toBe(0)
+      expect(socket.closeCount()).toBe(1)
+      expect(socket.listenerCount('message')).toBe(0)
+      expect(socket.listenerCount('close')).toBe(0)
+      expect(socket.listenerCount('error')).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('fails on close timeout and keeps a late close quarantined without reversal', async () => {
+    vi.useFakeTimers()
+    try {
+      const socket = createFixtureVtsSocket()
+      const handle = createVtsConnectionHandle({
+        socket,
+        closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+      })
+
+      handle.close()
+      await vi.advanceTimersByTimeAsync(M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS)
+      await expect(handle.closed).resolves.toEqual({
+        kind: 'failed',
+        code: 'close_timeout',
+      })
+      expect(vi.getTimerCount()).toBe(0)
+      expect(socket.closeCount()).toBe(1)
+      expect(socket.listenerCount('message')).toBe(1)
+      expect(socket.listenerCount('close')).toBe(1)
+      expect(socket.listenerCount('error')).toBe(1)
+
+      expect(() =>
+        socket.emitError(new Error(`${M1_VTS_CONNECTION_RAW_TEXT} timeout socket error`)),
+      ).not.toThrow()
+      expect(socket.listenerCount('message')).toBe(1)
+      expect(socket.listenerCount('close')).toBe(1)
+      expect(socket.listenerCount('error')).toBe(1)
+      await expect(handle.closed).resolves.toEqual({
+        kind: 'failed',
+        code: 'close_timeout',
+      })
+
+      const sendsBeforeLateClose = socket.sendCount()
+      handle.transport.send('{"fixture":"after timeout"}')
+      expect(socket.sendCount()).toBe(sendsBeforeLateClose)
+      expect(() => handle.transport.subscribe(() => undefined)).toThrow()
+      handle.close()
+      expect(socket.closeCount()).toBe(1)
+
+      socket.emitClose()
+      await microtasks()
+      expect(socket.listenerCount('message')).toBe(0)
+      expect(socket.listenerCount('close')).toBe(0)
+      expect(socket.listenerCount('error')).toBe(0)
+      expect(socket.terminateCount()).toBe(0)
+      await expect(handle.closed).resolves.toEqual({
+        kind: 'failed',
+        code: 'close_timeout',
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('fails safely when close throws and releases guards on a later close', async () => {
+    vi.useFakeTimers()
+    try {
+      const socket = createFixtureVtsSocket({ closeThrows: true })
+      const handle = createVtsConnectionHandle({
+        socket,
+        closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+      })
+      const events: VtsTransportEvent[] = []
+      handle.transport.subscribe((event) => {
+        events.push(event)
+      })
+
+      expect(() => handle.close()).not.toThrow()
+      await expect(handle.closed).resolves.toEqual({
+        kind: 'failed',
+        code: 'close_failed',
+      })
+      expect(events).toEqual([])
+      expect(JSON.stringify(events)).not.toContain(M1_VTS_CONNECTION_RAW_TEXT)
+      expect(vi.getTimerCount()).toBe(0)
+      expect(socket.closeCount()).toBe(1)
+      expect(socket.listenerCount('message')).toBe(1)
+      expect(socket.listenerCount('close')).toBe(1)
+      expect(socket.listenerCount('error')).toBe(1)
+
+      expect(() =>
+        socket.emitError(new Error(`${M1_VTS_CONNECTION_RAW_TEXT} close failure socket error`)),
+      ).not.toThrow()
+      expect(events).toEqual([{ type: 'error' }])
+      expect(JSON.stringify(events)).not.toContain(M1_VTS_CONNECTION_RAW_TEXT)
+      expect(socket.listenerCount('message')).toBe(1)
+      expect(socket.listenerCount('close')).toBe(1)
+      expect(socket.listenerCount('error')).toBe(1)
+      await expect(handle.closed).resolves.toEqual({
+        kind: 'failed',
+        code: 'close_failed',
+      })
+
+      socket.emitClose()
+      await microtasks()
+      expect(events).toEqual([{ type: 'error' }, { type: 'close' }])
+      expect(socket.listenerCount('message')).toBe(0)
+      expect(socket.listenerCount('close')).toBe(0)
+      expect(socket.listenerCount('error')).toBe(0)
+      await expect(handle.closed).resolves.toEqual({
+        kind: 'failed',
+        code: 'close_failed',
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it.each(['async-callback-error', 'sync-throw'] as const)(
+    'integrates with the actual VTS client and renderer after %s without replay',
+    async (failureMode) => {
+      const socket = createFixtureVtsSocket()
+      const handle = createVtsConnectionHandle({
+        socket,
+        closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+      })
+      const requests: FixtureWireRequest[] = []
+      let triggerRequest: FixtureWireRequest | null = null
+
+      socket.setOnSend((context) => {
+        const request = JSON.parse(context.serialized) as FixtureWireRequest
+        requests.push(request)
+        switch (request.messageType) {
+          case 'APIStateRequest':
+            context.reply(
+              wireReply(request, 'APIStateResponse', {
+                active: true,
+                vTubeStudioVersion: 'fixture-vts-offline',
+                currentSessionAuthenticated: true,
+              }),
+            )
+            return
+          case 'CurrentModelRequest':
+            context.reply(
+              wireReply(request, 'CurrentModelResponse', {
+                modelLoaded: true,
+                modelID: M1_VTS_FIXTURE_MODEL_ID,
+              }),
+            )
+            return
+          case 'HotkeysInCurrentModelRequest':
+            context.reply(
+              wireReply(request, 'HotkeysInCurrentModelResponse', {
+                modelLoaded: true,
+                modelID: M1_VTS_FIXTURE_MODEL_ID,
+                availableHotkeys: [{ hotkeyID: M1_VTS_FIXTURE_HOTKEY_SMILE }],
+              }),
+            )
+            return
+          case 'HotkeyTriggerRequest':
+            triggerRequest = request
+            if (failureMode === 'sync-throw') {
+              context.failSynchronously()
+            } else {
+              context.failAsynchronously()
+            }
+            return
+          default:
+            context.failAsynchronously()
+        }
+      })
+
+      const renderer = createVtsRenderer({
+        transport: handle.transport,
+        modelId: M1_VTS_FIXTURE_MODEL_ID,
+        rendererId: M1_VTS_FIXTURE_RENDERER_ID,
+        characterId: M1_VTS_FIXTURE_CHARACTER_ID,
+        capabilityRevision: 1,
+        mappings: [{ actionId: 'smile', hotkeyId: M1_VTS_FIXTURE_HOTKEY_SMILE }],
+        timeoutMs: 1000,
+        maxPending: 4,
+        deadlineGate: createTestDeadlineGate(),
+        receipts: createTestReceiptTools('vts-connection-integration'),
+      })
+
+      const receipt = await renderer.renderer.execute(
+        fixturePerformanceCommand({ actionId: 'smile' }),
+        createCallContext(),
+      )
+      expect(receipt).toMatchObject({ stage: 'unknown', reasonCode: 'vts_trigger_unknown' })
+
+      const trigger = triggerRequest
+      if (trigger === null) throw new Error('fixture: trigger request was not sent')
+      const sendsBeforeLateFrame = socket.sendCount()
+      const requestsBeforeLateFrame = requests.length
+
+      socket.emitMessage(
+        wireReply(trigger, 'HotkeyTriggerResponse', {
+          hotkeyID: M1_VTS_FIXTURE_HOTKEY_SMILE,
+        }),
+      )
+      await microtasks()
+      expect(socket.sendCount()).toBe(sendsBeforeLateFrame)
+      expect(requests.length).toBe(requestsBeforeLateFrame)
+      expect(
+        requests.filter((request) => request.messageType === 'HotkeyTriggerRequest'),
+      ).toHaveLength(1)
+
+      renderer.dispose()
+      expect(socket.closeCount()).toBe(1)
+      socket.emitClose()
+      await expect(handle.closed).resolves.toEqual({ kind: 'closed' })
+      expect(socket.terminateCount()).toBe(0)
+    },
+  )
+
+  it('adapts message and close from a real offline ws fixture peer on 127.0.0.1', async () => {
+    const server = await startM1VtsFixtureServer()
+    try {
+      const client = await openM1VtsFixtureClient(server.url)
+      try {
+        await server.waitForClient()
+        const handle = createVtsConnectionHandle({ socket: client, closeTimeoutMs: 1000 })
+        const events: VtsTransportEvent[] = []
+        let resolveMessage!: (text: string) => void
+        const messageArrived = new Promise<string>((resolve) => {
+          resolveMessage = resolve
+        })
+
+        handle.transport.subscribe((event) => {
+          events.push(event)
+          if (event.type === 'message' && typeof event.data === 'string') {
+            resolveMessage(event.data)
+          }
+        })
+
+        const text = '{"offlineFixture":"real-ws-message"}'
+        server.sendText(text)
+        await expect(messageArrived).resolves.toBe(text)
+
+        server.sendBinary(Buffer.from('binary frame must not become text', 'utf8'))
+        server.closeClient()
+        await expect(handle.closed).resolves.toEqual({ kind: 'closed' })
+
+        expect(events.filter((event) => event.type === 'message')).toEqual([
+          { type: 'message', data: text },
+        ])
+        expect(events.at(-1)).toEqual({ type: 'close' })
+      } finally {
+        await closeM1VtsFixtureClient(client)
+      }
+    } finally {
+      await server.close()
+    }
+  })
+})
+
+describe('M1-02 increment D2 VTS pairing handoff fence', () => {
+  it('rejects an authenticated handoff when the real D1 closes synchronously during pairing release', async () => {
+    const socket = createFixtureVtsSocket()
+    const handle = createVtsConnectionHandle({
+      socket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+    const realTransport = handle.transport
+    const wiredHandle = {
+      transport: {
+        send(serialized: string) {
+          realTransport.send(serialized)
+        },
+        subscribe(listener: (event: VtsTransportEvent) => void) {
+          const unsubscribe = realTransport.subscribe(listener)
+          return () => {
+            // Delegate first so the real D1 subscriber is gone, then complete
+            // the physical connection while the D1 socket guards remain.
+            unsubscribe()
+            socket.emitClose()
+          }
+        },
+        dispose() {
+          realTransport.dispose()
+        },
+      },
+      closed: handle.closed,
+      close: () => handle.close(),
+    }
+
+    socket.setOnSend((context) => {
+      const request = JSON.parse(context.serialized) as {
+        readonly requestID: string
+        readonly messageType: string
+      }
+      if (request.messageType !== 'AuthenticationRequest') return
+      context.reply(
+        JSON.stringify({
+          apiName: 'VTubeStudioPublicAPI',
+          apiVersion: '1.0',
+          timestamp: 1,
+          requestID: request.requestID,
+          messageType: 'AuthenticationResponse',
+          data: { authenticated: true },
+        }),
+      )
+    })
+
+    const result = await pairVtsConnection({
+      handle: wiredHandle,
+      identity: {
+        pluginName: 'Isla Pairing Fixture',
+        pluginDeveloper: 'Isla Team Fixture',
+      },
+      credentials: {
+        load: async () => 'fixture-pairing-token',
+        save: async () => undefined,
+      },
+      signal: new AbortController().signal,
+      mode: 'existing-only',
+      requestTimeoutMs: 1000,
+      humanApprovalTimeoutMs: 1000,
+    })
+
+    expect(result.kind).toBe('failed')
+    if (result.kind !== 'failed') return
+    expect(result.code).toBe('transport_closed')
+    expect(result.cleanup.connection).toEqual({ kind: 'closed' })
+    expect(result.cleanup.pairingSubscription).toBe('released')
+    expect('handle' in result).toBe(false)
+    await expect(handle.closed).resolves.toEqual({ kind: 'closed' })
+    expect(socket.sendCount()).toBe(1)
+    expect(socket.closeCount()).toBe(0)
+    expect(socket.listenerCount('message')).toBe(0)
+    expect(socket.listenerCount('close')).toBe(0)
+    expect(socket.listenerCount('error')).toBe(0)
+  })
+})
+
+describe('M1-02 increment D2 pairing core flow (A01, A02)', () => {
+  it('authenticates a stored credential on the same handle without prompting or saving', async () => {
+    const kit = createM1VtsPairingKit()
+    const counting = createM1VtsPairingCountingSignal()
+
+    const result = await kit.pair({ signal: counting.signal })
+
+    expect(result.kind).toBe('authenticated')
+    if (result.kind !== 'authenticated') return
+    expect(result.handle).toBe(kit.handle)
+    expect(kit.credentials.loadCalls()).toBe(1)
+    expect(kit.credentials.saveCalls()).toBe(0)
+    expect(kit.peer.requests().map((request) => request.messageType)).toEqual([
+      'AuthenticationRequest',
+    ])
+    expect(kit.peer.requestFor('AuthenticationTokenRequest')).toBeUndefined()
+    expect(kit.peer.requestFor('AuthenticationRequest')?.data).toEqual({
+      pluginName: M1_VTS_PAIRING_FIXTURE_PLUGIN_NAME,
+      pluginDeveloper: M1_VTS_PAIRING_FIXTURE_PLUGIN_DEVELOPER,
+      authenticationToken: M1_VTS_PAIRING_FIXTURE_TOKEN,
+    })
+    expect(counting.addCount()).toBe(1)
+    expect(counting.removeCount()).toBe(1)
+    expect(kit.socket.sendCount()).toBe(1)
+    expect(kit.socket.closeCount()).toBe(0)
+    expect(kit.socket.listenerCount('message')).toBe(1)
+    expect(kit.socket.listenerCount('close')).toBe(1)
+    expect(kit.socket.listenerCount('error')).toBe(1)
+  })
+
+  it('does not resolve or save after token grant; only real auth true permits save and same-handle success', async () => {
+    const credentials = createM1VtsControlledCredentials({
+      load: { kind: 'value', value: null },
+      save: { kind: 'hang' },
+    })
+    const kit = createM1VtsPairingKit({ credentials, mode: 'allow-prompt' })
+    kit.peer.setAuthReply({ kind: 'silent' })
+
+    let settled = false
+    const pending = kit.pair()
+    void pending.then(
+      () => {
+        settled = true
+      },
+      () => {
+        settled = true
+      },
+    )
+    await microtasks()
+
+    const tokenRequest = kit.peer.requestFor('AuthenticationTokenRequest')
+    const authRequest = kit.peer.requestFor('AuthenticationRequest')
+    expect(tokenRequest).toBeDefined()
+    expect(authRequest).toBeDefined()
+    expect(settled).toBe(false)
+    expect(credentials.saveCalls()).toBe(0)
+
+    kit.peer.respondAuthenticated(authRequest!, true)
+    await microtasks()
+    expect(settled).toBe(false)
+    expect(credentials.saveCalls()).toBe(1)
+    expect(credentials.pendingSaves()).toBe(1)
+    expect(credentials.savedValues()).toEqual([M1_VTS_PAIRING_FIXTURE_TOKEN])
+
+    credentials.resolveSave()
+    const result = await pending
+    expect(result.kind).toBe('authenticated')
+    if (result.kind !== 'authenticated') return
+    expect(result.handle).toBe(kit.handle)
+    expect(kit.peer.requests().map((request) => request.messageType)).toEqual([
+      'AuthenticationTokenRequest',
+      'AuthenticationRequest',
+    ])
+    expect(kit.peer.requestFor('AuthenticationTokenRequest')?.data).toEqual({
+      pluginName: M1_VTS_PAIRING_FIXTURE_PLUGIN_NAME,
+      pluginDeveloper: M1_VTS_PAIRING_FIXTURE_PLUGIN_DEVELOPER,
+    })
+  })
+
+  it('fails existing-only null with credential_missing, no sends and real closed cleanup', async () => {
+    const credentials = createM1VtsControlledCredentials({
+      load: { kind: 'value', value: null },
+    })
+    const kit = createM1VtsPairingKit({ credentials })
+
+    const result = await kit.pair()
+
+    expect(result.kind).toBe('failed')
+    if (result.kind !== 'failed') return
+    expect(result.code).toBe('credential_missing')
+    expect(result.cleanup.connection).toEqual({ kind: 'closed' })
+    expect(result.cleanup.pairingSubscription).toBe('released')
+    expect('handle' in result).toBe(false)
+    expect(kit.credentials.loadCalls()).toBe(1)
+    expect(kit.credentials.saveCalls()).toBe(0)
+    expect(kit.socket.sendCount()).toBe(0)
+    expect(kit.socket.closeCount()).toBe(1)
+  })
+
+  it('fails a rejected existing credential without prompting or retrying', async () => {
+    const kit = createM1VtsPairingKit({ mode: 'allow-prompt' })
+    kit.peer.setAuthReply({ kind: 'authenticated', value: false })
+
+    const result = await kit.pair()
+
+    expect(result.kind).toBe('failed')
+    if (result.kind !== 'failed') return
+    expect(result.code).toBe('authentication_rejected')
+    expect(result.cleanup.connection).toEqual({ kind: 'closed' })
+    expect(kit.peer.requests().map((request) => request.messageType)).toEqual([
+      'AuthenticationRequest',
+    ])
+    expect(kit.credentials.saveCalls()).toBe(0)
+    expect(kit.credentials.loadCalls()).toBe(1)
+    expect(kit.socket.sendCount()).toBe(1)
+  })
+
+  it('maps a correlated APIError 50 on the permission request to permission_denied without leaking its text', async () => {
+    const credentials = createM1VtsControlledCredentials({
+      load: { kind: 'value', value: null },
+    })
+    const kit = createM1VtsPairingKit({ credentials, mode: 'allow-prompt' })
+    kit.peer.setTokenReply({ kind: 'api-error', errorID: 50 })
+
+    const result = await kit.pair()
+
+    expect(result.kind).toBe('failed')
+    if (result.kind !== 'failed') return
+    expect(result.code).toBe('permission_denied')
+    expect(result.cleanup.connection).toEqual({ kind: 'closed' })
+    expect(JSON.stringify(result)).not.toContain(M1_VTS_PAIRING_PROVIDER_SENTINEL)
+    expect(kit.peer.requests().map((request) => request.messageType)).toEqual([
+      'AuthenticationTokenRequest',
+    ])
+    expect(kit.credentials.saveCalls()).toBe(0)
+  })
+
+  it('fails correlated wrong types and malformed used fields as protocol_error', async () => {
+    const promptCredentials = (): ReturnType<typeof createM1VtsControlledCredentials> =>
+      createM1VtsControlledCredentials({ load: { kind: 'value', value: null } })
+    const cases: Array<{
+      readonly name: string
+      readonly prompt: boolean
+      configure(kit: ReturnType<typeof createM1VtsPairingKit>): void
+    }> = [
+      {
+        name: 'auth response has the token response type',
+        prompt: false,
+        configure: (kit) =>
+          kit.peer.setAuthReply({
+            kind: 'wire',
+            messageType: 'AuthenticationTokenResponse',
+            data: { authenticationToken: M1_VTS_PAIRING_FIXTURE_TOKEN },
+          }),
+      },
+      {
+        name: 'authenticated is not boolean',
+        prompt: false,
+        configure: (kit) =>
+          kit.peer.setAuthReply({
+            kind: 'wire',
+            messageType: 'AuthenticationResponse',
+            data: { authenticated: 'yes' },
+          }),
+      },
+      {
+        name: 'authenticated is missing',
+        prompt: false,
+        configure: (kit) =>
+          kit.peer.setAuthReply({
+            kind: 'wire',
+            messageType: 'AuthenticationResponse',
+            data: {},
+          }),
+      },
+      {
+        name: 'APIError id is neither 50 nor valid permission denial',
+        prompt: false,
+        configure: (kit) => kit.peer.setAuthReply({ kind: 'api-error', errorID: 7 }),
+      },
+      {
+        name: 'token response is malformed',
+        prompt: true,
+        configure: (kit) =>
+          kit.peer.setTokenReply({
+            kind: 'wire',
+            messageType: 'AuthenticationTokenResponse',
+            data: {},
+          }),
+      },
+      {
+        name: 'token response is empty',
+        prompt: true,
+        configure: (kit) =>
+          kit.peer.setTokenReply({
+            kind: 'wire',
+            messageType: 'AuthenticationTokenResponse',
+            data: { authenticationToken: '' },
+          }),
+      },
+      {
+        name: 'token response has the auth response type',
+        prompt: true,
+        configure: (kit) =>
+          kit.peer.setTokenReply({
+            kind: 'wire',
+            messageType: 'AuthenticationResponse',
+            data: { authenticated: true },
+          }),
+      },
+    ]
+
+    for (const scenario of cases) {
+      const kit = createM1VtsPairingKit(
+        scenario.prompt
+          ? { credentials: promptCredentials(), mode: 'allow-prompt' }
+          : {},
+      )
+      scenario.configure(kit)
+      const result = await kit.pair()
+      expect(result.kind, scenario.name).toBe('failed')
+      if (result.kind !== 'failed') continue
+      expect(result.code, scenario.name).toBe('protocol_error')
+      expect(result.cleanup.connection, scenario.name).toEqual({ kind: 'closed' })
+      expect(kit.credentials.saveCalls(), scenario.name).toBe(0)
+    }
+  })
+})
+
+describe('M1-02 increment D2 correlation and options (A07, A13)', () => {
+  it('ignores wrong identity, version, request id and duplicate old frames before auth succeeds', async () => {
+    const credentials = createM1VtsControlledCredentials({
+      load: { kind: 'value', value: null },
+    })
+    const kit = createM1VtsPairingKit({ credentials, mode: 'allow-prompt' })
+    kit.peer.setAuthReply({ kind: 'silent' })
+
+    let settled = false
+    const pending = kit.pair()
+    void pending.then(
+      () => {
+        settled = true
+      },
+      () => {
+        settled = true
+      },
+    )
+    await microtasks()
+
+    const tokenRequest = kit.peer.requestFor('AuthenticationTokenRequest')
+    const authRequest = kit.peer.requestFor('AuthenticationRequest')
+    const tokenResponse = kit.peer.lastReplyFor('AuthenticationTokenResponse')
+    expect(tokenRequest).toBeDefined()
+    expect(authRequest).toBeDefined()
+    expect(tokenResponse).toBeDefined()
+
+    const envelope = (overrides: Record<string, unknown>): string =>
+      JSON.stringify({
+        apiName: 'VTubeStudioPublicAPI',
+        apiVersion: '1.0',
+        timestamp: 1,
+        requestID: tokenRequest!.requestID,
+        messageType: 'AuthenticationTokenResponse',
+        data: { authenticationToken: M1_VTS_PAIRING_FIXTURE_TOKEN },
+        ...overrides,
+      })
+    kit.peer.emitRaw(envelope({ apiName: 'NotVTubeStudio' }))
+    kit.peer.emitRaw(envelope({ apiVersion: '9.9' }))
+    kit.peer.emitRaw(envelope({ requestID: 'vts-999' }))
+    kit.peer.emitRaw(tokenResponse!)
+    await microtasks()
+    expect(settled).toBe(false)
+
+    kit.peer.respondAuthenticated(authRequest!, true)
+    const result = await pending
+    expect(result.kind).toBe('authenticated')
+    expect(kit.credentials.saveCalls()).toBe(1)
+    expect(kit.credentials.savedValues()).toEqual([M1_VTS_PAIRING_FIXTURE_TOKEN])
+  })
+
+  it('uses distinct ASCII request ids per attempt and never the C vts- namespace', async () => {
+    const first = createM1VtsPairingKit({
+      credentials: createM1VtsControlledCredentials({
+        load: { kind: 'value', value: null },
+      }),
+      mode: 'allow-prompt',
+    })
+    const second = createM1VtsPairingKit({
+      credentials: createM1VtsControlledCredentials({
+        load: { kind: 'value', value: null },
+      }),
+      mode: 'allow-prompt',
+    })
+
+    expect((await first.pair()).kind).toBe('authenticated')
+    expect((await second.pair()).kind).toBe('authenticated')
+    const ids = [...first.peer.requests(), ...second.peer.requests()].map(
+      (request) => request.requestID,
+    )
+    expect(ids).toHaveLength(4)
+    expect(new Set(ids).size).toBe(ids.length)
+    for (const id of ids) {
+      expect(id).toMatch(/^[\x21-\x7e]{1,64}$/)
+      expect(id.startsWith('vts-')).toBe(false)
+    }
+  })
+
+  it('rejects invalid programming options before ownership with no effect', async () => {
+    const kit = createM1VtsPairingKit()
+    const base = kit.options()
+    const invalid: Array<Record<string, unknown>> = [
+      { identity: { pluginName: 'ab', pluginDeveloper: 'Isla Team Fixture' } },
+      { identity: { pluginName: 'Isla Pairing Fixture', pluginDeveloper: 'x'.repeat(33) } },
+      { mode: 'prompt' },
+      { requestTimeoutMs: 0 },
+      { humanApprovalTimeoutMs: Number.POSITIVE_INFINITY },
+      { signal: {} },
+      { credentials: {} },
+      { handle: {} },
+    ]
+
+    for (const override of invalid) {
+      await expect(
+        pairVtsConnection({ ...base, ...override } as Parameters<typeof pairVtsConnection>[0]),
+      ).rejects.toThrow('vts-pairing: invalid options')
+    }
+
+    expect(kit.credentials.loadCalls()).toBe(0)
+    expect(kit.credentials.saveCalls()).toBe(0)
+    expect(kit.socket.sendCount()).toBe(0)
+    expect(kit.socket.closeCount()).toBe(0)
+    expect(kit.socket.listenerCount('message')).toBe(1)
+  })
+
+  it('treats a valid pre-aborted input as operational aborted cleanup with zero provider calls or sends', async () => {
+    const kit = createM1VtsPairingKit()
+    kit.controller.abort()
+
+    const result = await kit.pair()
+
+    expect(result.kind).toBe('failed')
+    if (result.kind !== 'failed') return
+    expect(result.code).toBe('aborted')
+    expect(result.cleanup.connection).toEqual({ kind: 'closed' })
+    expect(result.cleanup.pairingSubscription).toBe('released')
+    expect('handle' in result).toBe(false)
+    expect(kit.credentials.loadCalls()).toBe(0)
+    expect(kit.credentials.saveCalls()).toBe(0)
+    expect(kit.socket.sendCount()).toBe(0)
+    expect(kit.socket.closeCount()).toBe(1)
+    expect(kit.socket.listenerCount('message')).toBe(0)
+  })
+})
+
+describe('M1-02 increment D2 cancellation and budgets (A04, A05)', () => {
+  it('aborts promptly while the permission response is pending', async () => {
+    const credentials = createM1VtsControlledCredentials({
+      load: { kind: 'value', value: null },
+    })
+    const kit = createM1VtsPairingKit({ credentials, mode: 'allow-prompt' })
+    kit.peer.setTokenReply({ kind: 'silent' })
+
+    const pending = kit.pair()
+    await microtasks()
+    expect(kit.peer.requestFor('AuthenticationTokenRequest')).toBeDefined()
+
+    kit.controller.abort()
+    const result = await pending
+
+    expect(result.kind).toBe('failed')
+    if (result.kind !== 'failed') return
+    expect(result.code).toBe('aborted')
+    expect(result.cleanup.connection).toEqual({ kind: 'closed' })
+    expect(kit.peer.requestFor('AuthenticationRequest')).toBeUndefined()
+    expect(kit.credentials.saveCalls()).toBe(0)
+    expect(kit.socket.sendCount()).toBe(1)
+    expect(kit.socket.closeCount()).toBe(1)
+  })
+
+  it('aborts promptly while the authentication response is pending', async () => {
+    const kit = createM1VtsPairingKit()
+    kit.peer.setAuthReply({ kind: 'silent' })
+
+    const pending = kit.pair()
+    await microtasks()
+    expect(kit.peer.requestFor('AuthenticationRequest')).toBeDefined()
+
+    kit.controller.abort()
+    const result = await pending
+
+    expect(result.kind).toBe('failed')
+    if (result.kind !== 'failed') return
+    expect(result.code).toBe('aborted')
+    expect(result.cleanup.connection).toEqual({ kind: 'closed' })
+    expect(kit.peer.requestFor('AuthenticationTokenRequest')).toBeUndefined()
+    expect(kit.credentials.saveCalls()).toBe(0)
+    expect(kit.socket.sendCount()).toBe(1)
+  })
+
+  it('uses the human approval budget only for the permission response', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const credentials = createM1VtsControlledCredentials({
+        load: { kind: 'value', value: null },
+      })
+      const kit = createM1VtsPairingKit({
+        credentials,
+        mode: 'allow-prompt',
+        humanApprovalTimeoutMs: 10,
+        requestTimeoutMs: 1000,
+      })
+      kit.peer.setTokenReply({ kind: 'silent' })
+
+      let settled = false
+      const pending = kit.pair()
+      void pending.then(
+        () => {
+          settled = true
+        },
+        () => {
+          settled = true
+        },
+      )
+      await microtasks()
+      expect(kit.peer.requestFor('AuthenticationTokenRequest')).toBeDefined()
+
+      await vi.advanceTimersByTimeAsync(9)
+      expect(settled).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      const result = await pending
+      expect(result.kind).toBe('failed')
+      if (result.kind !== 'failed') return
+      expect(result.code).toBe('timeout')
+      expect(kit.peer.requestFor('AuthenticationRequest')).toBeUndefined()
+      expect(kit.credentials.saveCalls()).toBe(0)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('uses the request budget only for the authentication response', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const kit = createM1VtsPairingKit({
+        requestTimeoutMs: 10,
+        humanApprovalTimeoutMs: 1000,
+      })
+      kit.peer.setAuthReply({ kind: 'silent' })
+
+      let settled = false
+      const pending = kit.pair()
+      void pending.then(
+        () => {
+          settled = true
+        },
+        () => {
+          settled = true
+        },
+      )
+      await microtasks()
+      expect(kit.peer.requestFor('AuthenticationRequest')).toBeDefined()
+
+      await vi.advanceTimersByTimeAsync(9)
+      expect(settled).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      const result = await pending
+      expect(result.kind).toBe('failed')
+      if (result.kind !== 'failed') return
+      expect(result.code).toBe('timeout')
+      expect(kit.peer.requestFor('AuthenticationTokenRequest')).toBeUndefined()
+      expect(kit.credentials.saveCalls()).toBe(0)
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('M1-02 increment D2 same-handle handoff (A08, A16)', () => {
+  it('releases pairing resources and permits the actual C client to run APIState on the same handle', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const kit = createM1VtsPairingKit()
+      const counting = createM1VtsPairingCountingSignal()
+
+      const result = await kit.pair({ signal: counting.signal })
+      expect(result.kind).toBe('authenticated')
+      if (result.kind !== 'authenticated') return
+      expect(result.handle).toBe(kit.handle)
+      expect(counting.addCount()).toBe(1)
+      expect(counting.removeCount()).toBe(1)
+      expect(kit.socket.closeCount()).toBe(0)
+      expect(kit.socket.listenerCount('message')).toBe(1)
+      expect(vi.getTimerCount()).toBe(0)
+
+      kit.peer.setApiStateAuto(true)
+      const client = createVtsClient({
+        transport: kit.handle.transport,
+        timeoutMs: 1000,
+        maxPending: 2,
+      })
+      const state = await client.apiState(new AbortController().signal)
+      expect(state).toMatchObject({
+        kind: 'ok',
+        data: {
+          active: true,
+          vTubeStudioVersion: 'fixture-vts-pairing-1.0',
+          currentSessionAuthenticated: true,
+        },
+      })
+      expect(kit.peer.requestFor('APIStateRequest')?.requestID).toBe('vts-1')
+      expect(vi.getTimerCount()).toBe(0)
+
+      client.dispose()
+      await expect(kit.handle.closed).resolves.toEqual({ kind: 'closed' })
+      expect(kit.socket.closeCount()).toBe(1)
+      expect(kit.socket.listenerCount('message')).toBe(0)
+      expect(kit.socket.listenerCount('close')).toBe(0)
+      expect(kit.socket.listenerCount('error')).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('A16: a late duplicate pairing response cannot settle or fail C first APIState request', async () => {
+    const credentials = createM1VtsControlledCredentials({
+      load: { kind: 'value', value: null },
+    })
+    const kit = createM1VtsPairingKit({ credentials, mode: 'allow-prompt' })
+
+    const result = await kit.pair()
+    expect(result.kind).toBe('authenticated')
+    if (result.kind !== 'authenticated') return
+
+    const tokenRequest = kit.peer.requestFor('AuthenticationTokenRequest')
+    const tokenResponse = kit.peer.lastReplyFor('AuthenticationTokenResponse')
+    expect(tokenRequest).toBeDefined()
+    expect(tokenResponse).toBeDefined()
+    const captured = JSON.parse(tokenResponse!) as { readonly requestID: string }
+    expect(captured.requestID).toBe(tokenRequest!.requestID)
+    expect(captured.requestID).not.toBe('vts-1')
+    expect(captured.requestID).toMatch(/^[\x21-\x7e]{1,64}$/)
+    expect(captured.requestID.startsWith('vts-')).toBe(false)
+
+    kit.peer.setApiStateAuto(false)
+    const client = createVtsClient({
+      transport: kit.handle.transport,
+      timeoutMs: 1000,
+      maxPending: 2,
+    })
+    const pending = client.apiState(new AbortController().signal)
+    let settled = false
+    void pending.then(
+      () => {
+        settled = true
+      },
+      () => {
+        settled = true
+      },
+    )
+    await microtasks()
+
+    const apiStateRequest = kit.peer.requestFor('APIStateRequest')
+    expect(apiStateRequest?.requestID).toBe('vts-1')
+    expect(settled).toBe(false)
+
+    kit.peer.emitRaw(tokenResponse!)
+    await microtasks()
+    expect(settled).toBe(false)
+
+    kit.peer.respondApiState(apiStateRequest!)
+    const state = await pending
+    expect(state).toMatchObject({
+      kind: 'ok',
+      data: {
+        active: true,
+        vTubeStudioVersion: 'fixture-vts-pairing-1.0',
+        currentSessionAuthenticated: true,
+      },
+    })
+    expect(kit.peer.lastReplyFor('APIStateResponse')).toBeDefined()
+
+    client.dispose()
+    await expect(kit.handle.closed).resolves.toEqual({ kind: 'closed' })
+    expect(kit.socket.closeCount()).toBe(1)
+  })
+})
+
+describe('M1-02 increment D2 provider failure and late settlement (A06)', () => {
+  it('maps synchronous load throws and rejected loads to credential_read_failed without sends', async () => {
+    for (const mode of [
+      { kind: 'throw' as const, error: new Error(M1_VTS_PAIRING_PROVIDER_SENTINEL) },
+      { kind: 'reject' as const, error: new Error(M1_VTS_PAIRING_PROVIDER_SENTINEL) },
+    ]) {
+      const credentials = createM1VtsControlledCredentials({ load: mode })
+      const kit = createM1VtsPairingKit({ credentials })
+
+      const result = await kit.pair()
+
+      expect(result.kind).toBe('failed')
+      if (result.kind !== 'failed') continue
+      expect(result.code).toBe('credential_read_failed')
+      expect(result.cleanup.connection).toEqual({ kind: 'closed' })
+      expect(JSON.stringify(result)).not.toContain(M1_VTS_PAIRING_PROVIDER_SENTINEL)
+      expect(kit.credentials.loadCalls()).toBe(1)
+      expect(kit.credentials.saveCalls()).toBe(0)
+      expect(kit.socket.sendCount()).toBe(0)
+    }
+  })
+
+  it('returns aborted cleanup while load is unresolved and contains its late resolve and reject', async () => {
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason)
+    }
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const resolvedCredentials = createM1VtsControlledCredentials({
+        load: { kind: 'hang' },
+      })
+      const resolvedKit = createM1VtsPairingKit({ credentials: resolvedCredentials })
+      const resolvedPending = resolvedKit.pair()
+      await microtasks()
+      expect(resolvedCredentials.pendingLoads()).toBe(1)
+
+      resolvedKit.controller.abort()
+      const resolvedResult = await resolvedPending
+      expect(resolvedResult.kind).toBe('failed')
+      if (resolvedResult.kind === 'failed') {
+        expect(resolvedResult.code).toBe('aborted')
+        expect(resolvedResult.cleanup.connection).toEqual({ kind: 'closed' })
+      }
+      expect(resolvedCredentials.pendingLoads()).toBe(1)
+      resolvedCredentials.resolveLoad(M1_VTS_PAIRING_FIXTURE_TOKEN)
+      await microtasks()
+      expect(resolvedKit.socket.sendCount()).toBe(0)
+      expect(resolvedCredentials.saveCalls()).toBe(0)
+      expect(resolvedCredentials.pendingLoads()).toBe(0)
+
+      const rejectedCredentials = createM1VtsControlledCredentials({
+        load: { kind: 'hang' },
+      })
+      const rejectedKit = createM1VtsPairingKit({ credentials: rejectedCredentials })
+      const rejectedPending = rejectedKit.pair()
+      await microtasks()
+      rejectedKit.controller.abort()
+      await rejectedPending
+      rejectedCredentials.rejectLoad(new Error(M1_VTS_PAIRING_PROVIDER_SENTINEL))
+      await microtasks()
+
+      expect(unhandled).toEqual([])
+      expect(rejectedKit.socket.sendCount()).toBe(0)
+      expect(rejectedCredentials.saveCalls()).toBe(0)
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
+  it('maps synchronous save throws and rejected saves to credential_write_failed after real auth', async () => {
+    for (const mode of [
+      { kind: 'throw' as const, error: new Error(M1_VTS_PAIRING_PROVIDER_SENTINEL) },
+      { kind: 'reject' as const, error: new Error(M1_VTS_PAIRING_PROVIDER_SENTINEL) },
+    ]) {
+      const credentials = createM1VtsControlledCredentials({
+        load: { kind: 'value', value: null },
+        save: mode,
+      })
+      const kit = createM1VtsPairingKit({ credentials, mode: 'allow-prompt' })
+
+      const result = await kit.pair()
+
+      expect(result.kind).toBe('failed')
+      if (result.kind !== 'failed') continue
+      expect(result.code).toBe('credential_write_failed')
+      expect(result.cleanup.connection).toEqual({ kind: 'closed' })
+      expect(result.cleanup.pairingSubscription).toBe('released')
+      expect(JSON.stringify(result)).not.toContain(M1_VTS_PAIRING_PROVIDER_SENTINEL)
+      expect(kit.credentials.saveCalls()).toBe(1)
+      expect(kit.credentials.savedValues()).toEqual([M1_VTS_PAIRING_FIXTURE_TOKEN])
+      expect(kit.peer.requests().map((request) => request.messageType)).toEqual([
+        'AuthenticationTokenRequest',
+        'AuthenticationRequest',
+      ])
+    }
+  })
+
+  it('returns aborted cleanup while save is unresolved, contains late resolve/reject, and admits no new save', async () => {
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason)
+    }
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const resolvedCredentials = createM1VtsControlledCredentials({
+        load: { kind: 'value', value: null },
+        save: { kind: 'hang' },
+      })
+      const resolvedKit = createM1VtsPairingKit({
+        credentials: resolvedCredentials,
+        mode: 'allow-prompt',
+      })
+      const resolvedPending = resolvedKit.pair()
+      await resolvedCredentials.waitForSaveEntry()
+      expect(resolvedCredentials.pendingSaves()).toBe(1)
+
+      resolvedKit.controller.abort()
+      const resolvedResult = await resolvedPending
+      expect(resolvedResult.kind).toBe('failed')
+      if (resolvedResult.kind === 'failed') {
+        expect(resolvedResult.code).toBe('aborted')
+        expect(resolvedResult.cleanup.connection).toEqual({ kind: 'closed' })
+      }
+      expect(resolvedCredentials.pendingSaves()).toBe(1)
+      const sends = resolvedKit.socket.sendCount()
+      resolvedCredentials.resolveSave()
+      await microtasks()
+      expect(resolvedCredentials.saveCalls()).toBe(1)
+      expect(resolvedCredentials.pendingSaves()).toBe(0)
+      expect(resolvedKit.socket.sendCount()).toBe(sends)
+
+      const rejectedCredentials = createM1VtsControlledCredentials({
+        load: { kind: 'value', value: null },
+        save: { kind: 'hang' },
+      })
+      const rejectedKit = createM1VtsPairingKit({
+        credentials: rejectedCredentials,
+        mode: 'allow-prompt',
+      })
+      const rejectedPending = rejectedKit.pair()
+      await rejectedCredentials.waitForSaveEntry()
+      expect(rejectedCredentials.pendingSaves()).toBe(1)
+      rejectedKit.controller.abort()
+      await rejectedPending
+      expect(rejectedCredentials.pendingSaves()).toBe(1)
+      const rejectedSends = rejectedKit.socket.sendCount()
+      rejectedCredentials.rejectSave(new Error(M1_VTS_PAIRING_PROVIDER_SENTINEL))
+      await microtasks()
+
+      expect(unhandled).toEqual([])
+      expect(rejectedCredentials.saveCalls()).toBe(1)
+      expect(rejectedKit.socket.sendCount()).toBe(rejectedSends)
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
+  it('fails safely when the caller aborts during the pairing subscription release', async () => {
+    const kit = createM1VtsPairingKit()
+    const realTransport = kit.handle.transport
+    const wiredHandle = {
+      transport: {
+        send(serialized: string) {
+          realTransport.send(serialized)
+        },
+        subscribe(listener: (event: VtsTransportEvent) => void) {
+          const unsubscribe = realTransport.subscribe(listener)
+          return () => {
+            unsubscribe()
+            kit.controller.abort()
+          }
+        },
+        dispose() {
+          realTransport.dispose()
+        },
+      },
+      closed: kit.handle.closed,
+      close: () => kit.handle.close(),
+    }
+
+    const result = await kit.pair({ handle: wiredHandle })
+
+    expect(result.kind).toBe('failed')
+    if (result.kind !== 'failed') return
+    expect(result.code).toBe('aborted')
+    expect(result.cleanup.connection).toEqual({ kind: 'closed' })
+    expect(result.cleanup.pairingSubscription).toBe('released')
+    expect('handle' in result).toBe(false)
+    expect(kit.socket.closeCount()).toBe(1)
+  })
+})
+
+describe('M1-02 increment D2 actual D1 cleanup outcomes (A09)', () => {
+  it('keeps one physical close across duplicate dispose and close calls', async () => {
+    const credentials = createM1VtsControlledCredentials({
+      load: { kind: 'value', value: null },
+    })
+    const kit = createM1VtsPairingKit({ credentials })
+
+    const result = await kit.pair()
+    expect(result.kind).toBe('failed')
+    expect(kit.socket.closeCount()).toBe(1)
+
+    const first = kit.handle.close()
+    expect(kit.handle.close()).toBe(first)
+    kit.handle.transport.dispose()
+    await expect(first).resolves.toEqual({ kind: 'closed' })
+    expect(kit.socket.closeCount()).toBe(1)
+    expect(kit.socket.terminateCount()).toBe(0)
+  })
+
+  it('reports held cleanup timeout and keeps it failed after a late physical close', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const credentials = createM1VtsControlledCredentials({
+        load: { kind: 'value', value: null },
+      })
+      const kit = createM1VtsPairingKit({
+        credentials,
+        socket: createFixtureVtsSocket(),
+        closeTimeoutMs: 10,
+      })
+
+      const pending = kit.pair()
+      await microtasks()
+      expect(kit.socket.closeCount()).toBe(1)
+      const concurrent = kit.handle.close()
+      expect(concurrent).toBe(kit.handle.closed)
+      kit.handle.transport.dispose()
+      expect(kit.socket.closeCount()).toBe(1)
+      await vi.advanceTimersByTimeAsync(10)
+      const result = await pending
+
+      expect(result.kind).toBe('failed')
+      if (result.kind !== 'failed') return
+      expect(result.code).toBe('credential_missing')
+      expect(result.cleanup.connection).toEqual({ kind: 'failed', code: 'close_timeout' })
+      await expect(concurrent).resolves.toEqual({ kind: 'failed', code: 'close_timeout' })
+      expect(vi.getTimerCount()).toBe(0)
+      expect(kit.socket.listenerCount('message')).toBe(1)
+
+      kit.socket.emitClose()
+      await microtasks()
+      expect(kit.socket.listenerCount('message')).toBe(0)
+      expect(kit.socket.listenerCount('close')).toBe(0)
+      expect(kit.socket.listenerCount('error')).toBe(0)
+      await expect(kit.handle.closed).resolves.toEqual({
+        kind: 'failed',
+        code: 'close_timeout',
+      })
+      kit.handle.close()
+      expect(kit.socket.closeCount()).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('reports a synchronous socket close throw as failed and never rewrites it after a late close', async () => {
+    const credentials = createM1VtsControlledCredentials({
+      load: { kind: 'value', value: null },
+    })
+    const kit = createM1VtsPairingKit({
+      credentials,
+      socket: createFixtureVtsSocket({ closeThrows: true }),
+    })
+
+    const result = await kit.pair()
+    expect(result.kind).toBe('failed')
+    if (result.kind !== 'failed') return
+    expect(result.cleanup.connection).toEqual({ kind: 'failed', code: 'close_failed' })
+    expect('handle' in result).toBe(false)
+    expect(kit.socket.closeCount()).toBe(1)
+    expect(kit.socket.listenerCount('message')).toBe(1)
+
+    kit.socket.emitClose()
+    await microtasks()
+    expect(kit.socket.listenerCount('message')).toBe(0)
+    await expect(kit.handle.closed).resolves.toEqual({
+      kind: 'failed',
+      code: 'close_failed',
+    })
+  })
+
+  it('reports a listener-removal throw as failed rather than a successful cleanup', async () => {
+    const socket = createM1VtsPairingOffFailureSocket({ closeEmission: 'synchronous' })
+    socket.failOff(1)
+    const credentials = createM1VtsControlledCredentials({
+      load: { kind: 'value', value: null },
+    })
+    const kit = createM1VtsPairingKit({ credentials, socket })
+
+    const result = await kit.pair()
+    expect(result.kind).toBe('failed')
+    if (result.kind !== 'failed') return
+    expect(result.code).toBe('credential_missing')
+    expect(result.cleanup.connection).toEqual({ kind: 'failed', code: 'close_failed' })
+    expect('handle' in result).toBe(false)
+    expect(socket.closeCount()).toBe(1)
+    expect(socket.listenerCount('message')).toBe(1)
+    expect(socket.listenerCount('close')).toBe(0)
+    expect(socket.listenerCount('error')).toBe(0)
+  })
+})
+
+describe('M1-02 increment D2 pairing subscription release failure (A10)', () => {
+  it('rejects the handoff when unsubscribe throws after delegating to the real D1 unsubscribe', async () => {
+    const kit = createM1VtsPairingKit()
+    const realTransport = kit.handle.transport
+    const wiredHandle = {
+      transport: {
+        send(serialized: string) {
+          realTransport.send(serialized)
+        },
+        subscribe(listener: (event: VtsTransportEvent) => void) {
+          const unsubscribe = realTransport.subscribe(listener)
+          return () => {
+            unsubscribe()
+            throw new Error(M1_VTS_PAIRING_PROVIDER_SENTINEL)
+          }
+        },
+        dispose() {
+          realTransport.dispose()
+        },
+      },
+      closed: kit.handle.closed,
+      close: () => kit.handle.close(),
+    }
+
+    const result = await kit.pair({ handle: wiredHandle })
+
+    expect(result.kind).toBe('failed')
+    if (result.kind !== 'failed') return
+    expect(result.code).toBe('pairing_cleanup_failed')
+    expect(result.cleanup.connection).toEqual({ kind: 'closed' })
+    expect(result.cleanup.pairingSubscription).toBe('release_failed')
+    expect('handle' in result).toBe(false)
+    expect(JSON.stringify(result)).not.toContain(M1_VTS_PAIRING_PROVIDER_SENTINEL)
+    expect(kit.socket.closeCount()).toBe(1)
+    expect(kit.socket.listenerCount('message')).toBe(0)
+  })
+})
+
+describe('M1-02 increment D2 caller installation check (A11)', () => {
+  it('refuses a stale successful result, closes the shared handle, and installs only a current result', async () => {
+    let installed: unknown = null
+    const installIfCurrent = async (
+      result: Awaited<ReturnType<typeof pairVtsConnection>>,
+      current: boolean,
+      cancelled: boolean,
+    ): Promise<boolean> => {
+      if (result.kind !== 'authenticated') return false
+      if (!current || cancelled) {
+        await result.handle.close()
+        return false
+      }
+      installed = result.handle
+      return true
+    }
+
+    const staleKit = createM1VtsPairingKit()
+    const stale = await staleKit.pair()
+    expect(stale.kind).toBe('authenticated')
+    staleKit.controller.abort()
+    expect(await installIfCurrent(stale, false, true)).toBe(false)
+    expect(installed).toBeNull()
+    await expect(staleKit.handle.closed).resolves.toEqual({ kind: 'closed' })
+    expect(staleKit.socket.closeCount()).toBe(1)
+
+    const currentKit = createM1VtsPairingKit()
+    const current = await currentKit.pair()
+    expect(current.kind).toBe('authenticated')
+    expect(await installIfCurrent(current, true, false)).toBe(true)
+    expect(installed).toBe(currentKit.handle)
+    expect(currentKit.socket.closeCount()).toBe(0)
+    currentKit.handle.close()
+    await expect(currentKit.handle.closed).resolves.toEqual({ kind: 'closed' })
+  })
+})
+
+describe('M1-02 increment D2 sentinel isolation (A12)', () => {
+  it('does not expose fixture credentials, provider errors or protocol text through results or diagnostics', async () => {
+    const sentinel = M1_VTS_PAIRING_PROVIDER_SENTINEL
+    const tokenSentinel = 'fixture-secret-credential-sentinel'
+    const spies = [
+      vi.spyOn(console, 'log'),
+      vi.spyOn(console, 'warn'),
+      vi.spyOn(console, 'error'),
+      vi.spyOn(console, 'info'),
+      vi.spyOn(console, 'debug'),
+    ]
+    try {
+      const loadKit = createM1VtsPairingKit({
+        credentials: createM1VtsControlledCredentials({
+          load: { kind: 'throw', error: new Error(sentinel) },
+        }),
+      })
+      const loadResult = await loadKit.pair()
+      expect(loadResult.kind).toBe('failed')
+      if (loadResult.kind === 'failed') {
+        expect(loadResult.code).toBe('credential_read_failed')
+      }
+      expect(JSON.stringify(loadResult)).not.toContain(sentinel)
+
+      const saveKit = createM1VtsPairingKit({
+        credentials: createM1VtsControlledCredentials({
+          load: { kind: 'value', value: null },
+          save: { kind: 'throw', error: new Error(sentinel) },
+        }),
+        mode: 'allow-prompt',
+      })
+      const saveResult = await saveKit.pair()
+      expect(saveResult.kind).toBe('failed')
+      if (saveResult.kind === 'failed') {
+        expect(saveResult.code).toBe('credential_write_failed')
+      }
+      expect(JSON.stringify(saveResult)).not.toContain(sentinel)
+      expect(JSON.stringify(saveResult)).not.toContain(tokenSentinel)
+
+      const apiKit = createM1VtsPairingKit({
+        credentials: createM1VtsControlledCredentials({
+          load: { kind: 'value', value: null },
+        }),
+        mode: 'allow-prompt',
+      })
+      apiKit.peer.setTokenReply({
+        kind: 'api-error',
+        errorID: 50,
+        message: sentinel,
+      })
+      const apiResult = await apiKit.pair()
+      expect(apiResult.kind).toBe('failed')
+      if (apiResult.kind === 'failed') {
+        expect(apiResult.code).toBe('permission_denied')
+      }
+      expect(JSON.stringify(apiResult)).not.toContain(sentinel)
+
+      const successKit = createM1VtsPairingKit({
+        credentials: createM1VtsControlledCredentials({
+          load: { kind: 'value', value: tokenSentinel },
+        }),
+      })
+      const successResult = await successKit.pair()
+      expect(successResult.kind).toBe('authenticated')
+      expect(JSON.stringify(successResult)).not.toContain(tokenSentinel)
+      await successKit.handle.close()
+
+      for (const spy of spies) {
+        for (const call of spy.mock.calls) {
+          expect(call.map((value) => String(value)).join(' ')).not.toContain(sentinel)
+          expect(call.map((value) => String(value)).join(' ')).not.toContain(tokenSentinel)
+        }
+      }
+    } finally {
+      for (const spy of spies) spy.mockRestore()
+    }
+  })
+})
+
+describe('M1-02 increment D2 M5 total-deadline illustration (A14)', () => {
+  const createCaller = (
+    totalMs: number,
+  ): {
+    signal: AbortSignal
+    cause(): 'deadline' | 'cancel' | null
+    cancel(): void
+    finish(): void
+  } => {
+    const controller = new AbortController()
+    let cause: 'deadline' | 'cancel' | null = null
+    const timer = setTimeout(() => {
+      cause = 'deadline'
+      controller.abort()
+    }, totalMs)
+    return {
+      signal: controller.signal,
+      cause: () => cause,
+      cancel() {
+        cause = 'cancel'
+        controller.abort()
+      },
+      finish() {
+        clearTimeout(timer)
+      },
+    }
+  }
+
+  it('returns aborted while load is unresolved, keeps the caller deadline cause, and consumes late rejection', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason)
+    }
+    process.on('unhandledRejection', onUnhandled)
+    const caller = createCaller(20)
+    try {
+      const credentials = createM1VtsControlledCredentials({ load: { kind: 'hang' } })
+      const kit = createM1VtsPairingKit({ credentials })
+      const pending = kit.pair({ signal: caller.signal })
+      await microtasks()
+      expect(credentials.pendingLoads()).toBe(1)
+      expect(vi.getTimerCount()).toBe(1)
+
+      await vi.advanceTimersByTimeAsync(20)
+      const result = await pending
+      expect(result.kind).toBe('failed')
+      if (result.kind !== 'failed') return
+      expect(result.code).toBe('aborted')
+      expect(result.cleanup.connection).toEqual({ kind: 'closed' })
+      expect(caller.cause()).toBe('deadline')
+      expect(credentials.pendingLoads()).toBe(1)
+      expect(kit.socket.sendCount()).toBe(0)
+      expect(credentials.saveCalls()).toBe(0)
+
+      caller.finish()
+      expect(vi.getTimerCount()).toBe(0)
+      credentials.rejectLoad(new Error(M1_VTS_PAIRING_PROVIDER_SENTINEL))
+      await microtasks()
+      expect(unhandled).toEqual([])
+      expect(kit.socket.sendCount()).toBe(0)
+      expect(credentials.saveCalls()).toBe(0)
+    } finally {
+      caller.finish()
+      process.off('unhandledRejection', onUnhandled)
+      vi.useRealTimers()
+    }
+  })
+
+  it('returns aborted while save is unresolved, clears the caller timer, and consumes late rejection', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason)
+    }
+    process.on('unhandledRejection', onUnhandled)
+    const caller = createCaller(20)
+    try {
+      const credentials = createM1VtsControlledCredentials({
+        load: { kind: 'value', value: null },
+        save: { kind: 'hang' },
+      })
+      const kit = createM1VtsPairingKit({ credentials, mode: 'allow-prompt' })
+      const pending = kit.pair({ signal: caller.signal })
+      await credentials.waitForSaveEntry()
+      expect(credentials.pendingSaves()).toBe(1)
+      expect(vi.getTimerCount()).toBe(1)
+
+      await vi.advanceTimersByTimeAsync(20)
+      const result = await pending
+      expect(result.kind).toBe('failed')
+      if (result.kind !== 'failed') return
+      expect(result.code).toBe('aborted')
+      expect(result.cleanup.connection).toEqual({ kind: 'closed' })
+      expect(caller.cause()).toBe('deadline')
+      expect(credentials.pendingSaves()).toBe(1)
+
+      caller.finish()
+      expect(vi.getTimerCount()).toBe(0)
+      const sends = kit.socket.sendCount()
+      credentials.rejectSave(new Error(M1_VTS_PAIRING_PROVIDER_SENTINEL))
+      await microtasks()
+      expect(unhandled).toEqual([])
+      expect(credentials.saveCalls()).toBe(1)
+      expect(kit.socket.sendCount()).toBe(sends)
+    } finally {
+      caller.finish()
+      process.off('unhandledRejection', onUnhandled)
+      vi.useRealTimers()
+    }
+  })
+
+  it('clears the caller timer without a cause when a valid handoff is accepted', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const caller = createCaller(20)
+    try {
+      const kit = createM1VtsPairingKit()
+      const result = await kit.pair({ signal: caller.signal })
+      expect(result.kind).toBe('authenticated')
+      expect(caller.cause()).toBeNull()
+      caller.finish()
+      expect(vi.getTimerCount()).toBe(0)
+      kit.handle.close()
+      await expect(kit.handle.closed).resolves.toEqual({ kind: 'closed' })
+    } finally {
+      caller.finish()
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('M1-02 increment D2 test-only same-record save barrier (A15)', () => {
+  it('keeps a later operation for the same fixture record blocked until the admitted save settles', async () => {
+    let loadCalls = 0
+    let saveCalls = 0
+    let laterLoads = 0
+    let laterSaves = 0
+    let saveSettled = false
+    let releaseOldSave!: () => void
+    const oldSave = new Promise<void>((resolve) => {
+      releaseOldSave = () => {
+        saveSettled = true
+        resolve()
+      }
+    })
+
+    // Fixture-only provider for one plugin identity/deployment record. It has no
+    // production storage, lock or persistence beyond this test's gate.
+    let notifySaveEntry!: () => void
+    const saveEntered = new Promise<void>((resolve) => {
+      notifySaveEntry = resolve
+    })
+    const credentials = {
+      load: async (_signal: AbortSignal): Promise<string | null> => {
+        loadCalls += 1
+        return null
+      },
+      save: async (_value: string, _signal: AbortSignal): Promise<void> => {
+        saveCalls += 1
+        notifySaveEntry()
+        await oldSave
+      },
+    }
+
+    const kit = createM1VtsPairingKit({ mode: 'allow-prompt' })
+    const pending = kit.pair({ credentials })
+    await saveEntered
+    expect(loadCalls).toBe(1)
+    expect(saveCalls).toBe(1)
+    expect(saveSettled).toBe(false)
+
+    const laterAcquire = (async (): Promise<void> => {
+      await oldSave
+      await credentials.load(new AbortController().signal)
+      laterLoads += 1
+    })()
+    const laterPersist = (async (): Promise<void> => {
+      await oldSave
+      await credentials.save('fixture-later-record-value', new AbortController().signal)
+      laterSaves += 1
+    })()
+    await microtasks()
+    expect(laterLoads).toBe(0)
+    expect(laterSaves).toBe(0)
+    expect(loadCalls).toBe(1)
+    expect(saveCalls).toBe(1)
+
+    kit.controller.abort()
+    const result = await pending
+    expect(result.kind).toBe('failed')
+    if (result.kind !== 'failed') return
+    expect(result.code).toBe('aborted')
+    expect(result.cleanup.connection).toEqual({ kind: 'closed' })
+    expect(kit.socket.closeCount()).toBe(1)
+    await expect(kit.handle.closed).resolves.toEqual({ kind: 'closed' })
+    expect(saveSettled).toBe(false)
+    expect(laterLoads).toBe(0)
+    expect(laterSaves).toBe(0)
+    expect(loadCalls).toBe(1)
+    expect(saveCalls).toBe(1)
+
+    const sends = kit.socket.sendCount()
+    releaseOldSave()
+    await Promise.all([laterAcquire, laterPersist])
+    expect(saveSettled).toBe(true)
+    expect(laterLoads).toBe(1)
+    expect(laterSaves).toBe(1)
+    expect(loadCalls).toBe(2)
+    expect(saveCalls).toBe(2)
+    expect(kit.socket.sendCount()).toBe(sends)
+  })
+})
+
+describe('M1-02 increment D2 synchronous provider abort precedence', () => {
+  it('prefers observed abort when credential load aborts and then throws synchronously', async () => {
+    const controller = new AbortController()
+    const kit = createM1VtsPairingKit()
+    let loadCalls = 0
+    let saveCalls = 0
+
+    const result = await kit.pair({
+      signal: controller.signal,
+      credentials: {
+        load: (_signal: AbortSignal): Promise<string | null> => {
+          loadCalls += 1
+          controller.abort()
+          throw new Error(M1_VTS_PAIRING_PROVIDER_SENTINEL)
+        },
+        save: async () => {
+          saveCalls += 1
+        },
+      },
+    })
+
+    expect(result.kind).toBe('failed')
+    if (result.kind !== 'failed') return
+    expect(result.code).toBe('aborted')
+    expect(result.cleanup.connection).toEqual({ kind: 'closed' })
+    expect(result.cleanup.pairingSubscription).toBe('released')
+    expect('handle' in result).toBe(false)
+    expect(JSON.stringify(result)).not.toContain(M1_VTS_PAIRING_PROVIDER_SENTINEL)
+    expect(loadCalls).toBe(1)
+    expect(saveCalls).toBe(0)
+    expect(kit.socket.sendCount()).toBe(0)
+    expect(kit.socket.closeCount()).toBe(1)
+    await expect(kit.handle.closed).resolves.toEqual({ kind: 'closed' })
+  })
+
+  it('prefers observed abort when credentials save aborts and then throws synchronously', async () => {
+    const controller = new AbortController()
+    const kit = createM1VtsPairingKit({ mode: 'allow-prompt' })
+    let loadCalls = 0
+    let saveCalls = 0
+    const saved: string[] = []
+
+    const result = await kit.pair({
+      signal: controller.signal,
+      credentials: {
+        load: async (_signal: AbortSignal): Promise<string | null> => {
+          loadCalls += 1
+          return null
+        },
+        save: (_value: string, _signal: AbortSignal): Promise<void> => {
+          saveCalls += 1
+          saved.push(_value)
+          controller.abort()
+          throw new Error(M1_VTS_PAIRING_PROVIDER_SENTINEL)
+        },
+      },
+    })
+
+    expect(result.kind).toBe('failed')
+    if (result.kind !== 'failed') return
+    expect(result.code).toBe('aborted')
+    expect(result.cleanup.connection).toEqual({ kind: 'closed' })
+    expect('handle' in result).toBe(false)
+    expect(JSON.stringify(result)).not.toContain(M1_VTS_PAIRING_PROVIDER_SENTINEL)
+    expect(loadCalls).toBe(1)
+    expect(saveCalls).toBe(1)
+    expect(saved).toEqual([M1_VTS_PAIRING_FIXTURE_TOKEN])
+    expect(kit.peer.requests().map((request) => request.messageType)).toEqual([
+      'AuthenticationTokenRequest',
+      'AuthenticationRequest',
+    ])
+    expect(kit.socket.sendCount()).toBe(2)
+    await microtasks()
+    expect(kit.peer.requests()).toHaveLength(2)
+    expect(saveCalls).toBe(1)
+    expect(kit.socket.sendCount()).toBe(2)
+    await expect(kit.handle.closed).resolves.toEqual({ kind: 'closed' })
+  })
+})
+
+describe('M1-02 increment D2 safe entry checks', () => {
+  it('fails safely on an already physically closed handle and a quarantined failed handle', async () => {
+    const identity = {
+      pluginName: M1_VTS_PAIRING_FIXTURE_PLUGIN_NAME,
+      pluginDeveloper: M1_VTS_PAIRING_FIXTURE_PLUGIN_DEVELOPER,
+    }
+
+    const closedSocket = createFixtureVtsSocket()
+    const closedHandle = createVtsConnectionHandle({
+      socket: closedSocket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+    closedSocket.emitClose()
+    await expect(closedHandle.closed).resolves.toEqual({ kind: 'closed' })
+    const closedCredentials = createM1VtsControlledCredentials()
+    const closedResult = await pairVtsConnection({
+      handle: closedHandle,
+      identity,
+      credentials: closedCredentials,
+      signal: new AbortController().signal,
+      mode: 'existing-only',
+      requestTimeoutMs: 1000,
+      humanApprovalTimeoutMs: 1000,
+    })
+
+    expect(closedResult.kind).toBe('failed')
+    if (closedResult.kind !== 'failed') return
+    expect(closedResult.code).toBe('transport_error')
+    expect(closedResult.cleanup.connection).toEqual({ kind: 'closed' })
+    expect('handle' in closedResult).toBe(false)
+    expect(closedCredentials.loadCalls()).toBe(0)
+    expect(closedCredentials.saveCalls()).toBe(0)
+    expect(closedSocket.sendCount()).toBe(0)
+    await expect(closedHandle.closed).resolves.toEqual({ kind: 'closed' })
+
+    const failedSocket = createFixtureVtsSocket({ closeThrows: true })
+    const failedHandle = createVtsConnectionHandle({
+      socket: failedSocket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+    await expect(failedHandle.close()).resolves.toEqual({
+      kind: 'failed',
+      code: 'close_failed',
+    })
+    const failedCredentials = createM1VtsControlledCredentials()
+    const failedResult = await pairVtsConnection({
+      handle: failedHandle,
+      identity,
+      credentials: failedCredentials,
+      signal: new AbortController().signal,
+      mode: 'existing-only',
+      requestTimeoutMs: 1000,
+      humanApprovalTimeoutMs: 1000,
+    })
+
+    expect(failedResult.kind).toBe('failed')
+    if (failedResult.kind !== 'failed') return
+    expect(failedResult.code).toBe('transport_error')
+    expect(failedResult.cleanup.connection).toEqual({
+      kind: 'failed',
+      code: 'close_failed',
+    })
+    expect('handle' in failedResult).toBe(false)
+    expect(failedCredentials.loadCalls()).toBe(0)
+    expect(failedCredentials.saveCalls()).toBe(0)
+    expect(failedSocket.sendCount()).toBe(0)
+    expect(failedSocket.closeCount()).toBe(1)
+    await expect(failedHandle.closed).resolves.toEqual({
+      kind: 'failed',
+      code: 'close_failed',
+    })
+  })
+
+  it('maps empty, whitespace-bearing and 65-character stored credentials to credential_read_failed', async () => {
+    const invalidTokens = ['', 'fixture token with spaces', 'a'.repeat(65)]
+    for (const token of invalidTokens) {
+      const credentials = createM1VtsControlledCredentials({
+        load: { kind: 'value', value: token },
+      })
+      const kit = createM1VtsPairingKit({ credentials })
+
+      const result = await kit.pair()
+
+      expect(result.kind).toBe('failed')
+      if (result.kind !== 'failed') continue
+      expect(result.code).toBe('credential_read_failed')
+      expect(result.cleanup.connection).toEqual({ kind: 'closed' })
+      expect(result.cleanup.pairingSubscription).toBe('released')
+      expect('handle' in result).toBe(false)
+      expect(kit.credentials.loadCalls()).toBe(1)
+      expect(kit.credentials.saveCalls()).toBe(0)
+      expect(kit.socket.sendCount()).toBe(0)
+      expect(kit.socket.closeCount()).toBe(1)
+      await expect(kit.handle.closed).resolves.toEqual({ kind: 'closed' })
+    }
   })
 })

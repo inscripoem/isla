@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessByStdio } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { request } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -20,7 +20,11 @@ import { TEST_DEPLOYMENT_ORIGIN } from './production-kit'
  * SQLite handle and listening port — orphaned, which is why this harness never
  * uses it. Storage is a real temporary SQLite database, and the deployment
  * module is loaded by path through the same `ISLA_DEPLOYMENT_MODULE` seam a
- * deployment would use.
+ * deployment would use. `start(..., { ipc: true })` adds an IPC channel for the
+ * portable cooperative shutdown message; `collectUntilExit` reports the raw
+ * exit code and signal after both output pipes have drained, so a forceful
+ * termination is distinguishable from a cooperative exit and terminal
+ * diagnostics are not lost.
  *
  * Cleanup is deterministic on failure paths too: tracked disposers (performer
  * clients) close first, then every spawned CLI receives SIGTERM with a bounded
@@ -33,17 +37,31 @@ import { TEST_DEPLOYMENT_ORIGIN } from './production-kit'
  * the caller without ever being logged.
  */
 
-export type CliProcess = ChildProcessByStdio<null, Readable, Readable>
+export type CliProcess = ChildProcess & { stdout: Readable; stderr: Readable }
 
 export const CLI_ENTRY = 'src/runtime/production-cli.ts'
 export const DEPLOYMENT_MODULE = resolve(process.cwd(), 'test/support/production-deployment.ts')
+/**
+ * The CLI's portable cooperative shutdown message. The production entry cannot
+ * be imported (it runs `main()` on import), so this literal must match
+ * `IPC_SHUTDOWN_MESSAGE` in `src/runtime/production-cli.ts`.
+ */
+export const CLI_IPC_SHUTDOWN_MESSAGE = 'isla.runtime.shutdown'
 
 const DISPOSE_GRACE_MS = 5000
 const SHUTDOWN_GRACE_MS = 5000
 
+export interface CliStartOptions {
+  /**
+   * Spawns the CLI with an IPC channel, so the test can request the portable
+   * cooperative shutdown with `send({ type: CLI_IPC_SHUTDOWN_MESSAGE })`.
+   */
+  ipc?: boolean
+}
+
 export interface CliHarness {
   /** Spawns the production CLI with the given environment additions. */
-  start(env: Record<string, string>): CliProcess
+  start(env: Record<string, string>, options?: CliStartOptions): CliProcess
   /** A fresh temporary directory, removed by `cleanup()`. */
   tempDir(): string
   /** A fresh temporary SQLite path, removed by `cleanup()`. */
@@ -99,11 +117,14 @@ export function createCliHarness(prefix = 'isla-production-cli-'): CliHarness {
   }
 
   return {
-    start(env) {
+    start(env, options = {}) {
       const child = spawn(process.execPath, ['--import', 'tsx', CLI_ENTRY], {
         env: { ...process.env, ...env },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      })
+        stdio:
+          options.ipc === true
+            ? ['ignore', 'pipe', 'pipe', 'ipc']
+            : ['ignore', 'pipe', 'pipe'],
+      }) as CliProcess
       children.push(child)
       return child
     },
@@ -151,19 +172,54 @@ export function createCliHarness(prefix = 'isla-production-cli-'): CliHarness {
   }
 }
 
-/** Collects stdout and stderr until the child exits. */
-export function collectUntilExit(child: CliProcess): Promise<{ code: number; output: string }> {
+export interface CliExit {
+  /** The raw exit code, or `null` when the process was terminated by a signal. */
+  code: number | null
+  /** The raw termination signal, or `null` for a normal exit. */
+  signal: NodeJS.Signals | null
+  output: string
+}
+
+/**
+ * Collects stdout and stderr until the child has exited and both pipes have
+ * drained. The raw exit code and signal are returned without substitution, so a
+ * cooperative exit (`code` 0, `signal` null) is distinguishable from a forceful
+ * termination (`code` null, the actual signal). The `exit` event can precede the
+ * final pipe reads, so the promise resolves only after both streams have ended;
+ * detaching at `exit` could drop the terminal diagnostics. Process exit alone is
+ * never proof of graceful shutdown.
+ */
+export function collectUntilExit(child: CliProcess): Promise<CliExit> {
   return new Promise((resolve) => {
     let output = ''
+    let code: number | null = null
+    let signal: NodeJS.Signals | null = null
+    let exited = false
+    let endedStreams = 0
+    let settled = false
     const onData = (chunk: Buffer): void => {
       output += chunk.toString('utf8')
     }
-    child.stdout.on('data', onData)
-    child.stderr.on('data', onData)
-    child.once('exit', (code) => {
+    const finishIfDrained = (): void => {
+      if (settled || !exited || endedStreams < 2) return
+      settled = true
       child.stdout.off('data', onData)
       child.stderr.off('data', onData)
-      resolve({ code: code ?? -1, output })
+      resolve({ code, signal, output })
+    }
+    const onEnd = (): void => {
+      endedStreams += 1
+      finishIfDrained()
+    }
+    child.stdout.on('data', onData)
+    child.stderr.on('data', onData)
+    child.stdout.once('end', onEnd)
+    child.stderr.once('end', onEnd)
+    child.once('exit', (exitCode, exitSignal) => {
+      code = exitCode
+      signal = exitSignal
+      exited = true
+      finishIfDrained()
     })
   })
 }
@@ -209,9 +265,13 @@ export function waitForListening(child: CliProcess): Promise<{ port: number; ses
         }
       }
     }
-    const onExit = (code: number | null): void => {
+    const onExit = (code: number | null, signal: NodeJS.Signals | null): void => {
       child.stdout.off('data', onData)
-      reject(new Error(`CLI exited with code ${code} before "listening": ${buffer}`))
+      reject(
+        new Error(
+          `CLI exited with code ${code ?? 'null'}${signal !== null ? ` (signal ${signal})` : ''} before "listening": ${buffer}`,
+        ),
+      )
     }
     child.stdout.on('data', onData)
     child.once('exit', onExit)
