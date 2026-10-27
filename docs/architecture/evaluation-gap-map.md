@@ -14,7 +14,9 @@ before requesting any new case, so a later allocation starts from facts rather t
 
 Read `docs/req/case-registry.yaml` on `main` (`74e9995`) and the named verifier files. A case is
 **covered** only when a registered verifier asserts that case's own claim; a test that exercises the same
-mechanism is **partly**.
+mechanism is **partly**. Test titles are quoted as they appear at `74e9995`; the case registry remains the
+source of truth for which verifier is registered, so a renamed title must be re-checked against the
+registry rather than trusted from this table.
 
 ## Map
 
