@@ -14,6 +14,7 @@ import {
 import { createPerformerClient } from '../support/performer-client'
 import type { PerformerClient } from '../support/performer-client'
 import {
+  CLI_IPC_SHUTDOWN_MESSAGE,
   DEPLOYMENT_MODULE,
   bootstrapOperatorToken,
   collectUntilExit,
@@ -29,17 +30,27 @@ import { TEST_DEPLOYMENT_ORIGIN, seedProductionEvidence } from '../support/produ
  *
  * Two separately spawned production CLI processes run over one real SQLite
  * database. The first produces a confirmed turn through the actual application
- * transport (WebSocket `/app`) and exits under SIGTERM. The second starts under
- * a fresh live id, explicitly selects the previous live session and the seeded
- * archive, continues output through the same transport, and never replays old
- * audio or promotes the archive's partial-unknown, null-attribution record. The
- * assembled dialogue context is observed through the test-only capture hook in
- * the deployment module.
+ * transport (WebSocket `/app`) and exits through the portable IPC control
+ * message; the second starts under a fresh live id, explicitly selects the
+ * previous live session and the seeded archive, continues output through the
+ * same transport, exits through the same IPC trigger, and never replays old
+ * audio or promotes the archive's partial-unknown, null-attribution record.
+ * The assembled dialogue context is observed through the test-only capture hook
+ * in the deployment module. Both processes in this continuation case therefore
+ * avoid dependence on Linux signal semantics; the separate force-kill case
+ * below keeps the Linux signal coverage.
+ *
+ * The second case kills the first process forcefully (SIGKILL) while a turn's
+ * second segment is held, then reopens the same database: the committed prefix
+ * survives, the unfinished tail is never promoted, and a fresh stopped session
+ * continues over the crashed database without replaying anything before its
+ * own input.
  *
  * Scope: real child processes, real SQLite, real application transport. The peer
  * modules are the labeled test substitutes, so this establishes process
- * continuation and evidence preservation — not live providers, acoustic output
- * or uncommitted-tail crash recovery.
+ * continuation, forced-kill recovery and evidence preservation — not live
+ * providers or acoustic output. The kill lands between commits; it does not
+ * force a torn write, and no Windows behavior is established.
  */
 
 const LIVE_A = 'session-restart-a'
@@ -103,6 +114,7 @@ async function connectPerformer(
   cli: CliHarness,
   port: number,
   sessionId: string,
+  mediaOptions: { holdEndedFrom?: number } = {},
 ): Promise<PerformerClient> {
   let counter = 0
   const client = createPerformerClient({
@@ -110,7 +122,7 @@ async function connectPerformer(
     origin: TEST_DEPLOYMENT_ORIGIN,
     sessionId,
     resolver: createRegistryResolver(createM1ActualBlobMap()),
-    media: createControlledMediaDriver({ autoEvents: true }),
+    media: createControlledMediaDriver({ autoEvents: true, ...mediaOptions }),
     receipts: {
       newReceiptId: () => `${sessionId}-receipt-${(counter += 1)}`,
       localNowMs: () => null,
@@ -118,7 +130,10 @@ async function connectPerformer(
   })
   // Tracked before the handshake: a failed boot must not leak the socket.
   cli.track(() => client.close())
-  await client.snapshot
+  const snapshot = await client.snapshot
+  // The actual initial snapshot proves the lifecycle is stopped before Resume
+  // is requested; the comment alone is not evidence.
+  expect((snapshot.payload as { lifecycle?: unknown }).lifecycle).toBe('stopped')
   const token = await bootstrapOperatorToken(port)
   expect((await client.bootstrapOperator(token)).kind).toBe('operator.ack')
   expect((await client.attach()).kind).toBe('session.attach.ack')
@@ -167,12 +182,15 @@ describe('production process restart acceptance', () => {
       await seedDatabase(dbPath, (store) => seedProductionEvidence(store, ARCHIVE))
 
       // ---- first process: confirmed output through the actual transport ----
-      const first = harness.start({
-        ISLA_DEPLOYMENT_MODULE: DEPLOYMENT_MODULE,
-        ISLA_STORAGE_DB_PATH: dbPath,
-        ISLA_RUNTIME_PORT: '0',
-        ISLA_TEST_LIVE_SESSION_ID: LIVE_A,
-      })
+      const first = harness.start(
+        {
+          ISLA_DEPLOYMENT_MODULE: DEPLOYMENT_MODULE,
+          ISLA_STORAGE_DB_PATH: dbPath,
+          ISLA_RUNTIME_PORT: '0',
+          ISLA_TEST_LIVE_SESSION_ID: LIVE_A,
+        },
+        { ipc: true },
+      )
       const firstListening = await waitForListening(first)
       expect(firstListening.sessionId).toBe(LIVE_A)
       const firstClient = await connectPerformer(harness, firstListening.port, LIVE_A)
@@ -185,9 +203,14 @@ describe('production process restart acceptance', () => {
       expect(firstOutputIds).toHaveLength(SEGMENTS.length)
       await firstClient.close()
       const firstExit = collectUntilExit(first)
-      first.kill('SIGTERM')
+      // Both processes in this continuation case shut down through the portable
+      // IPC control message, so the acceptance does not depend on Linux signal
+      // semantics; the separate force-kill case keeps the Linux signal coverage.
+      expect(first.send({ type: CLI_IPC_SHUTDOWN_MESSAGE })).toBe(true)
       const firstResult = await firstExit
       expect(firstResult.code).toBe(0)
+      expect(firstResult.signal).toBeNull()
+      expect(firstResult.output).toContain('"trigger":"ipc"')
       expect(firstResult.output).toContain('"event":"shutdown_complete"')
 
       // The transport-confirmed turn is durable, and the archive's unknown
@@ -209,14 +232,17 @@ describe('production process restart acceptance', () => {
       expect(oldIdentities).toHaveLength(SEGMENTS.length + 2)
 
       // ---- second process: fresh live id, explicit selected history ----
-      const second = harness.start({
-        ISLA_DEPLOYMENT_MODULE: DEPLOYMENT_MODULE,
-        ISLA_STORAGE_DB_PATH: dbPath,
-        ISLA_RUNTIME_PORT: '0',
-        ISLA_TEST_LIVE_SESSION_ID: LIVE_B,
-        ISLA_TEST_ARCHIVE_SESSIONS: `${LIVE_A},${ARCHIVE}`,
-        ISLA_TEST_DIALOGUE_CAPTURE_FILE: captureFile,
-      })
+      const second = harness.start(
+        {
+          ISLA_DEPLOYMENT_MODULE: DEPLOYMENT_MODULE,
+          ISLA_STORAGE_DB_PATH: dbPath,
+          ISLA_RUNTIME_PORT: '0',
+          ISLA_TEST_LIVE_SESSION_ID: LIVE_B,
+          ISLA_TEST_ARCHIVE_SESSIONS: `${LIVE_A},${ARCHIVE}`,
+          ISLA_TEST_DIALOGUE_CAPTURE_FILE: captureFile,
+        },
+        { ipc: true },
+      )
       const secondListening = await waitForListening(second)
       expect(secondListening.sessionId).toBe(LIVE_B)
       const secondClient = await connectPerformer(harness, secondListening.port, LIVE_B)
@@ -264,9 +290,11 @@ describe('production process restart acceptance', () => {
 
       await secondClient.close()
       const secondExit = collectUntilExit(second)
-      second.kill('SIGTERM')
+      expect(second.send({ type: CLI_IPC_SHUTDOWN_MESSAGE })).toBe(true)
       const secondResult = await secondExit
       expect(secondResult.code).toBe(0)
+      expect(secondResult.signal).toBeNull()
+      expect(secondResult.output).toContain('"trigger":"ipc"')
       expect(secondResult.output).toContain('"event":"shutdown_complete"')
 
       // The assembled dialogue context proves the carried confirmed history
@@ -305,6 +333,118 @@ describe('production process restart acceptance', () => {
         ])
         expect(unresolvedRecords(view, LIVE_A)).toEqual([])
         expect(unresolvedRecords(view, LIVE_B)).toEqual([])
+      })
+    },
+    60000,
+  )
+
+  it(
+    'restarts after a forceful kill without promoting the interrupted tail',
+    async () => {
+      const dbPath = harness.tempDatabasePath()
+      const captureFile = join(harness.tempDir(), 'dialogue-context-crash.jsonl')
+
+      // ---- first process: a committed prefix and a held tail ----
+      const first = harness.start({
+        ISLA_DEPLOYMENT_MODULE: DEPLOYMENT_MODULE,
+        ISLA_STORAGE_DB_PATH: dbPath,
+        ISLA_RUNTIME_PORT: '0',
+        ISLA_TEST_LIVE_SESSION_ID: LIVE_A,
+      })
+      const firstListening = await waitForListening(first)
+      // Segment 0 completes on the controlled media; segment 1 starts and is
+      // held, so the turn has an unfinished tail when the process is killed.
+      const firstClient = await connectPerformer(harness, firstListening.port, LIVE_A, {
+        holdEndedFrom: 1,
+      })
+      expect(((await firstClient.input(INPUT_A)).payload as { status?: string }).status).toBe(
+        'accepted',
+      )
+      await until(
+        () => ({
+          completed: firstClient.receipts().filter((receipt) => receipt.stage === 'completed')
+            .length,
+          started: firstClient.receipts().filter((receipt) => receipt.stage === 'started').length,
+          committed: sessionEvents(firstClient, 'delivery.committed').length,
+        }),
+        (state) => state.completed >= 1 && state.started >= 2 && state.committed >= 1,
+      )
+      expect(sessionEvents(firstClient, 'delivery.committed')).toHaveLength(1)
+
+      const firstExit = collectUntilExit(first)
+      first.kill('SIGKILL')
+      const killed = await firstExit
+      // Raw reporting: a forceful kill has no exit code and names the signal.
+      expect(killed.code).toBeNull()
+      expect(killed.signal).toBe('SIGKILL')
+      expect(killed.output).not.toContain('"event":"shutdown_complete"')
+
+      // ---- recovered state: the committed prefix only ----
+      // The completed segment survived the kill; the held tail was never
+      // committed, and no completion was fabricated for the interrupted turn.
+      withRecoveryView(dbPath, (view) => {
+        expect(view.confirmed(LIVE_A).map((record) => record.text)).toEqual([SEGMENTS[0]])
+        expect(unresolvedRecords(view, LIVE_A)).toEqual([])
+      })
+
+      // ---- second process: fresh live id continues over the crashed database ----
+      const second = harness.start({
+        ISLA_DEPLOYMENT_MODULE: DEPLOYMENT_MODULE,
+        ISLA_STORAGE_DB_PATH: dbPath,
+        ISLA_RUNTIME_PORT: '0',
+        ISLA_TEST_LIVE_SESSION_ID: LIVE_B,
+        ISLA_TEST_ARCHIVE_SESSIONS: LIVE_A,
+        ISLA_TEST_DIALOGUE_CAPTURE_FILE: captureFile,
+      })
+      const secondListening = await waitForListening(second)
+      expect(secondListening.sessionId).toBe(LIVE_B)
+      const secondClient = await connectPerformer(harness, secondListening.port, LIVE_B)
+      // The restarted session is a fresh stopped session: snapshot, attach and
+      // resume dispatch nothing, and the crashed session's committed prefix is
+      // history, not a replay. Capture the message count before the new input.
+      const messagesBeforeInput = secondClient.messages().length
+      expect(((await secondClient.input(INPUT_B)).payload as { status?: string }).status).toBe(
+        'accepted',
+      )
+      await waitForCompletedTurn(secondClient)
+      // No performance message was dispatched before the new input, and only
+      // the new turn's deliveries are committed — nothing old is re-delivered.
+      const beforeInput = secondClient.messages().slice(0, messagesBeforeInput)
+      expect(
+        beforeInput.some(
+          (message) => typeof message.kind === 'string' && PERFORMANCE_KINDS.has(message.kind),
+        ),
+      ).toBe(false)
+      expect(sessionEvents(secondClient, 'delivery.committed')).toHaveLength(SEGMENTS.length)
+      await secondClient.close()
+      const secondExit = collectUntilExit(second)
+      second.kill('SIGTERM')
+      const secondResult = await secondExit
+      expect(secondResult.code).toBe(0)
+      expect(secondResult.signal).toBeNull()
+
+      // The continued context carries only the crashed session's committed
+      // segment; the held tail is not presented as history.
+      const captured = readFileSync(captureFile, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as CapturedContext)
+      expect(captured).toHaveLength(1)
+      const context = captured[0]!
+      expect(context.selectedInputText).toBe(INPUT_B)
+      expect(context.historySource).toBe('history-port')
+      expect(context.history.map((entry) => entry.text)).toEqual([SEGMENTS[0]])
+      expect(context.history.every((entry) => entry.classification === 'fully-delivered')).toBe(
+        true,
+      )
+      expect(context.turns.map((turn) => turn.sessionId)).toEqual([LIVE_A])
+
+      // Durable outcome: the crashed session keeps exactly its committed
+      // prefix, and the new session's own evidence is complete.
+      withRecoveryView(dbPath, (view) => {
+        expect(view.confirmed(LIVE_A).map((record) => record.text)).toEqual([SEGMENTS[0]])
+        expect(unresolvedRecords(view, LIVE_A)).toEqual([])
+        expect(view.confirmed(LIVE_B).map((record) => record.text)).toEqual([...SEGMENTS])
       })
     },
     60000,

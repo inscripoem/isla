@@ -22,9 +22,34 @@ import type { ProductionApplication, ProductionDeployment, ProductionDeploymentF
  * the failure is reported, and a failed start still performs the controlled
  * shutdown: a shutdown fault is reported as `shutdown_failed`, never swallowed
  * and never reported as complete.
+ *
+ * A parent that spawned this entry with an IPC channel can request the same
+ * controlled shutdown with `{ type: IPC_SHUTDOWN_MESSAGE }`. That is the
+ * portable cooperative trigger for platforms where a POSIX signal terminates
+ * the process forcefully (Windows). The lifecycle records distinguish the
+ * trigger from an actual signal: a real signal reports
+ * `trigger: "signal"` with the received signal name, while the IPC request
+ * reports `trigger: "ipc"` and never claims a POSIX signal that was not
+ * received.
  */
 
 export const DEPLOYMENT_MODULE_ENV = 'ISLA_DEPLOYMENT_MODULE'
+/** Control message that requests the controlled shutdown over an IPC channel. */
+export const IPC_SHUTDOWN_MESSAGE = 'isla.runtime.shutdown'
+
+/**
+ * How the controlled shutdown was requested: a real OS signal or the portable
+ * IPC control message. `ipc` is a trigger, never an OS signal.
+ */
+type ShutdownReason =
+  | { readonly trigger: 'signal'; readonly signal: NodeJS.Signals }
+  | { readonly trigger: 'ipc' }
+
+function shutdownDetails(reason: ShutdownReason): Record<string, unknown> {
+  return reason.trigger === 'signal'
+    ? { trigger: 'signal', signal: reason.signal }
+    : { trigger: 'ipc' }
+}
 
 function log(event: string, details: Record<string, unknown> = {}): void {
   process.stdout.write(
@@ -136,27 +161,51 @@ async function main(): Promise<void> {
     return
   }
 
+  // An installed `message` listener refs a parent-supplied IPC channel, which
+  // would keep the event loop alive after the controlled shutdown; release it
+  // once shutdown has settled so the process can exit naturally.
+  const releaseControlChannel = (): void => {
+    if (process.connected) process.disconnect()
+  }
+
   // Orderly shutdown handling is installed before the server is started, so a
   // signal delivered immediately after `listening` is published is handled
   // rather than terminating the process with the default action. A signal that
   // arrives during startup is serialized behind `start()` by the application's
   // own lifecycle.
   let shuttingDown = false
-  const shutdown = async (signal: string): Promise<void> => {
+  const shutdown = async (reason: ShutdownReason): Promise<void> => {
     if (shuttingDown) return
     shuttingDown = true
-    log('shutdown_started', { signal })
+    log('shutdown_started', shutdownDetails(reason))
     try {
       await application.stop()
-      log('shutdown_complete', { signal })
+      log('shutdown_complete', shutdownDetails(reason))
     } catch (error) {
       logError('shutdown_failed', error)
       process.exitCode = 1
+    } finally {
+      releaseControlChannel()
     }
   }
 
-  process.on('SIGINT', () => void shutdown('SIGINT'))
-  process.on('SIGTERM', () => void shutdown('SIGTERM'))
+  process.on('SIGINT', () => void shutdown({ trigger: 'signal', signal: 'SIGINT' }))
+  process.on('SIGTERM', () => void shutdown({ trigger: 'signal', signal: 'SIGTERM' }))
+
+  // The IPC trigger is installed under the same serialization as the signals.
+  // It only exists when a parent supplied a channel; unrelated messages are
+  // ignored, and the shutdown itself is idempotent.
+  if (typeof process.send === 'function') {
+    process.on('message', (message: unknown) => {
+      if (
+        typeof message === 'object' &&
+        message !== null &&
+        (message as { type?: unknown }).type === IPC_SHUTDOWN_MESSAGE
+      ) {
+        void shutdown({ trigger: 'ipc' })
+      }
+    })
+  }
 
   // `start()` is invoked synchronously after the handlers are installed, so a
   // signal can only be observed through the application's serialized lifecycle,
@@ -181,6 +230,7 @@ async function main(): Promise<void> {
       // than swallowed.
       logError('shutdown_failed', stopError)
     }
+    releaseControlChannel()
     process.exitCode = 1
     return
   }

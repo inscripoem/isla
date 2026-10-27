@@ -13,8 +13,9 @@ single-output browser playback controller, its `PlayerPort` adapter, the
 `HTMLAudioElement` media driver, a real injected-provider `SynthesisPort`
 adapter, a controlled audio-resource registry, a synchronous no-truncation
 tokenizer guard over the real SDK boundary and an optional Node worker
-offload for the blocking CPU inference. Live VTS, the network receipt transport
-and product history integration remain later work.
+offload for the blocking CPU inference, plus the offline D1 connection handle
+and D2 pairing primitive (token grant/authentication only). Live VTS, the network
+receipt transport and product history integration remain later work.
 
 ## Public adapters
 
@@ -599,9 +600,272 @@ pnpm exec tsx test/live/kokoro-smoke.ts --main-thread
 The browser harness is served from the committed config
 `test/live/kokoro-browser.config.ts` and page `test/live/kokoro-browser.html`.
 
+## VTube Studio hotkey adapter (M1-02 increment C)
+
+[`vts-client.ts`](vts-client.ts) implements the deterministic VTS protocol
+client and [`vts-driver.ts`](vts-driver.ts) implements the hotkey driver plus its
+composition with the existing mapped renderer. This increment is the offline,
+injected-transport adapter: it contains no endpoint discovery, pairing,
+authentication token, credential reader, socket constructor, reconnect, retry or
+replay. A later D/M5 composition supplies an already connected transport and
+owns the live connection decision.
+
+```ts
+const adapter = createVtsRenderer({
+  transport, // already connected; owned by the adapter until dispose
+  modelId, // exact configured model identity
+  rendererId,
+  characterId,
+  capabilityRevision,
+  mappings: [
+    { actionId: 'neutral', hotkeyId: 'exact-hotkey-id-neutral' },
+    { actionId: 'smile', hotkeyId: 'exact-hotkey-id-smile' },
+  ],
+  timeoutMs, // finite positive timer value
+  maxPending, // positive bounded in-flight request count
+  deadlineGate,
+  receipts,
+})
+
+const receipt = await adapter.renderer.execute(command, context)
+adapter.invalidate() // or adapter.dispose(): permanent, idempotent
+```
+
+`createVtsRenderer` exposes a mapped `RendererPort`, the lifecycle-owning
+`VtsHotkeyDriver`, a protected `capabilities()` view, and `invalidate()`/
+`dispose()`. Its capability snapshot advertises every configured semantic action
+as `acceptance-only` with no parameter bounds. Mappings are immutable copies of
+caller input; empty ids, duplicate actions/hotkeys, no-op actions, no-op hotkeys,
+invalid identities/revisions and unbounded timeout/pending values are refused at
+construction before the transport is subscribed. The validated model identity and
+the renderer/character/revision configuration are also captured once at
+construction, so later mutation of the caller-owned dependency object cannot
+retarget an existing capability revision. Injected live services and clock hooks
+remain separate from that immutable configuration.
+
+Each client requires one exclusively owned transport/connection for its whole
+lifecycle. Request ids are generated and correlated per client; overlapping
+clients must never share one transport/connection, because a reply stream and the
+connection-level subscription cannot be partitioned safely. The injected
+transport contract is deliberately narrow:
+
+- `send(serializedJson)` is synchronous; a throw may still have had an effect
+  and is never reported as certainly unsent.
+- `subscribe(event => ...)` returns an idempotent unsubscribe function;
+  `message`, `close` and `error` events are handled, including callbacks raised
+  synchronously during `subscribe` or `send`.
+- `dispose()` is called once by the adapter. The adapter never reconnects after a
+  close, error or disposal.
+
+The protocol client validates the complete VTS envelope identity
+(`apiName='VTubeStudioPublicAPI'`, `apiVersion='1.0'`), correlates the exact
+`requestID`, and validates every field it uses. Frames with a different
+`requestID`, a non-VTS envelope identity, non-JSON data, or an unrecognised, old
+or duplicate request id are unrelated and ignored. A frame whose request id
+matches a pending request is correlated: a different response type, malformed
+data, missing field or malformed `APIError` is a protocol failure and cannot
+succeed. Request ids are unique and non-reused within the client lifetime,
+nonempty and shorter than 64 characters. Pending work is bounded by
+`maxPending`, every request has a finite validated timeout, settlement is exactly
+once, and abort listeners and timers are removed on every outcome. A correlated
+protocol `APIError` is a refusal; raw error messages and transport exception text
+never enter observations or logs.
+
+Each dispatch rechecks, in order, `APIStateResponse` `active` and
+`currentSessionAuthenticated` (never a caller-supplied trust boolean),
+`CurrentModelResponse` `modelLoaded`/`modelID`, and
+`HotkeysInCurrentModelResponse` `modelLoaded`/`modelID` plus the exact configured
+`hotkeyID` for that currently loaded model. Only then is one
+`HotkeyTriggerRequest` with that exact id sent. A missing/unavailable mapping,
+model mismatch, unauthenticated or inactive API, disappeared hotkey or invalidated
+instance means zero trigger calls. One dispatch is admitted per driver instance;
+a concurrent dispatch fails `vts_busy` with no queue and no extra request.
+
+A matching `HotkeyTriggerResponse` with the exact requested `hotkeyID` is
+reported only as `accepted`. It never becomes `started` or `completed`; the
+mapped renderer additionally refuses an acceptance-only completion claim. A
+known `APIError` refusal settles `failed`. An already-aborted dispatch guarantees
+zero protocol sends and settles `cancelled`. An abort or expiry during preflight
+may already have sent read-only API/model/hotkey queries, but it guarantees zero
+trigger requests. The low-level driver can report `cancelled` before trigger; the
+existing generic mapped-renderer abort race can conservatively report `unknown`
+before the driver resolves, so the mapped wrapper does not always return
+`cancelled` for that pre-trigger case. No animation-stop guarantee is made. After
+the hotkey trigger send was attempted, abort, close, error, timeout, a send fault,
+a malformed correlated frame or a mismatched successful hotkey id settle
+`unknown`, because the protocol provides no proof that the trigger had no effect.
+A close, error or timeout during read-only preflight never sent a trigger and
+settles `failed` (for example `vts_unavailable` or `vts_timeout`) rather than an
+uncertain trigger. There is no automatic reset, remove-expression,
+stop-animation or replay guess, and no VTS timestamp is used as a local clock:
+driver observations and mapped receipts use the injected `ReceiptTools` local
+time. A cancel or close is not evidence that an animation stopped.
+
+`invalidate()`/`dispose()` permanently disable the old instance, close its owned
+transport and make all later dispatches fail with zero sends. A new capability
+revision and a freshly constructed instance are required, while M5 is stopped and
+previous work has settled. The adapter does not take over scheduling, epoch or
+freshness authority, global deduplication, history or product composition.
+
+**Known limitation.** This protocol cannot atomically fence the model/hotkey
+identity check against the trigger, nor fence a device-side model change against
+an in-flight trigger. An external model change between the preflight query and
+the trigger, or between the trigger and its response, is a TOCTOU window. The
+adapter rechecks on every dispatch but cannot eliminate that race; D/M5 remain
+responsible for controlled model changes, stopping admission and serializing
+replacement. The offline tests use explicitly scripted fixture peers and prove
+only the adapter's protocol handling, not a live VTS session, authentication,
+physical animation, acoustic timing or completion.
+
+The tests for this increment live in
+[`test/offline/m1-performance.test.ts`](../../test/offline/m1-performance.test.ts)
+and use [`test/support/m1-vts-kit.ts`](../../test/support/m1-vts-kit.ts) as the
+controlled transport peer. `pnpm test:m1` includes them without script changes.
+
+### Connection handle (M1-02 increment D offline)
+
+[`vts-connection.ts`](vts-connection.ts) adapts one injected, already OPEN Node
+`ws` socket to the existing `VtsTransport` seam.
+`createVtsConnectionHandle({ socket, closeTimeoutMs })` validates the OPEN ready
+state and a finite positive cleanup bound before taking ownership; a rejected
+factory call leaves the caller's socket untouched. It creates no endpoint,
+performs no discovery, pairing or authentication, and reads no credential. The
+caller still owns the private connection decision, and the C client still
+performs its own `APIStateResponse` checks.
+
+The handle exposes `{ transport, close(), closed }`. `transport.send` forwards
+one serialized request to the socket. A synchronous send throw and an
+asynchronous `ws` send-callback error both become one safe `error` transport
+event; the adapter never retries, replays or exposes raw exception text.
+`message` handlers normalize string, `Buffer`, `ArrayBuffer` and `Buffer[]` text
+frames to a UTF-8 string; malformed UTF-8 and unexpected binary frames are
+ignored. `close` and `error` are forwarded once without the raw close reason or
+error object. One application subscriber is allowed at a time; its unsubscribe
+is idempotent, and subscriber exceptions are contained. Only listeners added by
+this adapter are removed.
+
+Closing has three distinct facts:
+
+- **Close initiation** is the idempotent local request made by `close()` or
+  `transport.dispose()`. Both share one path and call `socket.close()` at most
+  once. Initiation alone is not evidence that the physical socket closed.
+- **Closed completion** is reported only after the socket's actual `close`
+  event is observed and the adapter's owned listeners and timer are released.
+  `closed` resolves `{ kind: 'closed' }`, and `close()` returns that same
+  Promise. A normal remote close reaches the same completion.
+- **Failed cleanup (quarantined)** resolves
+  `{ kind: 'failed', code: 'close_timeout' | 'close_failed' }` when the cleanup
+  budget expires or `socket.close()` throws.
+  The Promise never rejects with a raw error. The adapter does not retry,
+  reconnect or call `terminate`, and it refuses replacement sends and
+  subscribers through the failed handle. A later real close releases the
+  retained guards but does not rewrite the failed outcome.
+
+`closeTimeoutMs` is an independent cleanup budget, not a renderer or request
+timeout, and this module invents no production default. The Node-only module is
+not exported from `browser/index.ts` and is not composed into a production
+entrypoint in this checkout. The offline tests in
+[`test/offline/m1-performance.test.ts`](../../test/offline/m1-performance.test.ts)
+use [`test/support/m1-vts-connection-kit.ts`](../../test/support/m1-vts-connection-kit.ts)
+for controlled sockets and one local `127.0.0.1` ephemeral fixture server; they
+do not contact VTS, port 8001, a provider or credentials. Real pairing,
+authentication, model/hotkey verification and device actions remain
+unimplemented in increment D and require separate acceptance.
+
+### Pairing primitive (M1-02 increment D2 offline)
+
+[`vts-pairing.ts`](vts-pairing.ts) is the offline pairing primitive over one
+exclusive, already OPEN D1 connection handle. It does not construct a socket,
+discover an endpoint, read a credential file, contact VTube Studio or install a
+production connection owner. The public shape is:
+
+```ts
+pairVtsConnection({
+  handle,                  // one exclusive OPEN VtsConnectionHandle
+  identity: { pluginName, pluginDeveloper },
+  credentials: { load(signal), save(value, signal) },
+  signal,                  // M5-owned cancellation + finite total deadline
+  mode: 'existing-only' | 'allow-prompt',
+  requestTimeoutMs,
+  humanApprovalTimeoutMs,
+}): Promise<VtsPairingResult>
+```
+
+A successful result is `{ kind: 'authenticated', handle }` with the **identical**
+D1 handle. A failed result is `{ kind: 'failed', code, cleanup }`, where
+`cleanup.connection` is the actual D1 `VtsConnectionCompletion` and
+`cleanup.pairingSubscription` separately reports `'released'` or
+`'release_failed'`. The failure codes are `aborted`, `timeout`,
+`credential_missing`, `credential_read_failed`, `credential_write_failed`,
+`permission_denied`, `authentication_rejected`, `protocol_error`,
+`transport_closed`, `transport_error` and `pairing_cleanup_failed`.
+
+Invalid programming options (identity name outside 3–32 characters, an unknown
+mode, malformed handle/provider/signal shape, or a non-positive or out-of-range
+timer budget) reject with one fixed safe error before ownership and with no
+provider, subscription, send or close effect. A valid input whose signal is
+already aborted is instead an operational `aborted` failure: it calls the same
+D1 `close()` and returns the observed completion with zero provider calls and
+zero sends.
+
+`existing-only` never prompts: a missing credential is `credential_missing`.
+`allow-prompt` sends exactly one `AuthenticationTokenRequest` only when the
+provider returns `null`; a correlated `APIError` 50 is `permission_denied`.
+A previously stored credential that VTS rejects is `authentication_rejected` and
+never falls back to prompting or a retry. Token issuance alone is not
+authentication: the primitive must receive a correlated `AuthenticationResponse`
+with `authenticated === true`. Only a newly granted token is passed to
+`credentials.save`, and only after that success; an existing token is never
+re-saved. Tokens must be nonempty printable ASCII of at most 64 characters, and
+no token, raw provider exception, API error message or protocol frame is logged
+or returned.
+
+Request correlation uses a per-attempt `m1pair-<attempt>-<n>` namespace, disjoint
+from the C client's `vts-<sequence>` ids; all ids are ASCII 1–64 characters.
+Pending state exists before a synchronous send or reply. Unrelated envelope
+identity, request ids, duplicate old frames and unknown ids are ignored; a
+correlated wrong message type or malformed used field fails `protocol_error`.
+VTS timestamps are never used as a local clock. `requestTimeoutMs` bounds the
+ordinary `AuthenticationRequest` response only, and `humanApprovalTimeoutMs`
+separately bounds the initial permission response. There are no hidden defaults.
+
+**M5 ownership.** M5 must bind the credential provider to the intended plugin
+identity and deployment target, serialize same-record saves, provide persistent
+storage, and arm one finite overall acquisition deadline **before** credential
+load. That signal spans load, permission, authentication and save; M5 retains
+whether cancellation or deadline won and clears its own deadline timer on
+handoff. The primitive adds no production overall-timer API and no credential
+storage lock. Cancellation stops protocol progress and starts bounded D1 cleanup
+without awaiting an unresolved provider; late provider fulfillment/rejection is
+contained, admits no new send or save and cannot produce a successful handle.
+An already admitted save is not rolled back. A coordinated M5-supplied initial
+close policy of 5000 ms is a caller policy, not a D1/D2 hidden default or a
+measured cleanup guarantee.
+
+On failure the primitive releases its pairing subscription, clears its own
+timers and abort listener, calls the same D1 `close()` and reports the actual
+completion; close initiation is never reported as proof of physical closure. A
+thrown unsubscribe prevents success and reports `release_failed` separately even
+when the physical connection closes. On success only the pairing subscription,
+timers and abort listener are released; D1's socket guards and the identical
+open handle remain for the caller. D1 completion observed during that release
+fences a successful handoff, so a closed handle is never returned as usable. The
+C client later performs its own `APIStateResponse` authentication/active check.
+
+This Node/private module is not exported from [`browser/index.ts`](browser/index.ts).
+The offline tests exercise the real pairing primitive and D1 handle over
+controlled sockets and private provider fixtures. They are not evidence of live
+VTS pairing, a real credential store, production composition or a physical
+device session.
+
 ## Not yet implemented
 
-- Live VTube Studio avatar adapters (M1-02 increments C/D).
+- Live VTube Studio attachment, real credential storage, a production connection
+  owner and device-facing integration remain unimplemented. The offline C client,
+  hotkey driver, D1 connection handle and D2 pairing primitive above target
+  injected or locally fabricated sockets and a private injected credential
+  provider only; no live pairing/authentication, real credential store,
+  animation start/completion or physical device proof is claimed.
 - The authoritative `DeadlineGate` (M5) and the browser receipt transport (M2).
   The registry above is composed and invalidated by M5 later; it grants no
   dispatch authority.

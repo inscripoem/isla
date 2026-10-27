@@ -74,10 +74,42 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-69 | implemented | `test/offline/m6-02-report.test.ts` | a not-run-only variant reports unknown failure rate and usage |
 | C-70 | implemented | `test/offline/m6-02-recorded-run.test.ts` | a malformed or unpublishable recorded run is refused without output |
 | C-71 | implemented | `test/offline/m6-02-bench.test.ts` | runBench produces a recording consumed by the real R1 command without losing attempts or not-run entries |
+| C-73 | implemented | `test/offline/production-cli.test.ts` | `production CLI` — cooperative IPC shutdown, pending/failed release, duplicate/unrelated messages, startup/listen failure and raw exit reporting |
+| C-74 | implemented | `test/offline/m5-process-restart.test.ts` | `production process restart acceptance` — two-process IPC continuation and SIGKILL between a committed prefix and held tail; no replay or promotion |
 
+> C-73/C-74 are M5 suite-level verifiers, coordinated in [Issue25](https://github.com/inscripoem/isla/issues/25) following [M6 scope review](https://github.com/inscripoem/isla/issues/25#issuecomment-6313932602). C-73 covers the separate FR-05 process-lifecycle clause; C-74 covers FR-06/INV-12. Neither proves full product, Windows, torn-write/power-loss or acoustic acceptance. Scope and INV-12 edits were accepted by [M6 review at `8c36cad`](https://github.com/inscripoem/isla/pull/53#pullrequestreview-5599418482).
+>
 > C-68 is the distinct M6-01 coordinator/SQLite-reopen proof. C-32/C-33 remain
 > the registered unit verifiers for the recovery view and storage-only restart;
 > all three link INV-12.
+
+### C-73/C-74 suite test names
+
+The registry retains one verifier file per case. These are the exact test names at `8c36cad`, accepted as suite-level evidence by M6; this list adds no new acceptance claim.
+
+C-73 — `test/offline/production-cli.test.ts`:
+
+- `fails visibly when no deployment module is configured`
+- `fails visibly when the deployment module cannot be loaded`
+- `fails visibly when the deployment module exports no factory`
+- `fails startup over a seeded live id and exits naturally with an IPC channel attached`
+- `starts over a durable database, serves health, and shuts down on SIGTERM`
+- `shuts down cooperatively through the IPC control message`
+- `awaits a genuinely pending owned release before reporting IPC shutdown completion`
+- `reports an incomplete shutdown and still exits naturally when the owned release fails over IPC`
+- `ignores unrelated and duplicate IPC control messages`
+- `awaits the owned release once when startup fails over a seeded live id`
+- `awaits the owned release once on SIGTERM shutdown`
+- `awaits a genuinely pending owned release before reporting shutdown completion`
+- `reports an incomplete shutdown when the owned release fails`
+- `reports a shutdown fault after a listen failure instead of swallowing it`
+
+Same-file supporting coverage, outside the registered `production CLI` suite: `collectUntilExit output drain` / `retains output that arrives after the exit event until both streams end`. The registered suite contains 14 lifecycle tests; whole-file execution also runs this helper regression.
+
+C-74 — `test/offline/m5-process-restart.test.ts`:
+
+- `continues one durable database across two spawned CLI processes without replay or promotion`
+- `restarts after a forceful kill without promoting the interrupted tail`
 
 ## Requirement trace
 
@@ -87,8 +119,8 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | FR-02 | M4 | C-01, C-04, C-13 | — |
 | FR-03 | M1 | C-06, C-11 | — |
 | FR-04 | M1 | C-01, C-04, C-10 | — |
-| FR-05 | M5 | C-03, C-04 | C-08 |
-| FR-06 | M6 | C-12, C-17, C-21, C-22, C-29, C-30, C-31, C-32, C-33, C-45, C-46, C-47, C-67, C-68 | application startup/selected-history recovery integration; M6 SQLite module recovery is implemented in merged PR26 |
+| FR-05 | M5 | C-03, C-04; C-73 (separate controlled-process-lifecycle clause) | C-08 |
+| FR-06 | M6 | C-12, C-17, C-21, C-22, C-29, C-30, C-31, C-32, C-33, C-45, C-46, C-47, C-67, C-68, C-74 | product-console recovery adoption, Windows and live-provider acceptance; C-74 covers controlled Linux process continuation only |
 | NFR-01 | M5 | C-52, C-54, C-55, C-69, C-70, C-71 | metric baseline |
 | NFR-02 | M5 | C-10, C-17 | C-05, C-09, recovery duration |
 | NFR-03 | M3 | — | C-16, human rubric |
@@ -106,7 +138,7 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | INV-09 | M5 | C-46, C-47, C-67 | M4/SQLite consumer rollout |
 | INV-10 | M6 | C-26, C-27 | — |
 | INV-11 | M6 | C-27, C-28, C-48, C-65 | — |
-| INV-12 | M6 | C-32, C-33, C-68 | — |
+| INV-12 | M6 | C-32, C-33, C-68, C-74 | C-74 link accepted by [M6 review at `8c36cad`](https://github.com/inscripoem/isla/pull/53#pullrequestreview-5599418482); product/Windows acceptance remains separate |
 | INV-13 | M6 | C-34, C-35, C-37 | — |
 | INV-14 | M6 | C-36 | — |
 | INV-15 | M5 | C-47, C-50 (turn reconstruction ordering and M4 agreement guard) | M4/M6 consumer acceptance |
@@ -149,3 +181,14 @@ The composition and regression suites now run the same assertions against the in
 ## Local I1 application increment
 
 The user approved local I1 implementation on 2026-10-15. The application endpoint composes the real M5 coordinator, M1 fixed synthesis/player and M6 in-memory store with real M4 and explicit M3/dialogue-provider substitutes. New I1 tests cover transport, deadline and lifecycle boundaries; the candidate rebuilt on main `dbbbfcb` with merged PR30/PR31 passed 634 tests / 30 files plus typecheck, lint and build, retaining its ten-case M4/M6 consumption suite. Browser turns, Stop/Resume and disconnect cancellation were independently observed again on this candidate. See the [I1 handoff](../team/HANDOFF-I1-APPLICATION.en.md). This is uncommitted work under review, without remote publication. PR30 already moved the M5 attribution case from C-45 to C-47, preserving C-46 and M6's draft C-45; role ownership and full-course acceptance status remain unchanged.
+
+## M1-02 D offline connection prerequisite
+
+`src/performance/vts-connection.ts` and its helper `test/support/m1-vts-connection-kit.ts` are an offline module-level prerequisite for a future D/M5 connection composition. The appended suite in `test/offline/m1-performance.test.ts` is selected by the existing M1 role command `pnpm test:m1`. This note adds no registered case or requirement row and assigns no ID. Existing case-verifier rows, requirement ownership and pending product status are unchanged; live pairing, authentication, model/hotkey verification, device actions and production physical-close recovery remain unimplemented and require M5/M6 review and separate acceptance.
+
+
+## M1-02 D2 offline pairing prerequisite
+
+[`src/performance/vts-pairing.ts`](../../src/performance/vts-pairing.ts) supplies the private protocol prerequisite for M1-02 authenticated-connection handoff, supporting FR-03/FR-04/FR-05 and NFR-06 at module scope. The controlled peer/provider helper is [`test/support/m1-vts-pairing-kit.ts`](../../test/support/m1-vts-pairing-kit.ts); actual primitive, cancellation/cleanup and same-handle C-client regressions are appended to [`test/offline/m1-performance.test.ts`](../../test/offline/m1-performance.test.ts), selected by the existing `pnpm test:m1` command. These are prerequisite checks, not a newly registered global case or closure of an existing product verifier.
+
+M5 supplies the finite overall acquisition signal, deployment budgets and identity/target-bound credential provider, including serialization while a shared-record save is unsettled. A test-only caller/provider illustrates that boundary; it does not implement or validate M5 production storage/composition. The original case rows, requirement owners, D1/C APIs and registered identifiers are unchanged. Live VTS pairing/authentication, verified model/hotkey actions, physical output, Windows recovery, real measurements and G4/S6 acceptance remain separate and unclaimed.
