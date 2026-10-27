@@ -3191,3 +3191,50 @@ entries:
       connection/pairing/live/model/hotkey action, physical animation/silence, acoustic timing, Windows
       production recovery or G4/S6 acceptance. Issues remain Open with existing checklists unchanged;
       earlier evidence and approvals remain version-bound.
+
+  - date: "2026-10-26"
+    task: "I1-01 / M5 VTS acquisition first stage"
+    change: >-
+      Add bounded M5 acquisition over the real M1 D1/D2 interfaces, explicit
+      record-aware credential coordination, late-handle cleanup and blocked
+      replacement until resource settlement. Preserve M1/shared interfaces
+      and update dated team delivery status without changing responsibilities.
+    requirements: [FR-03, FR-04, FR-05, NFR-02, NFR-05, NFR-06]
+    invariants: [INV-01, INV-02]
+    commits: []
+    branch: feat/m5-vts-acquisition-20261026
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    opencode_version: 2.1.4
+    launch_flags: [--agent, build, --format, json]
+    sessions: [ses_e87e23191ffebgbHzWxKnQF87c]
+    supervision: >-
+      Genuine OpenCode authored all new runtime and test code. Codex reviewed
+      interfaces and ownership, narrowed the first stage, identified credential
+      binding and cancellation/release ordering defects, and directed regression
+      proofs before fixes. Codex maintains status/review documents, this factual
+      log entry and independent verification. No delegated agents were used.
+    human_review: >-
+      Captain approved first-stage local development by asking to proceed after
+      reviewing the M5 plan. The candidate remains uncommitted, unpublished and
+      under review. This is not implementation approval by M1, a live acceptance
+      result or authorization for an agent to merge.
+    transcript_record: >-
+      Native session messages and metadata are retained in the project's external
+      evidence/m5-vts-acquisition-20261026 directory. Preserve the original
+      model/agent metadata, failed tests and subsequent corrections.
+    verification:
+      base: 74e99953733eeb070f99d4b9c57554e22e928840
+      platform: "Linux x86_64 / Node22.23.4 / pnpm12.9.0"
+      baseline: "Unmodified M5 177 tests across 8 files passed."
+      independent: "M5 200/9, composition12/1 and full1230/64 passed; typecheck, lint and build passed; tested source hashes unchanged."
+    scope: >-
+      Controlled connections and credentials only. No production CLI/renderer
+      assembly, real VTS endpoint, credential file/storage validation, model or
+      hotkey action, physical silence, recovery unlock or S6/G4 acceptance.
+      The deployment must share one explicit coordinator per underlying store.
+      Pending loads as well as saves block replacement; failure latches are
+      process-local. No dependencies, lockfile, existing tests or registered
+      requirement/case/invariant IDs are changed.
