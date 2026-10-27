@@ -19,7 +19,11 @@ identity key, and M6 does not store it as a key.
 
 ## What state survives
 
-The table describes the persistence target. Current main supplies an in-memory backend; Step A does not implement SQLite migration or restart recovery.
+The table separates what is durable today from what is only in process: the `Survives restart?` column
+answers for the current code, and the Notes name anything still planned. SQLite is implemented
+(`src/storage/sqlite/*`) and is what the production composition uses (`src/runtime/production.ts:342-343`);
+`createEventStore` falls back to the in-memory backend only when no backend is supplied. SQLite reopen
+restores only confirmed history (M6-01); application/process restart acceptance remains M5's (#25).
 
 | State | Survives restart? | Store | Notes |
 | --- | --- | --- | --- |
