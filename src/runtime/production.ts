@@ -25,6 +25,7 @@ import type { CycleTimings, RuntimeCoordinator, SessionProfileConfig } from './c
 import { createRuntimeAuthorizer } from './control-policy'
 import { createDeadlineGate } from './deadline'
 import type { RuntimeDeadlineGate } from './deadline'
+import type { DialogueOutcomeObserver } from './dialogue-outcome'
 import { DiagnosticsServer } from './server'
 import type { ArchiveSelectionConfig } from './session-archives'
 import { createSessionRecovery } from './session-recovery'
@@ -104,6 +105,15 @@ export interface ProductionPeers {
   readonly storageTtlMs?: number
   readonly cancelTtlMs?: number
   readonly maxPendingInputs?: number
+  /**
+   * Observational consumer of the dialogue port's projected generation/discard
+   * accounting (see `DialogueOutcomeObserver`). It is wired into the initial
+   * composition and into every recovery successor, so a recovered session reports
+   * on the same channel. It adds no storage write of its own (M5 owns the runtime's
+   * persistence and delivery decisions, M6 owns the storage infrastructure) and
+   * never counts as a provider attempt. Omitted means no reporting.
+   */
+  readonly onDialogueOutcome?: DialogueOutcomeObserver
 }
 
 /**
@@ -380,6 +390,9 @@ async function buildProductionApplication(
             ...(peers.cancelTtlMs !== undefined ? { cancelTtlMs: peers.cancelTtlMs } : {}),
             ...(peers.maxPendingInputs !== undefined
               ? { maxPendingInputs: peers.maxPendingInputs }
+              : {}),
+            ...(peers.onDialogueOutcome !== undefined
+              ? { onDialogueOutcome: peers.onDialogueOutcome }
               : {}),
           })
         } catch (error) {
