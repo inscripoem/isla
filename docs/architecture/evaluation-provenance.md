@@ -1,7 +1,10 @@
 # Prepared-input provenance — companion record (proposal)
 
 Status: **proposal.** Not an approved artifact. `RecordedRunV1` (`schemaVersion: 1`) stays unchanged.
-Implementation requires a new ADR with an ID allocated in #25. Updated: 2026-10-27.
+Implementation requires a new ADR. M5 reserved its number in #25 on 2026-10-28; the reservation is a number
+only — it does not approve this design, authorise production implementation or close S6/G4. The numbered
+file is a separate slice, so this document names the reservation without an id: the trace gate refuses a
+reference to an ADR file that does not exist yet. Updated: 2026-10-28.
 
 ## Why a separate artifact
 
@@ -69,12 +72,17 @@ between attempts, so a per-run or end-of-run value cannot say which set an attem
 only when `history.source` is `none` or the set was genuinely unobserved, and `null` never satisfies
 `correlation: exact`.
 
+M4 has not yet answered whether a run with `history.source: 'none'` carries the digest of the **empty set**
+(M5 supports that reading, 2026-10-28). The rule above is unchanged until M4 answers; this is an open
+question, not a resolved rule.
+
 ## Partial admission and not-run
 
 Prepared execution can stop submitting after a rejection or throw; later entries are not submitted, and a
 batch with no acceptance is a `notRun` entry rather than an `AttemptRecord` (PR55 dependency commit
-`fccb0f2`, `evaluation-adapter.ts:1097-1123`; **not yet on `main` at `74e9995`**). The companion
-distinguishes:
+`fccb0f2`, `evaluation-adapter.ts:1097-1123`; **not yet on `main` at `74e9995`**). A `notRun` case still
+retains every input that was actually submitted and observed; only a failure before any submission leaves
+no observed inputs (M5, 2026-10-28). The companion distinguishes:
 
 - `not-submitted` — the batch stopped before this entry was submitted;
 - `no-acknowledgement` — the entry was submitted but no acknowledgement was returned;
@@ -87,19 +95,32 @@ receive invented acknowledgements. An unavailable batch cannot honestly supply 1
 `not-submitted`. The attempt keeps `accepted` / `rejected` / `not-submitted`, and the case's quality result
 is `unscored` because not every prepared input has an acknowledgement.
 
-**Example (pre-admission refusal):** the batch fails before any acceptance. There is no `AttemptRecord`; the
-run records a `notRun` entry and the companion records no inputs for it.
+**Example (pre-submission refusal):** the batch fails before **any input is submitted**. There is no
+`AttemptRecord`; the run records a `notRun` entry and the companion records no inputs for it, because no
+input was observed. A batch that stops **after** a rejected or unacknowledged submission is different: the
+case may still be `notRun`, but those observed inputs are retained rather than discarded.
 
 ## Rejected alternatives
 
 - **`schemaVersion: 2`** — changes the frozen run record and needs its own ADR plus M5/M3 review.
 - **Inference by text or order** — forbidden by M5.
 
-## Open question
+## Input identity (M5 answer, 2026-10-28; still not observable)
 
-`inputs[].inputId` depends on M3's answer to the corpus-identity question in #41. Until it exists, the link
-is recorded as `not-yet-observable`, not inferred.
+M5 checked this against PR #57 `2a354ca` and the PR55 dependency `fccb0f2` and reported that the end-to-end
+corpus identity link **does not exist today**:
+
+- PR55's prepared resolver accepts only `source`, `text` and `actorId`; extra fields are refused;
+- M5 generates fresh request-message and runtime event IDs, and accepted/duplicate acknowledgements return
+  those runtime IDs, not a corpus-side identifier;
+- the current adapter does not export each acknowledgement at all.
+
+M5 proposes `(corpusVersion, casesSha256, caseId, candidate.eventId)` as the stable corpus-side identity and
+asks M3 to confirm it; a future M5 admission capture would bind that identity to the submitted request and
+the returned acknowledgement. Until M3 confirms, `inputs[].inputId` stays `not-yet-observable` and is never
+inferred from text, array position or runtime IDs.
 
 ## References
 
-ADR-007 (evaluation bench); FR-06; INV-16; M5 and M4 replies in #41 (2026-10-24 and 2026-10-27).
+ADR-007 (evaluation bench); the reserved provenance ADR (number allocated in #25, 2026-10-28, not
+approved); FR-06; INV-16; M5 and M4 replies in #41 (2026-10-24 to 2026-10-28).
