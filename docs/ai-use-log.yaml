@@ -4,6 +4,58 @@
 version: 1
 entries:
   - date: "2026-10-28"
+    task: M4-03-review-negation-scope-and-whole-word-antonyms
+    change: >-
+      Fix both Medium findings from the M5 review of PR #65 inside the
+      consistency antonym path only: a negation marker directly before the
+      matched attribute ("not easy", "不好玩") flips it to the other side of
+      the axis, so "not easy" vs "hard" agrees while "not easy" vs "not hard"
+      still contradicts, and a marker anywhere else leaves its scope uncertain
+      so the pair is skipped rather than guessed; English attribute words match
+      as complete words (easygoing is not easy, hardworking is not hard) and
+      attribute removal uses the same whole-word rule; CJK keeps substring
+      matching. Five regression cases pin both findings, the scope-abstention
+      path and the retained genuine pair.
+    requirements: [NFR-03]
+    invariants: []
+    commits: [4273673]
+    agent: zcode/glm-5.3-flash
+    provider: zai-plan
+    model: glm-5.3-flash
+    supervision: >-
+      ZCode (GLM-5.3-Flash) reproduced the two reported false positives
+      against the pre-fix source, implemented the scoped fix and the
+      regression cases in one supervised session, and posted the fix summary
+      on PR #65. The member directed the work and reviewed the diff before
+      push.
+    human_review: >-
+      Captain (M4) requested the repair after the M5 review and approved the
+      pushed revision 4273673. M5 re-review remains pending on PR #65.
+    transcript_record: >-
+      The conversation is retained in the ZCode session; no separate export
+      was created.
+    verification:
+      base: 991733a
+      reproduction: >-
+        The two reported pairs and the compound-word pair each produced one
+        attribute/antonym finding before the fix and none after; the genuine
+        puzzle pair kept its finding in both runs.
+      independent: >-
+        pnpm test:m4 226/226 (10 files) including the five new cases;
+        typecheck, lint and build clean; pnpm test:m5 202/207 with the failures
+        exactly the pre-existing Windows production-cli and m5-process-restart
+        set; test:composition 12/12.
+      mutation: >-
+        Three of the five new cases fail against the pre-fix source (stash-run
+        of the consistency suite); the two-negated case passes on both sources
+        and documents the fixed semantics.
+    scope: >-
+      src/dialogue/consistency.ts and test/offline/m4-consistency.test.ts
+      only. No ceiling, contract, port, storage path or registry row changed.
+      The clause-level negation rule ('negation' kind) and all policy
+      constants are untouched.
+
+  - date: "2026-10-28"
     task: M4-memory-quality-tables-and-live-skeleton
     change: >-
       Extend M4's deterministic quality tables without touching policy
