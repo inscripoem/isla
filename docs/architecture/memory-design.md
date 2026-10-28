@@ -3,6 +3,7 @@
 Status: under review. M6 contributes the persistence portion; memory semantics are owned by M4 and
 live authority by M5. Step A record-shape coordination is under review. D2.5 clarifies persistence,
 retention and the M6/M4 visibility boundary. Updated: 2026-10-27.
+Anchors: FR-06 (persist and replay); NFR-05 (privacy, owner M5; M4/M6 collaborate).
 
 ## Scope and ownership
 
