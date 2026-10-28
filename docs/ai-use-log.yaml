@@ -18,7 +18,7 @@ entries:
       unreported durable identity as "not reported" and never fabricates it.
     requirements: [FR-01, FR-04, FR-05]
     invariants: [INV-01, INV-03]
-    commits: []
+    commits: [bbd35d6]
     agent: opencode/deepseek-v4-flash
     provider: custom-foundry/CS5351
     model: DeepSeek-V4-Flash
@@ -41,15 +41,15 @@ entries:
       event-shape repair after a real browser smoke exposed the mismatch. The
       member ran every verification command and the browser startup check.
     human_review: >-
-      Captain approved the M2-01 slice and all follow-up repairs in session.
-      Work remains under review; no commit, push, pull request or merge was
-      performed.
+      Captain approved the M2-01 slice and all follow-up repairs in session,
+      then authorized the commit and push to the task branch. Work remains under
+      review; no pull request or merge was performed.
     transcript_record: >-
       Genuine OpenCode JSONL records, prompts and browser-smoke evidence are
       retained privately outside the checkout; no raw records were added to the
       repository.
     verification:
-      base: 306bfcf (uncommitted working tree)
+      base: 306bfcf; implementation bbd35d6
       independent: >-
         pnpm test:m2 85/85 (1 file); pnpm test 1393/1393 (70 files); pnpm
         typecheck, pnpm lint (0 warnings, 0 errors) and pnpm build all clean;
