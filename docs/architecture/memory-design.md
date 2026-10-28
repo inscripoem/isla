@@ -24,15 +24,16 @@ The table separates what is durable today, what is only in process, and what is 
 planned or deliberately absent. SQLite is implemented
 (`src/storage/sqlite/*`) and is what the production composition uses (`src/runtime/production.ts:342-343`);
 `createEventStore` falls back to the in-memory backend only when no backend is supplied. SQLite reopen
-restores only confirmed history (M6-01); application/process restart acceptance remains M5's (#25).
+restores confirmed history and exposes unresolved records for recovery (M6-01); application/process
+restart acceptance remains M5's (#25).
 
 | State | Survives restart? | Store | Notes |
 | --- | --- | --- | --- |
 | Committed events (`RuntimeEvent`) | Yes | `event-store` / SQLite `events` | Append-only; `seq` strictly increasing |
-| Delivery outcomes (`CommitDelivery`) | Yes | SQLite `deliveries` | SQLite target; `terminalOutcome` is validated at the write boundary but is not yet part of the in-memory read record (see below) |
+| Delivery outcomes (`CommitDelivery`) | Yes | SQLite `deliveries` (`StoredDelivery`) | The full record, including `terminal_outcome`, is persisted; `ConfirmedDelivery` is the narrower read shape |
 | Confirmed spoken history | Yes | `deliveries` (`fully-delivered` only) | Returned by `HistoryQueryPort` |
 | Memory projection position | No — in-process only; a new projection starts at 0 on restart | in-process `appliedSeq` | One bookmark per session internally; advances one event at a time; never across a gap or across sessions. The shared scalar getter reports the last attempted session, including a gap or duplicate that did not advance; `apply` returns the event session’s position. The bookmark is not persisted, so restart does not restore it; a durable cursor is deferred. A public per-session getter (`appliedSeq(sessionId)`) is a proposal only, not the frozen `MemoryProjectionPort` contract. The component has no production caller today; it is exercised by tests only. |
-| Persona attribution and segment order | Planned for SQLite; present in memory | `personaProfileId`, `personaProfileVersion`, `segmentIndex` | Captured from the original request/segment; M6 must map each field explicitly in its SQLite adapter, retaining legacy unknowns as null |
+| Persona attribution and segment order | Yes — persisted in SQLite and present in memory | `personaProfileId`, `personaProfileVersion`, `segmentIndex` | Captured from the original request/segment; written by `src/storage/sqlite/backend.ts` and restored by `codec.ts`; legacy unknowns stay null. `ConfirmedDelivery` is the narrow read shape; `StoredDelivery` is the recovery shape. |
 | Active turn / pending outputs | No (by design) | — | Restart begins stopped; unresolved outputs stay `unknown` |
 | Raw audio | Separate local files | DB reference only | Never inside event payloads |
 | Credentials / tokens | Never persisted | — | Excluded from events and JSONL |
@@ -59,10 +60,11 @@ restores only confirmed history (M6-01); application/process restart acceptance 
    `classification`/`terminalOutcome` pair) and the supporting `RuntimeEvent`,
    rejecting an inconsistent or malformed pair as one paired `failed` with
    nothing persisted. The in-memory store persists the confirmed-delivery fields
-   and the supporting event only; the `ConfirmedDelivery` read record omits
-   `terminalOutcome`, and no projection table exists yet, so durable outcome
-   recording for `partial-unknown` / `not-delivered` segments remains an M6
-   SQLite gap rather than an implemented in-memory behavior.
+   and the supporting event; the `ConfirmedDelivery` read record deliberately
+   omits `terminalOutcome`. SQLite persists the full `StoredDelivery`, including
+   `terminal_outcome`, and `src/storage/recovery-view.ts` exposes unresolved
+   records; `test/offline/m6-recovery.test.ts` covers in-memory separation and
+   SQLite reopen. No projection table exists yet.
 6. Schema versioning is separate from contract version `0.2`. Back up before migrating; reject
    unsupported schema versions; migrations are idempotent.
 7. An event **payload must be a JSON value** (INV-04): a value JSON cannot represent (undefined,
@@ -77,10 +79,15 @@ restores only confirmed history (M6-01); application/process restart acceptance 
   `seq` ascending (enforced by INV-08 / case C-25; each delivery retains its supporting `event_seq`),
   independent of insertion order; partial/unknown and generated-only text excluded.
 - Turn reconstruction uses explicit `segmentIndex` within `(sessionId, turnId)`; it does not reorder the single-session history port or infer ordering from identifier spelling. Unknown indices remain unknown.
-- Cross-session aggregation is **out of v0.2**. There is no cross-session storage port until M3/M4/M5
-  define identity, consent and retention. M4 maintains a per-memory scope and recall *policy* for
-  audience-bound memory; that policy is not a cross-session storage port and not aggregation, and no
-  cross-session data path exists in v0.2.
+- **Automatic** cross-session memory is out of v0.2: no audience-linked recall across sessions until
+  M3/M4/M5 define identity, consent and retention. M4 maintains a per-memory scope and recall *policy*;
+  it is not an aggregation path.
+- **Explicit archive reconstruction is implemented and retained.** `src/runtime/session-archives.ts:307-330`
+  combines only the explicitly selected archive histories with the live session (archives in selection
+  order, then live); `src/runtime/production.ts:342-371` wires it into the SQLite-backed composition.
+  `test/offline/m5-process-restart.test.ts` covers selected prior-session history reaching the new
+  session's dialogue context. Scope: Linux/controlled peers; it does not establish product-console or
+  Windows acceptance.
 - Replay (`ReplayReaderPort.load`) is an **isolated read model**: it never mutates live state and
   never calls a live provider/renderer (C-12).
 
