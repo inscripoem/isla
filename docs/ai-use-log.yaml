@@ -4,6 +4,78 @@
 version: 1
 entries:
   - date: "2026-10-28"
+    task: M2-01-console-production-transport-selection-and-recovery
+    change: >-
+      Complete M2-01's console increment: extract the performer machine into
+      production console code and drive it through the application transport;
+      add the application transport extension, performer adapter, runtime audio
+      resolver and one-time operator bootstrap; project accepted inputs,
+      selection plans, reply intent, waiting stage, server-classified delivery
+      and explicit retirement/recovery; add a bounded batch-input fixture; and
+      correct both runtime event projections after a real browser smoke showed
+      that turn.started carries only {replyIntent} and delivery.committed only
+      {classification} on the application wire. The console now reports
+      unreported durable identity as "not reported" and never fabricates it.
+    requirements: [FR-01, FR-04, FR-05]
+    invariants: [INV-01, INV-03]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: custom-foundry/CS5351
+    model: DeepSeek-V4-Flash
+    opencode_version: 1.19.4
+    launch_flags: [--pure, --agent, build, --variant, xhigh]
+    sessions:
+      - ses_e7ec4154effeEml7xJb9T5vbCk
+      - ses_e7ebc188affeZKlvWQwugiNf5U
+      - ses_e7eb77e59ffeCdqOCUnluR9LkN
+      - ses_e7eaf5850ffe8BjBRnX2AzHl1Y
+      - ses_e7e9e717fffe3ARC3G9PIaeidz
+      - ses_e7e92c3f2ffeIxyh2nOWe9Te1T
+      - ses_e7e8291fcffeBdM1fZ1H7nYKGB
+    supervision: >-
+      OpenCode authored the console, fixture and test changes in seven
+      supervised sessions. The member reviewed callers and contracts, rejected
+      an early application-transport demo composition, reduced the operator
+      failure vocabulary after a boundary-test false positive, corrected the
+      acknowledgement-before-event sequence race, and ordered the final
+      event-shape repair after a real browser smoke exposed the mismatch. The
+      member ran every verification command and the browser startup check.
+    human_review: >-
+      Captain approved the M2-01 slice and all follow-up repairs in session.
+      Work remains under review; no commit, push, pull request or merge was
+      performed.
+    transcript_record: >-
+      Genuine OpenCode JSONL records, prompts and browser-smoke evidence are
+      retained privately outside the checkout; no raw records were added to the
+      repository.
+    verification:
+      base: 306bfcf (uncommitted working tree)
+      independent: >-
+        pnpm test:m2 85/85 (1 file); pnpm test 1393/1393 (70 files); pnpm
+        typecheck, pnpm lint (0 warnings, 0 errors) and pnpm build all clean;
+        pnpm verify passed.
+      startup: >-
+        The real production CLI loaded test/support/production-deployment.ts
+        and served /health, /diag, /app, /operator and /audio through the Vite
+        proxy; the console bootstrapped, attached a performer, bootstrapped an
+        operator, applied Stop 0->1 and Resume 1->2, and accepted one input in
+        a new epoch. After the final repair the browser reported waiting stage
+        delivered, turn reply intent answer, turn id not reported, delivery
+        classification partial-unknown and delivery identity not reported. No
+        uncaught exception occurred; the two /audio 404 responses are expected
+        because the fixture deployment supplies no M1 audio resources, so real
+        audio playback is not claimed. SIGTERM produced shutdown_complete.
+      gap: >-
+        The browser smoke cannot prove live providers, physical silence,
+        durable restart or real audio delivery; those remain unverified.
+    scope: >-
+      src/console, src/App.tsx, test/browser/console.tsx, test/browser/
+      performer-machine.ts and test/offline/m2-console.test.ts, with the
+      test-only fixture test/support/m2-batch-input.ts. No shared contract,
+      runtime, storage, evaluation or package change was authored. The
+      pre-existing local package.json edit remains outside this increment.
+
+  - date: "2026-10-28"
     task: M4-03-review-negation-scope-and-whole-word-antonyms
     change: >-
       Fix both Medium findings from the M5 review of PR #65 inside the

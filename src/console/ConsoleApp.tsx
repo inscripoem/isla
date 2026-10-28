@@ -4,6 +4,7 @@ import {
   Badge,
   Button,
   Card,
+  Checkbox,
   CodeBlock,
   Collapse,
   Divider,
@@ -19,17 +20,24 @@ import {
   APPLICATION_CONTRACT_VERSION,
   DIAGNOSTICS_PROTOCOL_VERSION,
   INPUT_SOURCES,
+  type ApplicationServerMessage,
   type BootstrapSnapshot,
   type ConsoleTransportPort,
+  type ControlResumeMessage,
+  type ControlStopMessage,
   type DiagnosticReply,
   type InputSource,
+  type InputSubmitMessage,
   type ServerMessage,
 } from '../contracts'
-import { ConsoleTransportError } from './app-transport'
+import { ConsoleTransportError, isApplicationTransport, type ConsoleApplicationTransport } from './app-transport'
 import type { PlaybackBinding, PlaybackCallbacks, PlaybackFactory } from './player-binding'
+import type { PerformerMachine, PerformerMachineHooks, PerformerState } from './performer-machine'
+import { snapshotMessageFromBootstrap } from './performer-adapter'
 import {
   canDispatch,
   createInitialConsoleState,
+  reduceApplicationMessage,
   reduceControlAck,
   reduceInputAck,
   reduceServerMessage,
@@ -87,9 +95,26 @@ export interface TransportStatusReporter {
 
 export type TransportFactory = (reporter: TransportStatusReporter) => ConsoleTransportPort
 
+/**
+ * Constructs the performer machine once the bootstrap identity is known.
+ *
+ * The factory owns wrapping the application transport with
+ * `createMachineTransport`; the console only supplies the hooks it needs.
+ */
+export interface PerformerFactory {
+  (bootstrap: BootstrapSnapshot, transport: ConsoleApplicationTransport, hooks: PerformerMachineHooks): PerformerMachine
+}
+
 export interface ConsoleAppProps {
   readonly transportFactory: TransportFactory
-  /** Mounted after bootstrap so the local player knows the session identity. */
+  /** Preferred application performer machine; required for an application transport. */
+  readonly performerFactory?: PerformerFactory
+  /** Requests a one-time operator token only when the operator button is pressed. */
+  readonly requestOperatorToken?: () => Promise<string>
+  /**
+   * Legacy local playback binding. It is an explicit fallback for base-only
+   * fixture transports only; production composes the performer machine instead.
+   */
   readonly playbackFactory?: PlaybackFactory
 }
 
@@ -356,14 +381,24 @@ function DiagnosticsPanel() {
  * modules and are injected.
  * ------------------------------------------------------------------ */
 
-export function ConsoleApp({ transportFactory, playbackFactory }: ConsoleAppProps) {
+export function ConsoleApp({
+  transportFactory,
+  performerFactory,
+  requestOperatorToken,
+  playbackFactory,
+}: ConsoleAppProps) {
   const [state, setState] = useState<ConsoleState>(createInitialConsoleState)
   const [source, setSource] = useState<InputSource>('local-audience')
   const [draft, setDraft] = useState('')
   const [playbackMounted, setPlaybackMounted] = useState(false)
+  const [machineState, setMachineState] = useState<PerformerState | null>(null)
+  const [recoveryAcknowledged, setRecoveryAcknowledged] = useState(false)
+  const [operatorRequestPending, setOperatorRequestPending] = useState(false)
+  const [operatorRequestError, setOperatorRequestError] = useState<string | null>(null)
 
   const transportRef = useRef<ConsoleTransportPort | null>(null)
   const playbackRef = useRef<PlaybackBinding | null>(null)
+  const machineRef = useRef<PerformerMachine | null>(null)
   const stateRef = useRef(state)
   const counterRef = useRef(0)
 
@@ -383,8 +418,13 @@ export function ConsoleApp({ transportFactory, playbackFactory }: ConsoleAppProp
     const applyStatus = (connection: ConnectionStatus, detail: string | null): void => {
       if (cancelled) return
       setState((current) => withConnection(current, connection, detail))
-      // Uncertain or lost transport: stop local playback and stay non-dispatching.
-      if (connection !== 'open') playbackRef.current?.cancelLocal()
+      if (connection !== 'open') {
+        // A lost or uncertain transport disposes the machine and stops the
+        // fallback playback; the console stays non-dispatching and never
+        // reconnects, replays or resumes on its own.
+        machineRef.current?.dispose('transport closed')
+        playbackRef.current?.cancelLocal()
+      }
     }
     const transport = transportFactory({
       onStatus: applyStatus,
@@ -395,16 +435,87 @@ export function ConsoleApp({ transportFactory, playbackFactory }: ConsoleAppProp
     })
     transportRef.current = transport
 
-    const unsubscribe = transport.onServerMessage((message: ServerMessage) => {
-      setState((current) => reduceServerMessage(current, message))
-      playbackRef.current?.handleServerMessage(message)
-    })
+    const application = isApplicationTransport(transport) ? transport : null
+    // An application transport without a performer factory is never silently
+    // downgraded to the legacy binding.
+    if (application !== null && performerFactory === undefined) {
+      const detail = 'this build has no performer machine for the application transport'
+      setState((current) => withConnection(current, 'error', detail))
+      transport.close()
+      transportRef.current = null
+      return () => {
+        cancelled = true
+      }
+    }
+
+    // Messages that arrive after bootstrap resolution but before the machine
+    // exists are queued and replayed in order, exactly once.
+    let machineReady = false
+    let queued: readonly ApplicationServerMessage[] = []
+
+    const unsubscribeApplication =
+      application === null
+        ? null
+        : application.onApplicationMessage((message) => {
+            setState((current) => reduceApplicationMessage(current, message))
+            if (!machineReady) {
+              queued = [...queued, message]
+              return
+            }
+            machineRef.current?.handleMessage(message)
+          })
+
+    const unsubscribeBase =
+      application === null
+        ? transport.onServerMessage((message: ServerMessage) => {
+            setState((current) => reduceServerMessage(current, message))
+            playbackRef.current?.handleServerMessage(message)
+          })
+        : null
 
     void (async () => {
       try {
         const bootstrap: BootstrapSnapshot = await transport.bootstrap()
         if (cancelled) return
         setState((current) => withBootstrap(current, bootstrap))
+        if (application !== null) {
+          const hooks: PerformerMachineHooks = {
+            onReceipt: (receipt) => {
+              if (cancelled) return
+              setState((current) => withReceipt(current, receipt))
+            },
+            onStateChanged: () => {
+              if (cancelled) return
+              const machine = machineRef.current
+              if (machine === null) return
+              const next = machine.state()
+              setState((current) => {
+                const projected = withPlaybackStatus(current, next.playerStatus)
+                return next.display.subtitle === null ? projected : withSubtitle(projected, next.display.subtitle)
+              })
+              setMachineState(next)
+            },
+            onServiceError: (_raw, reason) => {
+              if (cancelled) return
+              setState((current) => withError(current, { requestId: null, code: 'invalid_field', message: reason }))
+            },
+          }
+          const createMachine = performerFactory
+          if (createMachine === undefined) return
+          const machine = createMachine(bootstrap, application, hooks)
+          machineRef.current = machine
+          // Seed the identity before replaying anything that arrived early.
+          machine.handleMessage(snapshotMessageFromBootstrap(bootstrap))
+          machineReady = true
+          const replay = queued
+          queued = []
+          for (const message of replay) {
+            if (cancelled) return
+            machine.handleMessage(message)
+          }
+          setMachineState(machine.state())
+          return
+        }
         if (playbackFactory === undefined) return
         const callbacks: PlaybackCallbacks = {
           onReceipt: (receipt) => setState((current) => withReceipt(current, receipt)),
@@ -422,15 +533,20 @@ export function ConsoleApp({ transportFactory, playbackFactory }: ConsoleAppProp
 
     return () => {
       cancelled = true
-      unsubscribe()
+      unsubscribeApplication?.()
+      unsubscribeBase?.()
+      machineRef.current?.dispose('console unmounted')
+      machineRef.current = null
       playbackRef.current?.dispose()
       playbackRef.current = null
       transportRef.current = null
       transport.close()
     }
-  }, [transportFactory, playbackFactory])
+  }, [transportFactory, performerFactory, playbackFactory])
 
   const dispatchable = canDispatch(state)
+
+  const machine = machineState
 
   const submitInput = useCallback(async () => {
     const current = stateRef.current
@@ -438,13 +554,35 @@ export function ConsoleApp({ transportFactory, playbackFactory }: ConsoleAppProp
     const text = draft.trim()
     const transport = transportRef.current
     if (transport === null || session === null || !canDispatch(current) || text.length === 0) return
-    const message = {
+    const message: InputSubmitMessage = {
       protocolVersion: APPLICATION_CONTRACT_VERSION,
       messageId: nextId('input'),
       sessionId: session.sessionId,
       epoch: session.epoch,
-      kind: 'input.submit' as const,
+      kind: 'input.submit',
       payload: { source, text },
+    }
+    if (transport !== null && isApplicationTransport(transport)) {
+      // The machine path never awaits a transport promise: the application
+      // listener applies the acknowledgement when it arrives.
+      const activeMachine = machineRef.current
+      if (activeMachine === null || current.session?.retiring === true) return
+      setState((previous) => withPendingInput(previous, message))
+      setDraft('')
+      let accepted: string | null = null
+      try {
+        accepted = activeMachine.input(text, message.messageId, source)
+      } catch (error) {
+        setState((previous) => withInputFailure(previous, message.messageId, identify(error)))
+        notificationOpen({ type: 'error', message: 'Input dispatch failed', description: identify(error) })
+        return
+      }
+      if (accepted === null) {
+        setState((previous) =>
+          withInputFailure(previous, message.messageId, 'the performer machine refused the input'),
+        )
+      }
+      return
     }
     setState((previous) => withPendingInput(previous, message))
     setDraft('')
@@ -479,24 +617,47 @@ export function ConsoleApp({ transportFactory, playbackFactory }: ConsoleAppProp
       const transport = transportRef.current
       if (transport === null || session === null || !canDispatch(current)) return
       const requestId = nextId(`control-${action}`)
-      const message =
+      const message: ControlStopMessage | ControlResumeMessage =
         action === 'stop'
-          ? ({
+          ? {
               protocolVersion: APPLICATION_CONTRACT_VERSION,
               messageId: nextId('control'),
               sessionId: session.sessionId,
               epoch: session.epoch,
-              kind: 'control.stop' as const,
+              kind: 'control.stop',
               payload: { requestId },
-            } as const)
-          : ({
+            }
+          : {
               protocolVersion: APPLICATION_CONTRACT_VERSION,
               messageId: nextId('control'),
               sessionId: session.sessionId,
               epoch: session.epoch,
-              kind: 'control.resume' as const,
+              kind: 'control.resume',
               payload: { requestId },
-            } as const)
+            }
+      if (isApplicationTransport(transport)) {
+        // The acknowledgement is applied by the application listener.
+        const activeMachine = machineRef.current
+        if (activeMachine === null || current.session?.retiring === true) return
+        setState((previous) => withPendingControl(previous, message))
+        let accepted: string | null = null
+        try {
+          accepted =
+            action === 'stop'
+              ? activeMachine.stop(requestId, message.messageId)
+              : activeMachine.resume(requestId, message.messageId)
+        } catch (error) {
+          setState((previous) => withControlFailure(previous, requestId, identify(error)))
+          notificationOpen({ type: 'error', message: `Control ${action} failed`, description: identify(error) })
+          return
+        }
+        if (accepted === null) {
+          setState((previous) =>
+            withControlFailure(previous, requestId, 'the performer machine refused the control request'),
+          )
+        }
+        return
+      }
       setState((previous) => withPendingControl(previous, message))
       try {
         const ack = await transport.sendControl(message)
@@ -513,6 +674,53 @@ export function ConsoleApp({ transportFactory, playbackFactory }: ConsoleAppProp
     },
     [nextId],
   )
+
+  const attachPerformer = useCallback(() => {
+    const activeMachine = machineRef.current
+    if (activeMachine === null) return
+    try {
+      activeMachine.attach()
+    } catch (error) {
+      setState((previous) =>
+        withError(previous, { requestId: null, code: 'invalid_field', message: identify(error) }),
+      )
+    }
+  }, [])
+
+  const bootstrapOperator = useCallback(async () => {
+    if (requestOperatorToken === undefined) return
+    const activeMachine = machineRef.current
+    if (activeMachine === null) return
+    setOperatorRequestPending(true)
+    setOperatorRequestError(null)
+    let token: string
+    try {
+      token = await requestOperatorToken()
+    } catch {
+      // The token never enters an error message; only a generic failure is shown.
+      setOperatorRequestPending(false)
+      setOperatorRequestError('operator bootstrap failed')
+      return
+    }
+    setOperatorRequestPending(false)
+    try {
+      // The token is exchanged once and then discarded; it is never stored.
+      activeMachine.bootstrapOperator(token)
+    } catch {
+      setOperatorRequestError('operator bootstrap could not be sent')
+    }
+  }, [requestOperatorToken])
+
+  const requestRecovery = useCallback(() => {
+    const activeMachine = machineRef.current
+    if (activeMachine === null) return
+    try {
+      if (activeMachine.recover() === null) return
+    } catch {
+      return
+    }
+    setRecoveryAcknowledged(false)
+  }, [])
 
   const session = state.session
   const connectionSummary =
@@ -533,6 +741,7 @@ export function ConsoleApp({ transportFactory, playbackFactory }: ConsoleAppProp
     ['Output confirmation', session === null ? 'unknown' : session.outputConfirmation],
     ['Capability revision', session === null ? 'unknown' : String(session.capabilityRevision)],
     ['Accepted sequence', session === null ? 'unknown' : String(session.lastSeq)],
+    ['Retiring', session === null ? 'unknown' : session.retiring ? 'yes' : 'no'],
   ]
 
   const playbackRows: readonly (readonly [string, string])[] = [
@@ -541,6 +750,65 @@ export function ConsoleApp({ transportFactory, playbackFactory }: ConsoleAppProp
     ['Last stage', state.playback.lastStage ?? 'none'],
     ['Last subtitle', state.playback.subtitleText ?? 'none'],
   ]
+
+  const selection = state.selection
+  const plan = selection.plan
+  const selectionRows: readonly (readonly [string, string])[] = [
+    ['Waiting stage', selection.stage],
+    ['Plan disposition', plan === null ? 'none' : plan.disposition],
+    ['Selected event ids', plan === null ? 'none' : plan.selectedEventIds.join(', ') || 'none'],
+    ['Reply intent', plan === null ? 'none' : (plan.replyIntent ?? 'none')],
+    ['Plan reason code', plan === null ? 'none' : plan.reasonCode],
+    ['Plan synthetic', plan === null ? 'unknown' : plan.synthetic ? 'yes' : 'no'],
+    ['Turn reply intent', selection.replyIntent === null ? 'none' : selection.replyIntent.replyIntent],
+    [
+      'Turn id',
+      selection.replyIntent === null
+        ? 'none'
+        : selection.replyIntent.turnId === null
+          ? 'not reported'
+          : selection.replyIntent.turnId,
+    ],
+    [
+      'Delivery classification',
+      selection.serverDelivery === null ? 'none' : selection.serverDelivery.classification,
+    ],
+    [
+      'Delivery output',
+      selection.serverDelivery === null
+        ? 'none'
+        : selection.serverDelivery.outputId === null
+          ? 'not reported'
+          : selection.serverDelivery.outputId,
+    ],
+    [
+      'Delivery turn',
+      selection.serverDelivery === null
+        ? 'none'
+        : selection.serverDelivery.turnId === null
+          ? 'not reported'
+          : selection.serverDelivery.turnId,
+    ],
+    [
+      'Delivery segment',
+      selection.serverDelivery === null
+        ? 'none'
+        : selection.serverDelivery.segmentId === null
+          ? 'not reported'
+          : selection.serverDelivery.segmentId,
+    ],
+  ]
+
+  const machinePath = machine !== null
+  const retiring = session?.retiring === true
+  const allowDispatch = dispatchable && (!machinePath || !retiring)
+  const operatorButtonVisible = requestOperatorToken !== undefined && machinePath
+  const recovery = machine?.recovery
+  // Recovery is reported for as long as the session is retiring. A failed
+  // attempt stays reported so the operator can acknowledge again and retry;
+  // only an outstanding request disables the button.
+  const recoveryReported = retiring
+  const recoveryRequestable = recoveryReported && recoveryAcknowledged && machinePath
 
   const sessionView = (
     <div className="console__stack">
@@ -572,7 +840,7 @@ export function ConsoleApp({ transportFactory, playbackFactory }: ConsoleAppProp
               aria-labelledby="console-source-label"
               options={SOURCE_OPTIONS}
               value={source}
-              disabled={!dispatchable}
+              disabled={!allowDispatch}
               onChange={(key) => {
                 if (isInputSource(key)) setSource(key)
               }}
@@ -585,7 +853,7 @@ export function ConsoleApp({ transportFactory, playbackFactory }: ConsoleAppProp
             <Input
               id="console-text"
               value={draft}
-              disabled={!dispatchable}
+              disabled={!allowDispatch}
               placeholder="Type an audience message"
               allowClear
               onClear={() => setDraft('')}
@@ -596,7 +864,7 @@ export function ConsoleApp({ transportFactory, playbackFactory }: ConsoleAppProp
             type="primary"
             htmlType="submit"
             icon={<SendIcon size={20} />}
-            disabled={!dispatchable || draft.trim().length === 0}
+            disabled={!allowDispatch || draft.trim().length === 0}
           >
             Submit input
           </Button>
@@ -631,10 +899,10 @@ export function ConsoleApp({ transportFactory, playbackFactory }: ConsoleAppProp
       <Card>
         <Title size="middle">Control</Title>
         <div className="console__actions">
-          <Button danger icon={<StopIcon size={20} />} disabled={!dispatchable} onClick={() => void sendControl('stop')}>
+          <Button danger icon={<StopIcon size={20} />} disabled={!allowDispatch} onClick={() => void sendControl('stop')}>
             Stop
           </Button>
-          <Button icon={<PlayIcon size={20} />} disabled={!dispatchable} onClick={() => void sendControl('resume')}>
+          <Button icon={<PlayIcon size={20} />} disabled={!allowDispatch} onClick={() => void sendControl('resume')}>
             Resume
           </Button>
         </div>
@@ -671,6 +939,122 @@ export function ConsoleApp({ transportFactory, playbackFactory }: ConsoleAppProp
 
       <Card>
         <div className="console__card-head">
+          <Title size="middle">Performer and authority</Title>
+          <Tag variant="soft" color={machine === null ? 'app-orange' : machine.performer ? 'app-green' : 'app-yellow'}>
+            {machine === null
+              ? 'no machine'
+              : machine.performer
+                ? 'attached'
+                : 'not attached'}
+          </Tag>
+        </div>
+        <div className="console__actions">
+          <Button size="small" disabled={!machinePath} onClick={attachPerformer}>
+            Attach performer
+          </Button>
+          {operatorButtonVisible && (
+            <Button size="small" loading={operatorRequestPending} onClick={() => void bootstrapOperator()}>
+              Bootstrap operator
+            </Button>
+          )}
+          {machine !== null && machine.operator && (
+            <Tag variant="outlined" color="app-teal">
+              operator
+            </Tag>
+          )}
+        </div>
+        <Facts
+          rows={[
+            ['Performer attached', machine === null ? 'unknown' : machine.performer ? 'yes' : 'no'],
+            ['Operator authority', machine === null ? 'unknown' : machine.operator ? 'yes' : 'no'],
+            ['Session retiring', session === null ? 'unknown' : session.retiring ? 'yes' : 'no'],
+          ]}
+        />
+        {operatorRequestError !== null && <p className="console__alert">{operatorRequestError}</p>}
+        {machine?.error !== undefined && machine.error !== null && <p className="console__alert">{machine.error}</p>}
+        <Divider type="hairline" />
+        <Title size="middle">Recovery</Title>
+        <p className="console__hint">
+          Recovery is an operator decision, not measured delivery. It retires this session and continues in a fresh
+          successor over the same store. A successor session requires reconnect, operator bootstrap and performer
+          attach, followed by an explicit Resume. A failed attempt remains retryable while retirement is reported, so
+          acknowledge again and request recovery once more.
+        </p>
+        <Checkbox
+          size="small"
+          direction="vertical"
+          options={[
+            {
+              label:
+                "I acknowledge, as the operator's decision, that local playback in this retired session has ended.",
+              value: 'recovery-ack',
+            },
+          ]}
+          value={recoveryAcknowledged ? ['recovery-ack'] : []}
+          disabled={!recoveryReported}
+          onChange={(values) => setRecoveryAcknowledged(values.includes('recovery-ack'))}
+        />
+        <div className="console__actions">
+          <Button
+            size="small"
+            danger
+            disabled={!recoveryRequestable || recovery?.status === 'requested'}
+            onClick={requestRecovery}
+          >
+            Request recovery
+          </Button>
+        </div>
+        <Facts
+          rows={[
+            ['Recovery status', recovery === undefined ? 'none' : recovery.status],
+            ['Retired session', recovery?.retiredSessionId ?? 'none'],
+            ['Successor session', recovery?.successorSessionId ?? 'none'],
+            ['Recoveries', recovery === undefined ? 'none' : String(recovery.recoveries)],
+            [
+              'Remaining recoveries',
+              recovery === undefined || recovery.remainingRecoveries === null
+                ? 'unknown'
+                : String(recovery.remainingRecoveries),
+            ],
+          ]}
+        />
+      </Card>
+
+      <Card>
+        <div className="console__card-head">
+          <Title size="middle">Selection and delivery</Title>
+          <Tag variant="outlined" color="app-blue">
+            runtime-reported
+          </Tag>
+        </div>
+        <Facts rows={selectionRows} />
+        <p className="console__hint">
+          These facts are reported by the runtime as accepted session events. They are not local playback evidence and
+          do not prove that this browser released media.
+        </p>
+        <Divider type="hairline" />
+        <Title size="middle">Accepted inputs</Title>
+        {selection.acceptedInputs.length === 0 ? (
+          <p className="console__hint">No accepted inputs observed.</p>
+        ) : (
+          <ul className="console__list">
+            {[...selection.acceptedInputs].reverse().map((entry) => (
+              <li key={entry.eventId} className="console__list-item">
+                <Tag size="small" variant="soft" color="app-teal">
+                  #{entry.seq}
+                </Tag>
+                <span className="console__list-text">{entry.text}</span>
+                <span className="console__list-meta">
+                  {entry.source} · {entry.eventId}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card>
+        <div className="console__card-head">
           <Title size="middle">Playback and receipts</Title>
           <Tag variant="outlined" color="app-yellow">
             local evidence only
@@ -678,9 +1062,11 @@ export function ConsoleApp({ transportFactory, playbackFactory }: ConsoleAppProp
         </div>
         <Facts rows={playbackRows} />
         <p className="console__hint">
-          {playbackMounted
-            ? 'Receipts are observed in this browser. The console has no player-to-runtime channel yet, so this panel never claims the runtime confirmed delivery.'
-            : 'No local player is mounted for this console; playback cannot be observed here.'}
+          {machinePath
+            ? 'Receipts here are observed in this browser and are local evidence only. They are distinct from the runtime-reported delivery in the Selection and delivery card; local observation is not runtime confirmation.'
+            : playbackMounted
+              ? 'Receipts here are observed in this browser and are local evidence only. The fallback binding exposes no runtime-confirmed delivery; the runtime-reported delivery is never claimed from these observations.'
+              : 'No local player is mounted for this console; playback cannot be observed here.'}
         </p>
         {state.playback.receipts.length === 0 ? (
           <p className="console__hint">No receipts observed.</p>

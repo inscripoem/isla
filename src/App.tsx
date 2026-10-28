@@ -1,56 +1,30 @@
 import type { BootstrapSnapshot } from './contracts'
-import type { AudioLease, AudioResolver } from './performance/browser'
 import { createDomMediaDriver } from './performance/browser'
 import { ConsoleApp } from './console/ConsoleApp'
-import type { TransportStatusReporter } from './console/ConsoleApp'
-import { createAppTransport } from './console/app-transport'
-import { createPlaybackBinding } from './console/player-binding'
-import type { PlaybackBinding, PlaybackCallbacks } from './console/player-binding'
+import type { PerformerFactory, TransportStatusReporter } from './console/ConsoleApp'
+import { createAppTransport, type ConsoleApplicationTransport } from './console/app-transport'
+import { createMachineTransport } from './console/performer-adapter'
+import { createPerformerMachine, type PerformerMachineHooks } from './console/performer-machine'
+import { requestOperatorBootstrap } from './console/operator-bootstrap'
+import { createRuntimeAudioResolver } from './console/runtime-audio-resolver'
 
 /**
  * Console composition root.
  *
- * The console itself is pure view state; transport and playback reach it only
- * through injected factories. They are module-level constants so the console's
- * setup effect keeps a stable dependency list and never reconnects per render.
+ * The console itself is pure view state; transport and the performer machine
+ * reach it only through injected factories. They are module-level constants so
+ * the console's setup effect keeps a stable dependency list and never
+ * reconnects per render.
  *
- * The application endpoint is the runtime's v0.2 socket. No runtime serves it
- * yet, so the console honestly reports a closed transport until the M5 endpoint
- * and its dev-server proxy entry exist.
+ * The runtime serves the application socket at `/app`, the one-time operator
+ * bootstrap at `/operator/bootstrap` and dynamic audio at `/audio`. Browser
+ * delivery still requires a runtime-reported `performance.grant`; the console
+ * never treats a local receipt as confirmation.
  */
 
 const APPLICATION_PATH = '/app'
 
-/**
- * The audio references this build can resolve. A reference is never treated as
- * a URL: it must appear in this explicit registry. Real delivery of audio bytes
- * still waits for a runtime-owned channel, so these are the prepared fixed
- * segments only.
- */
-const AUDIO_REFS: ReadonlyMap<string, string> = new Map<string, string>([
-  ['audio://fixture/segment-0', '/assets/segment-0.wav'],
-  ['audio://fixture/segment-1', '/assets/segment-1.wav'],
-])
-
-function createConsoleResolver(): AudioResolver {
-  return {
-    async resolve(audioRef: string, signal: AbortSignal): Promise<AudioLease> {
-      const assetUrl = AUDIO_REFS.get(audioRef)
-      if (assetUrl === undefined) throw new Error(`unregistered audio ref: ${audioRef}`)
-      const response = await fetch(assetUrl, { signal })
-      if (!response.ok) throw new Error(`segment fetch failed with status ${response.status}`)
-      const blob = await response.blob()
-      return {
-        blob,
-        release() {
-          // The DOM driver owns its object URL; the lease owns only the Blob.
-        },
-      }
-    },
-  }
-}
-
-function createConsoleTransport(reporter: TransportStatusReporter) {
+function createConsoleTransport(reporter: TransportStatusReporter): ConsoleApplicationTransport {
   const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
   return createAppTransport({
     url: `${scheme}://${window.location.host}${APPLICATION_PATH}`,
@@ -59,24 +33,31 @@ function createConsoleTransport(reporter: TransportStatusReporter) {
   })
 }
 
-let receiptCounter = 0
-
-function createConsolePlayback(bootstrap: BootstrapSnapshot, callbacks: PlaybackCallbacks): PlaybackBinding {
-  return createPlaybackBinding({
-    bootstrap,
-    resolver: createConsoleResolver(),
+const createConsolePerformer: PerformerFactory = (
+  _bootstrap: BootstrapSnapshot,
+  transport: ConsoleApplicationTransport,
+  hooks: PerformerMachineHooks,
+) =>
+  createPerformerMachine({
+    transport: createMachineTransport(transport),
     media: createDomMediaDriver(),
-    newReceiptId: () => {
-      receiptCounter += 1
-      return `console-receipt-${receiptCounter}`
-    },
-    localNowMs: () => Math.round(performance.now()),
-    ...callbacks,
+    resolver: createRuntimeAudioResolver(),
+    hooks,
   })
+
+async function requestOperatorToken(): Promise<string> {
+  const result = await requestOperatorBootstrap()
+  return result.token
 }
 
 function App() {
-  return <ConsoleApp transportFactory={createConsoleTransport} playbackFactory={createConsolePlayback} />
+  return (
+    <ConsoleApp
+      transportFactory={createConsoleTransport}
+      performerFactory={createConsolePerformer}
+      requestOperatorToken={requestOperatorToken}
+    />
+  )
 }
 
 export default App
