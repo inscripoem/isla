@@ -1,7 +1,7 @@
 # Evaluation evidence gap map — C-05 and C-16
 
 Status: analysis only. **C-05 and C-16 remain open.** This document closes no case, allocates no ID and
-claims no S6 evidence. Updated: 2026-10-27.
+claims no S6 evidence. Anchors: FR-01, FR-02, NFR-03 (cases C-05/C-16); FR-06. Updated: 2026-10-27.
 
 ## Why this exists
 

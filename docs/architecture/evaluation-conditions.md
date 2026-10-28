@@ -1,7 +1,7 @@
 # Evaluation conditions — text source, clock and planMs
 
 Status: proposed wording for review. No code, no schema change, no `schemaVersion` change.
-Updated: 2026-10-27.
+Anchors: NFR-01, NFR-03, NFR-04; ADR-007 D7; INV-16. Updated: 2026-10-27.
 
 ## `textSource`
 
