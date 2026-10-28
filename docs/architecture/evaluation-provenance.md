@@ -13,8 +13,9 @@ a separate companion while the run schema stays frozen (2026-10-24); M4 requires
 
 `runId + caseId + variantId + attempt`, where `attempt` is the 1-based occurrence index among records with
 the same `(runId, caseId, variantId)` in the run file. Because `AttemptRecord` carries no record id, the
-link is positional; if the run file is reordered the companion must be regenerated, and the report refuses
-a companion whose counts disagree with the run.
+link is positional, so the companion also carries `runDigest`: a SHA-256 over the exact run artifact bytes
+(or a canonical serialization that preserves record order). A digest mismatch is refused — swapping two
+records for the same case and variant changes the digest even though the occurrence-key set is unchanged.
 
 ## Fields
 
@@ -22,16 +23,17 @@ a companion whose counts disagree with the run.
 | --- | --- | --- |
 | `provenanceVersion` | `1` | independent lifecycle from the run schema |
 | `runId` | string | ties the companion to one run (M5) |
+| `runDigest` | string (hex SHA-256) | binds the companion to the exact ordered run content (M5) |
 | `caseId` | string | corpus case (M5) |
 | `variantId` | string | runId+caseId cannot distinguish variants (M5) |
 | `attempt` | integer ≥ 1 | distinguishes repeated attempts (M5) |
-| `inputs[]` | 1–5 entries | prepared execution can submit 1–5 inputs (M5) |
+| `inputs[]` | 1–5 entries (fewer when the batch stops) | prepared execution can submit 1–5 inputs (M5) |
 | `inputs[].inputId` | string | corpus-side identity — **open question for M3** |
 | `inputs[].sourceId` | string | the corpus source the input came from |
 | `inputs[].requestMessageId` | string \| null | acknowledgement identity (M5) |
 | `inputs[].eventId` | string \| null | absent for a rejected submission (M5) |
-| `inputs[].status` | `accepted` \| `duplicate` \| `rejected` \| `no-acknowledgement` | explicit, never inferred |
-| `recordSetRevision` | string \| null | M4: identity for `history.recordSet` |
+| `inputs[].status` | `accepted` \| `duplicate` \| `rejected` \| `not-submitted` \| `no-acknowledgement` | explicit, never inferred |
+| `recordSetRevision` | string \| null | content-bound digest over the admitted confirmed record set in admission order, captured per attempt at admission time; `null` only when `history.source` is `none` or the set was genuinely unobserved; `null` never satisfies `correlation: exact` |
 | `correlation` | `exact` \| `missing` \| `ambiguous` | drives the unscored rule |
 
 ## Lookup
@@ -42,15 +44,48 @@ companion, every quality result for that run is `unscored` with reason `no-prove
 
 ## Format and refusal
 
-The companion is **JSON**, one object per run. The report refuses it unless its
-`(caseId, variantId, attempt)` set equals the run's record set; a missing or extra entry is a refusal, not
-a partial join.
+The companion is **JSON**, one object per run. The report refuses it unless (a) `runDigest` matches the run
+artifact, (b) the `(caseId, variantId, attempt)` set equals the run's record set, and (c) no duplicate
+`(caseId, variantId, attempt)` key appears. A missing or extra entry is a refusal, not a partial join.
 
 ## Unscored rule
 
 `correlation !== exact` for a case means that case's quality result is `unscored` with reason
 `missing-acknowledgement-link` or `ambiguous-acknowledgement-link`; the attempt's
 failed/cancelled/not-run classification is preserved.
+
+An exact acknowledgement does **not** bypass the condition check. An attempt whose preserved, replaced or
+unsupported fixture fields — or whose persona, history or timing conditions — differ from the run's
+`FixedConditions` is `unscored` with reason `condition-mismatch`. `FixedConditions` is referenced, never
+restated.
+
+## Record set revision
+
+`recordSetRevision` is not a label or a counter. It is a digest over the **admitted confirmed record set in
+admission order**, captured **per attempt at admission time**: with `history.source: 'durable'` the set grows
+between attempts, so a per-run or end-of-run value cannot say which set an attempt admitted. It is `null`
+only when `history.source` is `none` or the set was genuinely unobserved, and `null` never satisfies
+`correlation: exact`.
+
+## Partial admission and not-run
+
+Prepared execution can stop submitting after a rejection or throw; later entries are not submitted, and a
+batch with no acceptance is a `notRun` entry rather than an `AttemptRecord` (PR55 dependency commit
+`fccb0f2`, `evaluation-adapter.ts:1097-1123`). The companion distinguishes:
+
+- `not-submitted` — the batch stopped before this entry was submitted;
+- `no-acknowledgement` — the entry was submitted but no acknowledgement was returned;
+- `rejected` — submitted and refused (`requestMessageId` without `eventId`).
+
+Not-run entries are retained outside the record occurrence keys, keyed by `(caseId, variantId)`, and never
+receive invented acknowledgements. An unavailable batch cannot honestly supply 1–5 observed inputs.
+
+**Example (partial admission):** three inputs are prepared; the second is rejected, so the third is
+`not-submitted`. The attempt keeps `accepted` / `rejected` / `not-submitted`, and the case's quality result
+is `unscored` because not every prepared input has an acknowledgement.
+
+**Example (pre-admission refusal):** the batch fails before any acceptance. There is no `AttemptRecord`; the
+run records a `notRun` entry and the companion records no inputs for it.
 
 ## Rejected alternatives
 
