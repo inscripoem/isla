@@ -1,0 +1,639 @@
+import { contentTokensOf } from './memory-recall'
+
+/**
+ * Deterministic consistency scan over the statements M4 is about to render.
+ *
+ * Why this exists: NFR-03 character consistency is otherwise guaranteed only
+ * indirectly - a persona block plus version trimming. Nothing in the tree
+ * compares what the character already confirmed saying against what it says
+ * now, or against the standing facts it must always hold. So a turn that says
+ * "her birthday is 0603" and an older confirmed turn that says "her birthday is
+ * 0704" can both reach the prompt, and the model is free to pick either.
+ *
+ * What this does: one OFFLINE, deterministic comparison of admitted confirmed
+ * statements against each other and against the profile's standing facts. It
+ * reports what looks contradictory. It does NOT decide truth, rewrite text,
+ * delete a record, change admission, or change the character budget.
+ *
+ * What this deliberately does not do (issue #44, agreed boundaries):
+ *   - no model call, no I/O, no embeddings: NFR-03 A/B attribution depends on
+ *     context assembly staying free and reproducible;
+ *   - no automatic correction or deletion: a detector that silently rewrote
+ *     history would be inventing content, which is exactly what M4 must never
+ *     do;
+ *   - no admission or budget effect: a flagged statement is still admitted, and
+ *     still charged (see `CONFLICT_MARKER` for the opt-in render marker).
+ *
+ * Scope limits, stated rather than hidden:
+ *   - it compares CLAUSES, so a contradiction split across two clauses of one
+ *     sentence may be missed;
+ *   - it is lexical, so paraphrase ("she is short" vs "she is 151 cm") is not
+ *     detected;
+ *   - negation is read from a small marker list, so an idiom such as "不错"
+ *     ("not bad", i.e. good) is read as negated;
+ *   - on the antonym path, negation counts only when the marker sits directly
+ *     before the matched attribute ("not easy", "不好玩"); any other placement
+ *     leaves its scope uncertain and the pair is SKIPPED rather than guessed.
+ *
+ * Work bound. The scan runs synchronously during context assembly, before the
+ * prompt budget is applied, so its cost must not grow with the whole admitted
+ * history while only a handful of turns can reach the prompt. It visits at most
+ * `MAX_CONSISTENCY_STATEMENTS` statements, preprocesses at most
+ * `MAX_CONSISTENCY_TEXT_UNITS` UTF-16 units, generates at most
+ * `MAX_CONSISTENCY_CLAIMS` claims and performs at most
+ * `MAX_CONSISTENCY_COMPARISONS` pair iterations. A statement that does not fit
+ * is skipped WHOLE - never truncated: a cut-off clause is a different claim
+ * from the one the speaker made, and could manufacture a contradiction the
+ * record does not contain. Whenever a ceiling or the findings cap stops the
+ * scan early, the result reports `incomplete`, so an uninspected audit is never
+ * presented as complete.
+ *
+ * The result is AUDIT evidence: ids and counts, never statement text, so it can
+ * be handed to the operator console without crossing the redaction boundary of
+ * `memory.inspect`.
+ */
+
+/** How two statements disagree. */
+export type ContradictionKind =
+  /** Same content, opposite polarity: "likes coffee" vs "does not like coffee". */
+  | 'negation'
+  /** Same content, incompatible numbers: "birthday is 0603" vs "birthday is 0704". */
+  | 'quantity'
+  /** Same object, opposite attribute: "likes cats" vs "hates cats". */
+  | 'attribute'
+
+/** One side of a comparison. Ids only; a finding never carries text. */
+export type StatementRef =
+  | { kind: 'turn'; sessionId: string; turnId: string }
+  | { kind: 'persona-fact'; factIndex: number }
+
+/** One statement offered to the scan. */
+export interface ConsistencyStatement {
+  ref: StatementRef
+  text: string
+}
+
+export interface ConsistencyScanInput {
+  statements: readonly ConsistencyStatement[]
+  /** Upper bound on reported findings, so one long history cannot flood audit. */
+  maxFindings?: number
+}
+
+/**
+ * What a finding records. The evidence kind says WHY the pair was compared, so
+ * a reviewer can judge the finding without re-deriving the detector's reasoning.
+ */
+export interface Contradiction {
+  kind: ContradictionKind
+  left: StatementRef
+  right: StatementRef
+  /** Which rule fired. */
+  evidence: 'polarity' | 'quantity' | 'antonym'
+  /**
+   * How many content tokens the two clauses shared. A COUNT, not the tokens: the
+   * tokens are fragments of memory or persona text, and this payload crosses the
+   * redaction boundary described in ./memory-inspect.
+   */
+  sharedTokenCount: number
+}
+
+/** Default cap on findings per scan. */
+export const MAX_CONSISTENCY_FINDINGS = 8
+
+/**
+ * Hard ceilings on the work one scan may perform.
+ *
+ * They exist because the scan is synchronous inside context assembly: an
+ * unbounded pair loop blocks Stop/deadline handling for as long as the admitted
+ * history is long, even when the prompt renders only a few turns. The ceilings
+ * are counts, not wall-clock budgets, so the result is reproducible on any
+ * machine; reaching one does not throw, it reports `incomplete`.
+ *
+ * These are M4's adopted policy values (owner review, M4-03). They are counts,
+ * not latency guarantees, and may be revisited with recorded evidence; changing
+ * one is a policy change, not a bug fix. They were sized against the measured
+ * pair rate (the benchmark under `test/bench` compares them with the pre-repair
+ * scan):
+ *   - statements: 128, roughly a long context window plus standing facts;
+ *   - text: 32768 UTF-16 units, roughly 128 statements of 256 characters;
+ *   - claims: 256, roughly two clauses per visited statement;
+ *   - comparisons: 10000, the full pair space of about 141 claims.
+ *
+ * A ceiling stops the scan; it never throws and never silently truncates. The
+ * result then carries `incomplete: true`, and every consumer MUST treat the
+ * finding count as partial rather than as an all-clear. That contract is
+ * explained on `ConsistencyScanResult` and surfaced through
+ * `AssembledDialogueContext.consistencyAudit` and `MemoryInspectPayload`.
+ */
+export const MAX_CONSISTENCY_STATEMENTS = 128
+export const MAX_CONSISTENCY_TEXT_UNITS = 32_768
+export const MAX_CONSISTENCY_CLAIMS = 256
+export const MAX_CONSISTENCY_COMPARISONS = 10_000
+
+/**
+ * What one bounded scan produced.
+ *
+ * `incomplete` is true when at least one offered statement was not examined,
+ * when at least one clause pair was not compared, or when reporting stopped at
+ * the findings cap. It is never true merely because the input was small enough
+ * to fit every ceiling.
+ *
+ * Consumer contract: `incomplete` true means the audit is PARTIAL. An empty
+ * `findings` array with `incomplete` true is NOT "no contradictions" - it means
+ * some evidence was never compared. A consumer may report the count as partial;
+ * it may not present it as a clean or complete audit. `false` is the only value
+ * that licenses reading the findings as covering the whole input.
+ */
+export interface ConsistencyScanResult {
+  findings: readonly Contradiction[]
+  /** See the interface note: true whenever the scan did not cover its input. */
+  incomplete: boolean
+  /** Statements offered to the scan. */
+  statementsOffered: number
+  /** Statements considered before the visit ceiling stopped the scan. */
+  statementsVisited: number
+  /** Statements that passed the size gates and produced claims. */
+  statementsExamined: number
+  /** UTF-16 units of statement text preprocessed. */
+  textUnits: number
+  /** Claims generated from the examined statements. */
+  claims: number
+  /** Pair iterations attempted, bounded by MAX_CONSISTENCY_COMPARISONS. */
+  comparisons: number
+}
+
+/**
+ * Redacted completion summary of one scan: counts and a completeness flag,
+ * never statement text. Safe to carry through context assembly and the
+ * `memory.inspect` payload.
+ */
+export interface ConsistencyAuditSummary {
+  /** Contradictions reported; partial when `incomplete`. */
+  findings: number
+  /** True when some offered statement or pair was not examined, or reporting stopped at the findings cap. */
+  incomplete: boolean
+  statementsOffered: number
+  statementsVisited: number
+  statementsExamined: number
+  textUnits: number
+  claims: number
+  comparisons: number
+}
+
+/** Reduce a scan result to the redacted completion summary. */
+export function summarizeConsistencyAudit(
+  result: ConsistencyScanResult,
+): ConsistencyAuditSummary {
+  return {
+    findings: result.findings.length,
+    incomplete: result.incomplete,
+    statementsOffered: result.statementsOffered,
+    statementsVisited: result.statementsVisited,
+    statementsExamined: result.statementsExamined,
+    textUnits: result.textUnits,
+    claims: result.claims,
+    comparisons: result.comparisons,
+  }
+}
+
+/*
+ * Negation markers. English is matched as words (with the contraction tail
+ * `n't`); Chinese as the markers that actually flip a statement.
+ *
+ * The Chinese list stops at 不/没/别再/从未 on purpose. A bare 别 would match
+ * 别人 ("other people") and 别的 ("other"), and 无 would match 无聊 ("boring"),
+ * so both are left out: a detector that fires on those is noise, and noise is
+ * how an operator learns to ignore the audit.
+ */
+/*
+ * The contraction branch is anchored with `\b` before `\w+`. Without it the
+ * engine starts the `\w+` run at every character of a long word and backtracks
+ * through the whole run looking for the literal `n`, which is quadratic in the
+ * word length ("x".repeat(32768) took ~1.5 s). `\b` makes a long word enter the
+ * run once, at its start, so the branch is linear in the text length. The
+ * anchor changes no match: an apostrophe is a non-word character, so `n't` can
+ * only end a word and a match always began at that word's start.
+ */
+const NEGATION_PATTERN = /(?:\bnot\b|\bno\b|\bnever\b|\bcannot\b|\b\w+n['’]t\b)|不|没|别再|从未|未曾/i
+/** Characters removed before tokenizing, so negated and plain clauses align. */
+const NEGATION_STRIP_PATTERN = /(?:\bnot\b|\bno\b|\bnever\b|\bcannot\b|\b\w+n['’]t\b)|[不没]/gi
+/*
+ * A negation marker that ENDS the text before an attribute word: the marker is
+ * adjacent, so it scopes the attribute ("not easy", "不好玩"). The English
+ * alternatives stay word-bounded so a prefix ending in "piano" is not read as
+ * "no"; the CJK markers are the same list NEGATION_PATTERN uses.
+ */
+const NEGATION_TAIL_PATTERN = /(?:\bnot\b|\bno\b|\bnever\b|\bcannot\b|\b\w+n['’]t\b|不|没|别再|从未|未曾)$/i
+
+/** Latin words match as whole words; CJK words match by substring. */
+const LATIN_ATTRIBUTE_PATTERN = /^[a-z0-9]+$/
+
+function escapeRegExp(word: string): string {
+  return word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * Split the clause on each whole-word occurrence of the attribute word, so
+ * `parts[i]` is the text immediately before occurrence i and the number of
+ * occurrences is `parts.length - 1`. Latin attributes match whole words only -
+ * `easy` must not fire inside "easygoing", or `hard` inside "hardworking" - and
+ * CJK attributes match by substring, since CJK text has no word separators.
+ */
+function splitOnAttributeWord(clause: string, word: string): readonly string[] {
+  return LATIN_ATTRIBUTE_PATTERN.test(word)
+    ? clause.split(new RegExp(`\\b${escapeRegExp(word)}\\b`, 'gi'))
+    : clause.split(word)
+}
+
+/**
+ * Attribute pairs that mean opposite things about the same object. A closed
+ * list, not a thesaurus: only pairs where the disagreement is unambiguous.
+ *
+ * The quality pairs added here pass the same bar as the originals: each word is
+ * an evaluation with no reading that flips under a common compound (unlike
+ * 大/小, which shift with the noun, or 无, which is excluded from the negation
+ * table for exactly this reason). The shared-object rule below still guards
+ * every pair, so an opposite word about a different thing is not a finding.
+ */
+const ANTONYM_PAIRS: readonly (readonly [string, string])[] = [
+  ['喜欢', '讨厌'],
+  ['喜欢', '厌恶'],
+  ['爱', '恨'],
+  ['同意', '反对'],
+
+  ['好玩', '无聊'],
+  ['有趣', '无聊'],
+  ['好看', '难看'],
+  ['好听', '难听'],
+  ['简单', '困难'],
+  ['容易', '困难'],
+  ['开心', '难过'],
+  ['高兴', '难过'],
+  ['like', 'hate'],
+  ['love', 'hate'],
+  ['agree', 'disagree'],
+  ['easy', 'hard'],
+  ['interesting', 'boring'],
+]
+
+/** Split a statement into clauses; a contradiction lives inside one clause. */
+function clausesOf(text: string): readonly string[] {
+  return text
+    .split(/[。；;!！?？，,、\n]+|(?<=[a-z])\.\s+/i)
+    .map((clause) => clause.trim())
+    .filter((clause) => clause.length > 0)
+}
+
+/** Numbers in a clause, normalized so "0603" and "603" differ but "3:30" holds. */
+function numbersOf(text: string): ReadonlySet<string> {
+  const numbers = new Set<string>()
+  for (const match of text.matchAll(/\d+(?:[.:：/]\d+)*/g)) numbers.add(match[0])
+  return numbers
+}
+
+interface Claim {
+  ref: StatementRef
+  /** Content tokens with negation removed, so polarities align for comparison. */
+  content: ReadonlySet<string>
+  /** Numbers stated in the clause. */
+  quantities: ReadonlySet<string>
+  /** True when the clause negates its content. */
+  negated: boolean
+  /** Lowercased clause, used only for the antonym table. */
+  lower: string
+}
+
+function claimOf(ref: StatementRef, clause: string): Claim | null {
+  const content = new Set<string>()
+  for (const token of contentTokensOf(clause.replace(NEGATION_STRIP_PATTERN, ' ')).keys()) {
+    // Numbers are compared separately: a date is not a topic word.
+    if (/^\d+$/.test(token)) continue
+    content.add(token)
+  }
+  if (content.size === 0) return null
+  return {
+    ref,
+    content,
+    quantities: numbersOf(clause),
+    negated: NEGATION_PATTERN.test(clause),
+    lower: clause.toLowerCase(),
+  }
+}
+
+function sharedCount(left: ReadonlySet<string>, right: ReadonlySet<string>): number {
+  let shared = 0
+  for (const token of left) if (right.has(token)) shared += 1
+  return shared
+}
+
+/**
+ * Whether two clauses are about the same thing.
+ *
+ * Containment OR overlap, because clause lengths differ for a legitimate reason:
+ * a standing fact ("Elleya is 151 cm tall and prefers purple-red...") is a
+ * compound sentence, while a turn that contradicts it is usually one short
+ * clause. Requiring near-equal token sets would only ever match clauses of the
+ * same length, which is why the smaller set being fully contained is enough.
+ */
+function aboutSameThing(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
+  const shared = sharedCount(left, right)
+  if (shared === 0) return false
+  const smaller = Math.min(left.size, right.size)
+  return shared === smaller || shared * 2 >= left.size + right.size
+}
+
+/**
+ * Characters that are never the object of a preference. Used only by the
+ * single-character fallback below; the recall tokenizer keeps its stricter
+ * two-character floor.
+ */
+const SINGLE_CHAR_GLUE = new Set('我你他她它们的地得了着过吗呢吧啊是在有和就不'.split(''))
+
+/**
+ * Tokens of a clause with the given attribute words removed: the OBJECT that the
+ * two clauses disagree about.
+ *
+ * The bigram tokenizer gives up on a one-character run, which is correct for
+ * recall but wrong here: "我喜欢猫" / "我讨厌猫" disagree about 猫, and 猫 is a
+ * single character. So a surviving single CJK character that is not glue is
+ * kept as its own token, in this comparison only.
+ */
+function attributeObjectTokens(text: string, words: readonly string[]): Set<string> {
+  let rest = text
+  for (const word of words) {
+    // Same whole-word rule as the match itself: removing `easy` from
+    // "easygoing" would leave a fragment the speaker never wrote.
+    rest = LATIN_ATTRIBUTE_PATTERN.test(word)
+      ? rest.replace(new RegExp(`\\b${escapeRegExp(word)}\\b`, 'gi'), ' ')
+      : rest.split(word).join(' ')
+  }
+  const tokens = new Set<string>()
+  for (const token of contentTokensOf(rest).keys()) {
+    if (/^\d+$/.test(token)) continue
+    tokens.add(token)
+  }
+  for (const match of rest.matchAll(/[一-鿿]+/g)) {
+    const run = match[0]
+    if (run.length !== 1) continue
+    if (SINGLE_CHAR_GLUE.has(run)) continue
+    tokens.add(run)
+  }
+  return tokens
+}
+
+function refKey(ref: StatementRef): string {
+  return ref.kind === 'turn' ? `turn:${ref.sessionId}:${ref.turnId}` : `persona:${ref.factIndex}`
+}
+
+/**
+ * Scan the supplied statements for contradictions under the hard ceilings
+ * documented above.
+ *
+ * Statements are visited in caller order. Each is either examined (its clauses
+ * become claims) or skipped whole; a statement is skipped when the remaining
+ * text or claim budget cannot hold it, and the visit ceiling stops the loop.
+ * Comparisons then run over the claims in the same order, bounded by the pair
+ * ceiling and the findings cap.
+ *
+ * The output is stable for a given input and ordering is the caller's order,
+ * so a review can diff two runs. `incomplete` is derived from the work actually
+ * done, not from the size of the input: it stays false only when every offered
+ * statement was examined and the whole pair space was compared.
+ */
+export function scanContradictions(input: ConsistencyScanInput): ConsistencyScanResult {
+  const requestedFindings = input.maxFindings ?? MAX_CONSISTENCY_FINDINGS
+  /*
+   * A non-finite budget would make every `>=` comparison false and silently
+   * remove the findings cap, so it falls back to the default; a fractional one
+   * is floored. A budget of zero or less requests no findings, which means no
+   * audit happened, so any offered statement makes the result incomplete.
+   */
+  const maxFindings = Number.isFinite(requestedFindings)
+    ? Math.floor(requestedFindings)
+    : MAX_CONSISTENCY_FINDINGS
+  if (maxFindings <= 0) {
+    return {
+      findings: [],
+      incomplete: input.statements.length > 0,
+      statementsOffered: input.statements.length,
+      statementsVisited: 0,
+      statementsExamined: 0,
+      textUnits: 0,
+      claims: 0,
+      comparisons: 0,
+    }
+  }
+
+  const claims: Claim[] = []
+  let statementsVisited = 0
+  let statementsExamined = 0
+  let textUnits = 0
+  let incomplete = false
+
+  for (const statement of input.statements) {
+    if (statementsVisited >= MAX_CONSISTENCY_STATEMENTS) {
+      incomplete = true
+      break
+    }
+    statementsVisited += 1
+
+    /*
+     * Charge the text BEFORE splitting it, so preprocessing and tokenizing stay
+     * inside the same ceiling as the comparisons. A statement that does not fit
+     * is skipped whole: truncating it would present a clause the speaker never
+     * completed as a complete claim.
+     */
+    if (textUnits + statement.text.length > MAX_CONSISTENCY_TEXT_UNITS) {
+      incomplete = true
+      continue
+    }
+    textUnits += statement.text.length
+
+    const clauses = clausesOf(statement.text)
+    /*
+     * The gate is the CLAUSE count, an upper bound on the claims the statement
+     * can produce, so the claim ceiling holds even when some clauses yield no
+     * claim. Exceeding it skips the statement whole rather than admitting a
+     * partial statement.
+     */
+    if (claims.length + clauses.length > MAX_CONSISTENCY_CLAIMS) {
+      incomplete = true
+      continue
+    }
+
+    statementsExamined += 1
+    for (const clause of clauses) {
+      const claim = claimOf(statement.ref, clause)
+      if (claim !== null) claims.push(claim)
+    }
+  }
+
+  const findings: Contradiction[] = []
+  // One finding per pair of statements: the first rule that fired is the most
+  // specific description of the disagreement, and repeating the pair would only
+  // inflate the warning count.
+  const seenPairs = new Set<string>()
+  let comparisons = 0
+  let stopped = false
+  for (let leftIndex = 0; leftIndex < claims.length; leftIndex += 1) {
+    const left = claims[leftIndex]
+    if (left === undefined) continue
+    for (let rightIndex = leftIndex + 1; rightIndex < claims.length; rightIndex += 1) {
+      if (comparisons >= MAX_CONSISTENCY_COMPARISONS) {
+        stopped = true
+        break
+      }
+      comparisons += 1
+      const right = claims[rightIndex]
+      if (right === undefined) continue
+      if (refKey(left.ref) === refKey(right.ref)) continue
+      const pairKey = `${refKey(left.ref)}|${refKey(right.ref)}`
+      if (seenPairs.has(pairKey)) continue
+
+      const finding = compareClaims(left, right)
+      if (finding === null) continue
+      seenPairs.add(pairKey)
+      findings.push(finding)
+      if (findings.length >= maxFindings) {
+        stopped = true
+        break
+      }
+    }
+    if (stopped) break
+  }
+
+  /*
+   * `comparisons` reaches the full pair count only when the pair space was
+   * exhausted. Any other value means a ceiling or the findings cap stopped the
+   * scan early, so the audit is incomplete even when it found what it reported;
+   * a findings cap that fired on the very last pair inspected everything and
+   * stays complete.
+   */
+  const totalPairs = (claims.length * (claims.length - 1)) / 2
+  return {
+    findings,
+    incomplete: incomplete || comparisons !== totalPairs,
+    statementsOffered: input.statements.length,
+    statementsVisited,
+    statementsExamined,
+    textUnits,
+    claims: claims.length,
+    comparisons,
+  }
+}
+
+/** Compare one ordered pair of clauses; null when they do not disagree. */
+function compareClaims(left: Claim, right: Claim): Contradiction | null {
+  const shared = sharedCount(left.content, right.content)
+  const sameThing = aboutSameThing(left.content, right.content)
+
+  if (sameThing) {
+    // Opposite polarity about the same content is the primary case: two records
+    // cannot both be right about the same predicate.
+    if (left.negated !== right.negated) {
+      return {
+        kind: 'negation',
+        left: left.ref,
+        right: right.ref,
+        evidence: 'polarity',
+        sharedTokenCount: shared,
+      }
+    }
+    // Same polarity, incompatible numbers: two different birthdays for one
+    // person are a contradiction whatever the polarity.
+    const leftNumbers = [...left.quantities]
+    const rightNumbers = [...right.quantities]
+    if (
+      leftNumbers.length > 0 &&
+      rightNumbers.length > 0 &&
+      leftNumbers.some((value) => !right.quantities.has(value))
+    ) {
+      return {
+        kind: 'quantity',
+        left: left.ref,
+        right: right.ref,
+        evidence: 'quantity',
+        sharedTokenCount: shared,
+      }
+    }
+  }
+
+  return compareAntonyms(left, right)
+}
+
+/** How a matched attribute sits relative to negation, as far as the scan can tell. */
+type AttributePolarity = 'plain' | 'negated' | 'uncertain'
+
+/**
+ * Whether a clause's mention of an attribute word is negated.
+ *
+ * The negation that counts is the one ADJACENT to the word ("not easy",
+ * "不好玩"): that marker unambiguously scopes the attribute. A marker anywhere
+ * else in the clause ("I did not think the game was easy") may or may not scope
+ * it, and the scan does not guess scope, so the result is 'uncertain' and the
+ * caller abstains. Mixed readings across occurrences of the same word in one
+ * clause are uncertain for the same reason.
+ */
+function attributePolarity(clause: string, partsBetween: readonly string[]): AttributePolarity {
+  let negated = false
+  let plain = false
+  for (const prefix of partsBetween.slice(0, -1)) {
+    if (NEGATION_TAIL_PATTERN.test(prefix.trimEnd())) negated = true
+    else plain = true
+  }
+  if (negated && plain) return 'uncertain'
+  if (negated) return 'negated'
+  return NEGATION_PATTERN.test(clause) ? 'uncertain' : 'plain'
+}
+
+/** The word at the other end of the antonym pair. */
+function oppositeAttribute(word: string, first: string, second: string): string {
+  return word === first ? second : first
+}
+
+/**
+ * Opposite attribute words about the same object: "likes cats" vs "hates cats".
+ *
+ * Negation participates: "not easy" and "hard" sit on the SAME side of the
+ * easy/hard axis, so only opposed EFFECTIVE values are a finding - "easy" vs
+ * "hard", or "not easy" vs "not hard". When either clause's negation cannot be
+ * pinned to its matched attribute, the pair is skipped: guessing the scope
+ * would manufacture false contradictions (or hide real ones) whenever the
+ * marker belongs to a different predicate in the sentence.
+ */
+function compareAntonyms(left: Claim, right: Claim): Contradiction | null {
+  for (const [first, second] of ANTONYM_PAIRS) {
+    const leftFirst = splitOnAttributeWord(left.lower, first)
+    const leftSecond = splitOnAttributeWord(left.lower, second)
+    const rightFirst = splitOnAttributeWord(right.lower, first)
+    const rightSecond = splitOnAttributeWord(right.lower, second)
+    const forward = leftFirst.length > 1 && rightSecond.length > 1
+    const backward = leftSecond.length > 1 && rightFirst.length > 1
+    if (!forward && !backward) continue
+    const leftWord = forward ? first : second
+    const rightWord = forward ? second : first
+    const leftPolarity = attributePolarity(left.lower, forward ? leftFirst : leftSecond)
+    const rightPolarity = attributePolarity(right.lower, forward ? rightSecond : rightFirst)
+    if (leftPolarity === 'uncertain' || rightPolarity === 'uncertain') continue
+    const leftValue =
+      leftPolarity === 'negated' ? oppositeAttribute(leftWord, first, second) : leftWord
+    const rightValue =
+      rightPolarity === 'negated' ? oppositeAttribute(rightWord, first, second) : rightWord
+    // Same side of the axis ("not easy" / "hard") is agreement, not a finding.
+    if (leftValue === rightValue) continue
+    const leftRest = attributeObjectTokens(left.lower, [first, second])
+    const rightRest = attributeObjectTokens(right.lower, [first, second])
+    const shared = sharedCount(leftRest, rightRest)
+    // The attribute is opposite, so the OBJECT has to be the same; without a
+    // shared object this is two unrelated preferences, not a contradiction.
+    if (shared === 0) continue
+    return {
+      kind: 'attribute',
+      left: left.ref,
+      right: right.ref,
+      evidence: 'antonym',
+      sharedTokenCount: shared,
+    }
+  }
+  return null
+}

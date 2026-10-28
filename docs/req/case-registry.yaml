@@ -327,6 +327,13 @@ cases:
       file: test/offline/m6-sqlite.test.ts
       test: "preserves legacy NULL attribution across the v2 migration, and drops the legacy column"
 
+  - id: C-64
+    status: implemented
+    title: A late fully-delivered claim for a cancelled terminal is refused at M4 admission and leaves the stored record unchanged
+    verifier:
+      file: test/offline/m4-memory-safety.test.ts
+      test: "refuses a late fully-delivered claim for a cancelled terminal"
+
   - id: C-65
     status: implemented
     title: A contradictory legacy classification/outcome row is refused before migration exposure and the database is preserved

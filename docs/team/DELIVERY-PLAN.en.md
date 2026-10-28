@@ -25,6 +25,8 @@ PR53 documentation follow-up is published at [`bc294bf60e55ae9a45a50aa47bcbe118d
 
 [M4 proposal PR54](https://github.com/inscripoem/isla/pull/54) at `4bc4c184616e72bbf3d291ca2dadf03459efb4e2` has [M1 scoped producer-boundary approval](https://github.com/inscripoem/isla/pull/54#pullrequestreview-5612765235); M4 adoption of the count/reason semantics remains required. [M5 integration PR55](https://github.com/inscripoem/isla/pull/55) at `554100bbd8e22a2a0c4295fff1228404eeb7828b` remains an unreviewed Draft PR. Each has two passing CI checks. PR55 includes outcome/deadline wiring and bounded prepared inputs, not complete corpus replay. The inherited M4 long-history synchronous consistency-scan P2 and original AI-use scope correction remain open. These proposals are not on main.
 
+The 2026-10-22 [M5 mention follow-up](HANDOFF-M5-MENTIONS.en.md) is published in Draft PR55 over PR53 and M4 a678b61. It contains a separately reviewable M4 producer proposal and M5 outcome/deadline consumers; bounded input preparation is implemented. Independent M5 checks passed 203/9 and full verification passed 1223/69 with typecheck, lint and build. Imported M4 changes retain M4 ownership. M3 corpus/labels and M6 report binding remain required; this does not adopt a full corpus replay mode or close C-05/C-16.
+
 Approved coordination replies are published in [Issue37 / M2](https://github.com/inscripoem/isla/issues/37#issuecomment-6293124088) and [Issue4 / M3](https://github.com/inscripoem/isla/issues/4#issuecomment-6293124873). Do not resend them. Product adoption and real decision-provider work remain with those owners.
 
 [M5's Issue25 reply](https://github.com/inscripoem/isla/issues/25#issuecomment-6286818499) records the Linux controlled-shutdown/restart evidence and exact gaps. [M5's Issue41 reply](https://github.com/inscripoem/isla/issues/41#issuecomment-6286821631) records the implemented adapter and pending adoption. That earlier adapter snapshot kept all stage timings and totalMs null; it is historical, not a statement about every later controlled run. Current measurement claims remain limited to their actual observations; planMs, firstAudibleMs and stopToSilenceMs remain null pending agreed, verified observation paths. Supplied replyIntent remains refused. S6/G4, live providers and acoustic measurements remain unaccepted. Retention/deletion policy is undecided. The [Issue41](https://github.com/inscripoem/isla/issues/41#issuecomment-6309787640) and [Issue25](https://github.com/inscripoem/isla/issues/25#issuecomment-6309792285) proposals are published and still require the relevant owner decisions; clock classification and supplied-intent modes are not adopted; bounded multi-input preparation is now proposed in PR55 but is not full corpus replay, C-05/C-16 remain pending and C-72 is not allocated or registered.
@@ -58,6 +60,14 @@ The close/reopen continuation test uses two application instances in one process
 The production evaluation adapter is independently frozen in a separate worktree, with 922 tests / 55 files and 19 adapter cases. It is now adopted alongside the frozen physical lifecycle in this combination; see [the evaluation adapter handoff](HANDOFF-M5-EVALUATION-ADAPTER.en.md). Its timings, actual provider-attempt counts and costs remain null, with supplied-intent mode and M4 token propagation still unsupported. The separate integration worktree passed 986 tests / 56 files before physical-lifecycle adoption. Both increments are now adopted and their combined path is independently verified: 1008 tests / 57 files, typecheck, lint and build passed; M5 168 / 8 and evaluation 20 cases passed. One retained provider serves the actual evaluation adapter, real registry and a controlled real worker: successful resource delivery, Stop during held synthesis, explicit busy failure until settlement, reuse and caller-owned release through actual exit. Metrics remain null; this does not establish real model or acoustic output.
 
 PR35 is merged; C-49/C-50 and the selected-history repair are now on main. No new case IDs are allocated by this follow-up.
+
+## Consistency audit proposal follow-up
+
+The follow-up in PR55 includes the bounded M4 audit proposal, long-word regex repair,
+redacted incomplete-audit summary and PR53 documentation corrections. M4-only verification
+passed 1209/68; this M5 combination passed 1242/69 with typecheck, lint and build. Captain approved publication;
+M4 adoption and M2/M6 inspection review remain pending.
+See the [updated M5 handoff](HANDOFF-M5-MENTIONS.en.md#consistency-audit-follow-up-2026-10-22-under-review).
 
 ## Remaining delivery sequence
 

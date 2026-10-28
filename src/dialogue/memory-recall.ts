@@ -34,6 +34,17 @@ export const MAX_RECALLED_TURNS = 3
  * Minimum keyword overlap for a candidate to qualify. One shared word is too
  * weak a signal and would surface near-random old turns; two is the cheapest
  * bar that still catches genuine topical callbacks.
+ *
+ * The bar is a SUM OF TOKEN WEIGHTS, not a count of matches: an informative
+ * token (a long Latin word, a number, a CJK bigram of two content characters)
+ * is worth two, a thin one is worth one. Two thin tokens - the kind that survive
+ * in subtitled, file-less conversation, where the same glue words appear every
+ * turn - cannot reach the bar, but one informative token can.
+ *
+ * A candidate must ALSO share at least one informative token, whatever its
+ * total. Score alone would let two different thin tokens (two glue bigrams that
+ * happen to align) recall an unrelated old turn, which is the false positive
+ * this rule exists to stop.
  */
 export const MIN_RECALL_SCORE = 2
 
@@ -43,7 +54,17 @@ export interface RecalledTurn {
   score: number
 }
 
-/** Recall input: the current message and the turns dropped by the turn window. */
+/**
+ * Recall input: the current message and the turns dropped by the turn window.
+ *
+ * `replyIntent` is carried on the request for a FUTURE intent-aware ranking
+ * rule, but it is NOT consumed by the implementation today. Admission is
+ * evidence-based and never intent-gated (see ./memory-semantics): an intent can
+ * only ever reorder recall among memories already eligible under M4's policies.
+ * This invocation passes the field through but does not establish that behavior;
+ * a future ranker must state explicit rules and tests (M3 coordination, issue
+ * #44 §1). Known limitation, kept explicit rather than silent.
+ */
 export interface DeliveryRecallRequest {
   inputText: string
   replyIntent: string
@@ -160,42 +181,144 @@ export function mayRecallCandidate(request: DeliveryRecallRequest, turn: Assembl
 }
 
 /*
- * Stopwords are the words that appear in almost every listener message; letting
- * them score would make every old turn "relevant". The list stays small and
- * English-only because CJK tokens are bigrams, which are specific enough.
+ * Stopword tables are data, not configuration: they ship with the module and
+ * never come from the environment. A word listed here is one that shows up in
+ * almost every turn of a subtitled or file-less conversation, so letting it
+ * score would make every old turn look "relevant" to every new message and
+ * spend the recall budget on noise.
+ *
+ * Two tables rather than one, because the two tokenizers disagree about what a
+ * token is: a Latin token is a whole word, while a CJK token is a bigram. A
+ * bigram therefore needs its own "this pair is grammatical glue" table - an
+ * English-only list (the previous shape) simply never matched Chinese text.
  */
-const STOPWORDS = new Set([
-  'the', 'a', 'an', 'and', 'or', 'but', 'you', 'your', 'yours', 'what', 'did',
-  'say', 'said', 'about', 'are', 'was', 'were', 'is', 'it', 'its', 'to', 'of',
-  'in', 'on', 'for', 'with', 'me', 'my', 'we', 'our', 'do', 'does', 'how',
-  'that', 'this', 'tell',
+const LATIN_STOPWORDS = new Set([
+  // Articles, conjunctions, prepositions, pronouns.
+  'the', 'a', 'an', 'and', 'or', 'but', 'if', 'so', 'then', 'than', 'that',
+  'this', 'these', 'those', 'there', 'here', 'when', 'where', 'which', 'who',
+  'whom', 'whose', 'why', 'how', 'what', 'i', 'you', 'he', 'she', 'it', 'we',
+  'they', 'me', 'him', 'her', 'us', 'them', 'my', 'your', 'yours', 'his',
+  'its', 'our', 'their', 'mine', 'to', 'of', 'in', 'on', 'at', 'for', 'with',
+  'without', 'about', 'into', 'from', 'by', 'as', 'up', 'down', 'out', 'off',
+  'over', 'under', 'again',
+  // Auxiliaries, modals and copulas.
+  'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'do', 'does',
+  'did', 'done', 'have', 'has', 'had', 'will', 'would', 'shall', 'should',
+  'can', 'could', 'may', 'might', 'must',
+  // Conversational filler, and the debris of contractions. "maybe"/"perhaps"/
+  // "gonna" are 5+ characters, so before they were listed they scored as
+  // INFORMATIVE - exactly the false relevance this table exists to prevent.
+  'very', 'really', 'just', 'also', 'too', 'not', 'no', 'yes', 'ok', 'okay',
+  'yeah', 'oh', 'well', 'now', 'some', 'any', 'all', 'more', 'most', 'much',
+  'many', 'don', 'doesn', 'didn', 'isn', 'aren', 'wasn', 'weren', 'can', 'couldn',
+  'wouldn', 'shouldn', 'won', 'haven', 'hasn', 'hadn', 'n\'t',
+  'maybe', 'perhaps', 'gonna', 'wanna', 'lol', 'lmao',
+  // Verbs that report a conversation instead of carrying its topic. "What did
+  // you say about X" is a request to RECALL a topic, not a topic itself.
+  'say', 'says', 'said', 'tell', 'told', 'talk', 'talks', 'talked', 'ask',
+  'asked', 'think', 'thought', 'know', 'knew', 'want', 'wanted', 'get', 'got',
+  'go', 'goes', 'went', 'going', 'come', 'came', 'see', 'saw', 'seen', 'look',
+  'looked', 'mention', 'mentioned',
 ])
 
 /**
- * Tokenize for overlap scoring: latin words of 3+ letters, plus CJK bigrams.
- * CJK bigrams are used because single characters carry almost no topical
- * signal and whole runs would never match across phrasings.
+ * CJK tokens are bigrams, so this table lists the WORD that must not score, in
+ * its two-character form. A bigram in this list is skipped outright: it is a
+ * closed-class word (pronoun, auxiliary, conjunction) or conversational filler,
+ * and it can never establish a topic.
  */
-function tokensOf(text: string): Set<string> {
-  const tokens = new Set<string>()
+const CJK_STOPWORDS = new Set([
+  '我们', '你们', '他们', '她们', '它们', '咱们', '大家', '我的', '你的', '他的',
+  '她的', '什么', '怎么', '怎样', '为什么', '多少', '这个', '那个', '哪个', '这些',
+  '那些', '这里', '那里', '就是', '可以', '可能', '应该', '没有', '不是', '不会',
+  '不要', '不用', '不能', '真的', '觉得', '知道', '时候', '一个', '一下', '一点',
+  '有点', '现在', '还是', '因为', '所以', '但是', '然后', '如果', '虽然', '而且',
+  '或者', '这样', '那样', '这么', '那么', '东西', '事情', '好的', '好吧', '是的',
+  '对的', '嗯嗯', '哈哈', '谢谢', '你好', '再见', '拜拜', '已经', '一直', '还有',
+  '告诉', '说的', '说要', '是在', '了吗', '了呢', '了对', '了没', '是吧', '对不对',
+  '有没有', '是不是', '好不好', '怎么办', '我记得', '记得', '上次', '刚才', '之前',
+  // 感觉/其实 are hedging filler; 自己 is self-reference; 以后 is the mirror of
+  // the already-listed 之前. None of the four carries a topic, and because their
+  // characters sit outside CJK_FUNCTION_CHARS the bigram tokenizer used to score
+  // all of them as informative.
+  '感觉', '自己', '其实', '以后',
+])
+
+/**
+ * CJK characters that are mostly grammatical glue. A bigram containing one of
+ * them is still a token - it may be the only thing shared - but it is THIN: it
+ * cannot by itself make two turns look related, because it is usually a
+ * by-product of word segmentation rather than a word.
+ */
+const CJK_FUNCTION_CHARS = new Set(
+  '的了是我你他她它在有和就不都很吗呢啊吧呀哦这那些什么怎样着过呗嘛啦嗯于把被给让从对与及或但而则也还又再才只'
+    .split(''),
+)
+
+/**
+ * Weight of a token that carries topical information on its own: a long Latin
+ * word, a number, or a CJK bigram made of two content characters.
+ */
+export const INFORMATIVE_TOKEN_WEIGHT = 2
+/** Weight of a real-but-common token: a short Latin word or a glue bigram. */
+const THIN_TOKEN_WEIGHT = 1
+
+/**
+ * Tokenize for overlap scoring, returning each token with the weight it carries.
+ *
+ * Latin: words of 3+ characters. A word of 5+ characters, or one containing a
+ * digit, is informative; a 3-4 character word is thin.
+ *
+ * CJK: bigrams, because a single character carries almost no topical signal and
+ * a whole run would never match across rephrasings. Runs shorter than two
+ * characters produce NO token at all - a solitary character such as "我" is a
+ * pronoun, and matching it across turns is exactly the extreme false positive
+ * this floor exists to prevent. A bigram made of two content characters is
+ * informative; one containing a glue character is thin.
+ *
+ * Exported so the consistency scan (./consistency) uses the same definition of
+ * a content token instead of carrying a second, drifting stopword table.
+ */
+export function contentTokensOf(text: string): ReadonlyMap<string, number> {
+  const tokens = new Map<string, number>()
   const lower = text.toLowerCase()
   for (const match of lower.matchAll(/[a-z0-9]+/g)) {
     const word = match[0]
-    if (word.length >= 3 && !STOPWORDS.has(word)) tokens.add(word)
+    if (word.length < 3 || LATIN_STOPWORDS.has(word)) continue
+    const informative = word.length >= 5 || /\d/.test(word)
+    tokens.set(word, informative ? INFORMATIVE_TOKEN_WEIGHT : THIN_TOKEN_WEIGHT)
   }
   for (const match of lower.matchAll(/[一-鿿]+/g)) {
     const run = match[0]
+    // Length floor: a one-character run yields no bigram, so it cannot match.
+    if (run.length < 2) continue
     for (let index = 0; index + 2 <= run.length; index += 1) {
-      tokens.add(run.slice(index, index + 2))
+      const bigram = run.slice(index, index + 2)
+      if (CJK_STOPWORDS.has(bigram)) continue
+      const glue =
+        CJK_FUNCTION_CHARS.has(bigram[0] ?? '') || CJK_FUNCTION_CHARS.has(bigram[1] ?? '')
+      tokens.set(bigram, glue ? THIN_TOKEN_WEIGHT : INFORMATIVE_TOKEN_WEIGHT)
     }
   }
   return tokens
 }
 
 /**
- * Keyword-overlap recall. Candidates score by shared tokens with the listener's
- * message; results are ordered by score (ties keep the older turn first, so the
- * budget cap drops the newest of equals rather than the earliest memory).
+ * Keyword-overlap recall. Candidates score by the WEIGHT of the content tokens
+ * they share with the listener's message; results are ordered by score (ties
+ * keep the older turn first, so the budget cap drops the newest of equals rather
+ * than the earliest memory).
+ *
+ * Scoring is deterministic and dictionary-driven (see `contentTokensOf`): zero
+ * cost, no I/O, reproducible for NFR-03. It stays coarse by construction - a
+ * lexical matcher cannot know that "birthday" and "cake" are related - so it
+ * errs toward precision: a candidate has to clear both the weighted score and
+ * the informative-token rule.
+ *
+ * `replyIntent` is carried on the request but not consumed here: it only ever
+ * has a ranking role among already-eligible candidates (admission stays
+ * evidence-based per ./memory-semantics), and no per-turn semantic tag exists
+ * yet to rank on. Intent-aware ranking is follow-up work, not implemented here.
  */
 export function createKeywordDeliveryRecall(): DeliveryRecallPort {
   let dropped = 0
@@ -205,7 +328,7 @@ export function createKeywordDeliveryRecall(): DeliveryRecallPort {
     },
     recall(request) {
       dropped = 0
-      const query = tokensOf(request.inputText)
+      const query = contentTokensOf(request.inputText)
       if (query.size === 0) return []
       const scored: RecalledTurn[] = []
       for (const turn of request.candidates) {
@@ -220,12 +343,16 @@ export function createKeywordDeliveryRecall(): DeliveryRecallPort {
           dropped += 1
           continue
         }
-        const turnTokens = tokensOf(turn.text)
+        const turnTokens = contentTokensOf(turn.text)
         let score = 0
-        for (const token of query) {
-          if (turnTokens.has(token)) score += 1
+        let informativeHits = 0
+        for (const [token, weight] of query) {
+          if (!turnTokens.has(token)) continue
+          // A token's weight is a function of its form, so both sides agree.
+          score += weight
+          if (weight >= INFORMATIVE_TOKEN_WEIGHT) informativeHits += 1
         }
-        if (score >= MIN_RECALL_SCORE) scored.push({ turn, score })
+        if (score >= MIN_RECALL_SCORE && informativeHits > 0) scored.push({ turn, score })
       }
       scored.sort((left, right) => right.score - left.score)
       return scored
