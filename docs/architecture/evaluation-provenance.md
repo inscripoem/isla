@@ -13,9 +13,10 @@ a separate companion while the run schema stays frozen (2026-10-24); M4 requires
 
 `runId + caseId + variantId + attempt`, where `attempt` is the 1-based occurrence index among records with
 the same `(runId, caseId, variantId)` in the run file. Because `AttemptRecord` carries no record id, the
-link is positional, so the companion also carries `runDigest`: a SHA-256 over the exact run artifact bytes
-(or a canonical serialization that preserves record order). A digest mismatch is refused — swapping two
-records for the same case and variant changes the digest even though the occurrence-key set is unchanged.
+link is positional, so the companion also carries `runDigest`: the SHA-256 of the exact run artifact bytes;
+the ADR fixes the canonicalisation if a byte-stable serialization is required. A digest mismatch is
+refused — swapping two records for the same case and variant changes the digest even though the
+occurrence-key set is unchanged.
 
 ## Fields
 
@@ -27,7 +28,7 @@ records for the same case and variant changes the digest even though the occurre
 | `caseId` | string | corpus case (M5) |
 | `variantId` | string | runId+caseId cannot distinguish variants (M5) |
 | `attempt` | integer ≥ 1 | distinguishes repeated attempts (M5) |
-| `inputs[]` | 1–5 entries (fewer when the batch stops) | prepared execution can submit 1–5 inputs (M5) |
+| `inputs[]` | 1–5 entries in submission order (fewer when the batch stops) | prepared execution can submit 1–5 inputs (M5) |
 | `inputs[].inputId` | string | corpus-side identity — **open question for M3** |
 | `inputs[].sourceId` | string | the corpus source the input came from |
 | `inputs[].requestMessageId` | string \| null | acknowledgement identity (M5) |
@@ -46,7 +47,8 @@ companion, every quality result for that run is `unscored` with reason `no-prove
 
 The companion is **JSON**, one object per run. The report refuses it unless (a) `runDigest` matches the run
 artifact, (b) the `(caseId, variantId, attempt)` set equals the run's record set, and (c) no duplicate
-`(caseId, variantId, attempt)` key appears. A missing or extra entry is a refusal, not a partial join.
+`(caseId, variantId, attempt)` key appears. A missing or extra entry is a refusal, not a partial join. The
+input list is ordered by submission; a companion whose input order cannot be established is refused.
 
 ## Unscored rule
 
@@ -71,7 +73,8 @@ only when `history.source` is `none` or the set was genuinely unobserved, and `n
 
 Prepared execution can stop submitting after a rejection or throw; later entries are not submitted, and a
 batch with no acceptance is a `notRun` entry rather than an `AttemptRecord` (PR55 dependency commit
-`fccb0f2`, `evaluation-adapter.ts:1097-1123`). The companion distinguishes:
+`fccb0f2`, `evaluation-adapter.ts:1097-1123`; **not yet on `main` at `74e9995`**). The companion
+distinguishes:
 
 - `not-submitted` — the batch stopped before this entry was submitted;
 - `no-acknowledgement` — the entry was submitted but no acknowledgement was returned;
@@ -99,4 +102,4 @@ is recorded as `not-yet-observable`, not inferred.
 
 ## References
 
-ADR-007 (evaluation bench); M5 and M4 replies in #41 (2026-10-24).
+ADR-007 (evaluation bench); FR-06; INV-16; M5 and M4 replies in #41 (2026-10-24 and 2026-10-27).
