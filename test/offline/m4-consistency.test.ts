@@ -243,6 +243,74 @@ describe('M4 consistency scan: detection', () => {
     }
   })
 
+  it('does not flag a negated attribute against its plain antonym', () => {
+    // M5 review of PR #65, finding 1: "not easy" agrees with "hard" on the
+    // easy/hard axis, and 不好玩 agrees with 无聊. Negation adjacent to the
+    // matched attribute flips it to the other side instead of contradicting.
+    const english = scanContradictions({
+      statements: statements([
+        [turnRef('t1'), 'This game is not easy.'],
+        [turnRef('t2'), 'This game is hard.'],
+      ]),
+    })
+    expect(english.findings).toEqual([])
+    const chinese = scanContradictions({
+      statements: statements([
+        [turnRef('t1'), '这个游戏不好玩。'],
+        [turnRef('t2'), '这个游戏很无聊。'],
+      ]),
+    })
+    expect(chinese.findings).toEqual([])
+  })
+
+  it('still flags two negated attributes on opposite sides of one axis', () => {
+    // Both sides flip, so the effective values stay opposed: "not easy" and
+    // "not hard" disagree exactly like easy and hard.
+    const result = scanContradictions({
+      statements: statements([
+        [turnRef('t1'), 'This game is not easy.'],
+        [turnRef('t2'), 'This game is not hard.'],
+      ]),
+    })
+    expect(result.findings.map((finding) => [finding.kind, finding.evidence])).toEqual([
+      ['attribute', 'antonym'],
+    ])
+  })
+
+  it('abstains when the negation marker does not scope the attribute', () => {
+    // M5 review of PR #65, finding 1: "not" here scopes "think", not "easy".
+    // The scan does not guess scope, so the pair produces no finding.
+    const result = scanContradictions({
+      statements: statements([
+        [turnRef('t1'), 'I did not think the puzzle was easy.'],
+        [turnRef('t2'), 'The puzzle is hard.'],
+      ]),
+    })
+    expect(result.findings).toEqual([])
+  })
+
+  it('matches English attributes as complete words only', () => {
+    // M5 review of PR #65, finding 2: substring matching read easygoing as
+    // easy and hardworking as hard. The genuine pair right below must keep
+    // firing after the word-boundary fix.
+    const compounds = scanContradictions({
+      statements: statements([
+        [turnRef('t1'), 'The player is easygoing.'],
+        [turnRef('t2'), 'The player is hardworking.'],
+      ]),
+    })
+    expect(compounds.findings).toEqual([])
+    const genuine = scanContradictions({
+      statements: statements([
+        [turnRef('t1'), 'The puzzle is easy.'],
+        [turnRef('t2'), 'The puzzle is hard.'],
+      ]),
+    })
+    expect(genuine.findings.map((finding) => [finding.kind, finding.evidence])).toEqual([
+      ['attribute', 'antonym'],
+    ])
+  })
+
   it('does not flag quality antonyms about different objects', () => {
     // The shared-object rule guards the new pairs the same way: an opposite
     // word about a different thing is two opinions, not a disagreement.

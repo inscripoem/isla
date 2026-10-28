@@ -30,7 +30,10 @@ import { contentTokensOf } from './memory-recall'
  *   - it is lexical, so paraphrase ("she is short" vs "she is 151 cm") is not
  *     detected;
  *   - negation is read from a small marker list, so an idiom such as "不错"
- *     ("not bad", i.e. good) is read as negated.
+ *     ("not bad", i.e. good) is read as negated;
+ *   - on the antonym path, negation counts only when the marker sits directly
+ *     before the matched attribute ("not easy", "不好玩"); any other placement
+ *     leaves its scope uncertain and the pair is SKIPPED rather than guessed.
  *
  * Work bound. The scan runs synchronously during context assembly, before the
  * prompt budget is applied, so its cost must not grow with the whole admitted
@@ -214,6 +217,33 @@ export function summarizeConsistencyAudit(
 const NEGATION_PATTERN = /(?:\bnot\b|\bno\b|\bnever\b|\bcannot\b|\b\w+n['’]t\b)|不|没|别再|从未|未曾/i
 /** Characters removed before tokenizing, so negated and plain clauses align. */
 const NEGATION_STRIP_PATTERN = /(?:\bnot\b|\bno\b|\bnever\b|\bcannot\b|\b\w+n['’]t\b)|[不没]/gi
+/*
+ * A negation marker that ENDS the text before an attribute word: the marker is
+ * adjacent, so it scopes the attribute ("not easy", "不好玩"). The English
+ * alternatives stay word-bounded so a prefix ending in "piano" is not read as
+ * "no"; the CJK markers are the same list NEGATION_PATTERN uses.
+ */
+const NEGATION_TAIL_PATTERN = /(?:\bnot\b|\bno\b|\bnever\b|\bcannot\b|\b\w+n['’]t\b|不|没|别再|从未|未曾)$/i
+
+/** Latin words match as whole words; CJK words match by substring. */
+const LATIN_ATTRIBUTE_PATTERN = /^[a-z0-9]+$/
+
+function escapeRegExp(word: string): string {
+  return word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * Split the clause on each whole-word occurrence of the attribute word, so
+ * `parts[i]` is the text immediately before occurrence i and the number of
+ * occurrences is `parts.length - 1`. Latin attributes match whole words only -
+ * `easy` must not fire inside "easygoing", or `hard` inside "hardworking" - and
+ * CJK attributes match by substring, since CJK text has no word separators.
+ */
+function splitOnAttributeWord(clause: string, word: string): readonly string[] {
+  return LATIN_ATTRIBUTE_PATTERN.test(word)
+    ? clause.split(new RegExp(`\\b${escapeRegExp(word)}\\b`, 'gi'))
+    : clause.split(word)
+}
 
 /**
  * Attribute pairs that mean opposite things about the same object. A closed
@@ -330,7 +360,13 @@ const SINGLE_CHAR_GLUE = new Set('我你他她它们的地得了着过吗呢吧�
  */
 function attributeObjectTokens(text: string, words: readonly string[]): Set<string> {
   let rest = text
-  for (const word of words) rest = rest.split(word.toLowerCase()).join(' ')
+  for (const word of words) {
+    // Same whole-word rule as the match itself: removing `easy` from
+    // "easygoing" would leave a fragment the speaker never wrote.
+    rest = LATIN_ATTRIBUTE_PATTERN.test(word)
+      ? rest.replace(new RegExp(`\\b${escapeRegExp(word)}\\b`, 'gi'), ' ')
+      : rest.split(word).join(' ')
+  }
   const tokens = new Set<string>()
   for (const token of contentTokensOf(rest).keys()) {
     if (/^\d+$/.test(token)) continue
@@ -525,12 +561,66 @@ function compareClaims(left: Claim, right: Claim): Contradiction | null {
   return compareAntonyms(left, right)
 }
 
-/** Opposite attribute words about the same object: "likes cats" vs "hates cats". */
+/** How a matched attribute sits relative to negation, as far as the scan can tell. */
+type AttributePolarity = 'plain' | 'negated' | 'uncertain'
+
+/**
+ * Whether a clause's mention of an attribute word is negated.
+ *
+ * The negation that counts is the one ADJACENT to the word ("not easy",
+ * "不好玩"): that marker unambiguously scopes the attribute. A marker anywhere
+ * else in the clause ("I did not think the game was easy") may or may not scope
+ * it, and the scan does not guess scope, so the result is 'uncertain' and the
+ * caller abstains. Mixed readings across occurrences of the same word in one
+ * clause are uncertain for the same reason.
+ */
+function attributePolarity(clause: string, partsBetween: readonly string[]): AttributePolarity {
+  let negated = false
+  let plain = false
+  for (const prefix of partsBetween.slice(0, -1)) {
+    if (NEGATION_TAIL_PATTERN.test(prefix.trimEnd())) negated = true
+    else plain = true
+  }
+  if (negated && plain) return 'uncertain'
+  if (negated) return 'negated'
+  return NEGATION_PATTERN.test(clause) ? 'uncertain' : 'plain'
+}
+
+/** The word at the other end of the antonym pair. */
+function oppositeAttribute(word: string, first: string, second: string): string {
+  return word === first ? second : first
+}
+
+/**
+ * Opposite attribute words about the same object: "likes cats" vs "hates cats".
+ *
+ * Negation participates: "not easy" and "hard" sit on the SAME side of the
+ * easy/hard axis, so only opposed EFFECTIVE values are a finding - "easy" vs
+ * "hard", or "not easy" vs "not hard". When either clause's negation cannot be
+ * pinned to its matched attribute, the pair is skipped: guessing the scope
+ * would manufacture false contradictions (or hide real ones) whenever the
+ * marker belongs to a different predicate in the sentence.
+ */
 function compareAntonyms(left: Claim, right: Claim): Contradiction | null {
   for (const [first, second] of ANTONYM_PAIRS) {
-    const forward = left.lower.includes(first) && right.lower.includes(second)
-    const backward = left.lower.includes(second) && right.lower.includes(first)
+    const leftFirst = splitOnAttributeWord(left.lower, first)
+    const leftSecond = splitOnAttributeWord(left.lower, second)
+    const rightFirst = splitOnAttributeWord(right.lower, first)
+    const rightSecond = splitOnAttributeWord(right.lower, second)
+    const forward = leftFirst.length > 1 && rightSecond.length > 1
+    const backward = leftSecond.length > 1 && rightFirst.length > 1
     if (!forward && !backward) continue
+    const leftWord = forward ? first : second
+    const rightWord = forward ? second : first
+    const leftPolarity = attributePolarity(left.lower, forward ? leftFirst : leftSecond)
+    const rightPolarity = attributePolarity(right.lower, forward ? rightSecond : rightFirst)
+    if (leftPolarity === 'uncertain' || rightPolarity === 'uncertain') continue
+    const leftValue =
+      leftPolarity === 'negated' ? oppositeAttribute(leftWord, first, second) : leftWord
+    const rightValue =
+      rightPolarity === 'negated' ? oppositeAttribute(rightWord, first, second) : rightWord
+    // Same side of the axis ("not easy" / "hard") is agreement, not a finding.
+    if (leftValue === rightValue) continue
     const leftRest = attributeObjectTokens(left.lower, [first, second])
     const rightRest = attributeObjectTokens(right.lower, [first, second])
     const shared = sharedCount(leftRest, rightRest)
