@@ -3238,3 +3238,65 @@ entries:
       Pending loads as well as saves block replacement; failure latches are
       process-local. No dependencies, lockfile, existing tests or registered
       requirement/case/invariant IDs are changed.
+
+  - date: "2026-10-28"
+    task: "M5 VTS acquisition PR64 follow-ups"
+    change: >-
+      Add a maintained regression for a connector handle that arrives after
+      owner cancellation, completes its bounded physical close with a timeout
+      and later completes physically, proving replacement stays refused and
+      quarantine stays latched. Add a same-record contention regression and
+      document that D2 receives credential_read_failed without the evidence or
+      authorization to delete the stored credential or prompt again. No
+      production behavior or interface changed.
+    requirements: [FR-03, FR-04, FR-05, NFR-02, NFR-05, NFR-06]
+    invariants: [INV-01, INV-02]
+    commits: []
+    branch: "detached HEAD at 181294819bc3f948c80ea264df0952d75658c0ca"
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    opencode_version: 2.2.0
+    launch_flags: ["--model", "self-api/deepseek-v4-flash#xhigh", "--agent", "build", "--format", "json", "--title", "Isla M5 PR64 local follow-ups 20261028"]
+    sessions: [ses_e7f76281affeBHHKpGhrK6KWHF]
+    supervision: >-
+      OpenCode inspected the existing contention cases, added the two regressions
+      and updated the M5 handoff, trace note and this entry. No subagents were
+      used. The reviewer had already installed the locked dependencies and
+      isolated the global plugin; this session did not change dependencies,
+      global configuration or Git state. The supervising Codex reviewer corrected
+      the new entry's branch and launch flags from the actual CLI invocation
+      before publication; the native session and prior log entries are unchanged.
+    human_review: >-
+      Captain approved local completion of the two nonblocking M1 review
+      follow-ups on PR64 at base 1812948 and instructed implementation,
+      verification and an honest development entry. M1's approval of the earlier
+      candidate does not extend to this follow-up candidate. The work remains
+      under review; no commit, push, merge or publication was authorized here.
+    transcript_record: >-
+      This session's native messages and metadata remain in the active session
+      record. No prior transcript, failure or evidence entry was rewritten.
+    verification:
+      base: 181294819bc3f948c80ea264df0952d75658c0ca
+      platform: "Linux x86_64 / Node22.23.4 / pnpm12.9.0 / OpenCode2.2.0"
+      baseline: "focused 23/23 and M5 200/200 rerun before edits; prior documented full verify 1230/64 was not rerun before edits."
+      focused: "pnpm vitest run test/offline/m5-vts-acquisition.test.ts: 25 passed / 1 file."
+      m5: "pnpm test:m5: 202 passed / 9 files."
+      m1: "pnpm test:m1: 289 passed / 2 files (unchanged; run after the follow-up)."
+      full_suite: "pnpm verify: 1232 passed / 64 files; typecheck, lint and build passed."
+    scope: >-
+      Test and documentation follow-up only. The two new cases use the real M5
+      acquisition, real M1 D1/D2 and existing controlled peers/stores. Timeout
+      behavior uses fake timers, not arbitrary sleeps. No live VTS, real
+      credential storage, physical silence, durable recovery, independent
+      verification or M1 approval of this candidate is claimed. No dependencies,
+      lockfile, existing case bodies, other owner modules or registered IDs were
+      changed.
+    supervisor_verification: >-
+      Codex independently ran pnpm test:m5 (202/9) and pnpm verify (1232/64,
+      typecheck/lint/build passed), and documented the separate diagnostic
+      combination with PR65 4273673 and the existing M5 I1 candidate (1371/72).
+      These are supervisor results, not new OpenCode or M1 measurements.
+      Native session export and exact source hashes are retained outside the
+      repository in project evidence/local-followup-20261028.

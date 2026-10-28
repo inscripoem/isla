@@ -595,6 +595,10 @@ export function createVtsAcquisition(options: VtsAcquisitionOptions): VtsAcquisi
 
   const attemptCredentials = (attempt: Attempt): VtsPairingCredentialProvider => ({
     load: (signal) => {
+      // A same-record admission refusal propagates unchanged. D2 observes a
+      // rejected load and reports credential_read_failed; contention is not
+      // evidence that the stored credential is absent, invalid or rejected,
+      // so neither side deletes it or prompts again inside this attempt.
       const operation = recordCredentials.load(signal)
       trackLoad(attempt, operation)
       return operation

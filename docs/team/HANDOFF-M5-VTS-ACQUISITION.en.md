@@ -1,11 +1,11 @@
 # M5 VTS acquisition lifecycle handoff
 
-Revision: 2026-10-27.1. Status: under review; candidate on branch
-`feat/m5-vts-acquisition-20261026`. Publication preparation is complete;
-commit, push and PR creation await Captain's confirmation as of this revision.
-This document records the first implementation stage only. It does not describe
-deployment wiring, which is later work. Later publication and consumer-review
-results are recorded in the PR rather than inferred from these local checks.
+Revision: 2026-10-28.1. Status: local follow-up under review, not published.
+PR64 at `1812948` has M1 approval; that approval does not extend to this
+changed candidate. Earlier sections retain their 2026-10-27 publication context. This document records the first implementation stage only.
+It does not describe deployment wiring, which is later work. Later publication
+and consumer-review results are recorded in the PR rather than inferred from
+these local checks.
 
 ## Scope
 
@@ -17,9 +17,10 @@ included. M1 retains D1/D2/C protocol and renderer ownership.
 
 New production source: `src/runtime/vts-acquisition.ts`.
 New controlled support: `test/support/m5-vts-acquisition-kit.ts`.
-New suite: `test/offline/m5-vts-acquisition.test.ts` (23 cases).
+New suite: `test/offline/m5-vts-acquisition.test.ts` (23 cases at the
+2026-10-27 candidate; 25 after the 2026-10-28 follow-up cases).
 `package.json` adds that suite to `test:m5`; no dependency or lockfile changed.
-Existing tests were not edited.
+The follow-up cases are appended; the original case bodies are unchanged.
 
 ## Deployment surface
 
@@ -51,6 +52,12 @@ process-local latch with no unlock, replacement, reconnect or fabricated success
 A physical close observed after the bounded close attempt times out does not
 clear that latch.
 
+The 2026-10-28 follow-up makes this path observable in the maintained suite: a
+connector handle that arrives after owner cancellation can complete its bounded
+close attempt with `close_timeout`; the attempt becomes `quarantined`, and a
+later physical close of that handle is observed without clearing the latch.
+Replacement and release remain refused with `quarantined`.
+
 A synchronous `owner.abort()` or `release()` immediately after `acquire()` no
 longer starts the external connector: the queued connector microtask rechecks
 the attempt cause and `currentAttempt`, and the final adoption rechecks both
@@ -70,6 +77,15 @@ fabricates no `null`, erases no credential and invents no rollback. A rejected
 save remains D2's `credential_write_failed`; M5 does not substitute `load(null)`
 or prompt again inside that attempt. D2's existing-token rejection policy is
 unchanged.
+
+Same-record contention is refused before the delegated store effect. When a
+competing acquisition reaches the same-record load while another operation for
+that record is in flight, D2 observes a rejected load and reports
+`credential_read_failed`, not `credential_missing`; the refusal is not evidence
+that the stored credential is absent, invalid or rejected. It does not by itself
+justify deleting the credential or prompting again, and neither M5 nor D2
+performs either action inside that attempt. A later explicit attempt reads the
+stored value after the in-flight operation settles.
 
 Save admission is recorded before the delegated store effect. A store that
 throws synchronously after entry is reported as an admitted rejected save, and a
@@ -106,20 +122,23 @@ pre-abort and coordinator-only cases deliberately perform no pairing. The real C
 later attempt; pre-aborted owner; synchronous owner abort before the connector
 microtask; synchronous release before the connector microtask; deadline during a
 hung load; deadline during opening; owner cancellation during a prompt and
-listener removal; late handle after cancellation; connector rejection;
-cancellation between connector return and pairing; an already-closed handle;
-clean close timeout quarantine plus late physical close; pairing subscription
-release failure quarantine; release during an attempt; release/successor
-ordering; first-cause survival across later cancellation and deadline;
-timer/listener removal at a successful handoff; one controlled multi-record store
-proving same-record pending-save exclusion, independent target and identity
-records, correct frozen record keys at load and save, rejected-save value
-preservation and retained last successful value, synchronous store throw
-admission, synchronous cancellation during an admitted save whose delayed
-success is later read without a new prompt, caller mutation after construction;
-and the coordinator's own record binding. Deadline and close-timeout cases use
-fake timers rather than racing short real timers. Fixtures do not prove real
-VTS, real credential storage, physical silence or durable recovery.
+listener removal; late handle after cancellation; late handle with bounded-close
+timeout and later physical completion under latched quarantine; connector
+rejection; cancellation between connector return and pairing; an already-closed
+handle; clean close timeout quarantine plus late physical close; pairing
+subscription release failure quarantine; release during an attempt;
+release/successor ordering; first-cause survival across later cancellation and
+deadline; timer/listener removal at a successful handoff; one controlled
+multi-record store proving same-record pending-save exclusion, same-record
+contention mapping to D2's `credential_read_failed` without a store effect,
+deletion or re-prompt, independent target and identity records, correct frozen
+record keys at load and save, rejected-save value preservation and retained last
+successful value, synchronous store throw admission, synchronous cancellation
+during an admitted save whose delayed success is later read without a new
+prompt, caller mutation after construction; and the coordinator's own record
+binding. Deadline and close-timeout cases use fake timers rather than racing
+short real timers. Fixtures do not prove real VTS, real credential storage,
+physical silence or durable recovery.
 
 ### Publication preparation (2026-10-27)
 
@@ -140,6 +159,54 @@ future published-head CI or consumer approval.
 The original 196-message OpenCode record and this review's logs/manifests are
 retained outside the repository in project evidence directories
 `m5-vts-acquisition-20261026` and `m5-vts-publication-prep-20261027`.
+
+### Local follow-up on PR64 (2026-10-28)
+
+Captain approved local completion of two nonblocking M1 review follow-ups on
+PR64 at base `1812948`: a deterministic regression for a connector handle that
+arrives after owner cancellation, whose bounded physical close times out and
+later completes; and documentation plus a regression for the same-record
+contention mapping. Two cases were added to the existing suite. Production
+behavior and interfaces are unchanged; the only runtime edit is a clarifying
+comment on the credential-load admission path.
+
+- Focused acquisition suite: 25 tests / 1 file passed.
+- `pnpm test:m5`: 202 tests / 9 files passed.
+- `pnpm test:m1`: 289 tests / 2 files passed (unchanged baseline).
+- `pnpm verify`: 1232 tests / 64 files, typecheck, lint and build passed.
+
+Before the follow-up, this worktree's focused suite passed 23/23 and M5 passed
+200/200. The earlier candidate's documented full verification was 1230/64; it
+was not rerun before the edits. M1 was rerun after the follow-up and remained
+289/289.
+
+The late-handle case installs fake timers and a manual-close fixture socket, so
+it does not wait on an arbitrary sleep. It asserts `blocked` during the bounded
+close, `quarantined` after the close timeout, and still `quarantined` after the
+later physical close, with `acquire()` and `release()` both refused. The
+contention case holds a real admitted save, proves a competing `allow-prompt`
+attempt reports `credential_read_failed` without reaching `store.load` or
+`store.save` and without sending `AuthenticationTokenRequest`, preserves the
+prior value, then reads the committed value in a later attempt without a second
+prompt.
+
+These are local author checks on this worktree. They do not constitute a new
+independent verification, do not extend M1's approval to this candidate, and do
+not prove live VTS, real credential storage, physical silence or durable
+recovery.
+
+### Independent review of the local follow-up
+
+The supervising Codex reviewer independently ran `pnpm test:m5` (202/9)
+and `pnpm verify` (1232/64; typecheck, lint and build passed) on Linux.
+The runtime diff contains only a comment; the original 23 test bodies and
+previous AI-use log prefix remain unchanged. Exact hashes and recovery material
+are in external project evidence `local-followup-20261028`.
+
+The diagnostic combination with PR65 `4273673` and the existing M5 I1 candidate
+passed 1371 tests / 72 files, typecheck, lint and build. That assembly transfers
+authored implementation bytes and does not publish a combined branch, reconcile
+team documents, close global cases or replace M2/M3/real-service acceptance.
 
 ## Known gaps
 
@@ -182,3 +249,8 @@ Low: the `stage` field of a caller-visible cancellation names the cause, not the
 pairing sub-stage; the eventual pairing code is only descriptive once D2
 returns. `cleanup.connection === null` means "not observed yet", not "no
 connection existed". Both are documented in the module types.
+
+2026-10-28 follow-up: no production defect was found in the two reviewed paths;
+the appended cases bind the existing behavior. The runtime change is a comment
+only. These are author checks on this worktree, not a new independent review or
+M1 approval of the follow-up candidate.

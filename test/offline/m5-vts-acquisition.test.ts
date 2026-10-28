@@ -198,6 +198,57 @@ describe('M5 VTS acquisition lifecycle', () => {
     expect(await kit.acquisition.release()).toBe('stopped')
   })
 
+  it('keeps quarantine latched when a late handle close times out and later completes physically', async () => {
+    vi.useFakeTimers()
+    const kit = createKit({
+      closeTimeoutMs: 10,
+      socket: () => createFixtureVtsSocket({ closeEmission: 'manual' }),
+    })
+    kit.holdConnections(true)
+    const owner = new AbortController()
+    const pending = kit.acquisition.acquire(owner.signal)
+    await drainMicrotasks()
+    expect(kit.connectCount()).toBe(1)
+    expect(kit.attempts()).toHaveLength(0)
+
+    owner.abort()
+    const cancelled = await pending
+    expect(cancelled).toMatchObject({
+      kind: 'failed',
+      stage: 'cancelled',
+      reason: 'cancelled',
+      cause: 'owner',
+    })
+    expect(kit.acquisition.state()).toBe('blocked')
+    expect(await kit.acquisition.acquire()).toEqual({ kind: 'refused', reason: 'blocked' })
+
+    // The connector now returns the handle it acquired after cancellation.
+    // Its bounded close is still running, so replacement stays blocked.
+    kit.releaseConnections()
+    await drainMicrotasks()
+    expect(kit.attempts()).toHaveLength(1)
+    const attempt = kit.attempts()[0]
+    expect(attempt.socket.closeCount()).toBe(1)
+    expect(attempt.peer.requests()).toHaveLength(0)
+    expect(kit.acquisition.state()).toBe('blocked')
+    expect(await kit.acquisition.acquire()).toEqual({ kind: 'refused', reason: 'blocked' })
+
+    // The bounded close expires without a physical close. Quarantine latches
+    // and no later completion can clear it.
+    await vi.advanceTimersByTimeAsync(10)
+    await kit.acquisition.whenSettled()
+    expect(kit.acquisition.state()).toBe('quarantined')
+    expect(await kit.acquisition.acquire()).toEqual({ kind: 'refused', reason: 'quarantined' })
+    expect(await kit.acquisition.release()).toBe('quarantined')
+
+    attempt.socket.emitClose()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(attempt.socket.readyState).toBe(3)
+    expect(kit.acquisition.state()).toBe('quarantined')
+    expect(await kit.acquisition.acquire()).toEqual({ kind: 'refused', reason: 'quarantined' })
+    expect(await kit.acquisition.release()).toBe('quarantined')
+  })
+
   it('settles on the acquisition deadline while the connector is still opening', async () => {
     vi.useFakeTimers()
     const kit = createKit({ acquisitionTimeoutMs: 1_000 })
@@ -364,6 +415,57 @@ describe('M5 VTS acquisition lifecycle', () => {
     store.setLoad({ kind: 'value', value: M1_VTS_PAIRING_FIXTURE_TOKEN })
     const retried = await sameRecord.acquisition.acquire()
     expect(retried.kind).toBe('acquired')
+  })
+
+  it('maps same-record contention to credential_read_failed without deleting the stored value or prompting again', async () => {
+    const store = createM5VtsControlledStore()
+    const coordinator = createVtsCredentialCoordinator(store)
+    const first = createKit({ store, coordinator, mode: 'allow-prompt' })
+    store.setLoad({ kind: 'value', value: null })
+    store.setSave({ kind: 'hang' })
+    // A prior value exists while the controlled load forces the prompt path
+    // that admits a save. Only an admitted save may replace that value.
+    store.seed(first.record, 'preserved-credential')
+
+    const owner = new AbortController()
+    const pending = first.acquisition.acquire(owner.signal)
+    await store.waitForSaveEntry()
+    owner.abort()
+    expect((await pending).kind).toBe('failed')
+    expect(first.acquisition.state()).toBe('blocked')
+
+    // A competing allow-prompt attempt for the same record is refused by the
+    // coordinator before the store effect. D2 sees a rejected load, not a
+    // missing or invalid credential, so it neither deletes nor prompts.
+    const competing = createKit({ store, coordinator, mode: 'allow-prompt' })
+    const contended = await competing.acquisition.acquire()
+    expect(contended).toMatchObject({
+      kind: 'failed',
+      stage: 'pairing',
+      pairing: 'credential_read_failed',
+    })
+    expect(store.loadCalls()).toBe(1)
+    expect(store.saveCalls()).toBe(1)
+    expect(store.valueOf(first.record)).toBe('preserved-credential')
+    expect(competing.attempts()[0].peer.requests()).toHaveLength(0)
+    expect(coordinator.isBusy(first.record)).toBe(true)
+
+    store.resolveSave()
+    await first.acquisition.whenSettled()
+    expect(first.acquisition.state()).toBe('failed')
+    expect(coordinator.isBusy(first.record)).toBe(false)
+
+    // The same-record value admitted by the delayed save is readable later
+    // without a second prompt.
+    store.setLoad({ kind: 'stored' })
+    const later = await competing.acquisition.acquire()
+    expect(later.kind).toBe('acquired')
+    const prompts = [...first.attempts(), ...competing.attempts()]
+      .flatMap((attempt) => attempt.peer.requests())
+      .filter((request) => request.messageType === 'AuthenticationTokenRequest')
+    expect(prompts).toHaveLength(1)
+    expect(store.loadCalls()).toBe(2)
+    expect(store.saveCalls()).toBe(1)
   })
 
   it('preserves a rejected save as a write failure without a second prompt, load substitution or erased value', async () => {
