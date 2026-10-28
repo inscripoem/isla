@@ -12,10 +12,12 @@ inputs came from:
 - `fixture` — controlled or fixed text.
 
 A prepared corpus input executed through a real provider is `provider`. The input's provenance belongs to
-the companion record, not to this field. The report refuses `fixture` for a published benchmark because
-fixture text consumes no tokens and is not comparable to a provider run
-(`src/evaluation/report.ts:57, 173, 179-182`); the refusal is the honest outcome, not a missing value. No
-third value is introduced.
+the companion record, not to this field. With `history.source: 'durable'`, I1 session recovery (PR #45)
+re-delivers provider-generated text after a Resume; that text is still `provider`, not `fixture` —
+`textSource` describes where the generated dialogue came from regardless of how many sessions it spans.
+The report refuses `fixture` for a published benchmark because fixture text consumes no tokens and is not
+comparable to a provider run (`src/evaluation/report.ts:57, 173, 179-182`); the refusal is the honest
+outcome, not a missing value. No third value is introduced.
 
 ## Clock
 
