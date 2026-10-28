@@ -26,7 +26,7 @@ registry rather than trusted from this table.
 | C-14 | Invalid selection and fallback | `test/offline/regressions.test.ts` :: `uses the M5 fallback for malformed and wrong-revision selection` | `m5-coordinator.test.ts` :: stale-epoch/wrong-revision fallback; invalid selection with usage; defer when fallback is not allowed | covered |
 | C-15 | Wait and attempt accounting | `test/offline/regressions.test.ts` :: `adds exactly one attempt per new eligible input and none while unchanged` | `m5-coordinator.test.ts` :: invalid-selection accounting | covered |
 | C-05 | Decision timeout | **none** (`verifier: null`) | `i1-deadline.test.ts` :: already-expired, non-finite and elapsing deadline gate; `regressions.test.ts` :: expired selection treated as stale without fallback | **partly** |
-| C-16 | Intent and late fallback semantics | **none** (`verifier: null`) | `m5-coordinator.test.ts` :: allowed-intent constraint and defer when fallback is not allowed; `regressions.test.ts` :: intent preserved under substitution; `m4-dialogue.test.ts` :: a template for every reply intent | **partly** |
+| C-16 | Intent and late fallback semantics | **none** (`verifier: null`) | `m5-coordinator.test.ts` :: allowed-intent constraint and defer when fallback is not allowed; `regressions.test.ts` :: intent preserved under substitution; `m4-dialogue.test.ts` :: `exposes a template slot for every reply intent` | **partly** |
 
 ## Remaining gap
 
