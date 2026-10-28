@@ -119,3 +119,78 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
 - Schema freeze: R1 `schemaVersion: 1` shape is frozen in Delta-007; R2/S6 must emit exactly that shape, and a change requires version 2. R1 exports the shared `RecordedRunV1` type (commit `c66e018`); R2 imports it.
 - Case allocation: **deferred debt**; no ID claimed and no case/trace row added.
 - Limits: no real provider run, no `evaluation-table.md`, G4 not run, no quality/latency/cost claim.
+
+## M6 self-review — M6-02 R2 runBench harness
+
+- Date: 2026-10-19 · Reviewer: M6 (self) · Verdict: **M5 changes addressed; re-review pending**
+- Scope: `src/evaluation/bench.ts`, `test/offline/m6-02-bench.test.ts`, `test:m6` selection, Delta/verification
+  notes and C-69/C-70/C-71 rows; code commit `b8fa0f3`; no provider, runtime composition or evaluation table.
+- Contract: returns the frozen `schemaVersion: 1` shape; no `summary`; `sampleSize` is the actual recorded
+  attempt count; not-run cases and thrown variants remain explicit. R2 imports the shared `RecordedRunV1`
+  type from R1 (commit `761fa40`) and `serializeRecordedRun` emits the R1 file text (commit `37cf15a`).
+- Verification: `test:m6` **179/13**, composition **12/1**, readiness **42/3**, trace **41/1**, full
+  **956/54**, `pnpm verify` exit 0. Non-finite observations are rejected before serialization; C-71 invokes the
+  real R1 command over two variants with executed and not-run entries. Mutation: cases-as-sample-size turned
+  the not-run test red; restored.
+- Traceability: NFR-01/NFR-04, INV-16, ADR-007/Delta-007; C-71 is allocated and its verifier now passes.
+  C-69/C-70 rows are registered on this branch and become effective on merge.
+- Limits: no real provider run, no `evaluation-table.md`, G4 not run, no quality/latency/cost claim.
+
+## M6 self-review — C-66 session-scoped projection bookmark
+
+- Date: 2026-10-20 · Reviewer: M6 (self) · Verdict: **implementation complete; M5/consumer review pending**
+- Scope: `src/storage/memory-projection.ts`, the correct/faulty projection fixtures, `m6-storage.test.ts`,
+  `m6-recovery.test.ts`, and the C-66 trace/ADR/Delta evidence. The frozen shared contract was not changed.
+  No provider, runtime composition or evaluation table touched.
+- Behaviour: the bookmark is keyed by `event.sessionId`; gap, idempotence and next-event rules remain per
+  session. A projection shared across sessions cannot advance or skip another session.
+- Verification: focused `m6-storage.test.ts` **64/64**, `m6-recovery.test.ts` **4/4**, `test:m6` **180/13**,
+  full **986/54**, trace **41/1**, `pnpm verify` exit 0. A session-blind mutation turned C-66 red with
+  `expected 2 to be +0`; restored and the focused test passed again.
+- Traceability: C-66, INV-06, FR-06, ADR-002 amendment/Delta-002 amendment; no new case ID was invented.
+- Limits: no production caller today; the shared `MemoryProjectionPort` signature is unchanged, but the storage behaviour still needs M5/consumer review.
+## M6 self-review — C-67 late-delivery storage boundary
+
+- Date: 2026-10-20 · Reviewer: M6 (self) · Verdict: **test-only slice complete; M5/consumer review pending**
+- Scope: new `test/offline/m6-late-delivery-conflict.test.ts`, `test:m6` selection and C-67/FR-06/INV-09
+  trace rows; no production source changed.
+- Behaviour: a schema-valid later `fully-delivered`/`completed` claim for the same delivery key as an
+  existing cancelled/`partial-unknown` delivery returns `conflict`; the original record, classification
+  and supporting event remain unchanged, while the contradictory late event is retained as audit evidence.
+- Negative evidence: the test exercises the conflict path rather than an invalid pair; it asserts no
+  confirmed-history promotion and no overwrite.
+- Verification: focused C-67 **1/1**, `test:m6` **180/14**, composition **12/1**, trace **41/1**, full
+  **986/55**, `pnpm verify` exit 0. A permissive duplicate/upgrade mutation turned C-67 red with
+  `expected duplicate to be conflict`; restored.
+- Limits: storage boundary only; C-64 remains M4's admission case; no live provider, table, G4 or S6 claim.
+
+## M6 self-review — C-65 contradictory legacy-row trace
+
+- Date: 2026-10-20 · Reviewer: M6 (self) · Verdict: **test/docs-only trace convergence; M5 review pending**
+- Scope: C-65 registry/trace rows and the existing `m6-sqlite.test.ts` verifier; no production source changed.
+- Behaviour: a legacy row with an inconsistent classification/outcome pair is refused during migration, the
+  schema version remains 1, and the database is preserved. C-48 remains the legacy-NULL migration proof.
+- Verification: focused verifier 1/1; `test:m6` **181/14**, trace **41/1**, full **987/55**, `pnpm verify` exit 0.
+  The test now also asserts the original legacy classification/outcome row survives.
+- Limits: migration boundary only; no live provider, table, G4 or S6 claim.
+
+## M6 self-review — C-66 P3 getter alignment
+
+- Date: 2026-10-20 · Reviewer: M6 (self) · Verdict: **P3 resolved in the fixture; review pending**
+- Scope: `test/support/correct-ports.ts` and the C-66 P3 regression in `test/offline/m6-storage.test.ts`;
+  no production source or shared-contract change.
+- Decision: the scalar `appliedSeq()` getter follows the **last attempted** session. Production already
+  does this; the fixture now updates `lastSessionId` before gap/duplicate early returns.
+- Verification: focused P3 1/1; `test:m6` **182/14**; trace **41/1**; full **1125/63**. A last-advanced
+  mutation turned the P3 regression red with `expected 1 to be +0`; restored.
+- Limits: no production consumer; no interface change; no live/G4/S6 claim.
+
+## M6 self-review — INV-16 requirements registration
+
+- Date: 2026-10-20 · Reviewer: M6 (self) · Verdict: **documentation gap closed; review pending**
+- Scope: add the missing `INV-16` row to `docs/req/requirements.yaml` and refresh the stale INV-16 paragraph
+  in `docs/team/REQUIREMENTS.en.md`. No code, test, case or invariant definition changed.
+- Result: INV-16 now links NFR-01/NFR-04 to C-52–C-55 and C-69–C-71 in the requirements registry, matching
+  `docs/architecture/invariants.md` and the existing trace rows.
+- Verification: readiness **42/3**, trace **41/1**, `test:m6` **182/14**, full **1125/63**, `pnpm verify` exit 0.
+- Limits: documentation-only; no new ID, no S6/G4/live claim.

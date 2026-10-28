@@ -327,6 +327,20 @@ cases:
       file: test/offline/m6-sqlite.test.ts
       test: "preserves legacy NULL attribution across the v2 migration, and drops the legacy column"
 
+  - id: C-64
+    status: implemented
+    title: A late fully-delivered claim for a cancelled terminal is refused at M4 admission and leaves the stored record unchanged
+    verifier:
+      file: test/offline/m4-memory-safety.test.ts
+      test: "refuses a late fully-delivered claim for a cancelled terminal"
+
+  - id: C-65
+    status: implemented
+    title: A contradictory legacy classification/outcome row is refused before migration exposure and the database is preserved
+    verifier:
+      file: test/offline/m6-sqlite.test.ts
+      test: "refuses a contradictory classification/outcome row and preserves the database"
+
   # Moved from C-49 (2026-10-17) to free that id for M4's admission-divergence guard;
   # historical AI-use log entries keep the original id and are not rewritten.
   - id: C-51
@@ -336,6 +350,22 @@ cases:
       file: test/offline/m6-storage.test.ts
       test: "rejects a malformed event before mutation and lets a corrected retry apply"
 
+  # C-49 and C-50 are M4's cases, allocated in #25 and adopted here once M6's
+  # append-validation case had been migrated to C-51 on main (#42, 8937f7d), so
+  # neither id is claimed before the register can prove it is free.
+  - id: C-49
+    status: implemented
+    title: M4 admission divergence — a receiptless delivery is confirmed history for the durable store but stays out of spoken memory
+    verifier:
+      file: test/offline/m4-storage-integration.test.ts
+      test: "lists a receiptless delivery as confirmed history while M4 keeps it out of spoken memory"
+
+  - id: C-50
+    status: implemented
+    title: M4 within-turn reconstruction agrees with the shared ordering helper
+    verifier:
+      file: test/offline/m4-storage-integration.test.ts
+      test: "produces the same segment order for known, tied and unknown indices"
   - id: C-52
     status: implemented
     title: Failed and cancelled attempts remain in the aggregate
@@ -364,9 +394,57 @@ cases:
       file: test/offline/m6-02-report.test.ts
       test: "refuses a fixture text source"
 
+  - id: C-66
+    status: implemented
+    title: The projection bookmark is session-scoped; one session's sequence must never advance or skip another's
+    verifier:
+      file: test/offline/m6-storage.test.ts
+      test: "C-66: keeps the projection bookmark independent per session"
+  - id: C-67
+    status: implemented
+    title: A late fully-delivered claim for an already-cancelled delivery conflicts and preserves the original evidence
+    verifier:
+      file: test/offline/m6-late-delivery-conflict.test.ts
+      test: "refuses a later fully-delivered claim for an already-cancelled delivery and preserves the original evidence"
+
   - id: C-68
     status: implemented
     title: Coordinator SQLite reopen restores only confirmed history and keeps interrupted output unresolved
     verifier:
       file: test/offline/m6-i1-storage-recovery.test.ts
       test: "restores only confirmed history after the coordinator writes SQLite and reopens"
+
+  - id: C-69
+    status: implemented
+    title: A not-run-only variant in a mixed run reports unknown failure rate and usage
+    verifier:
+      file: test/offline/m6-02-report.test.ts
+      test: "reports an unknown failure rate for a variant with no attempts"
+
+  - id: C-70
+    status: implemented
+    title: A malformed or unpublishable recorded run is refused without writing output
+    verifier:
+      file: test/offline/m6-02-recorded-run.test.ts
+      test: "refuses a malformed or unpublishable run and writes nothing"
+
+  - id: C-71
+    status: implemented
+    title: A runBench recording is consumed by the real R1 report command without losing attempts or not-run entries
+    verifier:
+      file: test/offline/m6-02-bench.test.ts
+      test: "writes a runBench recording through the R1 report command without losing attempts or not-run entries"
+
+  - id: C-73
+    status: implemented
+    title: Production CLI lifecycle awaits owned release and reports shutdown honestly
+    verifier:
+      file: test/offline/production-cli.test.ts
+      test: "production CLI"
+
+  - id: C-74
+    status: implemented
+    title: Cross-process restart restores only confirmed history and never replays held output
+    verifier:
+      file: test/offline/m5-process-restart.test.ts
+      test: "production process restart acceptance"

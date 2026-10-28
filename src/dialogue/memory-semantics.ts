@@ -1,3 +1,5 @@
+import { scopeFor } from './audience'
+import type { MemoryKind, MemoryScopeDecision } from './audience'
 import type { ConfirmedDelivery, DeliveryClassification, Modality } from '../contracts'
 import { isSubstantiveSpeech } from './text'
 
@@ -45,6 +47,17 @@ export interface MemoryBucketDecision {
  * classification is built on top of that evidence. A `fully-delivered` audio
  * record with no receipt therefore carries a claim without proof and must be
  * held back from memory.
+ *
+ * IMPORTANT BOUNDARY (issue #44 §5, M1 reply): a non-empty `receiptId` is NOT
+ * by itself proof of complete audible delivery. M1 creates an `accepted`
+ * receipt before media resolves, and only an observed `ended` after an observed
+ * `started` produces an effective terminal `completed` fact. This module never
+ * reads the receipt stage, so its id-existence check is sound only to the
+ * extent M5 produces `fully-delivered` for an effective completed receipt. The
+ * guarantee therefore belongs to the producer/persistence/admission chain and is
+ * not re-derived here; this module does not certify every C6 writer. If a
+ * subtitle-only completion were ever classified `fully-delivered`, this policy
+ * would not catch it, because a subtitle record legitimately has no receipt.
  *
  * To relax the policy, change only this constant:
  *   1. 'required' - every fully-delivered record needs a receiptId.
@@ -171,26 +184,31 @@ export function modalityRank(modality: Modality): number {
 /**
  * Trim classes, ordered from "dropped first" to "dropped last".
  *
- * Memory carries two kinds of version information, and both affect what survives
- * a tight budget:
+ * Memory carries three kinds of survival information:
  *   - persona version: the record knows which persona said it. Words from an
  *     older persona are still words the audience heard, so they are not deleted
  *     immediately; they give way first only under pressure, because continuity
  *     with the current persona matters more.
  *   - truncation: an interrupted fragment is less useful for continuity than a
  *     complete statement, so it is dropped before complete statements.
+ *   - salience: a turn the scorer in ./salience pinned (a promise, a stated
+ *     preference, an identity detail) outlives every unpinned candidate,
+ *     because importance is not a function of age. A pin is trim-order only:
+ *     it never exempts a turn from the character budget.
  */
 export type TrimClass =
   | 'stale-persona-truncated'
   | 'stale-persona'
   | 'truncated'
   | 'current-persona'
+  | 'pinned'
 
 export const TRIM_ORDER: readonly TrimClass[] = [
   'stale-persona-truncated',
   'stale-persona',
   'truncated',
   'current-persona',
+  'pinned',
 ]
 
 export interface TrimInput {
@@ -199,6 +217,8 @@ export interface TrimInput {
   /** Persona version of the turn currently being assembled. */
   activePersonaVersion: string | null
   truncated: boolean
+  /** True when salience scoring pinned this turn; pinned turns drop last. */
+  pinned: boolean
 }
 
 /**
@@ -207,6 +227,10 @@ export interface TrimInput {
  * character's memory of what was really said.
  */
 export function trimClassOf(input: TrimInput): TrimClass {
+  // A pin outranks staleness and truncation: importance is decided by what the
+  // turn contains, not by which persona said it or whether it completed.
+  if (input.pinned) return 'pinned'
+
   const stale =
     input.personaVersion !== null &&
     input.activePersonaVersion !== null &&
@@ -237,6 +261,59 @@ export function trimRank(input: TrimInput): number {
  * trimmed. See `trimToCharacterBudget` in ./context for the order and the
  * character-counting rule.
  */
+/* -------------------------------------------------------------------------- */
+/* Scope: how long a memory may live                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Scope admission, the second gate a record passes before it becomes a memory.
+ *
+ * `classifyMemoryBucket` answers "was this really said, and did it really play".
+ * This gate answers a different question: "how long may it be kept, and for
+ * whom". Both are needed. Delivery evidence says a record is TRUE; it says
+ * nothing about whether it belongs to one listener or to everybody forever.
+ *
+ * The signature is deliberately parallel to `classifyMemoryBucket` and does not
+ * replace it. `classifyMemoryBucket` stays the only answer to the delivery
+ * question, so no existing caller changes behaviour by gaining this one.
+ *
+ * Authority: the scope policy itself lives in ./audience (`scopeFor`), which owns
+ * the identity type. Re-exported here so a caller assembling context has one
+ * import for memory semantics.
+ */
+export type { MemoryKind, MemoryScope, MemoryScopeDecision, MemoryScopeReason } from './audience'
+export { mayRecallAcrossSessions, normalizeAudience, scopeFor } from './audience'
+
+export interface ScopeClassificationInput {
+  /** What the record is about; decides the scope floor. */
+  kind: MemoryKind
+  /** Who is listening; absent means anonymous. */
+  audience?: import('./audience').AudienceIdentity
+}
+
+/**
+ * Classify a record's scope, alongside (never instead of) its memory bucket.
+ *
+ * A record admitted as `spoken` can still be `session-only`: that is the normal
+ * case for an anonymous audience, and it is not a contradiction. Delivering a
+ * sentence and remembering it for good are two different permissions.
+ */
+export function classifyMemoryScope(input: ScopeClassificationInput): MemoryScopeDecision {
+  return scopeFor(input.kind, input.audience)
+}
+
+/**
+ * Guard on durable retention: may this record be kept beyond its session?
+ *
+ * Kept separate from `scopeFor` so callers that only have a record cannot
+ * accidentally treat `scope === 'audience-bound'` as permission to persist.
+ * `durable` is the single field that answers that, and it is false for every
+ * non-durable identity including a per-session temporary id.
+ */
+export function mayRetainDurably(decision: MemoryScopeDecision): boolean {
+  return decision.durable
+}
+
 export const MEMORY_TRIM_POLICY = {
   dropOrder: TRIM_ORDER,
   keepNewestWithinBudget: true,

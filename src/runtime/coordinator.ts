@@ -108,6 +108,12 @@ export interface RuntimeMetrics {
   dialogueAttempts: number
   rejectedLate: number
   rejectedReceipts: number
+  /**
+   * Player messages received after the operation seal. Counts incoming calls
+   * refused before any envelope or payload inspection, not validated receipts:
+   * nothing is parsed, attributed or persisted, and `storageFailure` is not set.
+   */
+  lateReceipts: number
   storageFailure: boolean
 }
 
@@ -169,6 +175,19 @@ export interface RuntimeCoordinator {
   metrics(): RuntimeMetrics
   /** Revokes all session work without operator authority; used on shutdown. */
   dispose(): void
+  /**
+   * Controlled two-phase drain. It first seals operation admission and drains
+   * every admitted bounded operation to its terminal bookkeeping (the active
+   * turn, an in-flight receipt finalization), then seals writes and resolves
+   * after every admitted store/memory write has settled. Disposal aborts raw
+   * providers, so a cancellation-ignoring provider cannot hold this open. It
+   * never rejects: a failed unit leaves the session degraded and this call still
+   * resolves. After the write seal a late callback is refused without touching
+   * storage and is never counted as a storage failure, so a shared storage
+   * handle can be closed safely once this resolves. Idempotent and safe after
+   * `dispose()`.
+   */
+  settle(): Promise<void>
 }
 
 interface OutputRegistration {
@@ -581,6 +600,7 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
   let dialogueAttempts = 0
   let rejectedLate = 0
   let rejectedReceipts = 0
+  let lateReceipts = 0
   let storageFailure = false
   let turnCounter = 0
   let idCounter = 0
@@ -607,6 +627,27 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
   let writeChain: Promise<void> = Promise.resolve()
   // Once a write fails or is unverifiable, no later queued store write starts.
   let writeFailed = false
+  // Closed by the first `settle()` after admitted operations have drained: after
+  // the boundary, no new unit is admitted, so a late callback cannot reach a
+  // store that is about to close.
+  let writesClosed = false
+  // Bounded operations admitted before the write seal: the active turn and any
+  // in-flight player-message (receipt) handling. Settle drains these to their
+  // terminal bookkeeping before sealing writes, so cancellation evidence for an
+  // already-invoked provider or a finalizing delivery is never dropped. Disposal
+  // aborts the raw providers, so the drain is bounded by the coordinator's own
+  // stage budgets and never waits for a cancellation-ignoring provider.
+  const admittedOperations = new Set<Promise<unknown>>()
+  let operationsSealed = false
+
+  function trackOperation<T>(operation: Promise<T>): Promise<T> {
+    admittedOperations.add(operation)
+    const clear = (): void => {
+      admittedOperations.delete(operation)
+    }
+    void operation.then(clear, clear)
+    return operation
+  }
 
   function nextId(prefix: string): string {
     idCounter += 1
@@ -662,9 +703,13 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
   /**
    * Serializes a write unit behind the previous one. Validation, degradation
    * and publication happen inside the unit so no later queued write can start
-   * after a failed or unverifiable acknowledgement.
+   * after a failed or unverifiable acknowledgement. Once the settle boundary is
+   * closed, a late unit (for example a provider continuation that ignores
+   * cancellation and resumes after disposal) is refused here and never touches
+   * storage; refusal is not a storage failure.
    */
   function enqueueWrite(unit: () => Promise<void>): Promise<void> {
+    if (writesClosed) return Promise.resolve()
     const run = writeChain.then(async () => {
       if (writeFailed) return
       await unit()
@@ -2077,16 +2122,21 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
 
   /**
    * Cycle driver. It returns detached copies so a caller mutating the outcome
-   * (its plan or deliveries) can never corrupt internal trace state.
+   * (its plan or deliveries) can never corrupt internal trace state. An admitted
+   * turn is tracked so `settle()` can drain its bounded cancellation
+   * bookkeeping; once the operation seal is set no further turn is admitted.
    */
   async function runTurn(): Promise<CycleOutcome> {
-    const outcome = await runTurnImpl()
-    return {
+    if (operationsSealed) {
+      return { status: 'inactive', turnId: null, plan: null, deliveries: [] }
+    }
+    const run = runTurnImpl().then((outcome) => ({
       status: outcome.status,
       turnId: outcome.turnId,
       plan: outcome.plan === null ? null : cloneRecord(outcome.plan),
       deliveries: outcome.deliveries.map((delivery) => cloneRecord(delivery)),
-    }
+    }))
+    return trackOperation(run)
   }
 
   /**
@@ -2104,30 +2154,85 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
     activeAbort?.abort()
     activeAbort = null
     stopGeneration += 1
+    // Release a playback wait that can no longer receive terminal evidence:
+    // disposal is not a terminal stage, so the output's physical outcome stays
+    // unknown, and the in-flight turn reaches its bounded cancellation
+    // bookkeeping instead of waiting for the playback deadline.
+    let releasedPlayback = false
+    for (const registration of outputRegistry.values()) {
+      const settle = registration.settle
+      if (settle === null) continue
+      registration.settle = null
+      releasedPlayback = true
+      settle()
+    }
+    if (releasedPlayback) outputConfirmation = 'unknown'
+  }
+
+  /**
+   * Two-phase controlled drain.
+   *
+   * First the operation seal stops new turns and receipts from being admitted,
+   * and every admitted bounded operation (the active turn, an in-flight receipt
+   * finalization) drains to its terminal bookkeeping. Disposal aborts the raw
+   * providers, so a cancellation-ignoring provider cannot hold this open: the
+   * turn's bounded stage calls settle on abort and its writes are bounded by the
+   * storage budget.
+   *
+   * Then the write seal closes storage admission: a late callback (for example a
+   * raw provider completion after disposal) is refused without touching storage
+   * and is never counted as a storage failure, while every write admitted by the
+   * drained operations settles. The chain never rejects, so this never rejects
+   * either. Idempotent and safe after `dispose()`.
+   */
+  async function settleWrites(): Promise<void> {
+    operationsSealed = true
+    while (admittedOperations.size > 0) {
+      await Promise.allSettled([...admittedOperations])
+    }
+    writesClosed = true
+    await writeChain
+  }
+
+  /**
+   * One player message (a performance receipt). The caller tracks the returned
+   * operation so an admitted receipt finalizes its delivery before the write
+   * seal; it never awaits a raw provider.
+   */
+  async function handlePlayerMessageImpl(message: unknown): Promise<void> {
+    const parsed = playerMessageSchema.safeParse(message)
+    if (!parsed.success) {
+      // The envelope/payload correlation is unverifiable, so it cannot be
+      // attributed to the in-flight output; it is rejected without changing
+      // confirmation or storage progress.
+      rejectedReceipts += 1
+      await persist('receipt.rejected', { payload: { reason: 'malformed-envelope' } })
+      return
+    }
+    // Envelope correlation is checked before payload handling: a receipt for
+    // another session is never this runtime's evidence.
+    if (parsed.data.sessionId !== sessionId) {
+      rejectedReceipts += 1
+      await persist('receipt.rejected', { payload: { reason: 'envelope-session-mismatch' } })
+      return
+    }
+    await handleReceipt(parsed.data.payload)
   }
 
   const endpoint: RuntimeEndpointPort = {
     snapshot: () => Promise.resolve(snapshot()),
     submitInput,
     control,
-    async handlePlayerMessage(message) {
-      const parsed = playerMessageSchema.safeParse(message)
-      if (!parsed.success) {
-        // The envelope/payload correlation is unverifiable, so it cannot be
-        // attributed to the in-flight output; it is rejected without changing
-        // confirmation or storage progress.
-        rejectedReceipts += 1
-        await persist('receipt.rejected', { payload: { reason: 'malformed-envelope' } })
-        return
+    handlePlayerMessage(message) {
+      // A receipt admitted before the operation seal drains to its terminal
+      // bookkeeping; a late receipt after the seal is refused without touching
+      // storage. The refusal is observed as an incoming call: nothing is parsed
+      // after the seal, so the count never claims envelope or payload validity.
+      if (operationsSealed) {
+        lateReceipts += 1
+        return Promise.resolve()
       }
-      // Envelope correlation is checked before payload handling: a receipt for
-      // another session is never this runtime's evidence.
-      if (parsed.data.sessionId !== sessionId) {
-        rejectedReceipts += 1
-        await persist('receipt.rejected', { payload: { reason: 'envelope-session-mismatch' } })
-        return
-      }
-      await handleReceipt(parsed.data.payload)
+      return trackOperation(handlePlayerMessageImpl(message))
     },
     onServerMessage(listener) {
       serverListeners.add(listener)
@@ -2151,8 +2256,10 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
       dialogueAttempts,
       rejectedLate,
       rejectedReceipts,
+      lateReceipts,
       storageFailure,
     }),
     dispose: disposeSession,
+    settle: settleWrites,
   }
 }

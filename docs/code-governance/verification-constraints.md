@@ -43,13 +43,13 @@ confirms; it does not discover.**
 | --- | --- | --- |
 | INV-04 (session-scoped identity/sequence uniqueness) | C-18, C-23, C-39, C-40, C-41, C-43, C-44, C-51 | `m6-storage.test.ts`; conformance `append-duplicate`, `append-changed-content`, `append-seq-unique`, `append-session-scoped-identity`; conflicting commit reports `conflict` on both sides; canonical content equality (key order irrelevant, array order significant); a non-JSON payload is rejected with `unsupported_payload` (incl. sparse arrays) |
 | INV-05 (atomic delivery + event) | C-19, C-38, C-42 | `m6-storage.test.ts::INV-05` (failed commit persists nothing; a later unpublishable mutation leaves no partial state); `m6-sqlite-backend.test.ts` (batch rollback); conformance `atomic-failure-reported`, `atomic-no-partial-mutation` |
-| INV-06 (projection no gap / idempotent) | C-20 | `m6-storage.test.ts::INV-06`; conformance `projection-no-gap-claim`, `projection-idempotent` |
+| INV-06 (projection no gap / idempotent / session-scoped) | C-20, C-66 | `m6-storage.test.ts::INV-06`; `m6-storage.test.ts` C-66 independent-session test; conformance `projection-no-gap-claim`, `projection-idempotent` |
 | INV-07 (record isolation) | C-24, C-29 | `m6-storage.test.ts` (isolation tests); conformance `input-isolation`, `read-isolation` → runs over **both** in-memory and SQLite |
 | INV-08 (history ordering) | C-25, C-29 | `m6-storage.test.ts` (ordering test); conformance `history-ordered` → over **both** backends |
-| INV-09 (delivery attribution and consistent evidence) | C-46, C-47 | `m5-attribution.test.ts` (capture and persistence); conformance `delivery-invalid-combination:*`, `delivery-invalid-event:*`, `delivery-correlation:*`, `delivery-provenance:*`; negative adapters `createCombinationNormalizingEventStore`, `createProvenanceIgnoringEventStore` |
+| INV-09 (delivery attribution and consistent evidence) | C-46, C-47, C-67 | `m5-attribution.test.ts` (capture and persistence); `m6-late-delivery-conflict.test.ts` (late fully-delivered claim against cancelled delivery preserves original); conformance `delivery-invalid-combination:*`, `delivery-invalid-event:*`, `delivery-correlation:*`, `delivery-provenance:*`; negative adapters `createCombinationNormalizingEventStore`, `createProvenanceIgnoringEventStore` |
 | INV-15 (M5 within-turn reconstruction) | C-47 | `m5-attribution.test.ts`, existing ordering regression: exact session/turn filtering, known indices ascending, unknowns last, stable ties, preserved nulls and unchanged input |
 | INV-10 (config + schema version validated) | C-26, C-27 | `m6-sqlite.test.ts` (config + migrations) |
-| INV-11 (migration recoverable) | C-27, C-28, C-48 | `m6-sqlite.test.ts` (backup before apply; rollback on failure; legacy attribution migrated/refused) |
+| INV-11 (migration recoverable / contradictory legacy refusal) | C-27, C-28, C-48, C-65 | `m6-sqlite.test.ts` (backup before apply; rollback on failure; legacy attribution migrated/refused; contradictory row refused and database preserved) |
 | FR-06 (SQLite conformance) | C-29 | `m6-sqlite-backend.test.ts` (conformance suite over SQLite) |
 | FR-06 (SQLite persistence/reopen) | C-30 | `m6-sqlite-backend.test.ts` (reopen + isolation) |
 | FR-06 (delivery terminal outcome persisted) | C-31 | `m6-sqlite-backend.test.ts` (terminal outcome for recovery) |
@@ -108,3 +108,28 @@ rejects a missing file or absent test string.
   empty attempts, blank identifiers/reasons, unknown nested fields/variants, missing/duplicate CLI options,
   unreadable input and an explicit output are validated; a refused run writes nothing and preserves an existing output. The command uses a temp
   path; it does not create the repository evaluation table.
+
+## M6-02 R2 runBench harness
+
+- `test/offline/m6-02-bench.test.ts` — `runBench` returns the frozen recorded-run v1 shape, recomputes the
+  actual attempt sample size, preserves not-run entries and thrown failures, does not emit a trusted summary,
+  and does not mutate the supplied cases/variants; `serializeRecordedRun` produces the JSON the R1 parser
+  consumes. The test uses the synthetic runner; no provider or runtime pipeline is imported.
+
+### C-69 — zero-attempt variant reporting
+
+`test/offline/m6-02-report.test.ts` / “reports an unknown failure rate for a variant with no attempts”. A mixed run
+with a not-run-only variant renders `—` for failure rate and unknown usage; an entirely unexecuted run is still
+refused.
+
+### C-70 — R1 recorded-run refusal
+
+`test/offline/m6-02-recorded-run.test.ts` / “refuses a malformed or unpublishable run and writes nothing”.
+Output-preservation, strict-schema, and summary-recomputation tests remain supporting coverage.
+
+### C-71 — R2 producer-to-command integration
+
+`test/offline/m6-02-bench.test.ts` / “writes a runBench recording through the R1 report command without losing
+attempts or not-run entries”. Two variants, executed and not-run entries, temporary serialized input and the real
+R1 command are used; all-not-run refusal, output preservation and non-finite serialization refusal remain
+supporting boundary tests.

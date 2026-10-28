@@ -8,10 +8,18 @@ import {
 } from './persona'
 import type { RecalledFact } from './persona-recall'
 import { MAX_RECALLED_FACTS } from './persona-recall'
+import type { RecalledTurn, DeliveryRecallPort } from './memory-recall'
+import { MAX_RECALLED_TURNS } from './memory-recall'
+import type { ConsistencyAuditSummary, Contradiction, StatementRef } from './consistency'
+import { scanContradictions, summarizeConsistencyAudit } from './consistency'
+import { scoreSalience, SALIENCE_PIN_THRESHOLD, MAX_PINNED_TURNS } from './salience'
+import type { SalienceSignal } from './salience'
 import { turnKey, utteranceKey } from './delivery-key'
 import type { PersonaRecallPort } from './persona-recall'
 import { classifyMemoryBucket, isTruncatedSpeech, modalityRank, trimRank } from './memory-semantics'
 import type { MemoryBucketReason } from './memory-semantics'
+import { scopeFor } from './audience'
+import type { AudienceIdentity, MemoryKind, MemoryScope } from './audience'
 
 /**
  * Dialogue context assembly.
@@ -30,16 +38,25 @@ import type { MemoryBucketReason } from './memory-semantics'
  *      model reading the context cannot take it for a complete statement.
  *
  * Budget rule. `contextLimits.maxCharacters` covers the rendered confirmed
- * history AND the rendered recalled facts, which share it and therefore trade off
- * against each other. It does NOT cover the persona block (fixed per turn) or the
- * rest of the model prompt. The cap is hard: nothing assembled here may exceed it.
- * See `estimatedCharacters` for exactly which characters are counted.
+ * history AND the rendered recalls (persona facts and delivery-memory recalls),
+ * which share it and therefore trade off against each other. It does NOT cover
+ * the persona block (fixed per turn) or the rest of the model prompt. The cap
+ * is hard: nothing assembled here may exceed it. See `estimatedCharacters` for
+ * exactly which characters are counted.
+ *
+ * Retention extras. Two deterministic mechanisms fight the loss of important
+ * old turns without widening the budget: salience pinning (./salience) makes
+ * high-value turns the last victims of trimming, and a rollup line
+ * (`renderRollupLine`) states how many turns were omitted so the model knows
+ * something was left out. Neither invents content.
  *
  * Known limitation (recorded rather than hidden): `confirmedEventRefs` carries
- * runtime event ids, but a confirmed record exposes no event id. A reference
- * therefore cannot be resolved to a record and is only used as an ordering hint.
- * If M6 later exposes the delivery-to-event relationship, `matchesReference`
- * should be replaced so the hint becomes an exact filter.
+ * runtime event ids, but a confirmed record exposes no event id, so a reference
+ * cannot be resolved to a record. An unresolved hint must not move durable
+ * records, so the references are reported through `warnings` and otherwise
+ * ignored: they do not affect which records exist or what order they appear in.
+ * If a later contract exposes the delivery-to-event relationship, they can become
+ * an exact filter over the authoritative order rather than a reordering hint.
  */
 
 /* -------------------------------------------------------------------------- */
@@ -53,11 +70,25 @@ export const ITEM_PREFIX = '- '
 export const INTERRUPTED_SPEECH_MARKER = ' [cut off mid-sentence]'
 
 /**
+ * Appended to a turn the consistency scan (./consistency) flagged as
+ * contradicting another admitted statement or a standing fact.
+ *
+ * Opt-in, and OFF by default, because adding text to a rendered line spends
+ * budget: with the marker enabled the extra characters are charged and can push
+ * a turn out of context. With it disabled the scan is audit-only, so the default
+ * behaviour and the character accounting are exactly what they were before the
+ * detector existed.
+ */
+export const CONFLICT_MARKER = ' [conflicting]'
+
+/**
  * Rendered form of one confirmed turn. The single source of truth for both the
  * prompt and the character accounting, so the two cannot drift apart.
  */
 export function renderHistoryLine(turn: AssembledTurn): string {
-  return `${ITEM_PREFIX}${turn.text}${turn.interrupted ? INTERRUPTED_SPEECH_MARKER : ''}`
+  return `${ITEM_PREFIX}${turn.text}${turn.interrupted ? INTERRUPTED_SPEECH_MARKER : ''}${
+    turn.conflicting === true ? CONFLICT_MARKER : ''
+  }`
 }
 
 /**
@@ -67,6 +98,28 @@ export function renderHistoryLine(turn: AssembledTurn): string {
  */
 export function renderRecallLine(entry: RecalledFact): string {
   return `${ITEM_PREFIX}${entry.fact.text} (bible: ${entry.fact.id})`
+}
+
+/**
+ * Rendered form of the rollup line standing in for turns dropped under budget
+ * pressure. It states a COUNT and nothing else: a rollup that paraphrased the
+ * dropped turns would be a claim about content the model can no longer see, and
+ * inventing it would break the same honesty rule as unmarked truncation.
+ */
+export function renderRollupLine(omittedTurns: number): string {
+  return `${ITEM_PREFIX}(${omittedTurns} earlier turn${omittedTurns === 1 ? '' : 's'} omitted)`
+}
+
+/**
+ * Rendered form of one recalled older turn, with its provenance. The
+ * `(turn: session:turn)` suffix lets a reviewer trace the line back to the
+ * stored record, and is charged to the budget like every other rendered
+ * character.
+ */
+export function renderRecalledTurnLine(turn: AssembledTurn): string {
+  const marker = turn.interrupted ? INTERRUPTED_SPEECH_MARKER : ''
+  const conflict = turn.conflicting === true ? CONFLICT_MARKER : ''
+  return `${ITEM_PREFIX}${turn.text}${marker}${conflict} (turn: ${turn.sessionId}:${turn.turnId})`
 }
 
 /* -------------------------------------------------------------------------- */
@@ -84,6 +137,13 @@ export interface MemoryEntry {
    * absence of evidence is not evidence that the memory is outdated.
    */
   personaVersion: string | null
+  /**
+   * How long this record may live. Defaults to `'utterance'` when the source
+   * does not classify it, because an unclassified confirmed record is still
+   * something the character said - and an unclassified record must never be
+   * treated as a durable one by accident.
+   */
+  kind?: MemoryKind
 }
 
 /**
@@ -113,6 +173,23 @@ export interface RecallExclusion {
   reason: 'recall-budget'
 }
 
+/** A recalled older turn dropped before rendering, so the loss stays auditable. */
+export interface TurnRecallExclusion {
+  sessionId: string
+  turnId: string
+  reason: 'recall-budget'
+}
+
+/**
+ * The rollup standing in for turns dropped under budget pressure. Null when
+ * nothing was trimmed or when even the rollup line did not fit the budget.
+ */
+export interface ContextRollup {
+  omittedTurns: number
+  /** Rendered length of the rollup line, charged to the character budget. */
+  characters: number
+}
+
 /** One confirmed speaking turn, in speaking order. */
 export interface AssembledTurn {
   sessionId: string
@@ -128,6 +205,37 @@ export interface AssembledTurn {
   interrupted: boolean
   /** Persona version used to generate the turn; null when unknown. */
   personaVersion: string | null
+  /**
+   * True when salience scoring (./salience) pinned this turn. Pinned turns are
+   * trimmed last, after every unpinned candidate, but are never exempt from the
+   * character budget. Recomputed at every assembly; never persisted.
+   */
+  pinned: boolean
+  /** Raw salience score, kept for the pin cap tie-break and for auditing. */
+  salienceScore: number
+  /**
+   * How long this turn may be kept, decided from its kind and the current
+   * audience (./audience). Recomputed at every assembly; never persisted.
+   *
+   * A `'session-only'` turn is still rendered in this session - scope governs
+   * RETENTION, not visibility. It is recorded here so a later stage can refuse
+   * to carry the turn past this session instead of having to re-derive the
+   * audience to find out.
+   */
+  scope: MemoryScope
+  /** What the turn is about; defaults to `'utterance'`. See `MemoryEntry.kind`. */
+  kind: MemoryKind
+  /** Which salience signals fired; empty for an unpinned turn. */
+  salienceSignals: readonly SalienceSignal[]
+  /**
+   * True when the consistency scan (./consistency) found this turn contradicting
+   * another admitted statement or a standing fact.
+   *
+   * A review flag, not a verdict: the turn is still admitted and still charged,
+   * and its text is never rewritten. Absent on every turn the scan did not flag,
+   * and on every turn when the scan found nothing.
+   */
+  conflicting?: boolean
   /** Rendered length of this turn inside the context block. */
   characters: number
 }
@@ -139,6 +247,9 @@ export type ContextExclusionReason =
   | 'character-budget'
   | 'trim-stale-persona'
   | 'trim-truncated'
+  /** A candidate was dropped for crossing a session boundary without the
+   *  durable audience identity that crossing requires. See ./audience. */
+  | 'cross-session-scope'
 
 export interface ContextExclusion {
   sessionId: string
@@ -163,6 +274,18 @@ export interface AssembledDialogueContext {
   recalledFacts: readonly RecalledFact[]
   /** Recalled facts dropped for budget, with the reason. */
   recallExclusions: readonly RecallExclusion[]
+  /**
+   * Older confirmed turns recalled by delivery-memory recall (./memory-recall).
+   * They aged out of the recency window but matched the listener's current
+   * message; they are rendered in their own section, charged to the same
+   * budget, and never reordered into the recent history. Empty when no
+   * `deliveryRecall` port is supplied.
+   */
+  recalledTurns: readonly RecalledTurn[]
+  /** Recalled turns dropped for budget, with the reason. */
+  deliveryRecallExclusions: readonly TurnRecallExclusion[]
+  /** Rollup line for turns dropped under budget pressure; see ContextRollup. */
+  rollup: ContextRollup | null
   selectedInputText: string
   replyIntent: ReplyIntent
   /** Confirmed turns kept in context, oldest first. */
@@ -179,9 +302,11 @@ export interface AssembledDialogueContext {
    *
    * The counted characters are exactly those charged to `maxCharacters`:
    *   - each kept turn, as `renderHistoryLine` produces it (item prefix, turn
-   *     text, and the interrupted marker when present);
+   *     text, and the interrupted / conflict markers when present);
    *   - each recalled fact, as `renderRecallLine` produces it (item prefix, fact
-   *     text, and the provenance suffix).
+   *     text, and the provenance suffix);
+   *   - each recalled older turn, as `renderRecalledTurnLine` produces it;
+   *   - the rollup line, as `renderRollupLine` produces it.
    * Section headings, the persona block and the rest of the prompt are not
    * counted, because they are not part of this budget.
    */
@@ -189,6 +314,20 @@ export interface AssembledDialogueContext {
   truncatedByTurnLimit: boolean
   truncatedByCharacterLimit: boolean
   warnings: readonly string[]
+  /**
+   * Contradictions found among admitted statements and standing facts, as ids
+   * and counts only (./consistency). Audit evidence: nothing here changes
+   * admission, ordering or budget, and no statement text is carried. PARTIAL
+   * when `consistencyAudit.incomplete` is true.
+   */
+  conflicts?: readonly Contradiction[]
+  /**
+   * Redacted completion summary of the consistency audit (./consistency):
+   * counts and a completeness flag only, never statement text. `incomplete` is
+   * true when a work ceiling or the findings cap stopped the scan, in which case
+   * `conflicts` covers only the inspected part of the history.
+   */
+  consistencyAudit: ConsistencyAuditSummary
 }
 
 export interface AssembleDialogueContextInput {
@@ -209,6 +348,44 @@ export interface AssembleDialogueContextInput {
    * `PERSONA_RECALL_POLICY = 'off'`.
    */
   personaRecall?: PersonaRecallPort
+  /**
+   * Delivery-memory recall over confirmed turns that aged out of the recency
+   * window (./memory-recall). The candidates are turns the assembly already
+   * loaded, so supplying this port adds no I/O. Omitted means no delivery
+   * recall and context is identical to running without the feature.
+   */
+  deliveryRecall?: DeliveryRecallPort
+  /**
+   * Who is listening (./audience). Omitted means anonymous, which is the safe
+   * direction: an unidentified listener never produces a durable memory.
+   *
+   * This does not change what is rendered in the current session. It decides how
+   * long the assembled turns may be KEPT, and it is the input that lets a later
+   * stage refuse a cross-session recall.
+   */
+  audience?: AudienceIdentity
+  /**
+   * Archive sessions explicitly authorized by M5's validated reconstruction.
+   * This does not grant access to any session outside the selection.
+   */
+  explicitlySelectedSessionIds?: readonly string[]
+  /**
+   * Recorded owner of a candidate's memory, when the caller has one
+   * (./memory-recall). Automatic cross-session recall is refused without it;
+   * explicitly selected archives do not consult it.
+   */
+  ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
+  /**
+   * Render `CONFLICT_MARKER` on turns the consistency scan flagged.
+   *
+   * Off by default and opt-in, because the marker is prompt text: it is charged
+   * to `maxCharacters` and can therefore displace another turn. Leave it off
+   * when the audit record is enough; turn it on for an operator who wants the
+   * model itself to see that an entry is contested. Either way the scan runs and
+   * `conflicts` is populated - this switch only decides whether the marker is
+   * rendered, never whether the contradiction is detected.
+   */
+  markConflictingTurns?: boolean
 }
 
 /**
@@ -351,6 +528,8 @@ export async function assembleDialogueContext(
   const allTurns: AssembledTurn[] = [...grouped.values()].map((entries) => {
     const first = entries[0]
     if (first === undefined) throw new Error('grouped turn is empty')
+    const kind: MemoryKind = first.kind ?? 'utterance'
+    const scope = scopeFor(kind, input.audience).scope
     const segments = entries
       .map((entry, order) => ({ entry, order }))
       .sort(
@@ -360,6 +539,7 @@ export async function assembleDialogueContext(
       )
       .map(({ entry }) => entry.delivery)
     const text = turnText(segments)
+    const salience = scoreSalience(text)
     const turn: AssembledTurn = {
       sessionId: first.delivery.sessionId,
       turnId: first.delivery.turnId,
@@ -367,6 +547,11 @@ export async function assembleDialogueContext(
       text,
       interrupted: isTruncatedSpeech(text),
       personaVersion: first.personaVersion,
+      pinned: salience.score >= SALIENCE_PIN_THRESHOLD,
+      salienceScore: salience.score,
+      salienceSignals: salience.signals,
+      scope,
+      kind,
       characters: 0,
     }
     // Charged as rendered, so the budget matches what actually reaches the prompt.
@@ -374,9 +559,61 @@ export async function assembleDialogueContext(
     return turn
   })
 
+  /*
+   * Consistency scan, BEFORE the recency window and before trimming.
+   *
+   * Running it here rather than on the kept turns has two reasons. First, a
+   * contradiction is evidence about the records, not about the budget: which
+   * turns happen to fit must not decide which contradictions are reported.
+   * Second, an opt-in `CONFLICT_MARKER` lengthens a rendered line, so marking
+   * has to happen before `characters` is used for trimming - otherwise the
+   * marker would quietly push the block past `maxCharacters`, and a cap that
+   * only applies when convenient is not a bound.
+   *
+   * The scan covers admitted confirmed turns plus the profile's standing facts,
+   * which are the two things the model reads as true. It never runs on recalled
+   * persona facts (absent under the `off` policy anyway) and never on the
+   * listener's current message.
+   *
+   * The scan is itself bounded (./consistency): it visits a fixed maximum of
+   * statements, text units, claims and comparisons, independent of
+   * `maxCharacters`.
+   * A tiny prompt budget therefore cannot make the scan unbounded; it can only
+   * make the audit partial, and that partiality is reported through
+   * `consistencyAudit.incomplete` and the warnings rather than hidden.
+   */
+  const consistencyScan = scanContradictions({
+    statements: [
+      ...allTurns.map((turn) => ({
+        ref: { kind: 'turn', sessionId: turn.sessionId, turnId: turn.turnId } satisfies StatementRef,
+        text: turn.text,
+      })),
+      ...(profile.standingFacts ?? []).map((text, factIndex) => ({
+        ref: { kind: 'persona-fact', factIndex } satisfies StatementRef,
+        text,
+      })),
+    ],
+  })
+  const conflicts: readonly Contradiction[] = consistencyScan.findings
+  const consistencyAudit = summarizeConsistencyAudit(consistencyScan)
+  if (input.markConflictingTurns === true && conflicts.length > 0) {
+    const flagged = new Set<string>()
+    for (const conflict of conflicts) {
+      for (const ref of [conflict.left, conflict.right]) {
+        if (ref.kind === 'turn') flagged.add(turnKey(ref))
+      }
+    }
+    for (const turn of allTurns) {
+      if (!flagged.has(turnKey({ sessionId: turn.sessionId, turnId: turn.turnId }))) continue
+      turn.conflicting = true
+      turn.characters = renderHistoryLine(turn).length
+    }
+  }
+
   const recent = maxTurns === 0 ? [] : allTurns.slice(-maxTurns)
   const truncatedByTurnLimit = recent.length < allTurns.length
-  for (const turn of allTurns.slice(0, Math.max(0, allTurns.length - recent.length))) {
+  const turnLimitDropped = allTurns.slice(0, Math.max(0, allTurns.length - recent.length))
+  for (const turn of turnLimitDropped) {
     for (const segment of turn.segments) {
       exclusions.push({
         sessionId: turn.sessionId,
@@ -384,6 +621,22 @@ export async function assembleDialogueContext(
         segmentId: segment.segmentId,
         reason: 'turn-limit',
       })
+    }
+  }
+
+  /*
+   * Enforce the pin cap. Without it, pinned turns could accumulate until they
+   * alone consume the whole budget, recreating the starvation the pin exists to
+   * prevent. Highest scores keep the pin; ties keep the OLDER turn, because the
+   * pin's purpose is to protect important memories formed early.
+   */
+  const pinnedTurns = recent.filter((turn) => turn.pinned)
+  if (pinnedTurns.length > MAX_PINNED_TURNS) {
+    const keep = new Set(
+      [...pinnedTurns].sort((a, b) => b.salienceScore - a.salienceScore).slice(0, MAX_PINNED_TURNS),
+    )
+    for (const turn of pinnedTurns) {
+      if (!keep.has(turn)) turn.pinned = false
     }
   }
 
@@ -427,10 +680,102 @@ export async function assembleDialogueContext(
     recalledCharacters += cost
   }
 
-  const availableHistoryCharacters = Math.max(0, maxCharacters - recalledCharacters)
+  /*
+   * Delivery-memory recall runs on the turns the recency window dropped. The
+   * candidates were already loaded with the history, so this adds no I/O. The
+   * recalled turns share the same budget, charged after persona recall and
+   * before history trimming, and are rendered in their own section so they
+   * never blur into the recent chronological order.
+   *
+   * `maxTurns` is a bound on the turns that reach the prompt in total, not only
+   * on the recency window, so recall can never claim more slots than the caller
+   * allowed - with `maxTurns: 0` there is no allowance at all.
+   */
+  const recallAllowance = Math.min(MAX_RECALLED_TURNS, Math.max(0, maxTurns))
+  const deliveryRecallResult: readonly RecalledTurn[] =
+    maxTurns === 0 || input.deliveryRecall === undefined
+      ? []
+      : input.deliveryRecall.recall({
+          inputText: request.selectedInput.text,
+          replyIntent: request.responsePlan.replyIntent,
+          candidates: turnLimitDropped,
+          // The guard needs the requesting session to compare against; a
+          // candidate's own sessionId cannot supply both sides of the check.
+          sessionId: request.sessionId,
+          scope: scopeFor('utterance', input.audience).scope,
+          audience: input.audience,
+          explicitlySelectedSessionIds: input.explicitlySelectedSessionIds,
+          ...(input.ownerAudienceIdOf === undefined
+            ? {}
+            : { ownerAudienceIdOf: input.ownerAudienceIdOf }),
+        })
+
+  const recalledTurns: RecalledTurn[] = []
+  const deliveryRecallExclusions: TurnRecallExclusion[] = []
+  let recalledTurnCharacters = 0
+  for (const entry of deliveryRecallResult.slice(0, recallAllowance)) {
+    const cost = renderRecalledTurnLine(entry.turn).length
+    if (recalledCharacters + recalledTurnCharacters + cost > maxCharacters) {
+      deliveryRecallExclusions.push({
+        sessionId: entry.turn.sessionId,
+        turnId: entry.turn.turnId,
+        reason: 'recall-budget',
+      })
+      continue
+    }
+    recalledTurns.push(entry)
+    recalledTurnCharacters += cost
+  }
+
+  /*
+   * A recalled older turn is still history, so it displaces a recent turn rather
+   * than adding to it. Without this, `maxTurns` would bound only the recency
+   * window and recall could exceed the caller's request limit - M5's probe with
+   * `maxTurns: 0` rendered recalled turns, which is not what the limit says.
+   *
+   * Displacement starts with the oldest unpinned turn so a pinned turn keeps the
+   * protection it was scored for; pinned turns are displaced oldest-first only
+   * when the quota cannot be met otherwise. Every displaced turn is recorded, so
+   * the loss is auditable rather than silent.
+   *
+   * Records are identified by the session-and-turn pair, never by `turnId`
+   * alone: the turn counter is session-scoped, so a restored session reuses ids
+   * that earlier sessions already used. Keying displacement by the bare id made
+   * an unrelated turn in another session disappear alongside the intended one —
+   * and it took a pinned turn first, which is the record the pin exists to keep.
+   */
+  const recentQuota = Math.max(0, maxTurns - recalledTurns.length)
+  const displaced = new Set<string>()
+  const displacementKey = (turn: AssembledTurn): string =>
+    turnKey({ sessionId: turn.sessionId, turnId: turn.turnId })
+  for (const turn of recent) {
+    if (recent.length - displaced.size <= recentQuota) break
+    if (!turn.pinned) displaced.add(displacementKey(turn))
+  }
+  for (const turn of recent) {
+    if (recent.length - displaced.size <= recentQuota) break
+    displaced.add(displacementKey(turn))
+  }
+  const recentTurns = recent.filter((turn) => !displaced.has(displacementKey(turn)))
+  for (const turn of recent) {
+    if (!displaced.has(displacementKey(turn))) continue
+    for (const segment of turn.segments) {
+      exclusions.push({
+        sessionId: turn.sessionId,
+        turnId: turn.turnId,
+        segmentId: segment.segmentId,
+        reason: 'turn-limit',
+      })
+    }
+  }
+
+  const availableHistoryCharacters = Math.max(
+    0,
+    maxCharacters - recalledCharacters - recalledTurnCharacters,
+  )
 
   const kept = trimToCharacterBudget({
-    turns: recent,
+    turns: recentTurns,
     maxCharacters: availableHistoryCharacters,
     activePersonaVersion: personaVersionKey(profile.profileId, profile.version),
     exclusions,
@@ -439,10 +784,34 @@ export async function assembleDialogueContext(
   const historyFlat = kept.turns.flatMap((turn) => turn.segments)
   const warnings: string[] = []
   if (refs.size > 0) {
-    warnings.push('confirmedEventRefs could not be resolved to records; used as ordering hint only')
+    warnings.push(
+      'confirmedEventRefs could not be resolved to records; they are reported only and do not affect order',
+    )
   }
   if (kept.turns.some((turn) => turn.interrupted)) {
     warnings.push('context contains an interrupted utterance; it is marked, not completed')
+  }
+  /*
+   * A contradiction is reported as a count only. The finding itself carries ids
+   * and counts (./consistency), never text, so this warning stays safe to log
+   * and to render in an operator console. Nothing is rewritten or withheld: the
+   * model still sees both statements, which is deliberate - silently dropping
+   * one would pick a winner on lexical evidence alone.
+   */
+  if (conflicts.length > 0) {
+    warnings.push(
+      `${conflicts.length} potential contradiction(s) found among admitted statements or standing facts; recorded for audit and never rewritten`,
+    )
+  }
+  /*
+   * An incomplete audit is reported separately from its findings: the count
+   * above is then partial, and an operator must not read it as "no further
+   * contradictions exist".
+   */
+  if (consistencyAudit.incomplete) {
+    warnings.push(
+      'consistency audit is incomplete: some admitted statements or comparisons were not examined, so reported contradictions are partial',
+    )
   }
   if (historySource === 'local-stand-in') {
     warnings.push(
@@ -452,13 +821,28 @@ export async function assembleDialogueContext(
   if (recallExclusions.length > 0) {
     warnings.push('some recalled persona facts were dropped to stay within the character budget')
   }
-  if (recalledCharacters >= maxCharacters && recent.length > 0) {
+  if (deliveryRecallExclusions.length > 0) {
+    warnings.push('some recalled older turns were dropped to stay within the character budget')
+  }
+  /*
+   * A candidate refused for crossing a session boundary is a different loss from
+   * one refused for budget: it happened even when there was room. Without this
+   * warning the absence would be silent, and a listener who remembers telling
+   * the character something would have no way to learn why it was forgotten.
+   */
+  const crossSessionDrops = input.deliveryRecall?.crossSessionDrops ?? 0
+  if (crossSessionDrops > 0) {
     warnings.push(
-      'recalled persona facts consume the whole character budget, so no confirmed history is included',
+      `${crossSessionDrops} older turn(s) from other sessions were not recalled: no durable audience identity with recorded owner evidence for this listener, and the session was not explicitly selected`,
+    )
+  }
+  if (recalledCharacters + recalledTurnCharacters >= maxCharacters && recentTurns.length > 0) {
+    warnings.push(
+      'recalled content consumes the whole character budget, so no confirmed history is included',
     )
   }
 
-  const newestTurn = recent[recent.length - 1]
+  const newestTurn = recentTurns[recentTurns.length - 1]
   if (newestTurn !== undefined && kept.turns[kept.turns.length - 1]?.turnId !== newestTurn.turnId) {
     warnings.push(
       'the newest confirmed turn does not fit the character budget and was dropped from context',
@@ -466,6 +850,10 @@ export async function assembleDialogueContext(
   }
 
   const historyCharacters = kept.turns.reduce((total, turn) => total + turn.characters, 0)
+  const rollup: ContextRollup | null =
+    kept.omittedTurns > 0 && kept.rollupCharacters > 0
+      ? { omittedTurns: kept.omittedTurns, characters: kept.rollupCharacters }
+      : null
 
   return {
     personaBlock: renderPersonaBlock(profile),
@@ -474,30 +862,40 @@ export async function assembleDialogueContext(
     replyTemplates: intentTemplatesFor(profile, request.responsePlan.replyIntent),
     recalledFacts,
     recallExclusions,
+    recalledTurns,
+    deliveryRecallExclusions,
+    rollup,
     selectedInputText: request.selectedInput.text,
     replyIntent: request.responsePlan.replyIntent,
     turns: kept.turns,
     history: historyFlat,
     historySource,
     exclusions,
-    estimatedCharacters: historyCharacters + recalledCharacters,
+    estimatedCharacters:
+      historyCharacters + recalledCharacters + recalledTurnCharacters + (rollup?.characters ?? 0),
     truncatedByTurnLimit,
     truncatedByCharacterLimit: kept.truncated,
     warnings,
+    conflicts,
+    consistencyAudit,
   }
 }
 
 interface TrimResult {
   turns: AssembledTurn[]
   truncated: boolean
+  /** Turns dropped by this trimming, which the rollup line reports. */
+  omittedTurns: number
+  /** Rendered length of the rollup line that fits the budget; 0 when it does not. */
+  rollupCharacters: number
 }
 
 /**
  * Remove turns until the character budget is satisfied.
  *
- * The drop order follows ./memory-semantics: segments from a superseded persona
- * first, then whole turns from that persona, then interrupted turns, then the
- * oldest of what remains.
+ * The drop order follows ./memory-semantics: pinned turns last; otherwise
+ * segments from a superseded persona first, then whole turns from that persona,
+ * then interrupted turns, then the oldest of what remains.
  *
  * The newest turn is protected only while some other turn can give way. When one
  * turn is left and it still exceeds the budget it is the victim as well: keeping
@@ -505,6 +903,14 @@ interface TrimResult {
  * applies when convenient is not a bound. The loss is recorded as an exclusion
  * and reported in `warnings`, so stored evidence stays complete while the context
  * view stays honest about what it left out.
+ *
+ * Rollup. Dropping a turn without a trace would make the omission invisible to
+ * the model, so when at least one turn was dropped and the trimming left enough
+ * room, a one-line rollup (`renderRollupLine`) states the count. It is
+ * best-effort: it never costs an extra turn, and when it does not fit, the
+ * exclusions still record the loss. The rollup never states content, only that
+ * earlier turns existed - anything more specific would be a claim about text
+ * the model can no longer see.
  */
 function trimToCharacterBudget(input: {
   turns: readonly AssembledTurn[]
@@ -513,11 +919,15 @@ function trimToCharacterBudget(input: {
   exclusions: ContextExclusion[]
 }): TrimResult {
   const { turns, maxCharacters, activePersonaVersion, exclusions } = input
-  let dropped = false
   const kept: AssembledTurn[] = [...turns]
   const total = (): number => kept.reduce((sum, turn) => sum + turn.characters, 0)
+  let omittedTurns = 0
 
-  while (kept.length > 0 && total() > maxCharacters) {
+  /*
+   * Drop the single lowest-ranked candidate. The newest turn is protected while
+   * another candidate exists; equal ranks drop the earlier, older turn.
+   */
+  const dropVictim = (): boolean => {
     const candidateCount = kept.length > 1 ? kept.length - 1 : 1
     let victimIndex = -1
     let victimRank = Number.POSITIVE_INFINITY
@@ -528,19 +938,19 @@ function trimToCharacterBudget(input: {
         personaVersion: turn.personaVersion,
         activePersonaVersion,
         truncated: turn.interrupted,
+        pinned: turn.pinned,
       })
-      // A lower rank is dropped earlier; equal ranks drop the earlier, older turn.
       if (rank < victimRank) {
         victimRank = rank
         victimIndex = index
       }
     }
-    if (victimIndex === -1) break
+    if (victimIndex === -1) return false
 
     const victim = kept[victimIndex]
-    if (victim === undefined) break
+    if (victim === undefined) return false
     kept.splice(victimIndex, 1)
-    dropped = true
+    omittedTurns += 1
     for (const segment of victim.segments) {
       exclusions.push({
         sessionId: victim.sessionId,
@@ -554,9 +964,22 @@ function trimToCharacterBudget(input: {
               : 'character-budget',
       })
     }
+    return true
   }
 
-  return { turns: kept, truncated: dropped }
+  while (kept.length > 0 && total() > maxCharacters) {
+    if (!dropVictim()) break
+  }
+
+  let rollupCharacters = 0
+  if (omittedTurns > 0) {
+    const line = renderRollupLine(omittedTurns)
+    if (total() + line.length <= maxCharacters) {
+      rollupCharacters = line.length
+    }
+  }
+
+  return { turns: kept, truncated: omittedTurns > 0, omittedTurns, rollupCharacters }
 }
 
 /**
@@ -582,8 +1005,21 @@ export function renderDialoguePrompt(view: AssembledDialogueContext): string {
     for (const entry of view.recalledFacts) lines.push(renderRecallLine(entry))
   }
 
-  if (view.turns.length > 0) {
+  /*
+   * Recalled older turns sit between background and recent history: they are
+   * evidence like the history block, but they are NOT in speaking order with it
+   * (they jumped the window by matching the current message), so they get their
+   * own section with explicit provenance rather than blending into the recent
+   * chronology.
+   */
+  if (view.recalledTurns.length > 0) {
+    lines.push('Earlier, confirmed:')
+    for (const entry of view.recalledTurns) lines.push(renderRecalledTurnLine(entry.turn))
+  }
+
+  if (view.turns.length > 0 || view.rollup !== null) {
     lines.push('Already said (confirmed spoken):')
+    if (view.rollup !== null) lines.push(renderRollupLine(view.rollup.omittedTurns))
     for (const turn of view.turns) lines.push(renderHistoryLine(turn))
   }
 

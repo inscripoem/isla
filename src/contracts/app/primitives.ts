@@ -74,7 +74,7 @@ export type SelectionDisposition = z.infer<typeof dispositionSchema>
 export const decisionStatusSchema = z.enum(['selected', 'abstained', 'failed'])
 export type DecisionStatus = z.infer<typeof decisionStatusSchema>
 
-export const dialogueEndStatusSchema = z.enum(['completed', 'cancelled', 'failed'])
+export const dialogueEndStatusSchema = z.enum(['completed', 'cancelled', 'failed', 'deadline_exceeded'])
 export type DialogueEndStatus = z.infer<typeof dialogueEndStatusSchema>
 
 export const ERROR_CODES = [

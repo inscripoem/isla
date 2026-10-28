@@ -6,6 +6,7 @@ import type {
   EventStorePort,
   HistoryQueryPort,
   MemoryCommitPort,
+  PlayerPort,
   ReactionPort,
   RendererPort,
   SelectionPort,
@@ -13,9 +14,13 @@ import type {
 } from '../contracts'
 import { createDialoguePort } from '../dialogue/dialogue-port'
 import type { DialogueTextSource } from '../dialogue/dialogue-port'
+import type { AssembledTurn } from '../dialogue/context'
 import { createDeliveryMemoryStore } from '../dialogue/memory-commit'
 import type { DeliveryMemoryStore } from '../dialogue/memory-commit'
+import { projectDialogueOutcome } from './dialogue-outcome'
+import type { DialogueOutcomeObserver } from './dialogue-outcome'
 import type { PersonaRecallPort } from '../dialogue/persona-recall'
+import type { DeliveryRecallPort } from '../dialogue/memory-recall'
 import { createFixedSynthesis } from '../performance/fixed-synthesis'
 import type { FixedAudioEntry } from '../performance/fixed-synthesis'
 import type { CycleTimings, RuntimeCoordinator, SessionProfileConfig } from './coordinator'
@@ -30,13 +35,26 @@ import {
 import type { ArchiveSelectionConfig, ValidatedArchiveSelection } from './session-archives'
 
 /**
+ * Controlled server-side audio resource ownership used by the composition on
+ * Stop and disposal. It is structurally satisfied by the M1
+ * `AudioResourceRegistry`; the composition never resolves or plays bytes and
+ * never decides whether a prepared reference may be dispatched.
+ */
+export interface CompositionAudioResources {
+  /** Retire every session resource below `newEpoch`; later epochs stay admissible. */
+  retireBefore(sessionId: string, newEpoch: number): number
+  /** Retire every session resource and refuse all later epochs. */
+  retireSession(sessionId: string): number
+}
+
+/**
  * Production composition for one interactive session. It wires the M5
- * coordinator to the merged M1 fixed synthesis, the injected renderer adapter
- * (the M1 mapped renderer with its driver supplied by the caller) and the
- * server-side audio bridge, and to injected M3/M4 ports and the M6 store.
- * Missing peer modules are supplied by the caller as explicit substitutes (the
- * demo/test harness); this module imports no test code and makes no provider
- * assumptions.
+ * coordinator to an injected synthesis port (or the merged M1 fixed synthesis
+ * over explicit catalog entries), the injected renderer adapter (the M1 mapped
+ * renderer with its driver supplied by the caller) and the server-side audio
+ * bridge, and to injected M3/M4 ports and the M6 store. Missing peer modules
+ * are supplied by the caller as explicit substitutes (the demo/test harness);
+ * this module imports no test code and makes no provider assumptions.
  */
 export interface RuntimeCompositionDeps {
   clock: ClockPort
@@ -50,8 +68,21 @@ export interface RuntimeCompositionDeps {
   renderer: RendererPort
   /** Server-owned deadline gate; shared with the mapped renderer and the bridge. */
   gate: RuntimeDeadlineGate
-  /** Catalogued fixed audio entries used by M1 fixed synthesis. */
-  audioEntries: readonly FixedAudioEntry[]
+  /**
+   * Catalogued fixed audio entries used by M1 fixed synthesis. At least one of
+   * `synthesis` or `audioEntries` must be supplied; supplying neither is an
+   * explicit missing-configuration failure rather than an empty catalog. When
+   * both are supplied, `synthesis` takes precedence.
+   */
+  audioEntries?: readonly FixedAudioEntry[]
+  /** Injected synthesis port (for example M1 Kokoro); preferred over `audioEntries`. */
+  synthesis?: SynthesisPort
+  /**
+   * Optional controlled audio resource ownership: resources of a revoked epoch
+   * are retired on Stop and all session resources are retired on dispose. A
+   * fault here is isolated and can never prevent Stop or disposal.
+   */
+  audioResources?: CompositionAudioResources
   sessionId?: string
   profile?: Partial<SessionProfileConfig>
   timings?: Partial<CycleTimings>
@@ -83,6 +114,29 @@ export interface DialogueCompositionDeps {
   /** Provider substitute for dialogue text; M4-02 supplies a live one. */
   textSource?: DialogueTextSource
   personaRecall?: PersonaRecallPort
+  deliveryRecall?: DeliveryRecallPort
+  explicitlySelectedSessionIds?: readonly string[]
+  /**
+   * Recorded owner of a recalled candidate's memory. Automatic cross-session
+   * recall refuses a candidate it cannot attribute; nothing supplies this yet
+   * because M6 does not persist an owner field. Explicitly selected archives are
+   * authorized by the selection instead.
+   */
+  ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
+  /**
+   * Observational consumer of the dialogue port's per-call generation/discard
+   * accounting. Each raw report is projected before it crosses this boundary
+   * (`projectDialogueOutcome`): the consumer sees either a validated observation
+   * or a `refused` event whose reason is M5-authored, so a producer-chosen reason
+   * key or extra text field on the raw report never reaches it.
+   *
+   * This channel is observational: it adds no storage write of its own (M5 owns
+   * the runtime's persistence and delivery decisions, M6 owns the storage
+   * infrastructure), never counts as a provider attempt, and never enters spoken
+   * history or the dialogue context. A fault in the consumer is contained by the
+   * dialogue port and cannot change generation. Omitted means no reporting.
+   */
+  onDialogueOutcome?: DialogueOutcomeObserver
 }
 
 export interface DialogueComposition {
@@ -93,12 +147,29 @@ export interface DialogueComposition {
 
 export function createDialogueComposition(deps: DialogueCompositionDeps): DialogueComposition {
   const memory = createDeliveryMemoryStore()
+  const onDialogueOutcome = deps.onDialogueOutcome
   const dialogue = createDialoguePort({
     clock: deps.clock,
     history: deps.history,
     memory,
     ...(deps.textSource !== undefined ? { textSource: deps.textSource } : {}),
     ...(deps.personaRecall !== undefined ? { personaRecall: deps.personaRecall } : {}),
+    ...(deps.deliveryRecall !== undefined ? { deliveryRecall: deps.deliveryRecall } : {}),
+    ...(deps.explicitlySelectedSessionIds !== undefined
+      ? { explicitlySelectedSessionIds: deps.explicitlySelectedSessionIds }
+      : {}),
+    ...(deps.ownerAudienceIdOf !== undefined ? { ownerAudienceIdOf: deps.ownerAudienceIdOf } : {}),
+    ...(onDialogueOutcome === undefined
+      ? {}
+      : {
+          /*
+           * The expression body forwards the consumer's return value to the port,
+           * so the port's thenable check also contains a rejected async observer.
+           * The port already contains a synchronous throw, so a diagnostic
+           * consumer fault can never change generation.
+           */
+          onOutcome: (report) => onDialogueOutcome(projectDialogueOutcome(report)),
+        }),
   })
   return { dialogue, memory }
 }
@@ -116,6 +187,10 @@ export interface ReconstructedDialogueCompositionDeps {
   selection: ArchiveSelectionConfig
   textSource?: DialogueTextSource
   personaRecall?: PersonaRecallPort
+  deliveryRecall?: DeliveryRecallPort
+  ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
+  /** See `DialogueCompositionDeps.onDialogueOutcome`; forwarded unchanged. */
+  onDialogueOutcome?: DialogueOutcomeObserver
 }
 
 export interface ReconstructedDialogueFromSelectionDeps {
@@ -123,6 +198,10 @@ export interface ReconstructedDialogueFromSelectionDeps {
   history: HistoryQueryPort
   textSource?: DialogueTextSource
   personaRecall?: PersonaRecallPort
+  deliveryRecall?: DeliveryRecallPort
+  ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
+  /** See `DialogueCompositionDeps.onDialogueOutcome`; forwarded unchanged. */
+  onDialogueOutcome?: DialogueOutcomeObserver
 }
 
 export interface ReconstructedDialogueComposition extends DialogueComposition {
@@ -149,6 +228,12 @@ export function createReconstructedDialogueFromSelection(
     history: composedHistory,
     ...(deps.textSource !== undefined ? { textSource: deps.textSource } : {}),
     ...(deps.personaRecall !== undefined ? { personaRecall: deps.personaRecall } : {}),
+    ...(deps.deliveryRecall !== undefined ? { deliveryRecall: deps.deliveryRecall } : {}),
+    explicitlySelectedSessionIds: selection.sources.map((source) => source.sessionId),
+    ...(deps.ownerAudienceIdOf !== undefined ? { ownerAudienceIdOf: deps.ownerAudienceIdOf } : {}),
+    ...(deps.onDialogueOutcome !== undefined
+      ? { onDialogueOutcome: deps.onDialogueOutcome }
+      : {}),
   })
   return { ...composed, selection, history: composedHistory }
 }
@@ -197,10 +282,23 @@ export interface ReconstructedRuntimeDeps {
   history: HistoryQueryPort
   renderer: RendererPort
   gate: RuntimeDeadlineGate
-  audioEntries: readonly FixedAudioEntry[]
+  /**
+   * At least one of `synthesis` or `audioEntries` must be supplied; supplying
+   * neither fails visibly before any runtime is constructed. When both are
+   * supplied, `synthesis` takes precedence.
+   */
+  audioEntries?: readonly FixedAudioEntry[]
+  /** Injected synthesis port (for example M1 Kokoro); preferred over `audioEntries`. */
+  synthesis?: SynthesisPort
+  /** Optional controlled audio resource ownership (Stop/dispose retirement). */
+  audioResources?: CompositionAudioResources
   reconstruction: ArchiveSelectionConfig
   textSource?: DialogueTextSource
   personaRecall?: PersonaRecallPort
+  deliveryRecall?: DeliveryRecallPort
+  ownerAudienceIdOf?: (turn: AssembledTurn) => string | null
+  /** See `DialogueCompositionDeps.onDialogueOutcome`; forwarded unchanged. */
+  onDialogueOutcome?: DialogueOutcomeObserver
   /** Any remaining session-profile fields (for example voice). Character identity is always bound to the selection. */
   profile?: Partial<SessionProfileConfig>
   timings?: Partial<CycleTimings>
@@ -245,6 +343,11 @@ export async function createReconstructedRuntimeComposition(
     history: deps.history,
     ...(deps.textSource !== undefined ? { textSource: deps.textSource } : {}),
     ...(deps.personaRecall !== undefined ? { personaRecall: deps.personaRecall } : {}),
+    ...(deps.deliveryRecall !== undefined ? { deliveryRecall: deps.deliveryRecall } : {}),
+    ...(deps.ownerAudienceIdOf !== undefined ? { ownerAudienceIdOf: deps.ownerAudienceIdOf } : {}),
+    ...(deps.onDialogueOutcome !== undefined
+      ? { onDialogueOutcome: deps.onDialogueOutcome }
+      : {}),
   })
 
   const composition = createRuntimeComposition({
@@ -257,7 +360,9 @@ export async function createReconstructedRuntimeComposition(
     store: deps.store,
     renderer: deps.renderer,
     gate: deps.gate,
-    audioEntries: deps.audioEntries,
+    ...(deps.synthesis !== undefined ? { synthesis: deps.synthesis } : {}),
+    ...(deps.audioEntries !== undefined ? { audioEntries: deps.audioEntries } : {}),
+    ...(deps.audioResources !== undefined ? { audioResources: deps.audioResources } : {}),
     sessionId: selection.liveSessionId,
     // Character identity is bound to the validated selection, never to an ad-hoc
     // caller override.
@@ -278,32 +383,72 @@ export async function createReconstructedRuntimeComposition(
 
 export function createRuntimeComposition(deps: RuntimeCompositionDeps): RuntimeComposition {
   const sessionId = deps.sessionId ?? `session-${randomUUID()}`
-  const synthesis = createFixedSynthesis({ entries: deps.audioEntries, clock: deps.clock })
+  // Explicit missing-configuration failure: a composition without a synthesis
+  // port cannot prepare speech, and silently using an empty fixed catalog would
+  // misreport every prepared segment as `fixed_audio_missing`.
+  const synthesis =
+    deps.synthesis ??
+    (deps.audioEntries !== undefined
+      ? createFixedSynthesis({ entries: deps.audioEntries, clock: deps.clock })
+      : undefined)
+  if (synthesis === undefined) {
+    throw new TypeError(
+      'runtime composition requires a synthesis port: supply `synthesis` or `audioEntries`',
+    )
+  }
   const bridge = createPerformanceBridge({
     sessionId,
     gate: deps.gate,
     clock: deps.clock,
     ...(deps.cancelTtlMs !== undefined ? { cancelTtlMs: deps.cancelTtlMs } : {}),
   })
-  const coordinator = createRuntimeCoordinator({
-    clock: deps.clock,
-    authorizer: deps.authorizer,
-    selection: deps.selection,
-    reaction: deps.reaction,
-    dialogue: deps.dialogue,
-    synthesis,
-    renderer: deps.renderer,
-    player: bridge.player,
-    commit: deps.commit,
-    store: deps.store,
-    sessionId,
-    ...(deps.profile !== undefined ? { profile: deps.profile } : {}),
-    ...(deps.timings !== undefined ? { timings: deps.timings } : {}),
-    ...(deps.inputTtlMs !== undefined ? { inputTtlMs: deps.inputTtlMs } : {}),
-    ...(deps.storageTtlMs !== undefined ? { storageTtlMs: deps.storageTtlMs } : {}),
-    ...(deps.cancelTtlMs !== undefined ? { cancelTtlMs: deps.cancelTtlMs } : {}),
-    ...(deps.maxPendingInputs !== undefined ? { maxPendingInputs: deps.maxPendingInputs } : {}),
-  })
+  const resources = deps.audioResources
+  // Stop reaches the runtime through the coordinator's player call. Wrapping
+  // `cancel` retires the revoked epoch's audio resources at the same boundary;
+  // the retirement is isolated so a registry fault can never prevent Stop or
+  // change the cancellation evidence the bridge returns.
+  const player: PlayerPort =
+    resources === undefined
+      ? bridge.player
+      : {
+          ...bridge.player,
+          cancel: (request, context) => {
+            try {
+              resources.retireBefore(sessionId, request.newEpoch)
+            } catch {
+              // Best-effort resource retirement; Stop proceeds regardless.
+            }
+            return bridge.player.cancel(request, context)
+          },
+        }
+  let coordinator: RuntimeCoordinator
+  try {
+    coordinator = createRuntimeCoordinator({
+      clock: deps.clock,
+      authorizer: deps.authorizer,
+      selection: deps.selection,
+      reaction: deps.reaction,
+      dialogue: deps.dialogue,
+      synthesis,
+      renderer: deps.renderer,
+      player,
+      commit: deps.commit,
+      store: deps.store,
+      sessionId,
+      ...(deps.profile !== undefined ? { profile: deps.profile } : {}),
+      ...(deps.timings !== undefined ? { timings: deps.timings } : {}),
+      ...(deps.inputTtlMs !== undefined ? { inputTtlMs: deps.inputTtlMs } : {}),
+      ...(deps.storageTtlMs !== undefined ? { storageTtlMs: deps.storageTtlMs } : {}),
+      ...(deps.cancelTtlMs !== undefined ? { cancelTtlMs: deps.cancelTtlMs } : {}),
+      ...(deps.maxPendingInputs !== undefined ? { maxPendingInputs: deps.maxPendingInputs } : {}),
+    })
+  } catch (error) {
+    // The bridge was created here; a failed coordinator construction must
+    // release it instead of leaking an unowned performance bridge. The
+    // synthesis port and the gate stay caller-owned.
+    bridge.dispose()
+    throw error
+  }
   let disposed = false
   return {
     coordinator,
@@ -316,6 +461,13 @@ export function createRuntimeComposition(deps: RuntimeCompositionDeps): RuntimeC
       coordinator.dispose()
       bridge.dispose()
       deps.gate.dispose()
+      if (resources !== undefined) {
+        try {
+          resources.retireSession(sessionId)
+        } catch {
+          // Best-effort resource retirement; disposal is already complete.
+        }
+      }
     },
   }
 }

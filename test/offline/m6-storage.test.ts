@@ -5,7 +5,7 @@ import {
 } from '../conformance/storage.conformance'
 import type { StorageKit } from '../conformance/storage.conformance'
 import { runtimeEventSchema } from '../../src/contracts'
-import type { CommitDelivery, RuntimeEvent } from '../../src/contracts'
+import type { CommitDelivery, MemoryProjectionPort, RuntimeEvent } from '../../src/contracts'
 import * as correct from '../support/correct-ports'
 import * as faulty from '../support/faulty-ports'
 import {
@@ -962,6 +962,54 @@ describe('M6 storage invariants', () => {
     expect((await projection.apply(fixtureRuntimeEvent({ eventId: 'inv06-2', seq: 2 }))).appliedSeq).toBe(0)
     expect((await projection.apply(fixtureRuntimeEvent({ eventId: 'inv06-1', seq: 1 }))).appliedSeq).toBe(1)
     expect((await projection.apply(fixtureRuntimeEvent({ eventId: 'inv06-1', seq: 1 }))).appliedSeq).toBe(1)
+    expect(projection.appliedSeq()).toBe(1)
+  })
+
+  it('C-66: keeps the projection bookmark independent per session', async () => {
+    const projection = createMemoryProjection()
+    const sessionA = 'session-c66-a'
+    const sessionB = 'session-c66-b'
+    const apply = (sessionId: string, seq: number, eventId: string) =>
+      projection.apply(fixtureRuntimeEvent({ sessionId, seq, eventId }))
+
+    expect((await apply(sessionA, 1, 'c66-a-1')).appliedSeq).toBe(1)
+    expect((await apply(sessionA, 2, 'c66-a-2')).appliedSeq).toBe(2)
+
+    // B starts from 0: its own seq 2 is a gap, then seq 1 applies normally.
+    expect((await apply(sessionB, 2, 'c66-b-2')).appliedSeq).toBe(0)
+    expect((await apply(sessionB, 1, 'c66-b-1')).appliedSeq).toBe(1)
+
+    // A remains at 2; B is not changed by A's later idempotent event.
+    expect((await apply(sessionA, 1, 'c66-a-1')).appliedSeq).toBe(2)
+    expect((await apply(sessionB, 1, 'c66-b-1')).appliedSeq).toBe(1)
+  })
+
+  it('C-66 P3: production and fixture scalar getters agree on last attempted session', async () => {
+    const runSequence = async (
+      projection: MemoryProjectionPort,
+      entries: readonly [string, number, string][],
+    ): Promise<number> => {
+      for (const [sessionId, seq, eventId] of entries) {
+        await projection.apply(fixtureRuntimeEvent({ sessionId, seq, eventId }))
+      }
+      return projection.appliedSeq()
+    }
+
+    const gapThenOtherSession: [string, number, string][] = [
+      ['session-p3-a', 1, 'p3-a-1'],
+      ['session-p3-b', 2, 'p3-b-2'],
+    ]
+    const lastAttemptedA: [string, number, string][] = [
+      ['session-p3-a', 1, 'p3-a-1'],
+      ['session-p3-a', 2, 'p3-a-2'],
+      ['session-p3-b', 1, 'p3-b-1'],
+      ['session-p3-a', 1, 'p3-a-1'],
+    ]
+
+    expect(await runSequence(createMemoryProjection(), gapThenOtherSession)).toBe(0)
+    expect(await runSequence(correct.createFixtureMemoryProjection(), gapThenOtherSession)).toBe(0)
+    expect(await runSequence(createMemoryProjection(), lastAttemptedA)).toBe(2)
+    expect(await runSequence(correct.createFixtureMemoryProjection(), lastAttemptedA)).toBe(2)
   })
 })
 

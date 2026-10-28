@@ -3,7 +3,9 @@ import type {
   CapabilitySnapshot,
   ControlStopMessage,
   DecisionRequest,
+  EventStorePort,
   InputSubmitMessage,
+  MemoryCommitPort,
   PerformanceCommand,
   PerformanceReceipt,
   PlayerPort,
@@ -19,6 +21,7 @@ import type {
 import {
   deliveryCommitAckSchema,
   performanceReceiptSchema,
+  playerMessageSchema,
   selectionResultSchema,
 } from '../../src/contracts'
 import {
@@ -29,6 +32,7 @@ import {
   type RuntimeCoordinatorDeps,
   type SessionProfileConfig,
 } from '../../src/runtime/coordinator'
+import { createEventStore, createHistoryQuery, createInMemoryBackend } from '../../src/storage'
 import { createCoordinatorRunner, createVirtualClock } from '../support/runner-factories'
 import * as correct from '../support/correct-ports'
 import { createGate } from '../support/context'
@@ -194,6 +198,41 @@ describe('M5 coordinator cycle control (production)', () => {
     expect(runner.deliveries()).toHaveLength(0)
     expect(runner.rejectedLate()).toBeGreaterThanOrEqual(1)
   })
+
+  it('treats a valid selection returned exactly at its deadline as stale without fallback dispatch', async () => {
+    const gate = createGate()
+    const entered = createGate()
+    let selectionDeadlineAtMs = 0
+    const gated = createGatedSelectionPort(gate.promise, () => entered.release())
+    const selection: SelectionPort = {
+      async select(request, context) {
+        // The request carries the same deadline the call context holds.
+        selectionDeadlineAtMs = request.deadline.atMs
+        return gated.select(request, context)
+      },
+    }
+    const dialogue = createCapturingDialoguePort(correct.createFixtureDialoguePort())
+    const player = createCountingPlayer(correct.createFixturePlayer())
+    const renderer = correct.createCountingRenderer(correct.createFixtureRendererPort())
+    const runner = createCoordinatorRunner({ selection, dialogue, player, renderer })
+    await runner.resume()
+    await runner.accept('deadline exact selection')
+    const turnPromise = runner.runTurn()
+    await entered.promise
+    // Release the valid result exactly when the deadline is reached:
+    // isDeadlineExpired treats now >= atMs as expired, so the held result must
+    // be rejected rather than used or replaced by the fallback.
+    runner.clock.advance(selectionDeadlineAtMs - runner.clock.nowMs())
+    gate.release()
+    const turn = await turnPromise
+    expect(turn.status).toBe('stale')
+    expect(turn.plan).toBeNull()
+    expect(dialogue.requests()).toEqual([])
+    expect(player.executeCalls()).toBe(0)
+    expect(renderer.calls()).toBe(0)
+    expect(runner.deliveries()).toHaveLength(0)
+    expect(runner.rejectedLate()).toBeGreaterThanOrEqual(1)
+  })
 })
 
 describe('M5 coordinator reactions (production)', () => {
@@ -238,6 +277,41 @@ describe('M5 coordinator reactions (production)', () => {
     expect(renderer.calls()).toBe(0)
     expect(player.executeCalls()).toBe(1)
     expect(runner.deliveries()).toHaveLength(1)
+  })
+
+  it('accepts valid speech when the reaction returns exactly at its deadline', async () => {
+    const gate = createGate()
+    const entered = createGate()
+    let reactionDeadlineAtMs = 0
+    const gated = createGatedReactionPort(gate.promise, () => entered.release())
+    const reaction: ReactionPort = {
+      async decide(request, context) {
+        reactionDeadlineAtMs = request.deadline.atMs
+        return gated.decide(request, context)
+      },
+    }
+    const player = createCountingPlayer(correct.createFixturePlayer())
+    const renderer = correct.createCountingRenderer(correct.createFixtureRendererPort())
+    const runner = createCoordinatorRunner({ reaction, player, renderer })
+    await runner.resume()
+    await runner.accept('deadline exact reaction')
+    const turnPromise = runner.runTurn()
+    await entered.promise
+    // Return the decision exactly when the reaction deadline is reached.
+    runner.clock.advance(reactionDeadlineAtMs - runner.clock.nowMs())
+    gate.release()
+    const turn = await turnPromise
+    expect(turn.status).toBe('completed')
+    // The expired reaction is dropped to its no-op: no renderer dispatch...
+    expect(renderer.calls()).toBe(0)
+    expect(providerCall(runner, 'reaction')?.disposition).toBe('timeout')
+    // ...while the otherwise valid speech still plays and the cycle deadline
+    // (60s) remains live well past the reaction boundary.
+    expect(player.executeCalls()).toBe(1)
+    expect(runner.deliveries()).toHaveLength(1)
+    expect(runner.deliveries()[0]?.classification).toBe('fully-delivered')
+    expect(runner.clock.nowMs()).toBe(reactionDeadlineAtMs)
+    expect(runner.clock.nowMs()).toBeLessThan(60_000)
   })
 })
 
@@ -1827,6 +1901,64 @@ describe('M5 coordinator residual boundary defects (production)', () => {
     expect(runner.deliveries()).toHaveLength(0)
   })
 
+  it('captures an accepted non-default reply intent unchanged in the dialogue request', async () => {
+    const dialogue = createCapturingDialoguePort(correct.createFixtureDialoguePort())
+    const runner = createCoordinatorRunner({
+      selection: correct.createAlternateSelectionPort(),
+      dialogue,
+      profile: { allowedIntents: ['answer', 'clarify'] },
+    })
+    await runner.resume()
+    await runner.accept('clarify intent')
+    const turn = await runner.runTurn()
+    expect(turn.status).toBe('completed')
+    expect(turn.plan?.replyIntent).toBe('clarify')
+    expect(providerCall(runner, 'selection')?.disposition).toBe('accepted')
+    // The provider's accepted intent reaches the dialogue request unchanged.
+    expect(dialogue.requests()).toHaveLength(1)
+    expect(dialogue.requests()[0]?.responsePlan.replyIntent).toBe('clarify')
+    expect(runner.deliveries()).toHaveLength(1)
+    expect(runner.deliveries()[0]?.classification).toBe('fully-delivered')
+  })
+
+  it('defers a malformed selection returned exactly at candidate expiry while its deadline is live', async () => {
+    const gate = createGate()
+    const entered = createGate()
+    const malformed = createMalformedSelectionPort()
+    const selection: SelectionPort = {
+      async select(request, context) {
+        entered.release()
+        await gate.promise
+        return malformed.select(request, context)
+      },
+    }
+    const dialogue = createCapturingDialoguePort(correct.createFixtureDialoguePort())
+    const player = createCountingPlayer(correct.createFixturePlayer())
+    const renderer = correct.createCountingRenderer(correct.createFixtureRendererPort())
+    const runner = createCoordinatorRunner({
+      selection,
+      dialogue,
+      player,
+      renderer,
+      inputTtlMs: 1000,
+      timings: { selectionMs: 5000 },
+    })
+    await runner.resume()
+    await runner.accept('candidate expiry')
+    const turnPromise = runner.runTurn()
+    await entered.promise
+    // Return the malformed result exactly when the single candidate expires,
+    // while the selection deadline (5000ms) is still live: no fallback speech.
+    runner.clock.advance(1000)
+    gate.release()
+    const turn = await turnPromise
+    expect(turn.status).toBe('deferred')
+    expect(dialogue.requests()).toEqual([])
+    expect(player.executeCalls()).toBe(0)
+    expect(renderer.calls()).toBe(0)
+    expect(runner.deliveries()).toHaveLength(0)
+  })
+
   it('reports the safe current renderer capability revision in the snapshot', async () => {
     const alternate = createCoordinatorRunner({ renderer: correct.createAlternateRendererPort() })
     await alternate.resume()
@@ -2099,5 +2231,324 @@ describe('M5 coordinator final review corrections (production)', () => {
           (event.payload as { call?: string }).call === 'reaction',
       )
     expect(reactionCall).toBeUndefined()
+  })
+})
+
+describe('M5 coordinator controlled shutdown (production)', () => {
+  it('settle awaits every queued write and never rejects after dispose', async () => {
+    const base = correct.createFixtureEventStore()
+    const appendGate = createGate()
+    let appendCalls = 0
+    const store: EventStorePort = {
+      append: async (event) => {
+        appendCalls += 1
+        // Hold the first queued write so the settle boundary is observable.
+        if (appendCalls === 1) await appendGate.promise
+        return base.append(event)
+      },
+      commitDeliveryWithEvent: (delivery, event) => base.commitDeliveryWithEvent(delivery, event),
+      readSession: (sessionId) => base.readSession(sessionId),
+      exportJsonl: (sessionId) => base.exportJsonl(sessionId),
+    }
+    const coordinator = buildCoordinator({ sessionId: FIXTURE_SESSION_ID, store })
+    await coordinator.endpoint.control(
+      {
+        protocolVersion: '0.2',
+        kind: 'control.resume',
+        messageId: 'm-resume-settle',
+        sessionId: FIXTURE_SESSION_ID,
+        epoch: 0,
+        payload: { requestId: 'r-resume-settle' },
+      },
+      fixtureOperatorContext(),
+    )
+
+    let settled = false
+    const settling = coordinator.settle().then(() => {
+      settled = true
+    })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    // The queued write is genuinely held: settle must not resolve past it.
+    expect(appendCalls).toBe(1)
+    expect(settled).toBe(false)
+    appendGate.release()
+    await settling
+    expect(settled).toBe(true)
+
+    // Settle after disposal still resolves; it never rejects.
+    coordinator.dispose()
+    await coordinator.settle()
+  })
+
+  it('drains an aborted turn to its bookkeeping and then refuses a late receipt without storage access', async () => {
+    const base = correct.createFixtureEventStore()
+    const gate = createGate()
+    const entered = createGate()
+    let storeCalls = 0
+    const store: EventStorePort = {
+      append: async (event) => {
+        storeCalls += 1
+        return base.append(event)
+      },
+      commitDeliveryWithEvent: (delivery, event) => base.commitDeliveryWithEvent(delivery, event),
+      readSession: (sessionId) => base.readSession(sessionId),
+      exportJsonl: (sessionId) => base.exportJsonl(sessionId),
+    }
+    const coordinator = buildCoordinator({
+      sessionId: FIXTURE_SESSION_ID,
+      store,
+      selection: createGatedSelectionPort(gate.promise, () => entered.release()),
+    })
+    await coordinator.endpoint.control(
+      {
+        protocolVersion: '0.2',
+        kind: 'control.resume',
+        messageId: 'm-resume-drain',
+        sessionId: FIXTURE_SESSION_ID,
+        epoch: 0,
+        payload: { requestId: 'r-resume-drain' },
+      },
+      fixtureOperatorContext(),
+    )
+    await coordinator.endpoint.submitInput(
+      {
+        protocolVersion: '0.2',
+        kind: 'input.submit',
+        messageId: 'm-input-drain',
+        sessionId: FIXTURE_SESSION_ID,
+        epoch: 1,
+        payload: { source: 'local-audience', text: 'a turn held at selection' },
+      },
+      fixtureViewerContext(),
+    )
+    const turn = coordinator.runTurn()
+    await entered.promise
+
+    // Disposal aborts the raw provider; settle drains the bounded cancellation
+    // bookkeeping for the already-invoked attempt, then seals writes.
+    coordinator.dispose()
+    const settling = coordinator.settle()
+    gate.release()
+    const outcome = await turn
+    await settling
+    expect(outcome.status).toBe('stale')
+    expect(coordinator.metrics().storageFailure).toBe(false)
+    const events = await base.readSession(FIXTURE_SESSION_ID)
+    const types = events.map((event) => event.type)
+    expect(types).toContain('provider.call')
+    expect(types).toContain('result.stale')
+    expect(events.find((event) => event.type === 'provider.call')?.payload).toMatchObject({
+      call: 'selection',
+      disposition: 'aborted',
+    })
+
+    // A late receipt after the write seal is refused without touching storage.
+    const callsAfterSeal = storeCalls
+    const malformed = { kind: 'performance.receipt' } as unknown as Parameters<
+      typeof coordinator.endpoint.handlePlayerMessage
+    >[0]
+    await coordinator.endpoint.handlePlayerMessage(malformed)
+    expect(storeCalls).toBe(callsAfterSeal)
+    expect(coordinator.metrics().storageFailure).toBe(false)
+  })
+
+  it('observes a valid completed receipt after settle without touching storage or a confirmed outcome', async () => {
+    const base = correct.createFixtureEventStore()
+    let storeCalls = 0
+    const store: EventStorePort = {
+      append: async (event) => {
+        storeCalls += 1
+        return base.append(event)
+      },
+      commitDeliveryWithEvent: (delivery, event) => {
+        storeCalls += 1
+        return base.commitDeliveryWithEvent(delivery, event)
+      },
+      readSession: (sessionId) => base.readSession(sessionId),
+      exportJsonl: (sessionId) => base.exportJsonl(sessionId),
+    }
+    const coordinator = buildCoordinator({ sessionId: FIXTURE_SESSION_ID, store })
+    await coordinator.endpoint.control(
+      {
+        protocolVersion: '0.2',
+        kind: 'control.resume',
+        messageId: 'm-resume-late-receipt',
+        sessionId: FIXTURE_SESSION_ID,
+        epoch: 0,
+        payload: { requestId: 'r-resume-late-receipt' },
+      },
+      fixtureOperatorContext(),
+    )
+    await coordinator.endpoint.submitInput(
+      {
+        protocolVersion: '0.2',
+        kind: 'input.submit',
+        messageId: 'm-input-late-receipt',
+        sessionId: FIXTURE_SESSION_ID,
+        epoch: 1,
+        payload: { source: 'local-audience', text: 'a turn that confirms an output' },
+      },
+      fixtureViewerContext(),
+    )
+    const turn = await coordinator.runTurn()
+    expect(turn.status).toBe('completed')
+    expect(coordinator.outputConfirmation()).toBe('confirmed')
+    expect(coordinator.deliveries()).toHaveLength(1)
+    const committed = coordinator.deliveries()[0]!
+    expect(committed.outputId).not.toBeNull()
+
+    coordinator.dispose()
+    await coordinator.settle()
+    expect(coordinator.metrics().storageFailure).toBe(false)
+    expect(coordinator.lifecycle()).toBe('stopped')
+    const storeCallsAfterSeal = storeCalls
+    const eventsBefore = coordinator.events().length
+    const sessionEventsBefore = (await base.readSession(FIXTURE_SESSION_ID)).length
+
+    // A controlled in-process consumer (the player side) delivers a valid
+    // completed receipt for the already-confirmed output after the seal, then an
+    // unrelated receipt and a malformed envelope. Each is refused before
+    // envelope or payload inspection and observed as an incoming call only.
+    const receipt = (messageId: string, outputId: string) => ({
+      protocolVersion: '0.2' as const,
+      messageId,
+      sessionId: FIXTURE_SESSION_ID,
+      epoch: coordinator.epoch(),
+      kind: 'performance.receipt' as const,
+      payload: fixturePerformanceReceipt({
+        receiptId: `receipt-late-${messageId}`,
+        outputId,
+        sessionId: FIXTURE_SESSION_ID,
+        epoch: coordinator.epoch(),
+        turnId: committed.turnId,
+        segmentId: committed.segmentId,
+        modality: committed.modality,
+        stage: 'completed',
+      }),
+    })
+    await coordinator.endpoint.handlePlayerMessage(receipt('m-late-valid', committed.outputId!))
+    expect(coordinator.metrics().lateReceipts).toBe(1)
+    await coordinator.endpoint.handlePlayerMessage(receipt('m-late-unrelated', 'output-unrelated'))
+    expect(coordinator.metrics().lateReceipts).toBe(2)
+    const malformed = { kind: 'performance.receipt' } as unknown as Parameters<
+      typeof coordinator.endpoint.handlePlayerMessage
+    >[0]
+    await coordinator.endpoint.handlePlayerMessage(malformed)
+    expect(coordinator.metrics().lateReceipts).toBe(3)
+
+    // Nothing was parsed, attributed, persisted or degraded: the confirmed
+    // outcome and every recorded event stay exactly as sealed.
+    expect(storeCalls).toBe(storeCallsAfterSeal)
+    expect(coordinator.metrics().storageFailure).toBe(false)
+    expect(coordinator.outputConfirmation()).toBe('confirmed')
+    expect(coordinator.deliveries()).toHaveLength(1)
+    expect(coordinator.events()).toHaveLength(eventsBefore)
+    expect((await base.readSession(FIXTURE_SESSION_ID)).length).toBe(sessionEventsBefore)
+  })
+
+  it('refuses the withheld first completion receipt delivered after the seal and keeps history empty', async () => {
+    // The real M6 event store and history query: a refused late receipt must
+    // leave confirmed spoken history empty rather than fabricate a record.
+    const backend = createInMemoryBackend()
+    const base = createEventStore(backend)
+    const history = createHistoryQuery(backend)
+    let storeCalls = 0
+    const store: EventStorePort = {
+      append: async (event) => {
+        storeCalls += 1
+        return base.append(event)
+      },
+      commitDeliveryWithEvent: (delivery, event) => {
+        storeCalls += 1
+        return base.commitDeliveryWithEvent(delivery, event)
+      },
+      readSession: (sessionId) => base.readSession(sessionId),
+      exportJsonl: (sessionId) => base.exportJsonl(sessionId),
+    }
+    const baseCommit = correct.createFixtureMemoryCommit()
+    let memoryCommitCalls = 0
+    const commit: MemoryCommitPort = {
+      commit: async (delivery) => {
+        memoryCommitCalls += 1
+        return baseCommit.commit(delivery)
+      },
+    }
+    const player = createAcceptedReceiptPlayer()
+    const coordinator = buildCoordinator({ sessionId: FIXTURE_SESSION_ID, store, commit, player })
+    await coordinator.endpoint.control(
+      {
+        protocolVersion: '0.2',
+        kind: 'control.resume',
+        messageId: 'm-resume-first-late',
+        sessionId: FIXTURE_SESSION_ID,
+        epoch: 0,
+        payload: { requestId: 'r-resume-first-late' },
+      },
+      fixtureOperatorContext(),
+    )
+    await coordinator.endpoint.submitInput(
+      {
+        protocolVersion: '0.2',
+        kind: 'input.submit',
+        messageId: 'm-input-first-late',
+        sessionId: FIXTURE_SESSION_ID,
+        epoch: 1,
+        payload: { source: 'local-audience', text: 'a turn whose completion is withheld' },
+      },
+      fixtureViewerContext(),
+    )
+    const turn = coordinator.runTurn()
+    await waitUntil(() => player.commands().length > 0)
+    // The real command identity of the registered output whose first completion
+    // receipt the controlled in-process consumer still holds.
+    const command = player.commands()[0]!
+
+    // Disposal revokes the session and settle seals the coordinator while that
+    // first completion has never been delivered: the output stays unresolved.
+    coordinator.dispose()
+    const settling = coordinator.settle()
+    await turn
+    await settling
+    expect(coordinator.outputConfirmation()).toBe('unknown')
+    expect(coordinator.deliveries()).toHaveLength(0)
+    expect(await history.confirmedHistory(FIXTURE_SESSION_ID)).toEqual([])
+    const storeCallsAfterSeal = storeCalls
+    const memoryCommitsAfterSeal = memoryCommitCalls
+    const eventsBefore = coordinator.events().length
+    const sessionEventsBefore = (await base.readSession(FIXTURE_SESSION_ID)).length
+
+    // The withheld completion arrives only now, schema-valid and under the real
+    // command identity it was registered with.
+    const envelope = {
+      protocolVersion: '0.2' as const,
+      messageId: 'm-first-late',
+      sessionId: command.sessionId,
+      epoch: command.epoch,
+      kind: 'performance.receipt' as const,
+      payload: fixturePerformanceReceipt({
+        receiptId: 'receipt-first-late',
+        outputId: command.outputId,
+        sessionId: command.sessionId,
+        epoch: command.epoch,
+        turnId: command.turnId,
+        segmentId: command.segmentId,
+        modality: 'audio',
+        stage: 'completed',
+      }),
+    }
+    expect(playerMessageSchema.safeParse(envelope).success).toBe(true)
+
+    await coordinator.endpoint.handlePlayerMessage(envelope)
+    expect(coordinator.metrics().lateReceipts).toBe(1)
+    // The refused call is observable only in memory: no storage write, no
+    // memory commit, no promotion of the unknown output, no spoken history.
+    expect(coordinator.metrics().storageFailure).toBe(false)
+    expect(storeCalls).toBe(storeCallsAfterSeal)
+    expect(memoryCommitCalls).toBe(memoryCommitsAfterSeal)
+    expect(coordinator.outputConfirmation()).toBe('unknown')
+    expect(coordinator.deliveries()).toHaveLength(0)
+    expect(coordinator.events()).toHaveLength(eventsBefore)
+    expect((await base.readSession(FIXTURE_SESSION_ID)).length).toBe(sessionEventsBefore)
+    expect(await history.confirmedHistory(FIXTURE_SESSION_ID)).toEqual([])
   })
 })

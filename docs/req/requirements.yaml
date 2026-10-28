@@ -68,6 +68,9 @@ requirements:
       - kind: deterministic
         description: Late results cannot restart output; Stop is immediate and Resume requires confirmed evidence.
         cases: [C-03, C-04]
+      - kind: deterministic
+        description: A controlled process shutdown awaits owned release, reports a failed release as a shutdown fault and exits explicitly; an IPC trigger is not recorded as a POSIX signal. This lifecycle clause includes startup/listen failure and is distinct from operator Stop/Resume acceptance.
+        cases: [C-73]
       - kind: pending-metric
         description: Reconnect-while-audio-pending recovery remains an implemented-by-later-module case pending its own test.
         cases: [C-08]
@@ -98,7 +101,10 @@ requirements:
         cases: [C-29, C-30, C-31]
       - kind: deterministic
         description: On restart only confirmed history is restored; unresolved records remain unknown with their outcome and are never replayed.
-        cases: [C-32, C-33, C-68]
+        cases: [C-32, C-33, C-68, C-74]
+      - kind: deterministic
+        description: A late, internally valid fully-delivered/completed claim for an already-cancelled delivery is refused at the storage boundary; the original audit and classification remain unchanged and the contradictory supporting event is retained.
+        cases: [C-67]
 
   - id: NFR-01
     title: Responsiveness and synchronization
@@ -111,7 +117,7 @@ requirements:
     acceptance:
       - kind: deterministic
         description: Executed attempts are accounted for including failures and cancellations; a not-run result is not an executed attempt, and an evaluation report rejects a fixture text source.
-        cases: [C-52, C-54, C-55]
+        cases: [C-52, C-54, C-55, C-69, C-70, C-71]
       - kind: pending-metric
         description: p95 input-to-first-audible-output and Stop-to-silence thresholds require a reviewed measured baseline.
         cases: []
@@ -159,7 +165,7 @@ requirements:
         cases: [C-15]
       - kind: deterministic
         description: Failed and cancelled attempts remain in the aggregate, and incomplete usage remains unknown rather than becoming a partial total.
-        cases: [C-52, C-53]
+        cases: [C-52, C-53, C-69]
       - kind: pending-metric
         description: Total token and cost caps require a reviewed measured baseline.
         cases: []
@@ -274,7 +280,7 @@ requirements:
         cases: [C-42]
 
   - id: INV-06
-    title: A memory projection never advances across a gap and is idempotent
+    title: A memory projection never advances across a gap, is idempotent, and keeps its bookmark session-scoped
     category: invariant
     priority: must
     owner: M6
@@ -283,8 +289,8 @@ requirements:
     status: under-review
     acceptance:
       - kind: deterministic
-        description: A gap does not advance the projection and reapplying an applied event does not advance it (FR-06; C-12).
-        cases: [C-20]
+        description: A gap does not advance the projection, reapplying an applied event does not advance it, and one session's bookmark never advances or skips another's (FR-06; C-12; C-66).
+        cases: [C-20, C-66]
 
   - id: INV-07
     title: Committed records are isolated from caller mutation
@@ -323,7 +329,7 @@ requirements:
     acceptance:
       - kind: deterministic
         description: Delivery records retain the original segment index and generating persona identity/version through normal completion, Stop and late receipts. M6 preserves those values on read and reports a conflict on changed attribution; legacy unknowns remain null rather than being inferred.
-        cases: [C-46, C-47]
+        cases: [C-46, C-47, C-67]
 
   - id: INV-10
     title: Storage configuration and schema version are validated before use
@@ -339,7 +345,7 @@ requirements:
         cases: [C-26, C-27]
 
   - id: INV-11
-    title: A schema migration is recoverable
+    title: A schema migration is recoverable and refuses contradictory legacy rows
     category: invariant
     priority: must
     owner: M6
@@ -352,7 +358,7 @@ requirements:
         cases: [C-27, C-28]
       - kind: deterministic
         description: The v2 migration preserves genuinely unknown legacy attribution as NULL and drops the legacy persona_version column only when it holds no data; contradictory classification/outcome rows and non-NULL legacy persona values are refused with the database preserved (FR-06).
-        cases: [C-48]
+        cases: [C-48, C-65]
 
   - id: INV-12
     title: Restart restores only confirmed history and never replays unresolved output
@@ -365,7 +371,7 @@ requirements:
     acceptance:
       - kind: deterministic
         description: After a restart, only fully-delivered history is restored; unresolved records remain unknown with their terminal outcome and are never replayed (FR-06; C7, C-17).
-        cases: [C-32, C-33]
+        cases: [C-32, C-33, C-68, C-74]
 
   - id: INV-13
     title: The traceability chain is machine-checked
@@ -405,3 +411,16 @@ requirements:
       - kind: deterministic
         description: Filter records by the exact sessionId and turnId pair, order known segmentIndex values ascending before unknowns, retain input order for ties and unknowns, preserve null indices, and leave the input history order unchanged. The C-47 ordering regression is distinct from the INV-08 history-port read-order check.
         cases: [C-47]
+
+  - id: INV-16
+    title: Every executed attempt is accounted for, including completed, cancelled and failed attempts; missing usage remains unknown, and an empty sample has no failure-rate claim. An explicit not-run result is not an executed attempt
+    category: invariant
+    priority: must
+    owner: M6
+    collaborators: [M3, M4, M5]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Completed, cancelled and failed attempts are counted with a reason; missing usage remains unknown; an empty sample has no failure-rate claim; an explicit not-run result is not an executed attempt (NFR-01/NFR-04; C-52–C-55, C-69–C-71).
+        cases: [C-52, C-53, C-54, C-55, C-69, C-70, C-71]

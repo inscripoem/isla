@@ -729,16 +729,22 @@ export interface FixtureMemoryProjection extends MemoryProjectionPort {
 
 export function createFixtureMemoryProjection(): FixtureMemoryProjection {
   const appliedSeqs: number[] = []
-  let highest = 0
+  const highestBySession = new Map<string, number>()
+  let lastSessionId: string | null = null
+  const highestFor = (sessionId: string): number => highestBySession.get(sessionId) ?? 0
   return {
     appliedSeqs,
-    appliedSeq: () => highest,
+    appliedSeq: () => (lastSessionId === null ? 0 : highestFor(lastSessionId)),
     async apply(event) {
+      // Match production: the compatibility getter follows the last attempted
+      // session, including a gap or duplicate that did not advance its bookmark.
+      lastSessionId = event.sessionId
+      const highest = highestFor(event.sessionId)
       if (event.seq <= highest) return { appliedSeq: highest }
       if (event.seq > highest + 1) return { appliedSeq: highest }
-      highest = event.seq
+      highestBySession.set(event.sessionId, event.seq)
       appliedSeqs.push(event.seq)
-      return { appliedSeq: highest }
+      return { appliedSeq: event.seq }
     },
   }
 }
