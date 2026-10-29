@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { WebSocket, type RawData } from 'ws'
 import { DIAGNOSTICS_PROTOCOL_VERSION } from '../../src/contracts'
 import { DiagnosticsServer } from '../../src/runtime/server'
+import type { MemoryInspectSource } from '../../src/runtime/memory-inspect-reply'
 
 interface HealthBody {
   ok: boolean
@@ -31,6 +32,7 @@ async function createServer(
     path?: string
     maxPayload?: number
     graceMs?: number
+    memoryInspect?: MemoryInspectSource
   } = {},
 ): Promise<DiagnosticsServer> {
   const server = new DiagnosticsServer({ port: 0, graceMs: GRACE_MS, ...options })
@@ -190,8 +192,91 @@ describe('WebSocket diagnostics boundary', () => {
     ws.close()
   })
 
-  it('rejects an unimplemented application action', async () => {
+  it('answers get_memory_inspect with an explicit unavailable outcome when it holds no observation', async () => {
+    /*
+     * Over the real socket, not only the handler: a runtime with no dialogue
+     * observation must answer "nothing observed", and the reply must stay a
+     * protocol-1 success so a consumer can tell it apart from an error.
+     */
     const server = await createServer()
+    const ws = await openClient(server)
+    const reply = await sendJson(ws, {
+      v: 1,
+      id: 'm1',
+      kind: 'get_memory_inspect',
+      payload: { sessionId: 'session-a', turnId: 'turn-a' },
+    })
+    expect(reply).toMatchObject({
+      v: DIAGNOSTICS_PROTOCOL_VERSION,
+      id: 'm1',
+      ok: true,
+      kind: 'get_memory_inspect',
+      payload: {
+        section: 'memory.inspect',
+        outcome: 'unavailable',
+        reason: 'diag-plane-unavailable',
+      },
+    })
+    ws.close()
+  })
+
+  it('serves an observation when the composition root injected one', async () => {
+    const observation = {
+      sessionId: 'session-a',
+      turnId: 'turn-a',
+      payload: {
+        schemaVersion: 1 as const,
+        sessionId: 'session-a',
+        turnId: 'turn-a',
+        replyIntent: 'ack',
+        admission: { admitted: 2, exclusions: {}, noteM6Confirmed: 'audit-only' as const },
+        recall: { persona: { used: 0, dropped: 0 }, delivery: { used: 0, dropped: 0 }, results: [] },
+        budget: {
+          estimatedCharacters: 0,
+          truncatedByTurnLimit: false,
+          truncatedByCharacterLimit: false,
+        },
+        consistency: {
+          findings: 0,
+          incomplete: true,
+          statementsOffered: 200,
+          statementsVisited: 128,
+          statementsExamined: 128,
+          textUnits: 4000,
+          claims: 130,
+          comparisons: 1000,
+        },
+        historySource: 'history-port' as const,
+        warnings: ['consistency audit is incomplete'],
+      },
+    }
+    const source: MemoryInspectSource = {
+      latest: (sessionId, turnId) =>
+        sessionId === observation.sessionId && turnId === observation.turnId ? observation : null,
+    }
+    const server = await createServer({ memoryInspect: source })
+    const ws = await openClient(server)
+    const reply = await sendJson(ws, {
+      v: 1,
+      id: 'm2',
+      kind: 'get_memory_inspect',
+      payload: { sessionId: 'session-a', turnId: 'turn-a' },
+    })
+    const payload = reply.payload as { section: string; inspect: { consistency: { incomplete: boolean; findings: number } } }
+    expect(payload.section).toBe('memory.inspect')
+    expect(payload.inspect.consistency).toMatchObject({ findings: 0, incomplete: true })
+
+    const other = await sendJson(ws, {
+      v: 1,
+      id: 'm3',
+      kind: 'get_memory_inspect',
+      payload: { sessionId: 'session-a', turnId: 'unknown-turn' },
+    })
+    expect(other.payload).toMatchObject({ outcome: 'unavailable', reason: 'no-observation' })
+    ws.close()
+  })
+
+  it('rejects an unimplemented application action', async () => {    const server = await createServer()
     const ws = await openClient(server)
     const reply = await sendJson(ws, { v: 1, kind: 'app.chat', id: 'a1' })
     expect(reply.ok).toBe(false)
