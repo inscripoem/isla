@@ -1,6 +1,6 @@
 # Isla
 
-Team delivery: [submission checkpoints and per-member handoffs](docs/team/DELIVERY-PLAN.en.md). The plan retains I1-01 / I2-01 and targets a complete candidate on November 22, with November 23-25 reserved for contingency. Progress board: [Isla submission Project](https://github.com/users/inscripoem/projects/4).
+Team delivery: [submission checkpoints and per-member handoffs](docs/team/DELIVERY-PLAN.en.md). The plan retains I1-01 / I2-01 and targets a complete candidate on November 22, with November 23-25 reserved for contingency. Progress board: [Isla Roadmap](https://github.com/users/inscripoem/projects/4).
 
 Isla is a planned AI VTuber framework: a configurable character runtime with replaceable decision, dialogue, speech and avatar adapters, plus a local console.
 
