@@ -3209,7 +3209,7 @@ entries:
     requirements: [FR-01, NFR-03]
     invariants: []
     cases: []
-    commits: [7cd9af5, d04cddc]
+    commits: [7cd9af5, d04cddc, 98ce53b, 2a354ca]
     pull_request: 57
     publication: "PR #57 opened; not merged."
     agent: build
@@ -3274,13 +3274,21 @@ entries:
       changed_m3: "pnpm test:m3: 45 passed / 1 file."
       changed_verify: "pnpm verify exit 1; 1151 passed / 17 failed / 1168 tests; 3 unhandled spawn ENOENT errors; failing test identities and error categories equal to baseline; build not reached."
       changed_build: "pnpm build exit 0."
-      repair_m3: "pnpm test:m3: 47 passed / 1 file."
-      repair_verify: "pnpm verify exit 1; 1153 passed / 17 failed / 1170 tests; 3 unhandled spawn ENOENT errors; failing test identities and error categories equal to baseline; build not reached."
-      repair_static: "pnpm typecheck and pnpm lint passed; pnpm build exit 0."
-      repair_trace: "pnpm test:trace: 41 passed / 1 file."
-      repair_readiness: "pnpm test:readiness: 38 passed / 4 failed / 42 tests; the four failures are the existing Windows boundaries x3 and requirements CRLF identity."
-      repair_diff_check: "git diff --check clean."
-      repair_g6: "AI-use log YAML/shape check passed."
+      repair_commit: "98ce53b"
+      merge_verify: "2a354ca merge verification is recorded in the PR #57 thread; not restated here."
+      repair_m3: "At 98ce53b: pnpm test:m3: 47 passed / 1 file."
+      repair_verify: "At 98ce53b: pnpm verify exit 1; 1153 passed / 17 failed / 1170 tests; 3 unhandled spawn ENOENT errors; failing test identities and error categories equal to baseline; build not reached."
+      repair_static: "At 98ce53b: pnpm typecheck and pnpm lint passed; pnpm build exit 0."
+      repair_trace: "At 98ce53b: pnpm test:trace: 41 passed / 1 file."
+      repair_readiness: "At 98ce53b: pnpm test:readiness: 38 passed / 4 failed / 42 tests; the four failures are the existing Windows boundaries x3 and requirements CRLF identity."
+      repair_diff_check: "At 98ce53b: git diff --check clean."
+      repair_g6: "At 98ce53b: AI-use log YAML/shape check passed."
+      r1_r5_m3: "pnpm test:m3: 47 passed / 1 file."
+      r1_r5_trace: "pnpm test:trace: 41 passed / 1 file."
+      r1_r5_static: "pnpm typecheck and pnpm lint passed; pnpm build exit 0."
+      r1_r5_verify: "pnpm verify exit 1; 1235 passed / 17 failed / 1252 tests; 3 unhandled spawn ENOENT errors; failing identities identical to the 2a354ca merge run."
+      r1_r5_diff_check: "git diff --check clean."
+      r1_r5_g6: "AI-use log gate passed with comparison base 2a354ca and the complete changed-file list."
       boundary: "targeted production-to-test import boundary: 1 passed / 8 skipped."
       readiness: "pnpm test:readiness: 38 passed / 4 failed / 42 tests; the four failures are the pre-existing Windows boundaries x3 and requirements CRLF identity, not new M3 failures."
       trace: "pnpm test:trace: 41 passed / 1 file."

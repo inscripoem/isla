@@ -123,7 +123,7 @@ C-74 — `test/offline/m5-process-restart.test.ts`:
 | FR-06 | M6 | C-12, C-17, C-21, C-22, C-29, C-30, C-31, C-32, C-33, C-45, C-46, C-47, C-67, C-68, C-74 | product-console recovery adoption, Windows and live-provider acceptance; C-74 covers controlled Linux process continuation only |
 | NFR-01 | M5 | C-52, C-54, C-55, C-69, C-70, C-71 | metric baseline |
 | NFR-02 | M5 | C-10, C-17 | C-05, C-09, recovery duration |
-| NFR-03 | M3 | — | C-16, human rubric |
+| NFR-03 | M3 | — | C-16, human rubric (docs/decision/m3-quality-rubric-v0.1.md, draft) |
 | NFR-04 | M3 | C-15, C-52, C-53, C-69 | cost/token caps |
 | NFR-05 | M5 | C-07 | retention/deletion |
 | NFR-06 | M1 | C-11 | — |
