@@ -2,7 +2,7 @@
 
 Document revision: 2026-10-29.2. The team-confirmed allocation is unchanged.
 
-For progress, start with the [submission checkpoints](DELIVERY-PLAN.en.md): all ten acceptance targets, per-member deliveries and the November 23-25 contingency window. The private [Isla submission Project](https://github.com/users/inscripoem/projects/4) provides [Team progress](https://github.com/users/inscripoem/projects/4/views/2), [Checkpoints](https://github.com/users/inscripoem/projects/4/views/3) and [Next checkpoint](https://github.com/users/inscripoem/projects/4/views/4). All 50 delivery items are linked. Checkpoint 01 is in progress; acceptance and owner forecasts remain pending.
+For progress, start with the [submission checkpoints](DELIVERY-PLAN.en.md): all ten acceptance targets, per-member deliveries and the November 23-25 contingency window. The public [Isla Roadmap](https://github.com/users/inscripoem/projects/4) provides a table for [Team progress](https://github.com/users/inscripoem/projects/4/views/2), a roadmap for [Checkpoints](https://github.com/users/inscripoem/projects/4/views/3) and a status board for [Next checkpoint](https://github.com/users/inscripoem/projects/4/views/4). All 50 delivery items are linked. Checkpoint 01 is in progress; acceptance and owner forecasts remain pending.
 
 The linked handoffs below retain the evidence scope and source revision in each file. Their old "local only" or PR-status wording is historical, not the current delivery queue. Original role issues #2-#7 remain the member entry points; update the linked delivery once rather than duplicating status in every document.
 
