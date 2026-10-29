@@ -28,7 +28,7 @@
     "gate:eval": "tsx src/evaluation/eval-gate.ts",
     "gate:test-approval": "tsx src/evaluation/test-approval-gate.ts",
     "req:schema": "tsx src/evaluation/emit-req-schema.ts",
-    "verify": "pnpm typecheck && pnpm lint && pnpm test && pnpm build",
+    "verify": "tsc -b && oxlint && vitest run && tsc -b && vite build",
     "preview": "vite preview",
     "runtime:production": "tsx src/runtime/production-cli.ts"
   },
