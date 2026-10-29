@@ -3694,3 +3694,38 @@ entries:
       registry edit. selection-001 is human-reviewed; selection-002 remains
       draft. Synthetic review fixtures validate mechanics only and do not
       certify corpus evidence.
+  - date: "2026-10-30"
+    task: M4-04-loopback-evidence-and-verify-windows-fix
+    change: >-
+      For issue #91's offline verification half, test/offline/m4-loopback.test.ts
+      gains two cases (bd972ec, +172/-4): a real-selection intent case that
+      grounds createRuleSelectionPort (src/decision/selection.ts) over the
+      reviewed decision corpus and injects it through createLoopHarness
+      options.selection sharing one ClockPort instance with the harness, with
+      profile.allowedIntents ["clarify"] forcing the non-default intent so the
+      loopback view must show replyIntent clarify, its reply template, and only
+      that intent's reference line in renderDialoguePrompt (intent reorders
+      recall priority, never admission); and a delivery-history admission case
+      reusing the established m4-storage-integration.test fixtures. Header and
+      in-test comments declare which substitutes remain (reaction pending issue
+      #89, provider text pending issue #93) instead of implying production
+      parity. Separately, package.json's verify script (b8669ce) drops nested
+      pnpm run calls for direct tsc/oxlint/vitest/build invocations, because
+      nested pnpm invokes the broken Windows pnpm shim on this machine; the
+      full suite remains gated by remote CI.
+    requirements: []
+    invariants: []
+    commits: [bd972ec, b8669ce]
+    agent: opencode/deepseek-v4-flash
+    provider: cslabllm
+    model: CS5351/DeepSeek-V4-Flash
+    supervision: >-
+      Member M4's scheduled inspection workflow (ZCode, GLM-5.3-Flash) selected
+      the slice, wrote the English task briefs and supervised. OpenCode build
+      agent authored all test and package.json changes across three unattended
+      --auto --standalone sessions (loopback intent, delivery-history, verify
+      Windows fix; briefs kept in gitignored .cache/). The supervising agent
+      reviewed each diff, ran the targeted suites plus test:m4/tsc/oxlint, and
+      pushed the two commits ahead of the member's manual review; remote CI
+      passed on both commits. Local full-suite verify remains blocked by the
+      pre-existing Windows spawn ENOENT baseline noted in earlier entries.
