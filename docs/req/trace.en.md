@@ -198,3 +198,18 @@ M5 supplies the finite overall acquisition signal, deployment budgets and identi
 The [M5 mention handoff](../team/HANDOFF-M5-MENTIONS.en.md) records outcome/deadline consumer checks and bounded input preparation. `test/offline/m5-dialogue-outcome.test.ts`, `m5-production-application.test.ts` and `m5-evaluation-adapter.test.ts` supply scoped regression evidence. They do not redefine an existing registered case or allocate an ID. C-05/C-16 remain pending until the agreed cross-owner verifiers, real execution conditions and semantic evidence are reviewed. Deterministic boundary tests do not close NFR-03 or establish S6/G4.
 
 The final coordinator regressions cover exact selection/reaction deadlines, accepted clarify intent and exact candidate expiry; their full executable names are in the linked handoff. Coordinator/adapter checks passed 121/2; M5 passed 203/9 and full verification passed 1223/69. These results do not promote C-05/C-16 to registered completed verifiers.
+
+## M5 I1 adoption checks
+
+The local M5 I1 adoption increment on 2026-10-28 adds a test-only adoption entry
+and five loopback checks for selection timeout with a late result, unchanged
+deferral, synthesis failure before any output followed by a successful fresh
+turn, synthesis failure after a delivered prefix, and reconnect during
+unconfirmed playback. The helper closes a started harness when setup is refused
+and reads an explicitly supplied event store. It also corrects the terminal
+`turn.ended` status for a completed dialogue whose cycle failed, and the
+evaluation adapter now classifies a failed dialogue from the recorded dialogue
+end rather than the turn end. This is scoped evidence for the existing
+FR-01/FR-04/FR-05/FR-06 traces only: C-05, C-08, C-09 and C-16 remain pending,
+with no case-registry, requirement-owner or invariant change. Status: under
+review; uncommitted.

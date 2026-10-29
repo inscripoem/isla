@@ -3580,3 +3580,99 @@ entries:
       connection/pairing/live/model/hotkey action, physical animation/silence, acoustic timing, Windows
       production recovery or G4/S6 acceptance. Issues remain Open with existing checklists unchanged;
       earlier evidence and approvals remain version-bound.
+
+  - date: "2026-10-28"
+    task: M5-I1-adoption-checks
+    branch: m5-i1-independent-20261028-detached-uncommitted
+    member: M5
+    change: >-
+      Add a small test-only I1 adoption entry and seven checks: a held
+      selection timeout with a late result, an unchanged deferred candidate set,
+      synthesis failure before any output followed by a successful fresh turn,
+      synthesis failure after a delivered prefix, reconnect during unconfirmed
+      playback, reading an explicitly supplied event store, and closing a
+      started harness when setup is refused. Correct the terminal `turn.ended`
+      status for a completed dialogue whose cycle failed, and classify a failed
+      dialogue in the evaluation adapter from the recorded dialogue end.
+    requirements: [FR-01, FR-04, FR-05, FR-06]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.2.0
+    launch_flags: ["-m", "self-api/deepseek-v4-flash#xhigh", "--agent", "build", "--format", "json"]
+    sessions: [ses_e813b6114ffedTdxhlGftM8AF3]
+    supervision: >-
+      OpenCode authored the test-only adoption helper, the checks, the harness
+      synthesis seam, the coordinator terminal-status correction, the
+      evaluation-adapter classification change, the role-script update and the
+      English handoff, trace and README edits. Captain approved the local M5 I1
+      adoption scope; the implementation kept red-before-fix evidence and
+      inspected every `turn.ended` consumer. The Codex supervisor, not Captain
+      personally, requested this session's detailed failure semantics, the
+      bounded follow-up checks and the provenance correction. The supervisor
+      added the owner-replacement table to the handoff and independently ran
+      the role, composition, full, readiness, actual-range trace and G6 checks,
+      plus five consecutive repetitions of the seven adoption checks. No subagent,
+      live provider, Git mutation or remote write was used.
+    human_review: >-
+      Captain authorized the local M5 I1 adoption scope only; Captain did not
+      personally authorize the detailed failure semantics or code acceptance.
+      Those requests came from the Codex supervisor. Candidate human review
+      remains pending and the changes remain uncommitted.
+    verification:
+      base: 74e99953733eeb070f99d4b9c57554e22e928840
+      baseline: "pnpm test:m5: 177 passed / 8 files; worktree clean."
+      red_green: >-
+        Before the coordinator fix the new synthesis check failed because
+        `turn.ended` recorded `completed` while the cycle had failed; the same
+        check passed after the fix. Logs are kept under
+        `.cache/m5-i1-independent/`.
+      focused: >-
+        `pnpm test:m5`: 184 passed / 9 files; `m5-i1-adoption`: 7 passed;
+        focused evaluation, recovery and application suites: 57 passed /
+        3 files; typecheck and lint passed.
+      full_verify: >-
+        `pnpm verify` passed: 1214 tests / 64 files, typecheck, lint and build
+        (exit 0). Follow-up logs are `test-m5-followup.log` and
+        `verify-followup.log`; the original green logs are unchanged.
+    scope: >-
+      Fixed WAV catalog and controlled media events only; event reads are from
+      the in-memory test store, not restart-durable persistence. No acoustic,
+      live provider, SQLite restart/recovery or product console claim. C-05,
+      C-08, C-09 and C-16 remain pending; no register, owner or case change.
+
+  - date: "2026-10-29"
+    task: M5-I1-original-increment-main-adoption
+    member: M5
+    change: >-
+      Adopt the original OpenCode-authored M5 I1 increment on main 4e4f7cd,
+      preserving PR65's outcome and prepared-input changes. Source/test deltas
+      apply unchanged; new adoption files match the original candidate bytes.
+      Update the current handoff and extend the existing test:m5 command.
+    requirements: [FR-01, FR-04, FR-05, FR-06]
+    invariants: []
+    cases: []
+    commits: []
+    agent: codex-supervisor
+    sessions: [ses_e813b6114ffedTdxhlGftM8AF3]
+    supervision: >-
+      Captain approved continued local implementation, publication and existing
+      task follow-up. Codex extracted already-authored code, coordinated the
+      package test command and documentation, and ran independent verification.
+      No new OpenCode code-authoring session or teammate implementation is claimed.
+    human_review: >-
+      Owner consumption and complete I1 acceptance remain pending. Original
+      supervision, failed checks and original verification records are preserved.
+    verification:
+      base: 4e4f7cd7cab751486cec21efbf613364ca7dc07d
+      full_verify: "1346/1346 tests in 71 files; typecheck, lint, build passed."
+      m5: "214/214 in 10 files."
+      trace: "41/41 with the actual ten-file tracked/untracked diff."
+      g6: "Passed against the unchanged main AI-use log."
+      evidence: "External evidence/m5-i1-adoption-20261029/verification.json"
+    scope: >-
+      Controlled loopback and test-only adoption support; no real M3 provider,
+      formal M2 console, live services, acoustic or full I1/case completion claim.

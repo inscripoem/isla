@@ -440,3 +440,87 @@ recovery. This is lifecycle recovery over the existing in-memory store, not SQLi
 restart recovery; no new shared register or case id was introduced and C-08 stays
 pending with no verifier. OpenCode authored the implementation in `ses_eb2014c63ffePhR2Ga1C7G7sxo` and continued after the approved branch migration in `ses_eb180c970ffeoD5t6ywKvYKwFS`. The supervisor independently repeated `pnpm verify` (809 / 46, exit 0) and all ten browser scenarios with zero page errors. The results remain
 under review. The checks above precede publication; Captain subsequently authorized the follow-up branch commit, push and new PR.
+
+## Adoption checks for selection, synthesis and reconnect
+
+Current adoption (2026-10-29): the original OpenCode-authored increment below
+has been applied without source/test conflict to main `4e4f7cd`, which includes
+PR65. Independent Linux checks on this combination passed full `pnpm verify`
+1346/1346 in 71 files, M5 214/214 in 10 files, actual-range trace41/41 and G6.
+The original detached source and session `ses_e813b6114ffedTdxhlGftM8AF3` are
+preserved; no new code-authoring session is claimed for this extraction.
+The new files are byte-identical to that candidate and the source delta was
+applied as-is. The earlier counts and uncommitted state below describe the
+October 28 candidate only. Current adoption is under review for delivery #90
+and checkpoint #73; M2/M3 owner-port and product-console acceptance remains open.
+
+The local M5 I1 adoption increment (2026-10-28, detached worktree
+`m5-i1-independent-20261028`, uncommitted) adds a test-only adoption entry
+(`test/support/i1-adoption.ts`) and seven checks in
+`test/offline/m5-i1-adoption.test.ts`: five loopback scenarios, a supplied-store
+read check and a setup-refusal cleanup check:
+
+- selection timeout: a held selection becomes stale; its late valid result is
+  never used for dialogue or playback, and a later candidate completes;
+- defer: an unchanged deferred candidate set is not polled again; a new input is
+  selected and delivered;
+- synthesis failure before any output: the turn ends failed with no offer,
+  delivery or confirmed history; after the fault is cleared, a fresh input
+  completes a normal turn and the failed attempt is not retried or replayed;
+- synthesis failure after a delivered first segment: the completed prefix stays
+  in confirmed history, the failed segment commits nothing, `dialogue.result`
+  stays `completed`, and `turn.ended` records `failed`;
+- reconnect during unconfirmed playback: Resume is refused, fresh input is
+  accepted, and the cycle is blocked before selection, offer or grant.
+
+The timeout, defer and failure checks correlate accepted input event ids with
+the selected plan and the completed turn's delivery rather than only counting
+history rows, so a concurrent later cycle cannot stand in for the observed one.
+The adoption helper closes the harness it already started when setup is refused
+and rethrows the original error; its `events()` reads an explicitly supplied
+event store instead of assuming the harness's default backend. These are reads
+of the in-memory test store, not restart-durable persistence.
+
+The coordinator's terminal record now distinguishes a completed turn from a
+failed cycle: a dialogue that completed while a dependency or playback stage
+failed records `turn.ended: failed`; genuine dialogue `failed`/`cancelled` ends
+are preserved. `CycleOutcome.status` keeps its legacy coarse `cancelled` value
+for a failed cycle; that value is not an operator-cancellation claim, and
+`session.stopped` remains the cancellation evidence. The evaluation adapter
+therefore classifies a failed dialogue from the recorded dialogue end rather
+than the turn end, while a recorded operator Stop still maps to `cancelled`.
+Persistence, replay and console observers consume `session.event` payloads
+generically, so no consumer change was required. `test/support/contract-runner.ts`
+still mirrors the older terminal status and remains test-only.
+
+Owner adoption after a reviewable delivery is available:
+
+| Consumer | Replacement and checks |
+| --- | --- |
+| M3 / M5 | Supply the owner selection and reaction ports through `LoopHarnessOptions.selection` and `.reaction`, using the harness clock domain. Keep controlled failure/late-result peers in the negative tests. Recheck accepted-input identity, supported intent, defer, expiry and Stop; these tests do not grade intent quality. |
+| M2 / M1 / M5 | M2 owns the browser-safe production client and console extraction. Adopt `/app` and `/operator/bootstrap`, snapshot-first binding, one performer, offer/ready/grant, status-before-receipt, and explicit recovery. Repeat the transport scenarios with that client; the existing test performer is not evidence of M2 adoption. Root routes already exist on the merged base. |
+| M5 | Record each adopted commit and replace one owner at a time. PR65 remains separate until its repaired revision is reviewed; reconcile its M5 outcome/evaluation changes with this increment before testing the final combination. Keep PR57 and PR64 acceptance separate as well. |
+
+No public wire contract, owner assignment or shared case status changes in this
+increment. The fixed WAV catalogue, catalogue text source, controlled media and
+test renderer remain explicit substitutes; passing this entry does not connect
+live services or approve the product console.
+
+Actual local commands (detached base `74e9995`):
+
+- baseline `pnpm test:m5`: 177 passed / 8 files;
+- before the fix, the new synthesis assertion failed: `turn.ended` was
+  `completed` while the cycle had failed (`.cache/m5-i1-independent/adoption-red.log`);
+- after the fix, `m5-i1-adoption`: 7 passed; `pnpm test:m5`: 184 passed /
+  9 files; typecheck and lint passed; `pnpm verify`: 1214 passed / 64 files,
+  typecheck, lint and build passed; these follow-up runs are logged separately
+  (`test-m5-followup.log`, `verify-followup.log`) so the original green record
+  stays intact;
+- focused `m5-evaluation-adapter`, `i1-recovery` and `i1-application`:
+  57 passed / 3 files.
+
+Logs are under `.cache/m5-i1-independent/`. Limitations: fixed WAV catalog and
+controlled media events, no acoustic proof, no live provider, no SQLite
+restart/recovery and no product console integration. C-05, C-08, C-09 and C-16
+stay pending; these checks add scoped evidence only and do not close a case or
+promote a requirement. Status: under review; uncommitted.

@@ -9,6 +9,7 @@ import type {
   MemoryCommitPort,
   ReactionPort,
   SelectionPort,
+  SynthesisPort,
 } from '../../src/contracts'
 import type { CapabilitySnapshot, PerformanceCommand } from '../../src/contracts/app'
 import { createApplicationEndpoint } from '../../src/runtime/application'
@@ -106,6 +107,13 @@ export interface LoopHarnessOptions {
   realM4?: boolean
   /** Provider substitute for real M4; defaults to the deterministic catalog source. */
   dialogueTextSource?: DialogueTextSource
+  /**
+   * Replaces the M1 fixed synthesis with an injected port for every composition
+   * (initial, reconstructed and recovery successor), so an adoption check can
+   * observe or fail preparation through the real application path. When omitted
+   * the harness keeps the fixed synthesis over the fixture audio catalog.
+   */
+  createSynthesis?: (gate: RuntimeDeadlineGate) => SynthesisPort
   /** Records the assembled M4 context so a test can observe it. */
   captureView?: { view: AssembledDialogueContext | null }
   /** Cross-session reconstruction selection. Implies `realM4`. */
@@ -243,6 +251,13 @@ export async function createLoopHarness(options: LoopHarnessOptions = {}): Promi
       ? createCapturingCatalogDialogueTextSource(options.captureView)
       : createCatalogDialogueTextSource())
 
+  // One synthesis choice for every composition the harness builds. The injected
+  // port receives that composition's gate, exactly like the production peer.
+  const synthesisDeps = (deadlineGate: RuntimeDeadlineGate) =>
+    options.createSynthesis !== undefined
+      ? { synthesis: options.createSynthesis(deadlineGate) }
+      : { audioEntries: createM1ActualAssetEntries() }
+
   if (usesRecovery) {
     // Explicit operator recovery: the controller owns the selection lineage and
     // builds each successor from confirmed history. The harness supplies the
@@ -272,7 +287,7 @@ export async function createLoopHarness(options: LoopHarnessOptions = {}): Promi
           history: createBaseHistory(backend, failingHistorySessions),
           renderer: createRenderer(compositionGate),
           gate: compositionGate,
-          audioEntries: createM1ActualAssetEntries(),
+          ...synthesisDeps(compositionGate),
           reconstruction: selection,
           textSource: dialogueTextSource(),
           profile: {
@@ -326,7 +341,7 @@ export async function createLoopHarness(options: LoopHarnessOptions = {}): Promi
       history: createBaseHistory(backend, failingHistorySessions),
       renderer,
       gate,
-      audioEntries: createM1ActualAssetEntries(),
+      ...synthesisDeps(gate),
       reconstruction,
       textSource,
       // Voice and any other non-character profile fields are supplied here; the
@@ -372,7 +387,7 @@ export async function createLoopHarness(options: LoopHarnessOptions = {}): Promi
       store,
       renderer,
       gate,
-      audioEntries: createM1ActualAssetEntries(),
+      ...synthesisDeps(gate),
       sessionId,
       profile: {
         characterProfileId: realM4 ? 'character-fixture' : 'character-i1',

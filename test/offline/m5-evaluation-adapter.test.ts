@@ -705,6 +705,10 @@ describe('M5 evaluation adapter through the M6 runner', () => {
 
     const observation = harness.observations[0]
     expect(observation.cycleStatus).toBe('cancelled')
+    // The dialogue completed; the synthesis fault is a failed cycle, so the
+    // terminal turn record reports failure without relabelling the dialogue.
+    expect(observation.turnEndStatus).toBe('failed')
+    expect(observation.dialogueEndStatus).toBe('completed')
     expect(observation.dependencyFailures.length).toBeGreaterThan(0)
     expect(observation.dependencyFailures.every((failure) => failure.startsWith('synthesis'))).toBe(
       true,
@@ -712,6 +716,11 @@ describe('M5 evaluation adapter through the M6 runner', () => {
     expect(observation.deliveries).toEqual([])
 
     const events = await harness.store.readSession(harness.sessions[0])
+    expect(
+      events.some(
+        (event) => event.type === 'turn.ended' && event.payload.status === 'failed',
+      ),
+    ).toBe(true)
     const failures = events.filter((event) => event.type === 'dependency.failed')
     expect(failures).toHaveLength(2)
     expect(
@@ -821,6 +830,11 @@ describe('M5 evaluation adapter through the M6 runner', () => {
 
       const observation = harness.observations[0]
       expect(observation.cycleStatus).toBe('cancelled')
+      // A cancelled playback is a failed cycle, not a failed dialogue; the
+      // dialogue itself completed.
+      expect(observation.turnEndStatus).toBe('failed')
+      expect(observation.dialogueEndStatus).toBe('completed')
+      expect(run.records[0].failureReason).not.toContain('failed dialogue')
       // The real machine published cancelled receipts, so the coordinator
       // truthfully reports confirmed cancellation; that is not completed speech.
       expect(observation.outputConfirmation).toBe('confirmed')
@@ -1159,6 +1173,9 @@ describe('M5 evaluation adapter through the M6 runner', () => {
     const observation = harness.observations[0]
     expect(observation.sessionId).toBe(harness.sessions[0])
     expect(observation.cycleStatus).toBe('cancelled')
+    // An operator Stop is not a failed turn: the preserved dialogue cancellation
+    // and the terminal record stay cancelled.
+    expect(observation.turnEndStatus).toBe('cancelled')
     // The started playback was cancelled, not completed.
     expect(consumer.receipts().some((receipt) => receipt.stage === 'cancelled')).toBe(true)
     expect(
