@@ -22,9 +22,25 @@ Issue61 currently has no M4 response. Previous approved coordination replies in 
 
 ## Current M5 implementation slice
 
+Historical acquisition evidence (original scope):
+
 Captain approved local development of the first VTS acquisition/lifecycle stage on October 26. The [local candidate](HANDOFF-M5-VTS-ACQUISITION.en.md) now passes independent M5 200/9, composition12/1 and full1230/64 verification, with typecheck/lint/build passing and tested source hashes unchanged. It remains uncommitted, unpublished and under review. M5 owns acquisition deadlines, cancellation causes, identity/target-bound credential operations, unresolved-save exclusion, late-handle disposal and stopped replacement after actual cleanup. M1 retains D1/D2/C protocol and renderer ownership. Async acquisition precedes the existing synchronous renderer factory; no shared API change is planned. This slice does not depend on PR55 integration.
 
+Historical mention evidence (original scope):
+
+The 2026-10-22 [M5 mention follow-up](HANDOFF-M5-MENTIONS.en.md) is published in Draft PR55 over PR53 and M4 a678b61. It contains a separately reviewable M4 producer proposal and M5 outcome/deadline consumers; bounded input preparation is implemented. Independent M5 checks passed 203/9 and full verification passed 1223/69 with typecheck, lint and build. Imported M4 changes retain M4 ownership. M3 corpus/labels and M6 report binding remain required; this does not adopt a full corpus replay mode or close C-05/C-16.
+
+Approved coordination replies are published in [Issue37 / M2](https://github.com/inscripoem/isla/issues/37#issuecomment-6293124088) and [Issue4 / M3](https://github.com/inscripoem/isla/issues/4#issuecomment-6293124873). Do not resend them. Product adoption and real decision-provider work remain with those owners.
+
 The initial protocol/renderer/request/closure policies remain explicit deployment values. Human approval 60000 ms and total acquisition 75000 ms are starting policy proposals, not measured acceptance limits. No real credential storage, endpoint discovery, automatic reconnect, trigger replay or cleanup-recovery unlock is delivered by the controlled first stage. Existing OpenCode authorship, original-evidence retention and separate publication review continue to apply.
+
+## Consistency audit proposal follow-up
+
+The follow-up in PR55 includes the bounded M4 audit proposal, long-word regex repair,
+redacted incomplete-audit summary and PR53 documentation corrections. M4-only verification
+passed 1209/68; this M5 combination passed 1242/69 with typecheck, lint and build. Captain approved publication;
+M4 adoption and M2/M6 inspection review remain pending.
+See the [updated M5 handoff](HANDOFF-M5-MENTIONS.en.md#consistency-audit-follow-up-2026-10-22-under-review).
 
 ## Remaining delivery sequence
 

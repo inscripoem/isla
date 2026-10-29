@@ -64,6 +64,12 @@ export interface RecalledFact {
 /**
  * Recall input: the current message, recent history and the intent only. No extra
  * model call is made.
+ *
+ * `replyIntent` is carried for a future intent-aware ranking rule but is not
+ * consumed by the implementations today. It can only rank among facts already
+ * eligible under M4's policies; it never grants access or changes ownership
+ * (M3 coordination, issue #44 §1). `PersonaFact.intents` has no consumer in the
+ * tree yet; intent-aware ranking is follow-up work with explicit rules and tests.
  */
 export interface PersonaRecallRequest {
   inputText: string

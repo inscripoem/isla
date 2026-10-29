@@ -1,5 +1,7 @@
 # M5 production composition and durable application lifecycle handoff
 
+The outcome-observer wiring published in Draft PR55 on 2026-10-22 through initial and recovered sessions is described in [the M5 mention handoff](HANDOFF-M5-MENTIONS.en.md). Its checks and review status are separate from the published PR53 evidence below.
+
 Published baseline: [PR48 cbc845c746e426934acc8a55289fe58efefb8ec5](https://github.com/inscripoem/isla/commit/cbc845c746e426934acc8a55289fe58efefb8ec5), incorporating main37c1d9e. M1's [scoped Windows approval](https://github.com/inscripoem/isla/pull/48#pullrequestreview-5583059851) resolves the original response-hold P2 at that head. PR53 implementation is b0e5db708ea4c95dc6a6baf3bd67b6796bbe4f28 over main f972b32; documentation through [bc294bf60e55ae9a45a50aa47bcbe118d8629e90](https://github.com/inscripoem/isla/commit/bc294bf60e55ae9a45a50aa47bcbe118d8629e90) is published. [M1 approved bc294bf within the documentation scope](https://github.com/inscripoem/isla/pull/53#pullrequestreview-5612384602); [M6 approval](https://github.com/inscripoem/isla/pull/53#pullrequestreview-5599418482) remains bound to 8c36cad. M6 review of the later documentation and M4 review remain pending. Earlier increment baselines and test counts retain their original scope. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md#current-baseline) for the dated publication and owner-work snapshot.
 
 Revision: 2026-10-22.2. Publication snapshot: 2026-10-22 10:30 UTC. Owner: M5 — CHANG Xuben. Status: application merged on main f972b32; CLI shutdown hardening published in open PR53. Historical increment branch: `feat/m5-production-composition`, based on the published PR45
@@ -145,7 +147,7 @@ The deployment module exports a `ProductionDeploymentFactory` (named
 
 | Field | Meaning |
 | --- | --- |
-| `peers` | `ProductionPeers`: `selection`, `reaction`, `textSource`, `createRenderer(gate)`, `createSynthesis(gate)`, optional `personaRecall`, `audioResources`, `profile`, `timings` and budgets. The factories receive the composition's own deadline gate and must bind provider work to it. |
+| `peers` | `ProductionPeers`: `selection`, `reaction`, `textSource`, `createRenderer(gate)`, `createSynthesis(gate)`, optional `personaRecall`, `audioResources`, `onDialogueOutcome`, `profile`, `timings` and budgets. The factories receive the composition's own deadline gate and must bind provider work to it. |
 | `initialSelection` | The validated `ArchiveSelectionConfig` for the initial fresh live session (fresh id, selected archives, trusted catalogue). |
 | `allowedOrigins` | Exact canonical origins permitted to open an application socket; at least one is required. |
 | `allowedHosts` | Optional exact allowed `Host` values; omitted means loopback-only hosts. |

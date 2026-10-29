@@ -48,6 +48,17 @@ export interface MemoryBucketDecision {
  * record with no receipt therefore carries a claim without proof and must be
  * held back from memory.
  *
+ * IMPORTANT BOUNDARY (issue #44 §5, M1 reply): a non-empty `receiptId` is NOT
+ * by itself proof of complete audible delivery. M1 creates an `accepted`
+ * receipt before media resolves, and only an observed `ended` after an observed
+ * `started` produces an effective terminal `completed` fact. This module never
+ * reads the receipt stage, so its id-existence check is sound only to the
+ * extent M5 produces `fully-delivered` for an effective completed receipt. The
+ * guarantee therefore belongs to the producer/persistence/admission chain and is
+ * not re-derived here; this module does not certify every C6 writer. If a
+ * subtitle-only completion were ever classified `fully-delivered`, this policy
+ * would not catch it, because a subtitle record legitimately has no receipt.
+ *
  * To relax the policy, change only this constant:
  *   1. 'required' - every fully-delivered record needs a receiptId.
  *   2. 'required-for-audio' - audio needs a receipt; subtitle and avatar are

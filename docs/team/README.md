@@ -1,6 +1,6 @@
 # Team Development
 
-Document revision: 2026-10-26.1. The team-confirmed allocation is unchanged.
+Document revision: 2026-10-29.1. The team-confirmed allocation is unchanged.
 
 Start an agent from the repository root with a short request such as "I am M3. Start my first task." [AGENTS.md](../../AGENTS.md) maps the role to its task, directories, tests and planning workflow. If the tool does not load AGENTS.md automatically, explicitly ask it to read that file. Review its proposed plan before authorizing code changes; members do not need to repeat the full project instructions in each prompt.
 
@@ -20,6 +20,7 @@ Start an agent from the repository root with a short request such as "I am M3. S
 | [M5 physical synthesis handoff](HANDOFF-M5-PHYSICAL-SYNTHESIS.en.md) | Retained M1 adapter/provider, originating gate, physical settlement and owned release through actual worker exit; revision-specific evidence |
 | [M5 evaluation adapter handoff](HANDOFF-M5-EVALUATION-ADAPTER.en.md) | Real coordinator execution for the M6 runner, evidence-based outcomes, unknown metrics and cleanup diagnostics; revision-specific evidence |
 | [M5 VTS acquisition handoff](HANDOFF-M5-VTS-ACQUISITION.en.md) | Local candidate: bounded acquisition, record-aware credentials, cancellation/cleanup and explicit deployment gaps; under review |
+| [M5 mention follow-up](HANDOFF-M5-MENTIONS.en.md) | Local M4 outcome consumer integration, deadline handling, bounded input preparation and owner review limits |
 | [Readiness kits](READINESS-KITS.en.md) | Per-role commands, ports to implement, fixture replacement instructions and version-change coordination |
 | [Readiness review](READINESS-REVIEW.en.md) | Supervisory review of the approved contract and test design |
 | [Requirements registry](../req/requirements.yaml) | Machine-readable requirements with JSON schema, PRD and trace record under `docs/req/` |
