@@ -13,6 +13,7 @@ agent-induced bloat, evaluation debt, guardrail debt, human/cognitive debt.
 | DEBT-05 | untouchable code | `src/contracts/app/*` frozen | coordination cost | M5 | by design (ADR-006) |
 | DEBT-06 | agent-induced bloat | multiple stacked PRs pending merge (#9/#23/#24) | rebase churn | team | sequence merges |
 | DEBT-07 | guardrail debt | M4 reports 5 Windows-only `test:m6` failures (`m6-sqlite` ×3, `m6-02-boundary` ×2); Linux passes 181/14 and the cleanup branch 182/14 | no Windows test claim; CI is Linux-only | M6 | separate platform investigation; do not claim Windows coverage |
+| DEBT-08 | evaluation debt | documentation claims about live configuration are not machine-checked; M6-GOV-11 cannot be satisfied by a docs-only slice | a false or stale claim can ship inside a reviewable document (BUG-017) | M6 | every claim names its command; a negative claim needs a positive read; refresh the thread at write time. Trigger: refusal experiment or a read-only claims check |
 
 ## PR53 IPC literal follow-up
 
