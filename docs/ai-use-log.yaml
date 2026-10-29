@@ -3599,7 +3599,7 @@ entries:
       production source are unchanged.
     requirements: [FR-04, FR-05]
     invariants: []
-    commits: []
+    commits: [087c99cdf9e44400403a2c15556092835f618936]
     agent: build
     provider: self-api
     model: deepseek-v4-flash
@@ -3609,9 +3609,10 @@ entries:
       deployment; no production protocol, API, dependency or lockfile changed.
       No subagent, Git mutation or remote action was used.
     human_review: >-
-      Captain approved local implementation and verification only. The final
-      diff, handoff report and course acceptance remain for member review; no
-      commit, push, pull request or merge is claimed.
+      Captain approved this work and subsequently approved continued implementation
+      and publication. Implementation commit 087c99cdf9e44400403a2c15556092835f618936
+      was created by Codex after independent verification. Consumer and course
+      acceptance remain pending; no merge is claimed.
     session: ses_e78f5a97cffeW0gUUzUMuustLq
     transcript_record: >-
       Native OpenCode 2.2.0 session export is preserved in the external project
