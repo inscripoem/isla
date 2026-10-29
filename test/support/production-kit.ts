@@ -20,6 +20,7 @@ import type {
   ProductionDeploymentContext,
   ProductionPeers,
 } from '../../src/runtime/production'
+import { createCatalogAudio } from './catalog-audio'
 import { createFixtureReactionPort, createFixtureSelectionPort } from './correct-ports'
 import { fixtureCapabilitySnapshot, fixtureCommitDelivery, fixtureRuntimeEvent } from './fixture-data'
 import { createCatalogDialogueTextSource } from './m4-kit'
@@ -265,9 +266,12 @@ export function createTestProductionDeployment(
   const releaseHold = nonEmpty(context.env[RELEASE_HOLD_ENV])
   const releaseFails = nonEmpty(context.env[RELEASE_FAIL_ENV]) !== null
   const liveProfile = { profileId: 'character-fixture', profileVersion: '1' }
+  const audio = createCatalogAudio(context.clock)
   return {
     peers: createTestProductionPeers({
       clock: context.clock,
+      createSynthesis: audio.createSynthesis,
+      audioResources: audio.audioResources,
       ...(captureFile !== null ? { textSource: createCaptureWritingTextSource(captureFile) } : {}),
     }),
     initialSelection: {

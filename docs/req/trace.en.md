@@ -198,3 +198,14 @@ M5 supplies the finite overall acquisition signal, deployment budgets and identi
 The [M5 mention handoff](../team/HANDOFF-M5-MENTIONS.en.md) records outcome/deadline consumer checks and bounded input preparation. `test/offline/m5-dialogue-outcome.test.ts`, `m5-production-application.test.ts` and `m5-evaluation-adapter.test.ts` supply scoped regression evidence. They do not redefine an existing registered case or allocate an ID. C-05/C-16 remain pending until the agreed cross-owner verifiers, real execution conditions and semantic evidence are reviewed. Deterministic boundary tests do not close NFR-03 or establish S6/G4.
 
 The final coordinator regressions cover exact selection/reaction deadlines, accepted clarify intent and exact candidate expiry; their full executable names are in the linked handoff. Coordinator/adapter checks passed 121/2; M5 passed 203/9 and full verification passed 1223/69. These results do not promote C-05/C-16 to registered completed verifiers.
+
+## M5 controlled deployment audio support (Issue69)
+
+FR-04/FR-05 supporting integration evidence: `test/support/catalog-audio.ts` and
+`createTestProductionDeployment` in `test/support/production-kit.ts` connect the
+prepared WAV catalog to the existing resource route. The verifier is
+`test/offline/m5-audio-deployment.test.ts`: exact catalog/bytes/duration and lease
+reclamation; real HTTP serving/refusal order; Stop, old epoch and retired session.
+M5 owns the test deployment; M1/M2 consume the resulting audio path. This adds no
+case ID and does not close C-08/C-09, complete I1, browser/acoustic acceptance or
+live-provider claims. Existing production authority and interfaces are unchanged.

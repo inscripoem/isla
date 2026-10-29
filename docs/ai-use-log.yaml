@@ -3580,3 +3580,62 @@ entries:
       connection/pairing/live/model/hotkey action, physical animation/silence, acoustic timing, Windows
       production recovery or G4/S6 acceptance. Issues remain Open with existing checklists unchanged;
       earlier evidence and approvals remain version-bound.
+  - date: "2026-10-29"
+    task: M5-69-controlled-deployment-prepared-wav-audio
+    change: >-
+      Wire the default controlled test production deployment to the real M1
+      audio-resource registry and serve the prepared fixed WAV catalog through
+      the existing POST /audio route. The deployment presents the exact catalog
+      text/reference/duration tuple, maps each stable catalog reference to the
+      registration currently bound to the live session/epoch, and delegates
+      admission, resolution, lease release, epoch retirement and session
+      retirement to the one real registry. A repeated preparation for the same
+      session/epoch reuses the active registration; a reclaimed registration is
+      registered again; a binding owned by another session/epoch is refused and
+      the output fails as audio_resource_unavailable instead of serving
+      ambiguous bytes. New tests cover exact bytes and frame-derived duration,
+      both catalog segments, refusal order, stopped and retired-epoch refusals,
+      and lease reclamation. createTestProductionPeers defaults and all
+      production source are unchanged.
+    requirements: [FR-04, FR-05]
+    invariants: []
+    commits: []
+    agent: build
+    provider: self-api
+    model: deepseek-v4-flash
+    supervision: >-
+      Captain approved the narrow deployment-factory-only scope, the new test
+      file and local verification in this session. One registry is created per
+      deployment; no production protocol, API, dependency or lockfile changed.
+      No subagent, Git mutation or remote action was used.
+    human_review: >-
+      Captain approved local implementation and verification only. The final
+      diff, handoff report and course acceptance remain for member review; no
+      commit, push, pull request or merge is claimed.
+    session: ses_e78f5a97cffeW0gUUzUMuustLq
+    transcript_record: >-
+      Native OpenCode 2.2.0 session export is preserved in the external project
+      evidence/m5-69-audio-deployment-20261029/opencode-session.raw.json.
+      Codex supervised the session, moved this new entry to the file end without
+      changing original entries, and independently ran verify, trace and G6.
+      Application and test implementation was authored by OpenCode.
+    verification:
+      base: 4e4f7cd
+      baseline: >-
+        pnpm test:m5 passed 207/207 in 9 files before the change.
+      focused: >-
+        test/offline/m5-audio-deployment.test.ts passed 3/3; pnpm test:m5 passed
+        210/210 in 10 files.
+      full_suite: >-
+        pnpm verify exited 0: typecheck, lint, 1342/1342 in 71 files and build
+        passed.
+      trace: >-
+        pnpm test:trace passed 41/41 with the actual tracked and untracked
+        changed-file list.
+      scope: >-
+        Controlled test deployment and its tests only. No live provider,
+        browser, acoustic, product-deployment or Windows behavior is claimed.
+        After a lease release the registry reclaims the entry, so a late fetch
+        is 404 until another preparation; the catalog bytes are immutable, so a
+        replacement registration for the same catalog reference serves the same
+        content.
