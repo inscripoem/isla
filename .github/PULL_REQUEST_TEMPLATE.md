@@ -3,6 +3,7 @@
      short for routine fixes. Never include credentials or raw private records. -->
 
 ## Scope and provenance
+- Checkpoint / delivery issue and original task (or explain why no checkpoint applies):
 - Task / requirement / invariant / case IDs:
 - ADR / Delta:
 - Baseline commit and actual changes:
@@ -52,6 +53,8 @@
 - [ ] Frozen paths untouched, or an ADR accompanies the change
 
 ## Consumer acknowledgement
+- Acceptance owner and expected review/acceptance date (UTC+8):
+- If merge is only implementation delivery, link the still-open acceptance issue; avoid a closing keyword that would imply product acceptance.
 - Consumer's actual test/inspection result and remaining integration issue:
 
 ## Records

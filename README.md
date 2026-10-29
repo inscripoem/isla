@@ -1,5 +1,7 @@
 # Isla
 
+Team delivery: [submission checkpoints and per-member handoffs](docs/team/DELIVERY-PLAN.en.md). The plan retains I1-01 / I2-01 and targets a complete candidate on November 22, with November 23-25 reserved for contingency. Progress board: [Isla submission Project](https://github.com/users/inscripoem/projects/4).
+
 Isla is a planned AI VTuber framework: a configurable character runtime with replaceable decision, dialogue, speech and avatar adapters, plus a local console.
 
 This checkout contains the shared contracts, M5 coordinator, M1 speech/rendering/browser interfaces, M4 dialogue context and M6 in-memory/SQLite storage. The application transport (PR36) and explicit session recovery (PR45) are merged. The standard console provides diagnostics; the separate interactive demo uses deterministic dialogue text and fixed audio. This branch adds an under-review production application lifecycle over real SQLite with deployment-supplied peers and an under-review dynamic audio resource route served to a same-origin browser over `POST /audio`. A coordinator-backed evaluation adapter is also available for explicit peers and consumers; see the [evaluation handoff](docs/team/HANDOFF-M5-EVALUATION-ADAPTER.en.md). A complete product deployment, M3 decisions, live dialogue, the browser product resolver and VTube Studio acceptance remain open. See the [current delivery plan](docs/team/DELIVERY-PLAN.en.md) for component and PR status.
