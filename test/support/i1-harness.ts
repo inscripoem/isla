@@ -22,6 +22,7 @@ import {
 import type { ReconstructedRuntimeComposition, RuntimeComposition } from '../../src/runtime/composition'
 import { createMonotonicClock } from '../../src/runtime/clock'
 import { createRuntimeAuthorizer } from '../../src/runtime/control-policy'
+import { createRuleSelectionPort } from '../../src/decision'
 import type { CycleTimings, RuntimeCoordinator, SessionProfileConfig } from '../../src/runtime/coordinator'
 import type { ArchiveSelectionConfig } from '../../src/runtime/session-archives'
 import { createSessionRecovery } from '../../src/runtime/session-recovery'
@@ -83,6 +84,11 @@ function createAcceptanceDriver(): RendererDriver {
 }
 
 export interface LoopHarnessOptions {
+  /**
+   * Selection peer. Defaults to the merged M3 rule port bound to this harness's
+   * own monotonic clock, including recovery successors. Supply a controlled
+   * owner substitute only for a negative or fault-injection check.
+   */
   selection?: SelectionPort
   reaction?: ReactionPort
   dialogue?: DialoguePort
@@ -204,6 +210,12 @@ function createBaseHistory(backend: StorageBackend, failingSessions: Set<string>
 
 export async function createLoopHarness(options: LoopHarnessOptions = {}): Promise<LoopHarness> {
   const clock = options.clock ?? createMonotonicClock()
+  // One selection port for every composition the harness builds. The merged M3
+  // rule port asserts request/context deadlines against this exact clock, so a
+  // different clock origin would make a live selection look expired (or fail to
+  // expire) while the runtime still evaluates it. Recovery successors therefore
+  // receive the same port and clock domain, not a fresh substitute.
+  const selectionPort = options.selection ?? createRuleSelectionPort({ clock })
   const backend = options.backend ?? createInMemoryBackend()
   const store = options.store ?? createEventStore(backend)
   const gate = createDeadlineGate(clock)
@@ -281,7 +293,7 @@ export async function createLoopHarness(options: LoopHarnessOptions = {}): Promi
         const built = await createReconstructedRuntimeComposition({
           clock,
           authorizer: createRuntimeAuthorizer(),
-          selection: options.selection ?? correct.createFixtureSelectionPort(),
+          selection: selectionPort,
           reaction: options.reaction ?? correct.createFixtureReactionPort(),
           store,
           history: createBaseHistory(backend, failingHistorySessions),
@@ -335,7 +347,7 @@ export async function createLoopHarness(options: LoopHarnessOptions = {}): Promi
     const reconstructed = await createReconstructedRuntimeComposition({
       clock,
       authorizer: createRuntimeAuthorizer(),
-      selection: options.selection ?? correct.createFixtureSelectionPort(),
+      selection: selectionPort,
       reaction: options.reaction ?? correct.createFixtureReactionPort(),
       store,
       history: createBaseHistory(backend, failingHistorySessions),
@@ -380,7 +392,7 @@ export async function createLoopHarness(options: LoopHarnessOptions = {}): Promi
     composition = createRuntimeComposition({
       clock,
       authorizer: createRuntimeAuthorizer(),
-      selection: options.selection ?? correct.createFixtureSelectionPort(),
+      selection: selectionPort,
       reaction: options.reaction ?? correct.createFixtureReactionPort(),
       dialogue: dialoguePort ?? correct.createFixtureDialoguePort(),
       commit: commitPort ?? correct.createFixtureMemoryCommit(),

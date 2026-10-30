@@ -3789,3 +3789,42 @@ entries:
       registry edit. selection-001 is human-reviewed; selection-002 remains
       draft. Synthetic review fixtures validate mechanics only and do not
       certify corpus evidence.
+
+  - date: "2026-10-30"
+    task: I1-01-real-rule-selection-adoption
+    change: >-
+      Adopt the merged M3 rule SelectionPort in the runnable I1 loop and the
+      reusable M5 adoption harness using the runtime clock, including recovery
+      successors. Add consuming regressions for two competing inputs through
+      real M4 and exact recorded outputs, recovery, foreign-clock fallback and
+      explicit cancellation settlement. Retain the reaction and catalogue-text
+      substitutes, original peer implementations and shared case statuses.
+    requirements: [FR-01, FR-04, FR-05, FR-06]
+    invariants: [INV-15]
+    commits: []
+    agent: opencode/build
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    opencode_version: 2.2.0
+    launch_flags: [--agent, build, --format, json]
+    sessions: [ses_e740bebbeffeMIymYrx6cKvG6o]
+    supervision: >-
+      Captain approved the local implementation and requires separate approval
+      before publication. OpenCode authored code and tests in two supervised
+      rounds. Codex traced consumers, requested the competing-input and settled
+      cancellation assertions, maintained paired documentation and independently
+      verified the final candidate. No other module was repaired on its owner's
+      behalf; no subagent was used.
+    human_review: >-
+      Under review. Captain authorized local implementation; code publication,
+      review submission and progress-board updates require separate confirmation.
+      Final merge and full product acceptance remain human-owned.
+    transcript_record: >-
+      Authentic session export is retained outside this repository in the course
+      project evidence/m5-selection-adoption-20261030 directory. Verification
+      commands, results and limits are recorded there against the final file hashes.
+    scope: >-
+      Test/demo composition wiring and consuming tests, plus English documentation.
+      This does not supply M3 ReactionPort, formal M2 console recovery, live
+      providers, acoustic measurements or complete I1 acceptance.

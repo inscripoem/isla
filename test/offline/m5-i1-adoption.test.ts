@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
+  ClockPort,
   ControlAck,
   EventStorePort,
   RuntimeEvent,
@@ -9,16 +10,24 @@ import type {
   SynthesisPort,
 } from '../../src/contracts'
 import { controlAckSchema } from '../../src/contracts'
+import { createRuleSelectionPort } from '../../src/decision'
+import type { AssembledDialogueContext, DialogueTextSource } from '../../src/dialogue'
 import { createMonotonicClock } from '../../src/runtime/clock'
 import type { RuntimeCoordinator } from '../../src/runtime/coordinator'
 import type { RuntimeDeadlineGate } from '../../src/runtime/deadline'
 import { createEventStore } from '../../src/storage/event-store'
 import { createInMemoryBackend } from '../../src/storage/in-memory-backend'
 import { createDeferringSelectionPort, createFixtureSelectionPort } from '../support/correct-ports'
+import { createGate } from '../support/context'
 import { openAdoptionSession } from '../support/i1-adoption'
 import type { AdoptionSession } from '../support/i1-adoption'
 import type { LoopHarness, LoopHarnessOptions } from '../support/i1-harness'
-import { createControlledMediaDriver } from '../support/m1-kit'
+import { createCatalogDialogueTextSource } from '../support/m4-kit'
+import {
+  createControlledMediaDriver,
+  M1_FIXTURE_SEGMENT_0_TEXT,
+  M1_FIXTURE_SEGMENT_1_TEXT,
+} from '../support/m1-kit'
 import { createTestProductionPeers } from '../support/production-kit'
 
 /**
@@ -124,6 +133,21 @@ function firstSelectionRequestId(events: readonly RuntimeEvent[]): string | null
   return typeof requestId === 'string' ? requestId : null
 }
 
+/** The first recorded selection plan payload, without assuming its origin. */
+function firstPlanPayload(events: readonly RuntimeEvent[]): Record<string, unknown> | null {
+  const event = events.find((candidate) => candidate.type === 'selection.plan')
+  const plan = (event?.payload as { plan?: Record<string, unknown> } | undefined)?.plan
+  return plan ?? null
+}
+
+/** Disposition recorded for the first selection provider invocation. */
+function selectionCallDisposition(events: readonly RuntimeEvent[]): unknown {
+  const call = events.find(
+    (event) => event.type === 'provider.call' && event.payload.call === 'selection',
+  )
+  return call?.payload.disposition
+}
+
 function completedTurns(events: readonly RuntimeEvent[]): RuntimeEvent[] {
   return events.filter(
     (event) => event.type === 'turn.ended' && event.payload.status === 'completed',
@@ -185,7 +209,329 @@ function createLateSelectingPort(): {
   }
 }
 
+/**
+ * Holds the first scheduler pass until the test releases it, so two accepted
+ * inputs are both pending when the real coordinator snapshots its candidates.
+ * It changes no turn behaviour and delegates every later pass immediately.
+ */
+function createHeldScheduler(): {
+  wrapCoordinator: (coordinator: RuntimeCoordinator) => RuntimeCoordinator
+  release(): void
+} {
+  let release = (): void => {}
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let held = false
+  return {
+    release,
+    wrapCoordinator(coordinator) {
+      return {
+        ...coordinator,
+        async runTurn() {
+          if (!held) {
+            held = true
+            await gate
+          }
+          return coordinator.runTurn()
+        },
+      }
+    },
+  }
+}
+
 describe('M5 I1 adoption checks', () => {
+  it('selects the oldest of two queued inputs and feeds the decision into real M4 and output', async () => {
+    const clock = createMonotonicClock()
+    const rule = createRuleSelectionPort({ clock })
+    const offered: string[][] = []
+    const views: AssembledDialogueContext[] = []
+    const catalog = createCatalogDialogueTextSource()
+    const textSource: DialogueTextSource = {
+      ...catalog,
+      async compose(view, maxSegments) {
+        views.push(view)
+        return catalog.compose(view, maxSegments)
+      },
+    }
+    const scheduler = createHeldScheduler()
+    const session = await adopt({
+      clock,
+      realM4: true,
+      dialogueTextSource: textSource,
+      wrapCoordinator: scheduler.wrapCoordinator,
+      selection: {
+        async select(request, context) {
+          offered.push(request.candidates.map((candidate) => candidate.eventId))
+          return rule.select(request, context)
+        },
+      },
+    })
+
+    const firstAck = await session.harness.client.input('first competing question')
+    const firstId = (firstAck.payload as { eventId: string }).eventId
+    const secondAck = await session.harness.client.input('second competing question')
+    const secondId = (secondAck.payload as { eventId: string }).eventId
+    expect(secondId).not.toBe(firstId)
+    // Both inputs are accepted before the held scheduler snapshots a candidate
+    // set; the rule must then choose the oldest offered input.
+    scheduler.release()
+
+    const events = await session.until(
+      () => session.events(),
+      (all) => completedTurns(all).length >= 2,
+    )
+
+    // The first request really offered both candidates, and the merged rule chose
+    // the oldest accepted input rather than merely the only one available.
+    expect(offered[0]).toEqual([firstId, secondId])
+    const plans = planEvidence(events)
+    expect(plans).toHaveLength(2)
+    expect(plans[0]?.selectedEventIds).toEqual([firstId])
+    expect(plans[1]?.selectedEventIds).toEqual([secondId])
+    expect(firstPlanPayload(events)).toMatchObject({
+      disposition: 'respond',
+      provider: 'm3-rules',
+      modelVersion: 'm3-rules-v0.1',
+      reasonCode: 'oldest-offered',
+      replyIntent: 'answer',
+    })
+    expect(selectionCallDisposition(events)).toBe('accepted')
+
+    // Real M4 receives the rule-selected text and the supported answer intent.
+    expect(views).toHaveLength(2)
+    expect(views[0]).toMatchObject({
+      historySource: 'history-port',
+      selectedInputText: 'first competing question',
+      replyIntent: 'answer',
+    })
+    expect(views[1]).toMatchObject({
+      historySource: 'history-port',
+      selectedInputText: 'second competing question',
+      replyIntent: 'answer',
+    })
+    expect(views[1]?.turns[0]?.text).toContain(M1_FIXTURE_SEGMENT_0_TEXT)
+
+    // Exact committed outputs: one catalogued pair per selected turn, in order.
+    const firstTurn = plans[0]?.turnId
+    const secondTurn = plans[1]?.turnId
+    const expected = [
+      {
+        turnId: firstTurn,
+        segmentIndex: 0,
+        text: M1_FIXTURE_SEGMENT_0_TEXT,
+        classification: 'fully-delivered',
+        modality: 'audio',
+      },
+      {
+        turnId: firstTurn,
+        segmentIndex: 1,
+        text: M1_FIXTURE_SEGMENT_1_TEXT,
+        classification: 'fully-delivered',
+        modality: 'audio',
+      },
+      {
+        turnId: secondTurn,
+        segmentIndex: 0,
+        text: M1_FIXTURE_SEGMENT_0_TEXT,
+        classification: 'fully-delivered',
+        modality: 'audio',
+      },
+      {
+        turnId: secondTurn,
+        segmentIndex: 1,
+        text: M1_FIXTURE_SEGMENT_1_TEXT,
+        classification: 'fully-delivered',
+        modality: 'audio',
+      },
+    ]
+    const actual = session.harness.composition.coordinator
+      .deliveries()
+      .map((delivery) => ({
+        turnId: delivery.turnId,
+        segmentIndex: delivery.segmentIndex,
+        text: delivery.text,
+        classification: delivery.classification,
+        modality: delivery.modality,
+      }))
+    expect(actual).toEqual(expected)
+    expect(events.filter((event) => event.type === 'delivery.committed')).toHaveLength(4)
+
+    const history = await session.harness.confirmedHistory()
+    expect(
+      history.map((record) => ({
+        turnId: record.turnId,
+        segmentIndex: record.segmentIndex,
+        text: record.text,
+        classification: record.classification,
+        modality: record.modality,
+      })),
+    ).toEqual(expected)
+    expect(
+      session.harness.m4Memory?.records().map((record) => ({
+        turnId: record.turnId,
+        segmentIndex: record.segmentIndex,
+        text: record.text,
+        classification: record.classification,
+        modality: record.modality,
+      })),
+    ).toEqual(expected)
+  })
+
+  it('keeps the runtime clock-bound rule selection in a recovery successor', async () => {
+    const liveSessionId = 'session-adoption-rule'
+    const successorIds: string[] = []
+    const session = await adopt({
+      clock: createMonotonicClock(),
+      // One catalogued line keeps each turn's confirmed-history count exact.
+      dialogueTextSource: createCatalogDialogueTextSource([M1_FIXTURE_SEGMENT_0_TEXT]),
+      reconstruction: {
+        liveSessionId,
+        liveProfile: { profileId: 'character-fixture', profileVersion: '1' },
+        selectedSources: [],
+        catalogue: new Map(),
+      },
+      recovery: {
+        nextSessionId: () => {
+          const id = `session-adoption-succ-${successorIds.length + 1}`
+          successorIds.push(id)
+          return id
+        },
+      },
+    })
+
+    const firstAck = await session.harness.client.input('initial rule-selected input')
+    const firstId = (firstAck.payload as { eventId: string }).eventId
+    const liveEvents = await session.until(
+      () => session.events(liveSessionId),
+      (events) => completedTurns(events).length >= 1,
+    )
+    expect(planEvidence(liveEvents)[0]?.selectedEventIds).toEqual([firstId])
+    expect(firstPlanPayload(liveEvents)).toMatchObject({ provider: 'm3-rules' })
+
+    const operator = session.harness.newClient()
+    try {
+      await operator.snapshot
+      await operator.bootstrapOperator(await session.harness.bootstrapOperator())
+      const ack = await operator.recover()
+      expect(ack.kind).toBe('session.recovery.ack')
+    } finally {
+      await operator.close().catch(() => {})
+    }
+
+    const successor = session.harness.currentSessionId()
+    expect(successor).toBe(successorIds[0])
+
+    const next = session.harness.newClient()
+    try {
+      await next.snapshot
+      await next.bootstrapOperator(await session.harness.bootstrapOperator())
+      expect((await next.attach()).kind).toBe('session.attach.ack')
+      expect(((await next.resume()).payload as { status: string }).status).toBe('applied')
+
+      const secondAck = await next.input('successor rule-selected input')
+      const secondId = (secondAck.payload as { eventId: string }).eventId
+      const successorEvents = await session.until(
+        () => session.events(successor),
+        (events) => completedTurns(events).length >= 1,
+      )
+      expect(planEvidence(successorEvents)[0]?.selectedEventIds).toEqual([secondId])
+      expect(firstPlanPayload(successorEvents)).toMatchObject({
+        provider: 'm3-rules',
+        reasonCode: 'oldest-offered',
+      })
+      expect(selectionCallDisposition(successorEvents)).toBe('accepted')
+      expect(await session.harness.confirmedHistory(successor)).toHaveLength(1)
+    } finally {
+      await next.close().catch(() => {})
+    }
+  })
+
+  it('records an M3 rule port bound to a foreign clock as a failed call, not a plan', async () => {
+    // Negative control: the merged rule port compares deadlines against its own
+    // clock. A port wired to a foreign domain must not look like a valid M3 plan.
+    const foreignClock: ClockPort = { nowMs: () => Number.MAX_SAFE_INTEGER }
+    const session = await adopt({
+      clock: createMonotonicClock(),
+      selection: createRuleSelectionPort({ clock: foreignClock }),
+    })
+
+    const ack = await session.harness.client.input('foreign clock input')
+    const eventId = (ack.payload as { eventId: string }).eventId
+    const events = await session.until(
+      () => session.events(),
+      (all) => completedTurns(all).length >= 1,
+    )
+
+    expect(selectionCallDisposition(events)).toBe('failed')
+    const plan = firstPlanPayload(events)
+    expect(plan).toMatchObject({
+      provider: 'm5-fallback',
+      reasonCode: 'm5-fallback',
+      disposition: 'respond',
+    })
+    expect(plan?.selectedEventIds).toEqual([eventId])
+    expect(plan?.provider).not.toBe('m3-rules')
+  })
+
+  it('settles a held rule selection after Stop without adopting a plan, dialogue or output', async () => {
+    const clock = createMonotonicClock()
+    const base = createRuleSelectionPort({ clock })
+    const gate = createGate()
+    let entered = false
+    let calls = 0
+    let settleUnderlying = (): void => {}
+    const underlyingSettled = new Promise<void>((resolve) => {
+      settleUnderlying = resolve
+    })
+    const selection: SelectionPort = {
+      async select(request, context) {
+        calls += 1
+        entered = true
+        await gate.promise
+        try {
+          // After Stop the runtime context is aborted; the real rule port must
+          // refuse rather than return a proposal for the retired cycle.
+          return await base.select(request, context)
+        } finally {
+          settleUnderlying()
+        }
+      },
+    }
+    const session = await adopt({ clock, selection })
+
+    await session.harness.client.input('held rule selection')
+    await session.until(() => entered, (value) => value)
+    const stop = await session.harness.client.stop()
+    expect((stop.payload as { status: string }).status).toBe('applied')
+    gate.release()
+
+    // Wait for the underlying rule call itself, then for the coordinator's
+    // aborted-call and stale-selection bookkeeping instead of a fixed delay.
+    await underlyingSettled
+    const events = await session.until(
+      () => session.events(),
+      (all) =>
+        all.some(
+          (event) => event.type === 'provider.call' && event.payload.call === 'selection',
+        ) &&
+        all.some((event) => event.type === 'result.stale' && event.payload.stage === 'selection'),
+    )
+
+    expect(events.filter((event) => event.type === 'selection.plan')).toHaveLength(0)
+    expect(events.some((event) => event.type === 'turn.started')).toBe(false)
+    expect(events.some((event) => event.type === 'dialogue.result')).toBe(false)
+    expect(events.filter((event) => event.type === 'delivery.committed')).toHaveLength(0)
+    expect(session.harness.composition.coordinator.deliveries()).toHaveLength(0)
+    expect(
+      session.harness.client
+        .messages()
+        .some((message) => message.kind === 'performance.offer' || message.kind === 'performance.grant'),
+    ).toBe(false)
+    expect(selectionCallDisposition(events)).toBe('aborted')
+    expect(calls).toBe(1)
+  })
+
   it('times out a held selection, ignores its late result and completes a later candidate', async () => {
     const selection = createLateSelectingPort()
     const session = await adopt({

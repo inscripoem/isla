@@ -1,6 +1,6 @@
 # I1 application transport handoff (protocol 0.2)
 
-Status: under review · 2026-10-18.3 · Owner: M5 (runtime) · Consumer: M2 (console)
+Status: under review · 2026-10-30 · Owner: M5 (runtime) · Consumer: M2 (console)
 
 Explicit operator session recovery (`session.recover`) is implemented under review; see [Explicit session recovery](#explicit-session-recovery). The shared case registry is unchanged: the existing C-08 row stays pending and is not re-registered here.
 
@@ -16,7 +16,8 @@ runtime. It is the M5 application transport, separate from diagnostic protocol
 ## Run the loop
 
 The demo uses real M4 context, generation and delivery memory against M6 history.
-M3 and the dialogue text provider remain explicit `test/support` substitutes. The
+Selection uses the merged M3 rule port with the runtime clock. M3 reaction and
+the dialogue text provider remain explicit `test/support` substitutes. The
 provider returns the exact registered WAV text; this is not a live-model result.
 Production source imports no test code.
 
@@ -311,13 +312,16 @@ shared wire definitions are already in `src/contracts/app/transport.ts`.
 
 ## Known gaps
 
-M3 adoption, live dialogue/TTS/VTS, SQLite durability, full C-05/C-08/C-09/C-16
-and physical audio/silence verification remain pending. Explicit operator
-session recovery is implemented for the in-memory I1 loop only; disk or
-process-crash restart recovery over the SQLite backend remains M6 work and is
-not claimed here. The automated loop uses a controlled media driver that emits
-synthetic media events, so its receipts are M1 controller logic evidence, not
-acoustic proof. This handoff validates the offline loop only.
+The merged M3 rule selection is now wired into the runnable loop and the
+adoption harness (see below); a live or model-backed selection adapter, an
+M3-owned reaction port beyond the explicit fixture substitute, live
+dialogue/TTS/VTS, SQLite durability, full C-05/C-08/C-09/C-16 and physical
+audio/silence verification remain pending. Explicit operator session recovery is
+implemented for the in-memory I1 loop only; disk or process-crash restart
+recovery over the SQLite backend remains M6 work and is not claimed here. The
+automated loop uses a controlled media driver that emits synthetic media events,
+so its receipts are M1 controller logic evidence, not acoustic proof. This
+handoff validates the offline loop only.
 
 ## Historical I1 verification and ownership
 
@@ -443,7 +447,63 @@ under review. The checks above precede publication; Captain subsequently authori
 
 ## Adoption checks for selection, synthesis and reconnect
 
-Current adoption (2026-10-29): the original OpenCode-authored increment below
+### Merged M3 rule selection (2026-10-30)
+
+The October 30 M5 follow-up under issue #90 wires the merged M3 rule
+`SelectionPort` (`createRuleSelectionPort`, `src/decision/selection.ts`) into the
+runnable I1 loop (`test/browser/loop-server.ts`) and the reusable adoption harness
+(`test/support/i1-harness.ts`, `test/support/i1-adoption.ts`). `openAdoptionSession`
+creates the monotonic clock once (`options.clock ?? createMonotonicClock()`) and
+passes it to the harness; the harness constructs one rule port from that clock and
+reuses that single instance for the initial, reconstructed and every recovery
+successor composition, so a successor cannot silently fall back to a fixture or a
+second clock domain. The runnable demo differs: `createLoopCompositionBuilder`
+creates a rule port per composition, but every port is bound to the same
+`deps.clock` created once by the demo entry. `LoopHarnessOptions.selection` still
+overrides the default for controlled negative tests. The explicit M3-owned
+reaction substitute and the deterministic catalog dialogue text provider are
+unchanged. This is partial I1 adoption, not a live M3/M4 provider, acoustic output
+or formal console acceptance.
+
+`test/offline/m5-i1-adoption.test.ts` adds four checks over the actual
+application endpoint:
+
+- two competing candidates: the first scheduler pass is held until both inputs
+  are accepted, so the real rule is offered `[firstId, secondId]` in that order
+  and records `oldest-offered` selecting the first; the later turn selects the
+  remaining input. Real M4 receives `selectedInputText` equal to each selected
+  input with `replyIntent: 'answer'`; exactly four catalog segments commit as
+  `fully-delivered` audio in segment order, and the same rows appear in confirmed
+  history and M4 memory;
+- recovery successor: after explicit operator recovery, the successor's first
+  turn still records an `m3-rules` plan selecting its own accepted input;
+- clock/deadline negative control: a rule port bound to a foreign clock is
+  recorded as a `failed` selection call, and the turn proceeds only through the
+  M5 fallback plan, so a mismatched clock cannot masquerade as an M3 decision;
+- Stop settlement: Stop while the rule selection is held; the test awaits the
+  held underlying rule call's settlement and the recorded `provider.call` and
+  `result.stale` events instead of a fixed delay, then asserts no `selection.plan`
+  was adopted and no turn, dialogue, offer, grant or delivery exists, with the
+  selection call `aborted`.
+
+`test/offline/i1-loop-demo.test.ts` now also asserts that the actual demo
+composition records an `m3-rules` plan selecting the accepted input.
+
+Final independent Linux checks after the review follow-up: `pnpm test:m5`
+218/218 in 10 files; `pnpm test:m3` 47/47; actual-PR-range trace41 and G6 passed;
+`pnpm verify` 1395/1395 tests in 71 files with typecheck, lint and build. The
+maintained browser recovery check passed 10/10 with zero page errors using
+Nix Chromium 156.0.8078.47. Its real DOM media observations belong to the isolated
+loop page, not the formal M2 console or acoustic output. The four new adoption
+checks and the runnable-demo check were also run by OpenCode in the focused
+12/12 test set. Controlled media and the catalog text provider remain explicit
+in the Node tests. The November 1 team inspection is still NOT RUN; use
+[FIRST-I1-INSPECTION](FIRST-I1-INSPECTION.en.md) for its source-bound record. Live selection/model adapters, M3 rule ReactionPort adoption,
+SQLite restart recovery, physical output and full
+I1/C-05/C-08/C-09/C-16 acceptance remain pending. No shared contract,
+M2/M3/M4 module implementation or case ID changed.
+
+Historical adoption basis (2026-10-29): the original OpenCode-authored increment below
 has been applied without source/test conflict to main `4e4f7cd`, which includes
 PR65. Independent Linux checks on this combination passed full `pnpm verify`
 1346/1346 in 71 files, M5 214/214 in 10 files, actual-range trace41/41 and G6.
@@ -497,9 +557,9 @@ Owner adoption after a reviewable delivery is available:
 
 | Consumer | Replacement and checks |
 | --- | --- |
-| M3 / M5 | Supply the owner selection and reaction ports through `LoopHarnessOptions.selection` and `.reaction`, using the harness clock domain. Keep controlled failure/late-result peers in the negative tests. Recheck accepted-input identity, supported intent, defer, expiry and Stop; these tests do not grade intent quality. |
+| M3 / M5 | The merged M3 rule selection is now the harness and runnable-loop default, bound to the runtime monotonic clock; `LoopHarnessOptions.selection` remains for controlled negative tests. M3 still owns a live/model adapter and intent quality. The M3-owned reaction port remains an explicit fixture substitute, supplied through `LoopHarnessOptions.reaction` in the same clock domain. Recheck accepted-input identity, supported intent, defer, expiry and Stop; these tests do not grade intent quality. |
 | M2 / M1 / M5 | M2 owns the browser-safe production client and console extraction. Adopt `/app` and `/operator/bootstrap`, snapshot-first binding, one performer, offer/ready/grant, status-before-receipt, and explicit recovery. Repeat the transport scenarios with that client; the existing test performer is not evidence of M2 adoption. Root routes already exist on the merged base. |
-| M5 | Record each adopted commit and replace one owner at a time. PR65 remains separate until its repaired revision is reviewed; reconcile its M5 outcome/evaluation changes with this increment before testing the final combination. Keep PR57 and PR64 acceptance separate as well. |
+| M5 | Record each adopted commit and replace one owner at a time. The current base includes merged PR57 and PR65. Keep PR64/130/131 consumer reviews tied to their actual heads and run the final module combination once it exists; this local selection increment does not accept full I1. |
 
 No public wire contract, owner assignment or shared case status changes in this
 increment. The fixed WAV catalogue, catalogue text source, controlled media and

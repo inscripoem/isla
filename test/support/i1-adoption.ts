@@ -1,4 +1,5 @@
 import type { EventStorePort, RuntimeEvent } from '../../src/contracts'
+import { createMonotonicClock } from '../../src/runtime/clock'
 import { createEventStore } from '../../src/storage/event-store'
 import { createLoopHarness } from './i1-harness'
 import type { LoopHarness, LoopHarnessOptions } from './i1-harness'
@@ -10,6 +11,11 @@ import type { LoopHarness, LoopHarnessOptions } from './i1-harness'
  * exposes only the reads a future owner port needs to replace: the session's
  * recorded events, a bounded observable wait, and shutdown. It adds no behaviour
  * to the harness and is never imported by production code.
+ *
+ * The runtime clock is created once here and handed to the harness, so the
+ * harness's default M3 rule selection port and the runtime/coordinator share
+ * one clock domain. An explicit `selection` or `clock` remains available for
+ * controlled negative tests.
  */
 export interface AdoptionSession {
   readonly harness: LoopHarness
@@ -30,7 +36,8 @@ export interface AdoptionSession {
 export async function openAdoptionSession(
   options: LoopHarnessOptions = {},
 ): Promise<AdoptionSession> {
-  const harness = await createLoopHarness(options)
+  const clock = options.clock ?? createMonotonicClock()
+  const harness = await createLoopHarness({ ...options, clock })
   try {
     const token = await harness.bootstrapOperator()
     await harness.client.bootstrapOperator(token)
