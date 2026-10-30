@@ -1,0 +1,38 @@
+{
+  "requestId": "selection-request-001",
+  "task": "response-plan",
+  "sessionId": "session-eval-001",
+  "epoch": 0,
+  "snapshotRevision": 1,
+  "candidates": [
+    {
+      "eventId": "message-001",
+      "sessionId": "session-eval-001",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-a",
+      "text": "Which game are you playing?",
+      "receivedAtMs": 800,
+      "expiresAtMs": 6000,
+      "trust": "untrusted-content"
+    },
+    {
+      "eventId": "message-002",
+      "sessionId": "session-eval-001",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-b",
+      "text": "Hello Isla!",
+      "receivedAtMs": 900,
+      "expiresAtMs": 6000,
+      "trust": "untrusted-content"
+    }
+  ],
+  "personaSummary": "Isla is a friendly game commentator. Do not invent facts.",
+  "currentTopic": "Introducing the current game",
+  "recentHistory": [],
+  "allowedIntents": ["answer", "acknowledge", "clarify"],
+  "deadline": { "atMs": 3000 },
+  "policyVersion": "m3-rules-v0.1-draft",
+  "providerVersion": "rules-v0.1-draft"
+}

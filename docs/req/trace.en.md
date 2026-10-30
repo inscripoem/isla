@@ -123,7 +123,7 @@ C-74 — `test/offline/m5-process-restart.test.ts`:
 | FR-06 | M6 | C-12, C-17, C-21, C-22, C-29, C-30, C-31, C-32, C-33, C-45, C-46, C-47, C-67, C-68, C-74 | product-console recovery adoption, Windows and live-provider acceptance; C-74 covers controlled Linux process continuation only |
 | NFR-01 | M5 | C-52, C-54, C-55, C-69, C-70, C-71 | metric baseline |
 | NFR-02 | M5 | C-10, C-17 | C-05, C-09, recovery duration |
-| NFR-03 | M3 | — | C-16, human rubric |
+| NFR-03 | M3 | — | C-16, human rubric (docs/decision/m3-quality-rubric-v0.1.md, draft) |
 | NFR-04 | M3 | C-15, C-52, C-53, C-69 | cost/token caps |
 | NFR-05 | M5 | C-07 | retention/deletion |
 | NFR-06 | M1 | C-11 | — |
@@ -143,6 +143,13 @@ C-74 — `test/offline/m5-process-restart.test.ts`:
 | INV-14 | M6 | C-36 | — |
 | INV-15 | M5 | C-47, C-50 (turn reconstruction ordering and M4 agreement guard) | M4/M6 consumer acceptance |
 | INV-16 | M6 | C-52, C-53, C-54, C-55, C-69, C-70, C-71 | — |
+
+> **M3-01 module-level prerequisite.** `src/decision/selection.ts` and
+> `test/offline/m3-decision.test.ts` provide FR-01 module-level evidence for the
+> rule port, corpus loading and exact-one/deadline/failure observations. This is
+> not a registered composition case: C-13 remains the registered
+> selection-to-delivery verifier. No new case ID is assigned; C-05/C-16 remain
+> pending. Direct runner evidence is not full-pipeline S6 evidence.
 
 ## Ordering trace correction (2026-10-15)
 
