@@ -123,7 +123,7 @@ C-74 — `test/offline/m5-process-restart.test.ts`:
 | FR-06 | M6 | C-12, C-17, C-21, C-22, C-29, C-30, C-31, C-32, C-33, C-45, C-46, C-47, C-67, C-68, C-74 | product-console recovery adoption, Windows and live-provider acceptance; C-74 covers controlled Linux process continuation only |
 | NFR-01 | M5 | C-52, C-54, C-55, C-69, C-70, C-71 | metric baseline |
 | NFR-02 | M5 | C-10, C-17 | C-05, C-09, recovery duration |
-| NFR-03 | M3 | — | C-16, human rubric |
+| NFR-03 | M3 | — | C-16, human rubric (docs/decision/m3-quality-rubric-v0.1.md, draft) |
 | NFR-04 | M3 | C-15, C-52, C-53, C-69 | cost/token caps |
 | NFR-05 | M5 | C-07 | retention/deletion |
 | NFR-06 | M1 | C-11 | — |
@@ -143,6 +143,13 @@ C-74 — `test/offline/m5-process-restart.test.ts`:
 | INV-14 | M6 | C-36 | — |
 | INV-15 | M5 | C-47, C-50 (turn reconstruction ordering and M4 agreement guard) | M4/M6 consumer acceptance |
 | INV-16 | M6 | C-52, C-53, C-54, C-55, C-69, C-70, C-71 | — |
+
+> **M3-01 module-level prerequisite.** `src/decision/selection.ts` and
+> `test/offline/m3-decision.test.ts` provide FR-01 module-level evidence for the
+> rule port, corpus loading and exact-one/deadline/failure observations. This is
+> not a registered composition case: C-13 remains the registered
+> selection-to-delivery verifier. No new case ID is assigned; C-05/C-16 remain
+> pending. Direct runner evidence is not full-pipeline S6 evidence.
 
 ## Ordering trace correction (2026-10-15)
 
@@ -201,8 +208,9 @@ The final coordinator regressions cover exact selection/reaction deadlines, acce
 
 ## M5 I1 adoption checks
 
-The local M5 I1 adoption increment on 2026-10-28 adds a test-only adoption entry
-and five loopback checks for selection timeout with a late result, unchanged
+The local M5 I1 adoption increment on 2026-10-28 adds a test-only adoption entry,
+five loopback checks, and two helper checks (explicit store access and
+failed-setup cleanup) for selection timeout with a late result, unchanged
 deferral, synthesis failure before any output followed by a successful fresh
 turn, synthesis failure after a delivered prefix, and reconnect during
 unconfirmed playback. The helper closes a started harness when setup is refused
@@ -212,4 +220,5 @@ evaluation adapter now classifies a failed dialogue from the recorded dialogue
 end rather than the turn end. This is scoped evidence for the existing
 FR-01/FR-04/FR-05/FR-06 traces only: C-05, C-08, C-09 and C-16 remain pending,
 with no case-registry, requirement-owner or invariant change. Status: under
-review; uncommitted.
+review; committed at `bc66257`; subsequently adopted on current main and awaiting
+a fresh combined-head review.

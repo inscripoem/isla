@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "hashVersion": 1,
+  "corpusVersion": "m3-selection-v1",
+  "rubricVersion": "m3-quality-rubric-v0.1",
+  "casesSha256": "3182fd72ad04d397bbc84c5daca3bffe5a2035c29b5fede17e5041ecb6cd3cd7",
+  "cases": [
+    {
+      "id": "selection-001",
+      "requestFile": "requests/selection-001.json",
+      "labelFile": "labels/selection-001.json",
+      "reviewFile": "reviews/selection-001.json",
+      "initialNowMs": 1000,
+      "heldOut": false,
+      "executionMode": "selection-port"
+    },
+    {
+      "id": "selection-002",
+      "requestFile": "requests/selection-002.json",
+      "labelFile": "labels/selection-002.json",
+      "reviewFile": "reviews/selection-002.json",
+      "initialNowMs": 1000,
+      "heldOut": false,
+      "executionMode": "selection-port"
+    }
+  ]
+}
