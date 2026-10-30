@@ -3652,3 +3652,225 @@ entries:
       connection/pairing/live/model/hotkey action, physical animation/silence, acoustic timing, Windows
       production recovery or G4/S6 acceptance. Issues remain Open with existing checklists unchanged;
       earlier evidence and approvals remain version-bound.
+
+  - date: "2026-10-26"
+    task: "I1-01 / M5 VTS acquisition first stage"
+    change: >-
+      Add bounded M5 acquisition over the real M1 D1/D2 interfaces, explicit
+      record-aware credential coordination, late-handle cleanup and blocked
+      replacement until resource settlement. Preserve M1/shared interfaces
+      and update dated team delivery status without changing responsibilities.
+    requirements: [FR-03, FR-04, FR-05, NFR-02, NFR-05, NFR-06]
+    invariants: [INV-01, INV-02]
+    commits: [b6fdb1cf71eb7904c1bf7400fca739ba1875f1b5]
+    branch: feat/m5-vts-acquisition-20261026
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    opencode_version: 2.1.4
+    launch_flags: [--agent, build, --format, json]
+    sessions: [ses_e87e23191ffebgbHzWxKnQF87c]
+    supervision: >-
+      Genuine OpenCode authored all new runtime and test code. Codex reviewed
+      interfaces and ownership, narrowed the first stage, identified credential
+      binding and cancellation/release ordering defects, and directed regression
+      proofs before fixes. Codex maintains status/review documents, this factual
+      log entry and independent verification. No delegated agents were used.
+    human_review: >-
+      Captain approved first-stage local development by asking to proceed after
+      reviewing the M5 plan. The candidate remains uncommitted, unpublished and
+      under review. This is not implementation approval by M1, a live acceptance
+      result or authorization for an agent to merge.
+    transcript_record: >-
+      Native session messages and metadata are retained in the project's external
+      evidence/m5-vts-acquisition-20261026 directory. Preserve the original
+      model/agent metadata, failed tests and subsequent corrections.
+    verification:
+      base: 74e99953733eeb070f99d4b9c57554e22e928840
+      platform: "Linux x86_64 / Node22.23.4 / pnpm12.9.0"
+      baseline: "Unmodified M5 177 tests across 8 files passed."
+      independent: "M5 200/9, composition12/1 and full1230/64 passed; typecheck, lint and build passed; tested source hashes unchanged."
+    scope: >-
+      Controlled connections and credentials only. No production CLI/renderer
+      assembly, real VTS endpoint, credential file/storage validation, model or
+      hotkey action, physical silence, recovery unlock or S6/G4 acceptance.
+      The deployment must share one explicit coordinator per underlying store.
+      Pending loads as well as saves block replacement; failure latches are
+      process-local. No dependencies, lockfile, existing tests or registered
+      requirement/case/invariant IDs are changed.
+
+  - date: "2026-10-28"
+    task: "M5 VTS acquisition PR64 follow-ups"
+    change: >-
+      Add a maintained regression for a connector handle that arrives after
+      owner cancellation, completes its bounded physical close with a timeout
+      and later completes physically, proving replacement stays refused and
+      quarantine stays latched. Add a same-record contention regression and
+      document that D2 receives credential_read_failed without the evidence or
+      authorization to delete the stored credential or prompt again. No
+      production behavior or interface changed.
+    requirements: [FR-03, FR-04, FR-05, NFR-02, NFR-05, NFR-06]
+    invariants: [INV-01, INV-02]
+    commits: [3610d60699f8bde0fd302809b8a49fe706e584d6]
+    branch: "detached HEAD at 181294819bc3f948c80ea264df0952d75658c0ca"
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    opencode_version: 2.2.0
+    launch_flags: ["--model", "self-api/deepseek-v4-flash#xhigh", "--agent", "build", "--format", "json", "--title", "Isla M5 PR64 local follow-ups 20261028"]
+    sessions: [ses_e7f76281affeBHHKpGhrK6KWHF]
+    supervision: >-
+      OpenCode inspected the existing contention cases, added the two regressions
+      and updated the M5 handoff, trace note and this entry. No subagents were
+      used. The reviewer had already installed the locked dependencies and
+      isolated the global plugin; this session did not change dependencies,
+      global configuration or Git state. The supervising Codex reviewer corrected
+      the new entry's branch and launch flags from the actual CLI invocation
+      before publication; the native session and prior log entries are unchanged.
+    human_review: >-
+      Captain approved local completion of the two nonblocking M1 review
+      follow-ups on PR64 at base 1812948 and instructed implementation,
+      verification and an honest development entry. M1's approval of the earlier
+      candidate does not extend to this follow-up candidate. The work remains
+      under review; no commit, push, merge or publication was authorized here.
+    transcript_record: >-
+      This session's native messages and metadata remain in the active session
+      record. No prior transcript, failure or evidence entry was rewritten.
+    verification:
+      base: 181294819bc3f948c80ea264df0952d75658c0ca
+      platform: "Linux x86_64 / Node22.23.4 / pnpm12.9.0 / OpenCode2.2.0"
+      baseline: "focused 23/23 and M5 200/200 rerun before edits; prior documented full verify 1230/64 was not rerun before edits."
+      focused: "pnpm vitest run test/offline/m5-vts-acquisition.test.ts: 25 passed / 1 file."
+      m5: "pnpm test:m5: 202 passed / 9 files."
+      m1: "pnpm test:m1: 289 passed / 2 files (unchanged; run after the follow-up)."
+      full_suite: "pnpm verify: 1232 passed / 64 files; typecheck, lint and build passed."
+    scope: >-
+      Test and documentation follow-up only. The two new cases use the real M5
+      acquisition, real M1 D1/D2 and existing controlled peers/stores. Timeout
+      behavior uses fake timers, not arbitrary sleeps. No live VTS, real
+      credential storage, physical silence, durable recovery, independent
+      verification or M1 approval of this candidate is claimed. No dependencies,
+      lockfile, existing case bodies, other owner modules or registered IDs were
+      changed.
+    supervisor_verification: >-
+      Codex independently ran pnpm test:m5 (202/9) and pnpm verify (1232/64,
+      typecheck/lint/build passed), and documented the separate diagnostic
+      combination with PR65 4273673 and the existing M5 I1 candidate (1371/72).
+      These are supervisor results, not new OpenCode or M1 measurements.
+      Native session export and exact source hashes are retained outside the
+      repository in project evidence/local-followup-20261028.
+  - date: "2026-10-23"
+    task: M3-01-selection-prerequisite
+    branch: m3-minimal-delivery-20261023
+    change: >-
+      Implement the deterministic rule SelectionPort prerequisite, a versioned
+      two-case selection corpus with separated requests/labels/reviews, strict
+      test-only loaders and a direct runner. Add exact-one, duplicate-identity,
+      deadline, per-case clock consistency, failure-observation,
+      review-provenance and partial/exhaustive intent-coverage tests. Add the
+      NFR-03 rubric artifact and record the Windows verification comparison.
+      Record shallight's 2026-10-23 human review of selection-001 against the
+      exact request and label hashes and update the corpus hash. No ReactionPort,
+      M3-02 provider integration, runtime composition or full-pipeline replay is
+      included.
+    requirements: [FR-01, NFR-03]
+    invariants: []
+    cases: []
+    commits: [7cd9af5, d04cddc, 98ce53b, 2a354ca]
+    pull_request: 57
+    publication: "PR #57 opened; not merged."
+    agent: build
+    provider: deepseek
+    model: deepseek-flash
+    variant: max
+    model_display: DeepSeek V4.1 Flash 1017
+    model_display_note: >-
+      Session-reported display name. The export verifies the identifiers
+      provider deepseek and model deepseek-flash, not this display string.
+    runtime: OpenCode Desktop
+    launch_flags: []
+    launch_flag_note: >-
+      The export records agent build and variant max, not launch flags. The
+      empty list is not evidence of a --pure invocation; no pure-mode claim is
+      verified, and max is not claimed equivalent to xhigh.
+    session_id: ses_e9addaf70ffebF51cFKv3n6Hq4
+    sessions: [ses_e9addaf70ffebF51cFKv3n6Hq4]
+    export:
+      file: m3-selectionport-investigation-and-slice-plan.json
+      sha256: E479EFCCD3AE74B6BD4C1CE6965ECDA5E6F6BC7B1A63758AA2699A35BE1DC4BA
+      verification: >-
+        Parsed successfully; info.id matches the session ID;
+        info.model.providerID=deepseek; info.model.id=deepseek-flash;
+        info.agent=build; info.model.variant=max.
+      retention: >-
+        Original retained privately outside the checkout; not copied into the
+        repository.
+      snapshot: >-
+        The export ends before this record-update request and does not include
+        this update.
+    m6_review: >-
+      M6 reviewed d04cddc and requested commit/PR provenance, FR-01
+      module-level trace links and real-calendar reviewedAt validation. The
+      elapsedMs zero note is non-blocking.
+    supervision: >-
+      The M3 owner approved the revised implementation plan and acceptance
+      tests. OpenCode implemented and ran the M3 suite, typecheck, lint, build,
+      targeted boundary test, seven mutation checks and the full verify
+      comparison. No subagent or application-provider call was used.
+    human_review: >-
+      The Captain approved the plan before implementation. On 2026-10-23,
+      reviewer shallight reviewed selection-001's complete request and labels
+      and approved message-001 = 2, message-002 = 1, defer = 0, answer for
+      message-001 and acknowledge for message-002. Intent coverage stays
+      partial, heldOut stays false, and no game name or generated-dialogue
+      quality is inferred. The review is bound to the exact request and label
+      hashes. selection-002 remains draft. The implementation and AI-log move
+      were committed and pushed as 7cd9af5 and d04cddc; PR #57 is open for
+      review and has not been merged. This repair remains under review; no merge
+      approval is claimed.
+    transcript_record: >-
+      Verified Desktop session export m3-selectionport-investigation-and-slice-plan.json,
+      SHA-256 E479EFCCD3AE74B6BD4C1CE6965ECDA5E6F6BC7B1A63758AA2699A35BE1DC4BA.
+      The original is retained privately outside the checkout; no full
+      transcript was printed or copied into the repository. The export is a
+      snapshot ending before this record-update request.
+    verification:
+      baseline_m3: "pnpm test:m3: 2 passed / 1 file on f972b32."
+      baseline_verify: "pnpm verify exit 1; 1108 passed / 17 failed / 1125 tests; 3 unhandled spawn ENOENT errors; build not reached."
+      baseline_build: "pnpm build exit 0."
+      changed_m3: "pnpm test:m3: 45 passed / 1 file."
+      changed_verify: "pnpm verify exit 1; 1151 passed / 17 failed / 1168 tests; 3 unhandled spawn ENOENT errors; failing test identities and error categories equal to baseline; build not reached."
+      changed_build: "pnpm build exit 0."
+      repair_commit: "98ce53b"
+      merge_verify: "2a354ca merge verification is recorded in the PR #57 thread; not restated here."
+      repair_m3: "At 98ce53b: pnpm test:m3: 47 passed / 1 file."
+      repair_verify: "At 98ce53b: pnpm verify exit 1; 1153 passed / 17 failed / 1170 tests; 3 unhandled spawn ENOENT errors; failing test identities and error categories equal to baseline; build not reached."
+      repair_static: "At 98ce53b: pnpm typecheck and pnpm lint passed; pnpm build exit 0."
+      repair_trace: "At 98ce53b: pnpm test:trace: 41 passed / 1 file."
+      repair_readiness: "At 98ce53b: pnpm test:readiness: 38 passed / 4 failed / 42 tests; the four failures are the existing Windows boundaries x3 and requirements CRLF identity."
+      repair_diff_check: "At 98ce53b: git diff --check clean."
+      repair_g6: "At 98ce53b: AI-use log YAML/shape check passed."
+      r1_r5_m3: "pnpm test:m3: 47 passed / 1 file."
+      r1_r5_trace: "pnpm test:trace: 41 passed / 1 file."
+      r1_r5_static: "pnpm typecheck and pnpm lint passed; pnpm build exit 0."
+      r1_r5_verify: "pnpm verify exit 1; 1235 passed / 17 failed / 1252 tests; 3 unhandled spawn ENOENT errors; failing identities identical to the 2a354ca merge run."
+      r1_r5_diff_check: "git diff --check clean."
+      r1_r5_g6: "AI-use log gate passed with comparison base 2a354ca and the complete changed-file list."
+      boundary: "targeted production-to-test import boundary: 1 passed / 8 skipped."
+      readiness: "pnpm test:readiness: 38 passed / 4 failed / 42 tests; the four failures are the pre-existing Windows boundaries x3 and requirements CRLF identity, not new M3 failures."
+      trace: "pnpm test:trace: 41 passed / 1 file."
+      clock_regression: "two cases use different initialNowMs values; the actual SelectionPort receives each case clock, late candidate expiry is rejected at the case time, and a hard-coded clock mutation is caught. Separate hard-coded validation-time mutation is also caught."
+      factory_boundary: "the factory receives only {caseId, initialNowMs}; the regression asserts those keys and does not pass the request, labels or review record."
+      factory_failure: "a throwing selection factory is recorded as one per-case construction-failed technical failure; the next two cases still execute."
+      reviewed_example: "selection-001 reviewed by shallight on 2026-10-23; requestSha256=90f80ad934f41fc79336c6a94ea5e2c215acebe783a2b5a5115e9285e47728fc; labelSha256=3cc6deaaff60bea5a19c159084603ad6064678e2178380f64e726347eae07254; casesSha256=3182fd72ad04d397bbc84c5daca3bffe5a2035c29b5fede17e5041ecb6cd3cd7."
+      mutation: "zero IDs, two IDs, unoffered candidate and disallowed intent each failed the actual-port runner test; the hard-coded runner clock and hard-coded validation time each failed the per-case clock regression; rethrowing a factory failure failed the continuation regression. All files were restored byte-for-byte."
+      verify_flake: "two intermediate post-correction verify runs hit an unrelated Vitest worker crash in i1-cache.test.ts; that file passed alone and the final standard verify run returned the same three baseline unhandled spawn ENOENT errors."
+    scope: >-
+      SelectionPort prerequisite only. ReactionPort, M3-02 provider
+      integration, M5 prepared-input/full-pipeline replay, live providers,
+      S6/G4 and quality scores remain separate. C-05/C-16 remain pending with no
+      registry edit. selection-001 is human-reviewed; selection-002 remains
+      draft. Synthetic review fixtures validate mechanics only and do not
+      certify corpus evidence.

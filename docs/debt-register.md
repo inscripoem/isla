@@ -13,6 +13,7 @@ agent-induced bloat, evaluation debt, guardrail debt, human/cognitive debt.
 | DEBT-05 | untouchable code | `src/contracts/app/*` frozen | coordination cost | M5 | by design (ADR-006) |
 | DEBT-06 | agent-induced bloat | multiple stacked PRs pending merge (#9/#23/#24) | rebase churn | team | sequence merges |
 | DEBT-07 | guardrail debt | M4 reports 5 Windows-only `test:m6` failures (`m6-sqlite` ×3, `m6-02-boundary` ×2); Linux passes 181/14 and the cleanup branch 182/14 | no Windows test claim; CI is Linux-only | M6 | separate platform investigation; do not claim Windows coverage |
+| DEBT-08 | evaluation debt | documentation claims about live configuration are not machine-checked; M6-GOV-11 cannot be satisfied by a docs-only slice | a false or stale claim can ship inside a reviewable document (BUG-017) | M6 | every claim names its command; a negative claim needs a positive read; refresh the thread at write time. Trigger: refusal experiment or a read-only claims check |
 
 ## PR53 IPC literal follow-up
 
@@ -24,3 +25,18 @@ check. A follow-up should use a shared side-effect-free constant or add an
 agreement test, preserving shutdown success, pending/failed release, duplicate
 message and startup-failure coverage. This entry records the debt; it does not
 claim the duplication is fixed or allocate a new stable ID.
+
+## M3 selection integration follow-up
+
+Owner: M3 (M3/M5 where the oldest/answer rule and prepared-input boundary are
+shared). Status: open, non-blocking, as identified in the M6 re-review of PR #57
+and M5's coordination reply.
+
+`src/decision/selection.ts` and M5's `src/runtime/policy.ts` both choose the
+oldest eligible candidate and use `answer` when allowed, but there is no
+cross-module agreement test binding the two implementations. The rule port's
+usage is synthetic (`elapsedMs: 0`, `usageMissing: true`), intent coverage in
+`selection-001` remains partial, and the `EvalCase`/prepared-input binding for a
+future `runVariant` remains unresolved (#41/#55). This entry records the debt;
+it does not allocate a new stable ID, change runtime behavior or claim corpus,
+report, S6 or G4 completion.

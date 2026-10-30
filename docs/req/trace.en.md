@@ -123,7 +123,7 @@ C-74 — `test/offline/m5-process-restart.test.ts`:
 | FR-06 | M6 | C-12, C-17, C-21, C-22, C-29, C-30, C-31, C-32, C-33, C-45, C-46, C-47, C-67, C-68, C-74 | product-console recovery adoption, Windows and live-provider acceptance; C-74 covers controlled Linux process continuation only |
 | NFR-01 | M5 | C-52, C-54, C-55, C-69, C-70, C-71 | metric baseline |
 | NFR-02 | M5 | C-10, C-17 | C-05, C-09, recovery duration |
-| NFR-03 | M3 | — | C-16, human rubric |
+| NFR-03 | M3 | — | C-16, human rubric (docs/decision/m3-quality-rubric-v0.1.md, draft) |
 | NFR-04 | M3 | C-15, C-52, C-53, C-69 | cost/token caps |
 | NFR-05 | M5 | C-07 | retention/deletion |
 | NFR-06 | M1 | C-11 | — |
@@ -143,6 +143,13 @@ C-74 — `test/offline/m5-process-restart.test.ts`:
 | INV-14 | M6 | C-36 | — |
 | INV-15 | M5 | C-47, C-50 (turn reconstruction ordering and M4 agreement guard) | M4/M6 consumer acceptance |
 | INV-16 | M6 | C-52, C-53, C-54, C-55, C-69, C-70, C-71 | — |
+
+> **M3-01 module-level prerequisite.** `src/decision/selection.ts` and
+> `test/offline/m3-decision.test.ts` provide FR-01 module-level evidence for the
+> rule port, corpus loading and exact-one/deadline/failure observations. This is
+> not a registered composition case: C-13 remains the registered
+> selection-to-delivery verifier. No new case ID is assigned; C-05/C-16 remain
+> pending. Direct runner evidence is not full-pipeline S6 evidence.
 
 ## Ordering trace correction (2026-10-15)
 
@@ -192,6 +199,16 @@ The user approved local I1 implementation on 2026-10-15. The application endpoin
 [`src/performance/vts-pairing.ts`](../../src/performance/vts-pairing.ts) supplies the private protocol prerequisite for M1-02 authenticated-connection handoff, supporting FR-03/FR-04/FR-05 and NFR-06 at module scope. The controlled peer/provider helper is [`test/support/m1-vts-pairing-kit.ts`](../../test/support/m1-vts-pairing-kit.ts); actual primitive, cancellation/cleanup and same-handle C-client regressions are appended to [`test/offline/m1-performance.test.ts`](../../test/offline/m1-performance.test.ts), selected by the existing `pnpm test:m1` command. These are prerequisite checks, not a newly registered global case or closure of an existing product verifier.
 
 M5 supplies the finite overall acquisition signal, deployment budgets and identity/target-bound credential provider, including serialization while a shared-record save is unsettled. A test-only caller/provider illustrates that boundary; it does not implement or validate M5 production storage/composition. The original case rows, requirement owners, D1/C APIs and registered identifiers are unchanged. Live VTS pairing/authentication, verified model/hotkey actions, physical output, Windows recovery, real measurements and G4/S6 acceptance remain separate and unclaimed.
+
+## M5 VTS acquisition prerequisite (2026-10-27)
+
+[`src/runtime/vts-acquisition.ts`](../../src/runtime/vts-acquisition.ts) consumes the real M1 D1/D2 primitives for one bounded acquisition, cancellation, same-handle handoff and explicit release. Its record-aware credential coordinator serializes operations for a plugin identity and target when deployment callers share one coordinator per store. This supplies module-level support for FR-03/FR-04/FR-05 and NFR-02/NFR-05/NFR-06; it does not change their owners or satisfy their complete product acceptance criteria.
+
+The 23 original cases in [`test/offline/m5-vts-acquisition.test.ts`](../../test/offline/m5-vts-acquisition.test.ts) (25 after the 2026-10-28 follow-up), selected by `pnpm test:m5`, exercise the production module with [`test/support/m5-vts-acquisition-kit.ts`](../../test/support/m5-vts-acquisition-kit.ts). The cases check cancelled/expired acquisition, late-handle closure, explicit stopped replacement, physical-close and subscription-cleanup failure, record-bound load/save exclusion, and delayed-save settlement. The successful-handoff case also uses the real C client; pre-abort and coordinator-only cases intentionally perform no pairing. See the [handoff](../team/HANDOFF-M5-VTS-ACQUISITION.en.md) for the exact verification scope and deployment obligations.
+
+Follow-up (2026-10-28). Two cases were appended without changing the existing case bodies or production behavior. One uses fake timers and a manual-close fixture socket to prove that a connector handle arriving after owner cancellation stays blocked during its bounded close, latches `quarantined` when the close times out, and remains `quarantined` after the physical close later completes, with replacement and release refused. The other proves that a competing same-record load is refused before the store effect and reaches D2 as `credential_read_failed`, without deleting the stored value or prompting again. Initial author checks and the subsequent independent review are recorded separately in the handoff; neither extends M1's approval to this changed candidate.
+
+These are supporting module tests, not a newly registered global case. Existing case rows and identifiers remain unchanged; C-08, recovery duration, retention/deletion, live VTS, physical output, Windows and S6/G4 acceptance remain pending. Production CLI/renderer assembly, a real credential store, and recovery from a quarantined connection are not part of this slice.
 
 ## M5 mention follow-up (local, 2026-10-22)
 
