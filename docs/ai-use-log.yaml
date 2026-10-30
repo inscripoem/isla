@@ -3934,3 +3934,77 @@ entries:
       physical silence, durable recovery and completed product behaviour are
       not claimed. No merge or publication beyond the task branch was
       performed. The local package.json edit remains uncommitted.
+
+  - date: "2026-10-31"
+    task: M2-01-console-formal-acceptance-harness
+    branch: feat/m2-01-console
+    change: >-
+      Add a test-only Playwright harness for the formal M2 console matrix and
+      document it. `test/browser/formal-console-acceptance.mjs` drives the real
+      root Vite entry, the real `ConsoleApp` and the actual M1 browser
+      controller through the application WebSocket; it never substitutes media,
+      receipts or runtime behaviour. The script asserts a fresh stopped, epoch-0,
+      non-retiring snapshot, complete two-segment turns, Stop before and during
+      playback, manual Resume, duplicate and late frame replay, transport loss,
+      reload without replay, the first acknowledged recovery before retirement,
+      successor adoption and a final complete turn. It writes screenshots plus
+      `report.json` and `summary.txt`, and exits non-zero on page errors or a
+      failed scenario. `test/browser/README.md` records the runtime audio
+      prerequisite, a fresh-database requirement and the evidence boundary.
+    requirements: [FR-01, FR-04, FR-05]
+    invariants: [INV-01, INV-03]
+    commits: [212ab97]
+    agent: trae-code
+    supervision: >-
+      The supervising assistant authored this test-only increment after the
+      formal matrix had only existed under `/tmp`. No production source, shared
+      contract, dependency, manifest or Git-history change was made. The member
+      ran the harness against a fresh runtime with the temporary test-only fixed
+      audio composition from PR #130 and restored those temporary files
+      afterwards; the checkout no longer contains them.
+    human_review: >-
+      The Captain directed completion of the remaining M2 work and a commit per
+      completed slice. Work remains under review; no self-approval, merge or
+      reviewer acceptance is claimed.
+    transcript_record: >-
+      No OpenCode session was used for this test-only increment; the supervising
+      assistant's session is the only transcript and no raw record was copied
+      into the checkout.
+    verification:
+      base: 1ae674c (origin/main 5e7abfb); harness commit 212ab97
+      m2: "pnpm test:m2: 93 passed / 1 file."
+      harness: >-
+        `node --check` clean and `git diff --check` clean. The harness ran
+        against a fresh runtime and the root Vite entry with the temporary PR
+        #130 test-only audio composition: report verdict passed, 0 page errors,
+        13 screenshots. The driven session was
+        session-49c49de5-fac2-4319-8eaa-96e8a26958f9 and the adopted successor
+        was session-b7570438-df8e-423e-964c-d4e6ed0f36ab. SQLite recorded 91
+        events and 7 deliveries: the original session's two completed turns
+        were fully delivered, the Stop-during-playback turn was
+        partial-unknown/cancelled, and the successor's turn was fully delivered.
+        These are local browser/media and server-reported facts, not acoustic or
+        live-provider evidence.
+      full_suite: >-
+        A standalone `pnpm test` run passed 1471 tests in 71 files. `pnpm build`
+        and `pnpm lint` passed separately. Repeated `pnpm verify` runs failed
+        only in `test/offline/cli.test.ts`: the SIGINT/SIGTERM cases observe
+        `"event":"listening"` before `src/runtime/cli.ts` installs its handlers
+        (line 42 logs, lines 63-64 subscribe) and occasionally receive the
+        default termination code 130/143. The file passes 3/3 in isolation, the
+        runtime CLI is M5-owned, and the harness is test-only, so no repair or
+        assertion change was made here. Full `pnpm verify` itself is therefore
+        not reported as green on this branch.
+      g6: >-
+        `pnpm gate:ai-use-log` passed with base 212ab97 and the changed-file
+        list for this documentation commit.
+    scope: >-
+      Test-only browser harness and its README only. This increment does not
+      change production contracts, the console implementation, deployment
+      manifests or dependencies, does not close issue #85 and does not claim
+      reviewer acceptance. Until PR #130 merges, the harness still requires a
+      runtime deployment that serves the registered fixed audio resources; the
+      temporary test-only composition used for this run was restored. Live
+      providers, acoustic verification, Windows behaviour and durable recovery
+      are not claimed. No merge was performed and the local `package.json` edit
+      remains uncommitted.
