@@ -3874,3 +3874,63 @@ entries:
       registry edit. selection-001 is human-reviewed; selection-002 remains
       draft. Synthetic review fixtures validate mechanics only and do not
       certify corpus evidence.
+
+  - date: "2026-10-31"
+    task: M2-01-console-recovery-eligibility-and-disposal
+    branch: feat/m2-01-console
+    change: >-
+      Resolve the three outstanding review findings on PR #67. Recovery is no
+      longer gated on retirement: a new pure `recoveryControlView` helper decides
+      availability from connection, session and live performer/operator state,
+      ConsoleApp re-checks it before calling `recover()`, and the first request
+      is allowed before any retirement while still requiring the local playback
+      acknowledgement. The performer machine now refuses every outgoing frame
+      after disposal, sends a valid `session.recover` frame before mutating
+      recovery state, and publishes the offer-expiry receipt through its local
+      observer as well as the wire. The M5 evaluation probe now expects that
+      local unknown receipt; it still asserts that no accepted terminal evidence
+      exists.
+    requirements: [FR-01, FR-04, FR-05]
+    invariants: [INV-01, INV-03]
+    commits: [53fa476, 1f8bd8b]
+    agent: trae-code
+    supervision: >-
+      The supervising assistant authored these repairs after M5 review
+      5696482319 and M1 review 5683748583 on PR #67. No OpenCode session was
+      used for this increment; no subagent, dependency or Git-history change was
+      made. The member ran the role suite, the full verify and the real-browser
+      recovery acceptance, and corrected the M5 probe expectation when the local
+      expiry observation changed. The wire shape, shared contracts and other
+      module code were not altered.
+    human_review: >-
+      The Captain directed completion of the remaining M2 work, which included
+      resolving the outstanding PR #67 review findings and replying to them.
+      Work remains under review; no merge, approval of another role's pull
+      request or self-approval is claimed.
+    transcript_record: >-
+      This increment has no new OpenCode JSONL export; the supervising
+      assistant's session is the only transcript and no raw record was copied
+      into the repository.
+    verification:
+      base: 09cee72 (origin/main 5e7abfb merged); code 53fa476, test 1f8bd8b
+      m2: "pnpm test:m2: 93 passed / 1 file."
+      full_suite: "pnpm verify: 1471 passed / 71 files; typecheck, lint and build passed."
+      browser: >-
+        Real Chromium acceptance of the production console through the Vite
+        proxy with the PR #130 fixed-audio fixture composition: the first
+        loading turn reached a started output with retiring=no; after reload and
+        reattach the checkbox was enabled and Request stayed disabled until the
+        acknowledgement was checked; one request retired
+        session-d308e968-5779-4e7a-8f88-833fe0036545 and produced successor
+        session-0c4b2fbf-c6b0-47a9-a850-aba2e528793e with recoveries 1, which
+        reloaded, reattached and resumed; SQLite showed the old session's
+        accepted started receipt, bridge unknown performer_disconnected,
+        aborted dialogue, cancelled turn and the successor's session.resumed,
+        with no deliveries rows.
+    scope: >-
+      M2 console gating, performer disposal and one M5 test expectation only.
+      Formal two-turn, Stop, Resume, duplicate, late and transport-loss
+      acceptance still depends on the PR #130 audio deployment; live providers,
+      physical silence, durable recovery and completed product behaviour are
+      not claimed. No merge or publication beyond the task branch was
+      performed. The local package.json edit remains uncommitted.
