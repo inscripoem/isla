@@ -149,3 +149,26 @@ bug: **symptom, reproduction, classification, root cause, fix, and the invariant
 - Status: local repair under review; the original failed push run remains historical until a
   separately authorized publication produces new CI evidence.
 - Invariant gap: an exception that is not itself verified turns a strict gate into a whitelist.
+
+## BUG-017 — An enforcement record certified "no bypass actors" from an omitted API field
+- Symptom: the "Effective enforcement" section of `verification-constraints.md` (2026-10-29)
+  recorded `current_user_can_bypass: "never"` as "no bypass actors" — a stronger claim than the
+  data supports. The maintainer records that an administrator PR-only bypass remains
+  (issue #84, 2026-10-29T10:15:50Z).
+- Reproduction: `gh api repos/inscripoem/isla/rulesets/24803426 --jq 'keys | join(",")'` returns
+  no `bypass_actors` key, and `.bypass_actors` is absent rather than `[]`. The absent field was
+  read as an empty list. The same record also said the applying actor was unknown although the
+  maintainer's comment predates the document by 42 minutes.
+- Classification: data / claims defect in documentation (not a code or test defect).
+- Root cause: a negative claim inferred from a field the API did not return, plus a context
+  snapshot taken before the issue thread moved and not refreshed at the write step.
+- Fix: the bypass cell is now account-scoped and says bypass actors are not readable with that
+  account; the maintainer-reported administrator PR-only bypass is recorded under "what this does
+  not establish"; the actor line cites the maintainer's statement and keeps the previous value
+  unrecorded. Two rules were added to the reviewer's five questions: a negative claim requires a
+  positive read, and a live setting or thread is re-read at the moment of writing.
+- Status: uncommitted on `m6-issue-68-boundary-parser` (base `4e4f7cd`); no gate change, no
+  production code touched.
+- Invariant gap: no registered invariant covers prose claims about live configuration, and an
+  offline test cannot read a live ruleset, so the guard is review plus the recorded rule — not a
+  test. Recorded as DEBT-08.
