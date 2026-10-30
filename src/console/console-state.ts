@@ -1,8 +1,16 @@
+import {
+  deliveryClassificationSchema,
+  inputEventSchema,
+  replyIntentSchema,
+  selectionResultSchema,
+} from '../contracts'
 import type {
+  ApplicationServerMessage,
   BootstrapSnapshot,
   ControlAck,
   ControlResumeMessage,
   ControlStopMessage,
+  DeliveryClassification,
   InputAck,
   InputSource,
   InputSubmitMessage,
@@ -10,6 +18,8 @@ import type {
   PerformanceReceipt,
   PerformerStatus,
   PlayerStatus,
+  ReplyIntent,
+  SelectionDisposition,
   ServerMessage,
   SessionLifecycle,
 } from '../contracts'
@@ -76,6 +86,11 @@ export interface SessionView {
   readonly capabilityRevision: number
   /** Highest accepted event sequence. Only strictly greater sequences are new. */
   readonly lastSeq: number
+  /**
+   * Explicit retirement state pushed by the server. It is never inferred from
+   * lifecycle; a successor session starts non-retiring.
+   */
+  readonly retiring: boolean
 }
 
 export interface EventView {
@@ -88,6 +103,86 @@ export interface ErrorView {
   readonly requestId: string | null
   readonly code: string
   readonly message: string
+}
+
+/**
+ * One accepted input as the console observed it. It carries the validated
+ * InputEvent identity and text; nothing is invented.
+ */
+export interface AcceptedInputView {
+  readonly eventId: string
+  readonly seq: number
+  readonly text: string
+  readonly source: InputSource
+}
+
+/**
+ * The latest validated response plan observed from the pipeline. It stays
+ * visible for audit even when a newer accepted input has made it stale.
+ */
+export interface SelectionPlanView {
+  readonly seq: number
+  readonly disposition: SelectionDisposition
+  readonly selectedEventIds: readonly string[]
+  readonly replyIntent: ReplyIntent | null
+  readonly reasonCode: string
+  readonly synthetic: boolean
+}
+
+/**
+ * The latest `turn.started` reply intent and its turn identity.
+ *
+ * The application wire carries the stored event payload only, so the durable
+ * identity is usually unreported. `turnId` is `null` when it is absent from the
+ * event data; it is never fabricated.
+ */
+export interface ReplyIntentView {
+  readonly seq: number
+  readonly turnId: string | null
+  readonly replyIntent: ReplyIntent
+}
+
+/**
+ * Explicit waiting stage derived from observed pipeline events. The console
+ * never fabricates a stage: an unknown message leaves it unchanged.
+ */
+export type WaitingStage =
+  | 'idle'
+  | 'awaiting-selection'
+  | 'selected'
+  | 'deferred'
+  | 'speaking'
+  | 'delivered'
+  | 'stopped'
+
+/**
+ * A delivery the server has confirmed. It is server evidence, deliberately
+ * separate from the locally observed playback receipts in {@link PlaybackView}.
+ *
+ * The application wire carries the stored event payload only, so durable
+ * identity may be unreported. Each identity field is `null` when it is absent
+ * from the event data; it is never fabricated.
+ */
+export interface ServerDeliveryView {
+  readonly seq: number
+  readonly outputId: string | null
+  readonly turnId: string | null
+  readonly segmentId: string | null
+  readonly classification: DeliveryClassification
+}
+
+/**
+ * The console's real understanding of the selection/waiting pipeline, built
+ * only from accepted session events. It carries no invented text or delivery.
+ */
+export interface SelectionView {
+  readonly stage: WaitingStage
+  /** Bounded newest list of accepted inputs, ordered oldest to newest. */
+  readonly acceptedInputs: readonly AcceptedInputView[]
+  readonly plan: SelectionPlanView | null
+  readonly replyIntent: ReplyIntentView | null
+  /** The latest server-confirmed delivery, or null before any is committed. */
+  readonly serverDelivery: ServerDeliveryView | null
 }
 
 export interface PlaybackView {
@@ -112,6 +207,7 @@ export interface ConsoleState {
   readonly events: readonly EventView[]
   readonly errors: readonly ErrorView[]
   readonly playback: PlaybackView
+  readonly selection: SelectionView
 }
 
 /** Retained history per list. Older entries are dropped; newest are kept. */
@@ -126,6 +222,14 @@ const IDLE_PLAYBACK: PlaybackView = {
   faults: [],
 }
 
+const IDLE_SELECTION: SelectionView = {
+  stage: 'idle',
+  acceptedInputs: [],
+  plan: null,
+  replyIntent: null,
+  serverDelivery: null,
+}
+
 export function createInitialConsoleState(): ConsoleState {
   return {
     connection: 'connecting',
@@ -136,6 +240,7 @@ export function createInitialConsoleState(): ConsoleState {
     events: [],
     errors: [],
     playback: IDLE_PLAYBACK,
+    selection: IDLE_SELECTION,
   }
 }
 
@@ -145,7 +250,8 @@ export function createInitialConsoleState(): ConsoleState {
  * non-dispatching instead of guessing.
  */
 export function canDispatch(state: ConsoleState): boolean {
-  return state.connection === 'open' && state.session !== null
+  if (state.connection !== 'open' || state.session === null) return false
+  return !state.session.retiring
 }
 
 function keepNewest<T>(entries: readonly T[], entry: T): readonly T[] {
@@ -203,6 +309,7 @@ export function withBootstrap(state: ConsoleState, bootstrap: BootstrapSnapshot)
       outputConfirmation: bootstrap.outputConfirmation,
       capabilityRevision: bootstrap.capabilityRevision,
       lastSeq: bootstrap.seq,
+      retiring: false,
     },
   }
 }
@@ -332,13 +439,6 @@ export function reduceControlAck(state: ConsoleState, ack: ControlAck): ConsoleS
   return applyControlAck(state, ack)
 }
 
-/** Advance the accepted sequence, never backwards and never on a stale value. */
-function advanceSeq(state: ConsoleState, seq: number): ConsoleState {
-  const session = state.session
-  if (session === null || seq <= session.lastSeq) return state
-  return { ...state, session: { ...session, lastSeq: seq } }
-}
-
 const IDENTITY_MISMATCH = 'acknowledgement references a different session or epoch'
 
 function applyInputAck(state: ConsoleState, ack: InputAck): ConsoleState {
@@ -364,7 +464,13 @@ function applyInputAck(state: ConsoleState, ack: InputAck): ConsoleState {
       seq: ack.seq,
     })),
   }
-  return mismatch ? settled : advanceSeq(settled, ack.seq)
+  // An accepted acknowledgement settles only its own request view. It does not
+  // advance `lastSeq`: the runtime sends `input.ack` before it publishes the
+  // matching `input.accepted` event at the same sequence, so advancing here
+  // would make that event look like replayed history. `lastSeq` advances only
+  // on bootstrap, snapshots and accepted session events, so an event at the
+  // acknowledged sequence is still strictly above the frontier and applies.
+  return settled
 }
 
 function applyControlAck(state: ConsoleState, ack: ControlAck): ConsoleState {
@@ -384,7 +490,7 @@ function applyControlAck(state: ConsoleState, ack: ControlAck): ConsoleState {
   // A late acknowledgement may settle its own request display (above), but it
   // must not roll the session back: an older epoch never overwrites newer state.
   if (ack.epoch < session.epoch) return settled
-  return {
+  const advanced: ConsoleState = {
     ...settled,
     session: {
       ...session,
@@ -393,6 +499,16 @@ function applyControlAck(state: ConsoleState, ack: ControlAck): ConsoleState {
       outputConfirmation: ack.outputConfirmation,
     },
   }
+  // Only an applied/duplicate control ack changes the waiting stage. A refused
+  // acknowledgement leaves the observed pipeline evidence untouched.
+  if (!applied && ack.status !== 'duplicate') return advanced
+  if (ack.action === 'stop') {
+    return { ...advanced, selection: { ...advanced.selection, stage: 'stopped' } }
+  }
+  if (ack.action === 'resume') {
+    return { ...advanced, selection: { ...advanced.selection, stage: resumeStage(advanced.selection) } }
+  }
+  return advanced
 }
 
 function applySnapshot(state: ConsoleState, message: ServerMessage & { kind: 'session.snapshot' }): ConsoleState {
@@ -412,8 +528,22 @@ function applySnapshot(state: ConsoleState, message: ServerMessage & { kind: 'se
     return state
   }
   const sameSession = previous !== null && previous.sessionId === message.sessionId
-  return {
+  // A snapshot for a different session is a real successor: the previous
+  // session's selection, event log and still-pending requests describe a
+  // retired identity and must not be projected under the new one. Settled
+  // request entries are retained as history.
+  const markStale = <T extends { readonly outcome: RequestOutcome; readonly detail: string | null }>(
+    entry: T,
+  ): T =>
+    entry.outcome === 'pending'
+      ? { ...entry, outcome: 'unknown', detail: 'session changed before acknowledgement' }
+      : entry
+  const advanced: ConsoleState = {
     ...state,
+    inputs: sameSession ? state.inputs : state.inputs.map(markStale),
+    controls: sameSession ? state.controls : state.controls.map(markStale),
+    events: sameSession ? state.events : [],
+    selection: sameSession ? state.selection : IDLE_SELECTION,
     session: {
       sessionId: message.sessionId,
       epoch: message.epoch,
@@ -423,7 +553,176 @@ function applySnapshot(state: ConsoleState, message: ServerMessage & { kind: 'se
       outputConfirmation: payload.outputConfirmation,
       capabilityRevision: payload.capabilityRevision,
       lastSeq: sameSession ? Math.max(previous.lastSeq, payload.lastSeq) : payload.lastSeq,
+      // Retirement is only ever set by an explicit recovery state frame. A
+      // successor snapshot starts non-retiring; a same-session refresh keeps the
+      // state already confirmed.
+      retiring: sameSession ? previous.retiring : false,
     },
+  }
+  // A snapshot reflects lifecycle without inventing events: a stopped snapshot
+  // stops the waiting projection, and leaving stopped is decided by the same
+  // input-versus-plan evidence a Resume acknowledgement uses.
+  // A successor projection starts from the idle selection produced above; a
+  // same-session refresh keeps the selection it was given.
+  const projection = advanced.selection
+  const wasStopped = sameSession && previous.lifecycle === 'stopped'
+  if (payload.lifecycle === 'stopped') {
+    return { ...advanced, selection: { ...projection, stage: 'stopped' } }
+  }
+  if (wasStopped) {
+    return { ...advanced, selection: { ...projection, stage: resumeStage(projection) } }
+  }
+  return advanced
+}
+
+/**
+ * The stage a plan projects, unless an accepted input arrived after it, in
+ * which case the console is waiting for a selection of the newer input again.
+ */
+function planStage(
+  plan: SelectionPlanView | null,
+  newestInputSeq: number | null,
+): 'selected' | 'deferred' | null {
+  if (plan === null) return null
+  if (newestInputSeq !== null && newestInputSeq > plan.seq) return null
+  return plan.disposition === 'respond' ? 'selected' : 'deferred'
+}
+
+/** Resume/successor stage: plan or newer-input evidence decides, else idle. */
+function resumeStage(selection: SelectionView): WaitingStage {
+  const newestInput =
+    selection.acceptedInputs.length === 0
+      ? null
+      : selection.acceptedInputs[selection.acceptedInputs.length - 1]!.seq
+  const planned = planStage(selection.plan, newestInput)
+  if (planned !== null) return planned
+  return newestInput !== null ? 'awaiting-selection' : 'idle'
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+/**
+ * Read one durable identity field the runtime chose to report. The application
+ * wire carries the stored event payload only, so an identity is often absent;
+ * an absent or non-string value is recorded as `null` and never fabricated.
+ */
+function reportedIdentity(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null
+}
+
+/**
+ * Project one accepted pipeline event onto the selection view. It returns the
+ * state unchanged when the payload is malformed, names another session/epoch or
+ * is not a pipeline event the console understands.
+ */
+function applyPipelineEvent(
+  state: ConsoleState,
+  message: ServerMessage & { kind: 'session.event' },
+): ConsoleState {
+  const selection = state.selection
+  const data = asRecord(message.payload.data)
+  if (data === null) return state
+  const seq = message.payload.seq
+  const epoch = message.epoch
+
+  switch (message.payload.type) {
+    case 'input.accepted': {
+      const eventId = data.eventId
+      const input = inputEventSchema.safeParse(data.input)
+      if (typeof eventId !== 'string' || !input.success) return state
+      if (
+        input.data.sessionId !== message.sessionId ||
+        input.data.epoch !== epoch ||
+        input.data.eventId !== eventId
+      ) {
+        return state
+      }
+      // An already-recorded input is never duplicated.
+      if (selection.acceptedInputs.some((entry) => entry.eventId === eventId)) return state
+      const acceptedInputs = keepNewest<AcceptedInputView>(selection.acceptedInputs, {
+        eventId,
+        seq,
+        text: input.data.text,
+        source: input.data.source,
+      })
+      const newestInput = acceptedInputs[acceptedInputs.length - 1]!.seq
+      // A plan that covers this input keeps its stage; an older plan leaves the
+      // console waiting for a selection of the newer input.
+      const stage = planStage(selection.plan, newestInput) ?? 'awaiting-selection'
+      return {
+        ...state,
+        selection: { ...selection, acceptedInputs, stage },
+      }
+    }
+    case 'selection.plan': {
+      const plan = selectionResultSchema.safeParse(data.plan)
+      const synthetic = data.synthetic
+      if (!plan.success || typeof synthetic !== 'boolean') return state
+      if (plan.data.sessionId !== message.sessionId || plan.data.epoch !== epoch) return state
+      // Never replace a newer plan with an older one.
+      if (selection.plan !== null && selection.plan.seq >= seq) return state
+      const nextPlan: SelectionPlanView = {
+        seq,
+        disposition: plan.data.disposition,
+        selectedEventIds: [...plan.data.selectedEventIds],
+        replyIntent: plan.data.replyIntent,
+        reasonCode: plan.data.reasonCode,
+        synthetic,
+      }
+      const newestInput =
+        selection.acceptedInputs.length === 0
+          ? null
+          : selection.acceptedInputs[selection.acceptedInputs.length - 1]!.seq
+      const planned = planStage(nextPlan, newestInput)
+      return {
+        ...state,
+        selection: {
+          ...selection,
+          plan: nextPlan,
+          stage: planned ?? (newestInput !== null ? 'awaiting-selection' : selection.stage),
+        },
+      }
+    }
+    case 'turn.started': {
+      const parsedIntent = replyIntentSchema.safeParse(data.replyIntent)
+      if (!parsedIntent.success) return state
+      return {
+        ...state,
+        selection: {
+          ...selection,
+          stage: 'speaking',
+          replyIntent: {
+            seq,
+            turnId: reportedIdentity(data.turnId),
+            replyIntent: parsedIntent.data,
+          },
+        },
+      }
+    }
+    case 'delivery.committed': {
+      const classification = deliveryClassificationSchema.safeParse(data.classification)
+      if (!classification.success) return state
+      return {
+        ...state,
+        selection: {
+          ...selection,
+          stage: 'delivered',
+          serverDelivery: {
+            seq,
+            outputId: reportedIdentity(data.outputId),
+            turnId: reportedIdentity(data.turnId),
+            segmentId: reportedIdentity(data.segmentId),
+            classification: classification.data,
+          },
+        },
+      }
+    }
+    default:
+      return state
   }
 }
 
@@ -432,7 +731,7 @@ function applySessionEvent(state: ConsoleState, message: ServerMessage & { kind:
   if (session === null || message.sessionId !== session.sessionId) return state
   // Replayed history at or below the accepted sequence is never rendered.
   if (message.payload.seq <= session.lastSeq) return state
-  return {
+  const advanced: ConsoleState = {
     ...state,
     session: { ...session, lastSeq: message.payload.seq },
     events: keepNewest(state.events, {
@@ -441,6 +740,7 @@ function applySessionEvent(state: ConsoleState, message: ServerMessage & { kind:
       data: message.payload.data,
     }),
   }
+  return applyPipelineEvent(advanced, message)
 }
 
 function applyRequestError(state: ConsoleState, message: ServerMessage & { kind: 'request.error' }): ConsoleState {
@@ -484,6 +784,37 @@ export function reduceServerMessage(state: ConsoleState, message: ServerMessage)
     case 'performance.execute':
     case 'performance.cancel':
       return state
+  }
+}
+
+/**
+ * Apply one inbound application (protocol 0.2) message. Base messages are
+ * delegated unchanged to {@link reduceServerMessage}; only the explicit
+ * retirement state is handled here. Attach, operator, offer, grant and recovery
+ * acknowledgement messages leave the view unchanged, and retirement is never
+ * inferred from lifecycle.
+ */
+export function reduceApplicationMessage(
+  state: ConsoleState,
+  message: ApplicationServerMessage,
+): ConsoleState {
+  switch (message.kind) {
+    case 'session.recovery.state': {
+      const session = state.session
+      if (session === null || message.sessionId !== session.sessionId) return state
+      // A frame for an older epoch is stale and never regresses the current
+      // retirement state.
+      if (message.epoch < session.epoch) return state
+      return { ...state, session: { ...session, retiring: message.payload.retiring } }
+    }
+    case 'session.attach.ack':
+    case 'operator.ack':
+    case 'performance.offer':
+    case 'performance.grant':
+    case 'session.recovery.ack':
+      return state
+    default:
+      return reduceServerMessage(state, message)
   }
 }
 
