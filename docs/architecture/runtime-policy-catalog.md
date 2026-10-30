@@ -18,6 +18,9 @@ defined response and operational fallback.
 | Restart with unresolved output | Startup reconciliation | Begin stopped; restore only confirmed history | Unresolved outputs remain `unknown`; no automatic replay | M6 / M5 |
 | Migration failure (unsupported schema version, or apply error) | `migrate` rejects or rolls back | Refuse to open the database; keep the prior version | Restore from the pre-migration backup under `<dbDir>/backups/` | M6 |
 | Startup recovery (restart) | `recovery-view` reads committed deliveries | Restore only confirmed history; keep unresolved `unknown` | No replay; an unresolved segment is never quoted as spoken | M6 / M5 |
+| Standalone corpus-runner selection failure | `runSelectionCase` catches a `SelectionCallError` (including abort, deadline and invalid-deadline codes), a generic throw, or empty candidates/intents | Record one per-case `technical-failure` with `adoptedScore: null`, reason and diagnostic; continue remaining corpus cases | No fallback and no semantic score; the failed case remains visible | M3 |
+| Runtime selection timeout, cancellation, expired authority or superseded snapshot | M5 coordinator observes timeout/abort, expired authority/deadline, or a superseded snapshot | Mark the turn `stale`; produce no plan/output | No fallback into output; late results remain stale | M3 / M5 |
+| Fresh runtime selection rejection or invalid proposal | Ordinary rejection or schema-invalid/mis-correlated/unoffered/disallowed-intent result while authority is fresh; M5 does not inspect `SelectionCallError.code` | Record the provider attempt as failed; do not accept the proposal | Use the authorised `m5-fallback` when eligible and allowed; otherwise defer; never bypass Stop or expiry | M3 / M5 |
 
-Non-storage failure paths (decision timeout, synthesis failure, renderer disconnect) are owned by
-M3/M1/M5 and are pending their entries here.
+Decision rows are recorded above; synthesis failure and renderer disconnect remain owned by M1/M5
+and pending their entries here.

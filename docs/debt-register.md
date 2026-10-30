@@ -24,3 +24,18 @@ check. A follow-up should use a shared side-effect-free constant or add an
 agreement test, preserving shutdown success, pending/failed release, duplicate
 message and startup-failure coverage. This entry records the debt; it does not
 claim the duplication is fixed or allocate a new stable ID.
+
+## M3 selection integration follow-up
+
+Owner: M3 (M3/M5 where the oldest/answer rule and prepared-input boundary are
+shared). Status: open, non-blocking, as identified in the M6 re-review of PR #57
+and M5's coordination reply.
+
+`src/decision/selection.ts` and M5's `src/runtime/policy.ts` both choose the
+oldest eligible candidate and use `answer` when allowed, but there is no
+cross-module agreement test binding the two implementations. The rule port's
+usage is synthetic (`elapsedMs: 0`, `usageMissing: true`), intent coverage in
+`selection-001` remains partial, and the `EvalCase`/prepared-input binding for a
+future `runVariant` remains unresolved (#41/#55). This entry records the debt;
+it does not allocate a new stable ID, change runtime behavior or claim corpus,
+report, S6 or G4 completion.

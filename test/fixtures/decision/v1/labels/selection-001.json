@@ -1,0 +1,35 @@
+{
+  "caseId": "selection-001",
+  "selectionScores": [
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-001"],
+      "score": 2
+    },
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-002"],
+      "score": 1
+    },
+    {
+      "disposition": "defer",
+      "selectedEventIds": [],
+      "score": 0
+    }
+  ],
+  "intentLabels": [
+    {
+      "selectedEventId": "message-001",
+      "acceptableIntents": ["answer"],
+      "coverage": "partial",
+      "coverageRationale": null
+    },
+    {
+      "selectedEventId": "message-002",
+      "acceptableIntents": ["acknowledge"],
+      "coverage": "partial",
+      "coverageRationale": null
+    }
+  ],
+  "rationale": "Answering the older on-topic question is preferred; acknowledging the greeting is an acceptable alternative. Intent coverage is partial pending human review, so unlisted allowed intents remain unassessed."
+}
