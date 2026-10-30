@@ -3729,3 +3729,61 @@ entries:
       pushed the two commits ahead of the member's manual review; remote CI
       passed on both commits. Local full-suite verify remains blocked by the
       pre-existing Windows spawn ENOENT baseline noted in earlier entries.
+  - date: "2026-10-30"
+    task: M4-04-provider-text-source
+    change: >-
+      For issue #93's offline-verifiable half, the provider slice lands additively
+      (e382df2, +938/-23). src/dialogue/provider-text-source.ts (new) adds
+      createOpenAiCompatibleTextSource over the OpenAI chat-completions wire: baseUrl,
+      model and apiKey arrive through the injected config object and nothing in
+      src/dialogue reads the environment; every fault — a blank key checked before any
+      request is issued, an HTTP status outside 200-299, a non-JSON body, a missing
+      choices[0].message.content, or a transport error not caused by the per-call
+      abort signal — throws into the existing failure path, so DialogueEnd.status
+      reports failed and fixture text is never substituted; an aborted per-call
+      signal returns no lines so the port's existing post-compose re-check
+      classifies the call as cancelled. src/dialogue/dialogue-port.ts widens
+      DialogueTextSource.compose additively per the M5-confirmed #44 §2 decisions
+      (optional per-call { signal } argument; optional result wrapper carrying the
+      per-call served resolvedModel and measured inputTokens/outputTokens, with
+      absent counts left usageMissing rather than invented zeros) and replaces the
+      silent line-203 default with createUnconfiguredTextSource(), whose compose
+      always throws, so a port built without a textSource fails visibly while
+      createIntentTextSource remains available by explicit caller choice; thirteen
+      M4-owned call sites now pass the intent source explicitly. The three live
+      it.todo placeholders in test/live/m4-text-source.live.test.ts become real
+      assertions mapped to the HANDOFF-M4-01 criteria (schema-valid usage; a missing
+      key fails instead of falling back to the fixture source; the credential stays
+      out of the repository, the logs and the error messages, checked by a
+      repository scan and no-echo assertions). test/offline/m4-dialogue.test.ts
+      gains seven offline negatives (missing configuration fails and is never
+      fixture text; a blank apiKey fails with zero wire requests; an HTTP 500 and a
+      non-JSON body fail with honest outcome counts and no response-body echo; a
+      Stop during compose keeps the existing cancelled path; a provider call
+      aborted mid-flight reports cancelled, not failed). The slice's single
+      declared substitute is a local loopback HTTP server inside M4's own offline
+      test file that pins the OpenAI wire format and serves controlled failures —
+      a boundary tool for M4's own seam, standing in for no M3/M5/M6 component;
+      real provider wiring stays with the composition root (#44 §4).
+    requirements: []
+    invariants: []
+    commits: [e382df2]
+    agent: opencode/deepseek-v4-flash
+    provider: cslabllm
+    model: CS5351/DeepSeek-V4-Flash
+    supervision: >-
+      Member M4's scheduled inspection workflow (ZCode, GLM-5.3-Flash) selected
+      the slice, wrote the English task briefs and supervised. OpenCode build
+      agent (deepseek-v4-flash) authored all code and test changes across four
+      unattended --auto --standalone sessions (provider source and no-fallback
+      default, live assertions, offline negatives, one live-test fix; briefs kept
+      in gitignored .cache/). The supervising agent reviewed each diff and
+      committed e382df2 only after the local gates: pnpm exec tsc -b clean,
+      pnpm exec oxlint clean, pnpm test:m4 244/244 (237 baseline plus 7 new), the
+      live suite cleanly skipped with ISLA_LIVE_TEXT_* unset, and pnpm verify
+      showing zero new failures against the 14-case Windows-host baseline
+      recorded on issue #44 on 2026-10-29 (same six files and spawn-ENOENT
+      unhandled errors; vite build passes standalone). The real-provider
+      assertion remains skipped until the operator supplies ISLA_LIVE_TEXT_*; per
+      AGENTS.md no live-provider success is claimed from fixtures. Full-suite
+      final review belongs to remote CI.
