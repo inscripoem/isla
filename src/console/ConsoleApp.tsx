@@ -34,6 +34,7 @@ import { ConsoleTransportError, isApplicationTransport, type ConsoleApplicationT
 import type { PlaybackBinding, PlaybackCallbacks, PlaybackFactory } from './player-binding'
 import type { PerformerMachine, PerformerMachineHooks, PerformerState } from './performer-machine'
 import { snapshotMessageFromBootstrap } from './performer-adapter'
+import { recoveryControlView } from './recovery-control'
 import {
   canDispatch,
   createInitialConsoleState,
@@ -714,13 +715,24 @@ export function ConsoleApp({
   const requestRecovery = useCallback(() => {
     const activeMachine = machineRef.current
     if (activeMachine === null) return
+    const current = stateRef.current
+    const eligibility = recoveryControlView({
+      connection: current.connection,
+      hasSession: current.session !== null,
+      machine: activeMachine.state(),
+      acknowledged: recoveryAcknowledged,
+    })
+    // A rendered control may be stale by one event. Re-check the same pure
+    // eligibility before mutating so a lost transport or disposed machine never
+    // records a request that was not sent.
+    if (!eligibility.requestable) return
     try {
       if (activeMachine.recover() === null) return
     } catch {
       return
     }
     setRecoveryAcknowledged(false)
-  }, [])
+  }, [recoveryAcknowledged])
 
   const session = state.session
   const connectionSummary =
@@ -804,11 +816,18 @@ export function ConsoleApp({
   const allowDispatch = dispatchable && (!machinePath || !retiring)
   const operatorButtonVisible = requestOperatorToken !== undefined && machinePath
   const recovery = machine?.recovery
-  // Recovery is reported for as long as the session is retiring. A failed
-  // attempt stays reported so the operator can acknowledge again and retry;
-  // only an outstanding request disables the button.
-  const recoveryReported = retiring
-  const recoveryRequestable = recoveryReported && recoveryAcknowledged && machinePath
+  // Recovery does not wait for `retiring`: the runtime only retires the session
+  // after the operator's first valid request. Eligibility requires the current
+  // connected session, an attached performer, operator authority, an explicit
+  // acknowledgement and a machine that has not been disposed.
+  const recoveryControls = recoveryControlView({
+    connection: state.connection,
+    hasSession: session !== null,
+    machine,
+    acknowledged: recoveryAcknowledged,
+  })
+  const recoveryAvailable = recoveryControls.available
+  const recoveryRequestable = recoveryControls.requestable
 
   const sessionView = (
     <div className="console__stack">
@@ -976,8 +995,10 @@ export function ConsoleApp({
         <Title size="middle">Recovery</Title>
         <p className="console__hint">
           Recovery is an operator decision, not measured delivery. It retires this session and continues in a fresh
-          successor over the same store. A successor session requires reconnect, operator bootstrap and performer
-          attach, followed by an explicit Resume. A failed attempt remains retryable while retirement is reported, so
+          successor over the same store. The first request does not require retirement to be reported: the server
+          starts retirement only after a valid request, so acknowledge below and request recovery once the performer
+          and operator are attached to this connected session. A successor session requires reconnect, operator
+          bootstrap and performer attach, followed by an explicit Resume. A failed attempt remains retryable, so
           acknowledge again and request recovery once more.
         </p>
         <Checkbox
@@ -986,19 +1007,19 @@ export function ConsoleApp({
           options={[
             {
               label:
-                "I acknowledge, as the operator's decision, that local playback in this retired session has ended.",
+                "I acknowledge, as the operator's decision, that local playback in this session has ended.",
               value: 'recovery-ack',
             },
           ]}
           value={recoveryAcknowledged ? ['recovery-ack'] : []}
-          disabled={!recoveryReported}
+          disabled={!recoveryAvailable}
           onChange={(values) => setRecoveryAcknowledged(values.includes('recovery-ack'))}
         />
         <div className="console__actions">
           <Button
             size="small"
             danger
-            disabled={!recoveryRequestable || recovery?.status === 'requested'}
+            disabled={!recoveryRequestable}
             onClick={requestRecovery}
           >
             Request recovery

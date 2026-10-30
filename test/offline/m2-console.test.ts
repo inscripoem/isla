@@ -62,8 +62,10 @@ import { FIXTURE_SESSION_ID, fixturePerformanceCommand } from '../support/fixtur
 import {
   createPerformerMachine,
   type PerformerMachine,
+  type PerformerMachineHooks,
   type PerformerTransport,
 } from '../../src/console/performer-machine'
+import { recoveryControlView } from '../../src/console/recovery-control'
 
 describe('M2 console conformance', () => {
   it('accepts a transport built on a fixture runtime', async () => {
@@ -1743,6 +1745,7 @@ function machineGrantMessage(
 
 function createConsoleMachine(
   media = createControlledMediaDriver({ autoEvents: true }),
+  hooks?: PerformerMachineHooks,
 ): {
   machine: PerformerMachine
   frames: RecordedMachineFrame[]
@@ -1757,6 +1760,7 @@ function createConsoleMachine(
     resolver,
     receipts: createTestReceiptTools('console'),
     now: () => 5_000,
+    hooks,
   })
   machine.handleMessage(machineSnapshotMessage(1))
   return { machine, frames, media }
@@ -3102,5 +3106,147 @@ describe('successor session projection reset', () => {
     const outstandingControl = successor.controls.find((view) => view.requestId === 'control-outstanding')
     expect(outstandingControl?.outcome).toBe('unknown')
     expect(outstandingControl?.detail).toBe('session changed before acknowledgement')
+  })
+})
+
+/* ------------------------------------------------------------------ *
+ * Recovery eligibility, disposal guards and the expiry observation.
+ * ------------------------------------------------------------------ */
+
+describe('console recovery eligibility', () => {
+  const connectedMachine = {
+    disposed: false,
+    performer: true,
+    operator: true,
+    recovery: { status: 'idle' as const },
+  }
+  const connected = {
+    connection: 'open' as const,
+    hasSession: true,
+    machine: connectedMachine,
+    acknowledged: true,
+  }
+
+  it('allows the first explicitly acknowledged recovery request before retirement is reported', () => {
+    // Retirement is not an input to this decision: the runtime starts retirement
+    // only after the first valid session.recover, so requiring it here would
+    // deadlock a connected current session.
+    expect(recoveryControlView(connected)).toEqual({ available: true, requestable: true })
+  })
+
+  it('requires the explicit acknowledgement before the request is available', () => {
+    expect(recoveryControlView({ ...connected, acknowledged: false })).toEqual({
+      available: true,
+      requestable: false,
+    })
+  })
+
+  it('withdraws both controls when the transport is not open or no session is known', () => {
+    expect(recoveryControlView({ ...connected, connection: 'closed' })).toEqual({
+      available: false,
+      requestable: false,
+    })
+    expect(recoveryControlView({ ...connected, hasSession: false })).toEqual({
+      available: false,
+      requestable: false,
+    })
+    expect(recoveryControlView({ ...connected, machine: null })).toEqual({
+      available: false,
+      requestable: false,
+    })
+  })
+
+  it('withdraws both controls after disposal or without performer/operator authority', () => {
+    expect(recoveryControlView({ ...connected, machine: { ...connectedMachine, disposed: true } })).toEqual({
+      available: false,
+      requestable: false,
+    })
+    expect(recoveryControlView({ ...connected, machine: { ...connectedMachine, performer: false } })).toEqual({
+      available: false,
+      requestable: false,
+    })
+    expect(recoveryControlView({ ...connected, machine: { ...connectedMachine, operator: false } })).toEqual({
+      available: false,
+      requestable: false,
+    })
+  })
+
+  it('keeps an outstanding request from being sent twice', () => {
+    expect(
+      recoveryControlView({
+        ...connected,
+        machine: { ...connectedMachine, recovery: { status: 'requested' } },
+      }),
+    ).toEqual({ available: true, requestable: false })
+  })
+})
+
+describe('console performer machine recovery guards', () => {
+  it('ignores every outgoing request after disposal', () => {
+    const { machine, frames } = createConsoleMachine()
+    const sentBeforeDispose = frames.length
+    machine.dispose('transport closed')
+
+    expect(machine.state().disposed).toBe(true)
+    machine.attach()
+    machine.bootstrapOperator('one-time-token')
+    expect(machine.input('late input')).toBeNull()
+    expect(machine.resume()).toBeNull()
+    expect(machine.stop()).toBeNull()
+    expect(machine.recover()).toBeNull()
+
+    expect(frames).toHaveLength(sentBeforeDispose)
+    expect(machine.state().recovery.status).toBe('idle')
+  })
+
+  it('does not mark recovery requested when the transport rejects the send', () => {
+    let open = true
+    const sent: string[] = []
+    const transport: PerformerTransport = {
+      send(raw) {
+        if (!open) throw new Error('closed transport')
+        sent.push(raw)
+      },
+    }
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const machine = createPerformerMachine({
+      transport,
+      media: createControlledMediaDriver({ autoEvents: true }),
+      resolver,
+      receipts: createTestReceiptTools('closed-transport'),
+      now: () => 5_000,
+    })
+    machine.handleMessage(machineSnapshotMessage(1))
+    open = false
+
+    expect(() => machine.recover()).toThrow('closed transport')
+    expect(sent).toEqual([])
+    expect(machine.state().recovery.status).toBe('idle')
+    expect(machine.state().disposed).toBe(false)
+    machine.dispose('test complete')
+  })
+
+  it('reports an expired offer through the local receipt hook as well as the wire', () => {
+    const receipts: PerformanceReceipt[] = []
+    const { machine, frames } = createConsoleMachine(undefined, {
+      onReceipt: (receipt) => receipts.push(receipt),
+    })
+    const command = fixturePerformanceCommand({ outputId: 'output-console-expiry' })
+
+    machine.handleMessage(machineOfferMessage(command))
+    machine.handleMessage(machineGrantMessage(command, 0))
+
+    const receiptFrame = frames.find((frame) => frame.message.kind === 'performance.receipt')
+    expect(receiptFrame).toBeDefined()
+    expect(receiptFrame?.message.payload).toMatchObject({
+      outputId: command.outputId,
+      stage: 'unknown',
+      reasonCode: 'offer_expired',
+      source: 'performer-machine',
+    })
+    expect(receipts).toHaveLength(1)
+    expect(receipts[0]).toEqual(receiptFrame?.message.payload)
+    machine.dispose('test complete')
   })
 })

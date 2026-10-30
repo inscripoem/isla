@@ -56,6 +56,12 @@ export interface PerformerState {
    * is stopped and only a recovery retry or a reconnect can continue.
    */
   retiring: boolean
+  /**
+   * True once this machine has been disposed, for example after transport loss.
+   * Every outgoing request is ignored from that point on; the console uses this
+   * to withdraw controls instead of attempting a send on a closed transport.
+   */
+  disposed: boolean
   outputConfirmation: string
   performer: boolean
   operator: boolean
@@ -329,6 +335,20 @@ export function createPerformerMachine(options: {
     const command = entry.command
     if (entry.timer !== null) clearTimeout(entry.timer)
     clearPending(command.outputId)
+    const receipt: PerformanceReceipt = {
+      receiptId: nextId('receipt-expired'),
+      outputId: command.outputId,
+      sessionId: command.sessionId,
+      epoch: command.epoch,
+      turnId: command.turnId,
+      segmentId: command.segmentId,
+      modality: 'audio',
+      stage: 'unknown',
+      localTimeMs: null,
+      chunkIds: null,
+      reasonCode: reason,
+      source: 'performer-machine',
+    }
     options.transport.send(
       JSON.stringify({
         protocolVersion: '0.2',
@@ -336,22 +356,12 @@ export function createPerformerMachine(options: {
         sessionId: command.sessionId,
         epoch: command.epoch,
         kind: 'performance.receipt',
-        payload: {
-          receiptId: nextId('receipt-expired'),
-          outputId: command.outputId,
-          sessionId: command.sessionId,
-          epoch: command.epoch,
-          turnId: command.turnId,
-          segmentId: command.segmentId,
-          modality: 'audio',
-          stage: 'unknown',
-          localTimeMs: null,
-          chunkIds: null,
-          reasonCode: reason,
-          source: 'performer-machine',
-        },
+        payload: receipt,
       }),
     )
+    // The unknown receipt is a local observation too: without this hook the
+    // console's receipt list would omit an expiry that already reached the wire.
+    hooks.onReceipt?.(receipt)
     notify()
   }
 
@@ -633,6 +643,7 @@ export function createPerformerMachine(options: {
   return {
     handleMessage,
     attach(): void {
+      if (disposed) return
       const messageId = nextId('attach')
       const raw = buildEnvelope('session.attach', {}, messageId)
       if (raw === null) return
@@ -640,6 +651,7 @@ export function createPerformerMachine(options: {
       options.transport.send(raw)
     },
     bootstrapOperator(token: string): void {
+      if (disposed) return
       const messageId = nextId('bootstrap')
       const raw = buildEnvelope('operator.bootstrap', { token }, messageId)
       if (raw === null) return
@@ -647,6 +659,7 @@ export function createPerformerMachine(options: {
       options.transport.send(raw)
     },
     input(text: string, messageId?: string, source: InputSource = 'local-audience'): string | null {
+      if (disposed) return null
       const id = messageId ?? nextId('msg')
       const raw = buildEnvelope('input.submit', { source, text }, id)
       if (raw === null) return null
@@ -654,6 +667,7 @@ export function createPerformerMachine(options: {
       return id
     },
     resume(requestId?: string, messageId?: string): string | null {
+      if (disposed) return null
       const id = messageId ?? nextId('msg')
       const raw = buildEnvelope('control.resume', { requestId: requestId ?? nextId('resume') }, id)
       if (raw === null) return null
@@ -661,6 +675,7 @@ export function createPerformerMachine(options: {
       return id
     },
     stop(requestId?: string, messageId?: string): string | null {
+      if (disposed) return null
       const id = messageId ?? nextId('msg')
       const raw = buildEnvelope('control.stop', { requestId: requestId ?? nextId('stop') }, id)
       if (raw === null) return null
@@ -668,15 +683,18 @@ export function createPerformerMachine(options: {
       return id
     },
     recover(): string | null {
+      if (disposed) return null
       const messageId = nextId('recover')
       // The acknowledgement is the operator's explicit decision that they have
       // ended playback in the previous session. It is a required literal so it
       // cannot be omitted; it is never measured media or a delivery fact.
       const raw = buildEnvelope('session.recover', { acknowledgePlaybackEnded: true }, messageId)
       if (raw === null) return null
+      // Send first: a closed transport must not leave a request looking
+      // outstanding when no frame was emitted.
+      options.transport.send(raw)
       lastRecoverMessageId = messageId
       recovery = { ...recovery, status: 'requested' }
-      options.transport.send(raw)
       return messageId
     },
     state(): PerformerState {
@@ -685,6 +703,7 @@ export function createPerformerMachine(options: {
         epoch,
         lifecycle,
         retiring,
+        disposed,
         outputConfirmation,
         performer,
         operator,
