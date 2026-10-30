@@ -171,9 +171,10 @@ activate G1.
 
 **What this does not establish.**
 
-- No refusal has been observed. `main` has not moved since 2026-10-28T03:57Z, before the rule took effect, so
-  no merge has met the new rule. Blocking behaviour is the platform's documented semantics, not a measurement
-  recorded here.
+- No refusal has been observed. One merge has occurred since the rule took effect: PR #57 merged as
+  `c1decc2` on 2026-10-29T11:58Z with a green `verify` (observed 2026-10-30). That is consistent with the
+  rule being satisfied, but it is not a refusal test. No merge with a failing `verify` has been attempted,
+  so enforcement remains unobserved.
 - The maintainer records that they applied the setting (issue #84, 2026-10-29T10:15:50Z), consistent with
   the ruleset's `updated_at`. The previous required-check value is not recorded.
 - The maintainer records that an **administrator PR-only bypass** remains (same comment). It is not readable
