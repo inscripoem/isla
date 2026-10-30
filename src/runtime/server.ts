@@ -11,7 +11,6 @@ import {
 } from './config'
 import { createHealthResponse } from './health'
 import { processDiagnosticMessage } from './diagnostics'
-import type { MemoryInspectSource } from './memory-inspect-reply'
 import type { ApplicationEndpoint } from './application'
 
 type ServerState = 'idle' | 'starting' | 'started' | 'stopping' | 'stopped'
@@ -55,7 +54,6 @@ export class DiagnosticsServer {
   private readonly wss: WebSocketServer
   private readonly appWss: WebSocketServer | undefined
   private readonly application: ApplicationEndpoint | undefined
-  private readonly memoryInspect: MemoryInspectSource | undefined
   private readonly host: string
   private readonly path: string
   private readonly graceMs: number
@@ -71,12 +69,6 @@ export class DiagnosticsServer {
     maxPayload?: number
     graceMs?: number
     application?: ApplicationEndpoint
-    /*
-     * Read-only observation source for `get_memory_inspect`. Omitted by default:
-     * the composition root decides whether a dialogue observation exists, and a
-     * diagnostics server that never received one answers "unavailable".
-     */
-    memoryInspect?: MemoryInspectSource
   } = {}) {
     const config = normalizeRuntimeConfig({
       host: options.host,
@@ -89,7 +81,6 @@ export class DiagnosticsServer {
     this.path = options.path ?? DIAGNOSTICS_PATH
     this.graceMs = config.graceMs
     this.application = options.application
-    this.memoryInspect = options.memoryInspect
     this.http = createServer((req, res) => this.handleHttp(req, res))
     this.wss = new WebSocketServer({ noServer: true, maxPayload: config.maxPayload })
     this.http.on('upgrade', (req, socket, head) => this.handleUpgrade(req, socket, head))
@@ -317,12 +308,7 @@ export class DiagnosticsServer {
         )
         return
       }
-      this.sendReply(
-        ws,
-        processDiagnosticMessage(text, this.uptimeSec, {
-          ...(this.memoryInspect !== undefined ? { memoryInspect: this.memoryInspect } : {}),
-        }),
-      )
+      this.sendReply(ws, processDiagnosticMessage(text, this.uptimeSec))
     })
     ws.on('error', (err) => this.logWsError('connection', err))
   }

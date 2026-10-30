@@ -11,40 +11,16 @@ export interface Edge {
   resolved: string | null
 }
 
-const MODULE_PATTERN =
-  /^\s*(?:import|export)\b(?![^'"]*?\btype\b)[^'"]*?['"]([^'"]+)['"]|import\s*\(\s*['"]([^'"]+)['"]\s*\)|\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/gm
-
-/*
- * Real module specifiers, including the `type` imports that carry no runtime
- * edge but whose existence the checker still has to see.
- *
- * The import-graph edges above deliberately ignore `import type` / `export
- * type`, because an erased type import adds no runtime dependency and a type
- * contract on the browser side may legitimately name a backend-owned shape
- * (`./moduleSpecifiers.test.ts` covers both readings). This helper exists for
- * the path-level checks: a `src/` file must not even NOMINATE test code.
- */
-const ALL_SPECIFIERS_PATTERN =
-  /^\s*(?:import|export)\b[^'"]*?['"]([^'"]+)['"]|import\s*\(\s*['"]([^'"]+)['"]\s*\)|\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/gm
+const MODULE_PATTERN = /^\s*(?:import|export)\b[^'"]*?['"]([^'"]+)['"]|import\s*\(\s*['"]([^'"]+)['"]\s*\)|\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/gm
 
 /** Normalize path separators so checks are portable across platforms. */
 const norm = (path: string): string => path.replace(/\\/g, '/')
 
-/** Runtime import specifiers: `import type` and `export type` are excluded. */
 export function moduleSpecifiers(source: string): string[] {
-  return matchAll(MODULE_PATTERN, source)
-}
-
-/** Every import specifier, including type-only ones. */
-export function allSpecifiers(source: string): string[] {
-  return matchAll(ALL_SPECIFIERS_PATTERN, source)
-}
-
-function matchAll(pattern: RegExp, source: string): string[] {
   const specs: string[] = []
   let match: RegExpExecArray | null
-  pattern.lastIndex = 0
-  while ((match = pattern.exec(source)) !== null) {
+  MODULE_PATTERN.lastIndex = 0
+  while ((match = MODULE_PATTERN.exec(source)) !== null) {
     specs.push(match[1] ?? match[2] ?? match[3])
   }
   return specs
@@ -53,29 +29,10 @@ function matchAll(pattern: RegExp, source: string): string[] {
 export function makeResolver(exists: (path: string) => boolean) {
   return (spec: string, fromFile: string): string | null => {
     if (!spec.startsWith('.')) return null
-    /*
-     * Resolve in the POSIX namespace and hand the joined path to `exists`, so a
-     * caller's in-memory file map ('/app/main.tsx') matches on every platform.
-     * The real-filesystem callers below pass native paths, which Node's path
-     * module already normalises before they reach this function.
-     */
-    const base = fromFile.startsWith('/') && isWindows ? posixResolve(dirname(fromFile), spec) : resolve(dirname(fromFile), spec)
-    const candidates = [base, `${base}.ts`, `${base}.tsx`, posixResolve(base, 'index.ts'), posixResolve(base, 'index.tsx')]
+    const base = resolve(dirname(fromFile), spec)
+    const candidates = [base, `${base}.ts`, `${base}.tsx`, join(base, 'index.ts'), join(base, 'index.tsx')]
     return candidates.find((candidate) => exists(candidate)) ?? null
   }
-}
-
-const isWindows = process.platform === 'win32'
-
-/** Resolve a POSIX-style in-memory path without touching the Windows drive. */
-function posixResolve(from: string, spec: string): string {
-  const segments: string[] = from.split('/').filter((segment) => segment.length > 0 && segment !== '.')
-  for (const segment of spec.split('/')) {
-    if (segment === '' || segment === '.') continue
-    if (segment === '..') segments.pop()
-    else segments.push(segment)
-  }
-  return `/${segments.join('/')}`
 }
 
 export function collectEdges(
@@ -152,6 +109,16 @@ describe('import graph boundary checker', () => {
     expect(offenders).toEqual([])
   })
 
+  it('classifies representative imports correctly', () => {
+    expect(isNodeSpec('node:fs')).toBe(true)
+    expect(isNodeSpec('path')).toBe(true)
+    expect(isNodeSpec('ws')).toBe(true)
+    expect(isNodeSpec('zod')).toBe(false)
+    expect(isNodeSpec('../some/path')).toBe(false)
+    expect(isTestPath('../test/support/runner-factories')).toBe(true)
+    expect(isTestPath('../../src/contracts')).toBe(false)
+  })
+
   it('keeps browser-facing contracts free of Node and backend modules', () => {
     const entry = join(SRC, 'contracts', 'index.ts')
     const edges = collectEdges(entry, (file) => readFileSync(file, 'utf8'), isFile)
@@ -159,24 +126,17 @@ describe('import graph boundary checker', () => {
     expect(offenders).toEqual([])
   })
 
-  it('separates type-only imports from runtime edges', () => {
-    /*
-     * Both readings matter and must not be conflated. A type-only import is
-     * erased, so it adds no runtime edge - that is what lets the browser-facing
-     * contracts declare a backend-owned payload shape. It is still a real
-     * dependency for path checks, so `allSpecifiers` reports it.
-     */
-    const source = [
-      "import type { Payload } from '../dialogue/contract'",
-      "import { value } from '../dialogue/runtime'",
-      "export type { Other } from '../dialogue/other'",
-    ].join('\n')
-    expect(moduleSpecifiers(source)).toEqual(['../dialogue/runtime'])
-    expect(allSpecifiers(source)).toEqual([
-      '../dialogue/contract',
-      '../dialogue/runtime',
-      '../dialogue/other',
-    ])
+  it('allows a browser-safe M1 player import through the same checker (positive)', () => {
+    const files: Record<string, string> = {
+      '/app/main.tsx': "import player from '../src/performance/browser/player'\nimport { contract } from '../src/contracts'\n",
+      '/src/performance/browser/player.ts': "import type { PlayerPort } from '../../contracts'\nexport const player: unknown = null\n",
+      '/src/contracts/index.ts': "export const contract = 1\n",
+    }
+    const read = (file: string): string => files[file] ?? ''
+    const exists = (path: string): boolean => path in files
+    const edges = collectEdges('/app/main.tsx', read, exists)
+    const offenders = edges.filter((edge) => consoleEdgeBlocked(edge.spec, edge.resolved))
+    expect(offenders).toEqual([])
   })
 
   it('rejects a browser player that transitively imports backend or Node code (negative)', () => {
@@ -228,27 +188,28 @@ describe('import graph boundary checker', () => {
     expect(edges.some((edge) => edge.resolved !== null && isTestPath(edge.resolved))).toBe(true)
   })
 
-  it('flags a type-only import of test code, which the runtime graph would miss', () => {
-    /*
-     * Counterpart to the previous case: the runtime edge set ignores
-     * `import type`, so the path-level rule must be applied to every specifier
-     * or a type-only reach into test code would go unreported.
-     */
-    const source = "import type { Fixture } from '../test/support/fixture-data'\n"
-    expect(moduleSpecifiers(source)).toEqual([])
-    expect(allSpecifiers(source)).toEqual(['../test/support/fixture-data'])
-  })
-
-  it('keeps all production source free of runtime and type-only test imports', () => {
+  it('keeps all production source from importing test code', () => {
     const offenders: string[] = []
     for (const file of walk(SRC)) {
-      for (const spec of allSpecifiers(readFileSync(file, 'utf8'))) {
+      for (const spec of moduleSpecifiers(readFileSync(file, 'utf8'))) {
         const resolved = makeResolver(isFile)(spec, file)
-        if (resolved !== null && isTestPath(resolved)) {
+        if (isTestPath(spec) || (resolved !== null && isTestPath(resolved))) {
           offenders.push(`${file} -> ${spec}`)
         }
       }
     }
     expect(offenders).toEqual([])
+  })
+
+  it('keeps the I1 loop demo client free of Node, provider and runner imports', () => {
+    const entry = join(ROOT, 'test', 'browser', 'loop.ts')
+    const edges = collectEdges(entry, (file) => readFileSync(file, 'utf8'), isFile)
+    const offenders = edges.filter((edge) => consoleEdgeBlocked(edge.spec, edge.resolved))
+    expect(offenders).toEqual([])
+    // The demo may share the browser-safe performer machine, but must never
+    // reach Node-only test support or a fixture runner.
+    expect(
+      edges.some((edge) => edge.resolved !== null && /\/test\/support\//.test(norm(edge.resolved))),
+    ).toBe(false)
   })
 })
