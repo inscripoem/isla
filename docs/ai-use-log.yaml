@@ -3787,3 +3787,69 @@ entries:
       assertion remains skipped until the operator supplies ISLA_LIVE_TEXT_*; per
       AGENTS.md no live-provider success is claimed from fixtures. Full-suite
       final review belongs to remote CI.
+
+  - date: "2026-10-30"
+    task: M4-04-withdraw-out-of-scope-edits
+    branch: feat/m4-04
+    change: >-
+      Withdrawal only; no application code was authored. df6cc58 mixed an
+      M4-owned refactor with three changes outside M4's ownership, so this
+      commit restores the out-of-scope paths to their df6cc58^ content and
+      deletes the two files that existed only to serve them: M6's
+      test/offline/boundaries.test.ts (PR #70 supersedes it; the withdrawn
+      version had deleted three existing cases, relaxed the production
+      test-import rule to resolved paths only, and cited a
+      moduleSpecifiers.test.ts that does not exist), src/contracts/protocol.ts
+      plus src/runtime/{diagnostics,server}.ts and test/offline/server.test.ts
+      (shared contract and M5-owned wiring), and the package.json test:m4 entry
+      naming the withdrawn protocol test. The deleted files are
+      src/runtime/memory-inspect-reply.ts and
+      test/offline/m4-memory-inspect-protocol.test.ts. Retained as M4's own:
+      src/dialogue/memory-inspect-contract.ts, which declares the payload once,
+      states that admission.admitted counts admitted history SEGMENTS while
+      recall.delivery.* counts recalled TURNS, and keeps consistency.incomplete
+      first-class so a zero finding count with incomplete true cannot read as an
+      all-clear; src/dialogue/memory-inspect.ts now builds on that declaration
+      and src/dialogue/index.ts re-exports it. The contracts-to-dialogue type
+      import that motivated the checker exception is gone with protocol.ts, so
+      no boundary rule needed widening.
+    requirements: []
+    invariants: []
+    commits: [3014648]
+    agent: workbuddy/deepseek-v4.1-flash
+    provider: deepseek
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Member M4 reviewed the alignment report for origin/main 02276f6, chose the
+      split option (withdraw the out-of-scope paths, retain the dialogue-owned
+      declaration) and authorised this commit. The agent restored the withdrawn
+      paths from df6cc58^, deleted the two dependent files and made the commit;
+      it did not write or alter application logic, and the retained declaration
+      comes from df6cc58, whose authorship is not restated or re-claimed here.
+      The disclosure to M6 was posted as a comment on PR #70 before this
+      withdrawal, so the defects in the withdrawn checker version are on record
+      rather than silently reverted.
+    human_review: >-
+      Captain (M4) authorised the split in session on 2026-10-30 after reading
+      the conflict report (ownership, shared contract, manifest). No reviewer
+      approval, merge or case closure is claimed by this entry.
+    transcript_record: >-
+      The conversation is retained in the WorkBuddy session; no separate export
+      was created.
+    verification:
+      base: 7733dfa
+      commands: >-
+        pnpm typecheck; pnpm lint; pnpm test:m4; pnpm test:readiness;
+        pnpm test:trace; pnpm test
+      results: >-
+        typecheck clean; lint 0 warnings / 0 errors on 251 files; test:m4
+        233/233 in 10 files; trace 41/41; readiness 38/42 and the full suite
+        1376/1393 with 17 failures, all of the documented Windows class
+        (boundaries x3 restored by design by this withdrawal, cli x3,
+        production-cli x4, m5-process-restart x1, m6-02-boundary x2,
+        m6-sqlite x3, requirements x1). The three restored boundaries failures
+        are the Windows-only absent-path negatives reported to M6 on PR #70;
+        they are not new regressions from this commit.
+      not_run: >-
+        No live provider run and no Windows-green or product claim; this entry
+        reverts and re-homes declarations only.
