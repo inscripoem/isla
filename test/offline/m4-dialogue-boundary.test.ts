@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createCallContext, createGate } from '../support/context'
 import { fixtureDialogueRequest } from '../support/fixture-data'
-import { createDialoguePort } from '../../src/dialogue'
+import { createDialoguePort, createIntentTextSource } from '../../src/dialogue'
 import type { DialogueOutcomeReport, DialogueTextSource } from '../../src/dialogue'
 import type { ClockPort, DialogueSegment, DialogueSink } from '../../src/contracts'
 
@@ -110,6 +110,7 @@ describe('M4 dialogue outcome boundary (M5 review of revision a678b61)', () => {
     const reports: DialogueOutcomeReport[] = []
     const port = createDialoguePort({
       clock: FIXTURE_CLOCK,
+      textSource: createIntentTextSource(),
       onOutcome: (report) => reports.push(report),
     })
     const context = createCallContext(5_000)
@@ -130,6 +131,7 @@ describe('M4 dialogue outcome boundary (M5 review of revision a678b61)', () => {
     const reports: DialogueOutcomeReport[] = []
     const port = createDialoguePort({
       clock: FIXTURE_CLOCK,
+      textSource: createIntentTextSource(),
       onOutcome: (report) => reports.push(report),
     })
     const end = await port.generate(fixtureDialogueRequest(), createCallContext(0), sinkOf([]))
@@ -148,6 +150,7 @@ describe('M4 dialogue outcome boundary (M5 review of revision a678b61)', () => {
     const reports: DialogueOutcomeReport[] = []
     const port = createDialoguePort({
       clock: FIXTURE_CLOCK,
+      textSource: createIntentTextSource(),
       onOutcome: (report) => reports.push(report),
     })
     const end = await port.generate(
@@ -223,6 +226,7 @@ describe('M4 dialogue outcome boundary (M5 review of revision a678b61)', () => {
   it('does not let a throwing outcome observer change a cancelled generation', async () => {
     const port = createDialoguePort({
       clock: FIXTURE_CLOCK,
+      textSource: createIntentTextSource(),
       onOutcome: () => {
         throw new Error('observer down')
       },
@@ -238,6 +242,7 @@ describe('M4 dialogue outcome boundary (M5 review of revision a678b61)', () => {
     const reports: DialogueOutcomeReport[] = []
     const port = createDialoguePort({
       clock: FIXTURE_CLOCK,
+      textSource: createIntentTextSource(),
       history: {
         confirmedHistory: async () => {
           throw failure
