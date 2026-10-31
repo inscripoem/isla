@@ -37,9 +37,9 @@ async function main(): Promise<void> {
     return
   }
 
+  let bound: { host: string; port: number }
   try {
-    const bound = await server.start()
-    log('listening', { host: bound.host, port: bound.port })
+    bound = await server.start()
   } catch (error) {
     logError('listen_failed', error)
     process.exitCode = 1
@@ -60,8 +60,14 @@ async function main(): Promise<void> {
     }
   }
 
+  // Installed before readiness becomes observable. A supervisor may treat the
+  // listening line as permission to signal; a signal delivered while no
+  // listener exists takes the default action and terminates the process with
+  // exit 130/143 instead of running the graceful shutdown above.
   process.on('SIGINT', () => void shutdown('SIGINT'))
   process.on('SIGTERM', () => void shutdown('SIGTERM'))
+
+  log('listening', { host: bound.host, port: bound.port })
 }
 
 void main()
