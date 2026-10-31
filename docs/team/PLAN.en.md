@@ -1,6 +1,6 @@
 # Isla — Team Work Plan v0.2
 
-Status: under review · 2026-10-31.1 · [Project overview](../../README.md)
+Status: proposed coordination update, under review · 2026-10-31.2 · [Project overview](../../README.md)
 
 ## Requirements and course-deliverable work
 
@@ -91,7 +91,7 @@ M6-02 prepares measurement tooling alongside the offline work and compares imple
 
 ### Submission checkpoint responsibilities
 
-Captain adopted the target schedule on October 29; member capacity acknowledgements remain pending. Each cell points to existing work rather than a new module assignment. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md) for individual PR/acceptance deliveries and reviewer dependencies.
+Captain adopted the target schedule on October 29. Record delivery estimates when supplied; no separate weekly capacity return is required under this proposed process. Each cell points to existing work rather than a new module assignment. Members update the actual task or PR once; M5 maintains the Project summary. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md) for product acceptance and reviewer dependencies.
 
 | Member / role issue | I1 checks: Nov 1 / Nov 5 | I2: Nov 8 | Evaluation / faults: Nov 10-15 | Course closure: Nov 18-22 |
 | --- | --- | --- | --- | --- |
