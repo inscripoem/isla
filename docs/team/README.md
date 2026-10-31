@@ -1,6 +1,6 @@
 # Team Development
 
-Document revision: 2026-10-29.2. The team-confirmed allocation is unchanged.
+Document revision: 2026-10-31.1. The team-confirmed allocation is unchanged.
 
 For progress, start with the [submission checkpoints](DELIVERY-PLAN.en.md): all ten acceptance targets, per-member deliveries and the November 23-25 contingency window. The public [Isla Roadmap](https://github.com/users/inscripoem/projects/4) provides a table for [Team progress](https://github.com/users/inscripoem/projects/4/views/2), a roadmap for [Checkpoints](https://github.com/users/inscripoem/projects/4/views/3) and a status board for [Next checkpoint](https://github.com/users/inscripoem/projects/4/views/4). All 50 delivery items are linked. Checkpoint 01 is in progress; acceptance and owner forecasts remain pending.
 
@@ -23,6 +23,7 @@ Start an agent from the repository root with a short request such as "I am M3. S
 | [M5 dynamic audio handoff](HANDOFF-M5-DYNAMIC-AUDIO.en.md) | Same-origin `POST /audio` resource route, authoritative lifecycle/scope rechecks, response-lifetime lease ownership and the assembled-turn and real-browser acceptance; version-bound evidence |
 | [M5 physical synthesis handoff](HANDOFF-M5-PHYSICAL-SYNTHESIS.en.md) | Retained M1 adapter/provider, originating gate, physical settlement and owned release through actual worker exit; version-bound evidence |
 | [M5 evaluation adapter handoff](HANDOFF-M5-EVALUATION-ADAPTER.en.md) | Real coordinator execution for the M6 runner, evidence-based outcomes, unknown metrics and cleanup diagnostics; version-bound evidence |
+| [M5 VTS acquisition handoff](HANDOFF-M5-VTS-ACQUISITION.en.md) | Merged bounded acquisition, record-aware credentials and cancellation/cleanup; product deployment remains separate |
 | [M5 mention follow-up](HANDOFF-M5-MENTIONS.en.md) | Local M4 outcome consumer integration, deadline handling, bounded input preparation and owner review limits |
 | [Readiness kits](READINESS-KITS.en.md) | Per-role commands, ports to implement, fixture replacement instructions and version-change coordination |
 | [Readiness review](READINESS-REVIEW.en.md) | Supervisory review of the approved contract and test design |

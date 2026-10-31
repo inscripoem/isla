@@ -1,6 +1,6 @@
 # Submission checkpoint plan
 
-Revision: 2026-10-29.2. Status: under review. Captain has adopted these target dates; individual capacity, review slots and forecasts require member acknowledgement. All times are UTC+8; each target is 21:00. No checkpoint is marked accepted by this document.
+Revision: 2026-10-31.1. Status: under review. Captain has adopted these target dates; individual capacity, review slots and forecasts require member acknowledgement. All times are UTC+8; each target is 21:00. No checkpoint is marked accepted by this document.
 
 Scope: CS5351 submission and the agreed Isla requirements only. Preserve M1-M6 ownership, workload ratings, existing task/requirement/case IDs and genuine evidence. Checkpoint numbers are schedule positions, not new requirement/case IDs. I1-01, I2-01 and S1-01 remain the original task references. Any scope reduction needs an explicit recorded decision.
 
@@ -18,7 +18,9 @@ Keep the main view short: member, next delivery, status, target, forecast, block
 
 There are ten checkpoint Issues (#71-#80) and 50 canonical child delivery Issues, reusing #68/#69 and creating 48 missing delivery trackers. Each checkpoint links its children and acceptance dependencies. The Checkpoints view exposes native Sub-issues progress; this counts accepted/closed delivery issues, not implementation percentage. Existing source and evidence are reused.
 
-Current checkpoint: [01 - scope and delivery queue](https://github.com/inscripoem/isla/issues/71), In progress. Its four remaining deliveries are [plan publication #81](https://github.com/inscripoem/isla/issues/81), [member capacity #82](https://github.com/inscripoem/isla/issues/82), [PR queue confirmation #83](https://github.com/inscripoem/isla/issues/83) and [required verify #84](https://github.com/inscripoem/isla/issues/84). No delivery or checkpoint has been marked Accepted by administrative setup.
+Current checkpoint: [01 - scope and delivery queue](https://github.com/inscripoem/isla/issues/71), In progress. Its four remaining deliveries are [plan publication #81](https://github.com/inscripoem/isla/issues/81), [member capacity #82](https://github.com/inscripoem/isla/issues/82), [PR queue confirmation #83](https://github.com/inscripoem/isla/issues/83) and [required verify #84](https://github.com/inscripoem/isla/issues/84). PR132 has merged and the verify requirement is active; #84 still needs its named acceptance record and a decision on M2's #133 flake concern. No delivery or checkpoint has been marked Accepted by administrative setup.
+
+On October 31 the recorded main is [5e7abfb7dfa758a462b97ef891266c7d911637d9](https://github.com/inscripoem/isla/commit/5e7abfb7dfa758a462b97ef891266c7d911637d9), including merged PR57 rule selection and PR64 bounded VTS acquisition. The acquisition handoff retains its original evidence; production VTS assembly and product acceptance remain open. PR130 and PR131 remain separate M5 candidates. M2 submitted the first-recovery correction and an acceptance harness in PR67 at `35a0774`; consumer re-review is pending. M5's separate local candidate for the diagnostic CLI signal race #133 awaits publication and M2's macOS retest.
 
 ## Schedule
 
@@ -63,7 +65,7 @@ Acceptance dependencies: preparation may start now; follow the prerequisites in 
 | --- | --- | --- | --- |
 | M5 | Planning PR: submission requirements, target platform, comparison baseline, checkpoint dates and acceptance boundaries. | M1-M6 | docs/team/PLAN.en.md; docs/team/DELIVERY-PLAN.en.md |
 | M1-M6 | Each member confirms next delivery, review availability, unpublished work and seven-day capacity on the existing role issue. | M5 | Issues #2-#7 |
-| M5 | For every open PR, record its current head, author action, consumer reviewer, forecast and checkpoint; obtain owner acknowledgement. | respective owners | PRs #57/#63/#64/#66/#67/#70 |
+| M5 | For every open PR, record its current head, author action, consumer reviewer, forecast and checkpoint; obtain owner acknowledgement. | respective owners | PRs #63/#66/#67/#70/#129/#130/#131 |
 | M6 + human maintainer | Prepare and approve the required-check setting for existing verify; maintainer applies it and records effective rules. | M5 | Existing CI and Protect Main ruleset |
 
 Pass condition: All six next deliveries are visible; critical dependencies have owners and forecasts; adopted scope and actual required-check settings are recorded. Member capacity is not inferred from silence.
@@ -100,7 +102,7 @@ Acceptance dependencies: checkpoint 02.
 
 | Owner | Delivery | Reviewer / accepter | Existing work |
 | --- | --- | --- | --- |
-| M3 | Finish PR57 review fixes and obtain current-head consumer acceptance for the rule SelectionPort. | M6/M5; M4 rubric | PR #57; role Issue #4 |
+| M3 | Preserve the merged PR57 rule SelectionPort and its accepted consumer review; support adoption in the combined revision. | M6/M5; M4 rubric | PR #57; Issue #88; role Issue #4 |
 | M3 | Deliver rule ReactionPort and its tests as a separate PR if no existing implementation covers the agreed scope. | M1/M5 | M3-01; shared ReactionPort |
 | M5 | I1 adoption PR: reuse applicable local eleven-file preparation; wire real module factories with a shared clock and run one combined revision. | M1/M3/M4/M6 | Local m5-i1-independent-20261028; Issue #6 |
 | M4 | Validate selected text, intent and delivered-versus-unconfirmed history through the real dialogue module; repair owned defects. | M5/M6 | Merged PR65; Issue #5 |
@@ -122,7 +124,7 @@ Acceptance dependencies: checkpoint 03.
 | --- | --- | --- | --- |
 | M4 | Live text-provider PR with cancellation, deadlines and honest usage; replace live todo cases with actual assertions. | M5/M6 | DialogueTextSource; M4 live harness |
 | M1 | Verify existing Kokoro and selected avatar implementation on the target machine; submit focused fixes only for demonstrated defects. | M2/M5 | Merged M1 providers; Issue #2 |
-| M5 | Resolve PR64 conflicts with current main and obtain renewed review; implement remaining product connector/store/budget/assembly work required by the selected VTS deployment. | M1 | PR #64; Issue #58 |
+| M5 | Build the remaining product connector/store/budget/assembly work on the merged PR64 acquisition lifecycle and obtain M1 review. | M1 | PR #64; Issues #58/#95 |
 | M5 | Product deployment PR: real peers, explicit configuration failure and owned cleanup; reference one reproducible startup command. | M1/M4/M6 | Existing production CLI and composition |
 | M2 | Verify live waiting/failure/output states through the formal console and fix owned UI defects. | M1/M5 | Adopted PR67; Issue #3 |
 
@@ -259,6 +261,6 @@ Source basis checked October 29, 2026: `CS5351-2026-2027-project.pdf`, project P
 
 The ten checkpoint issues (#71-#80) are published and open. Their bodies mirror this plan's acceptance definitions; approved schedule changes update both. Operational status belongs to each linked delivery item. Role issues #2-#7 retain responsibilities and history. Long coordination threads #25/#37/#41/#44/#58 remain intact; add approved concise current-action links rather than replacing past discussions. Historical handoffs are version-bound evidence, not the current project status.
 
-Existing PRs continue on their original branches. PR64 also edits team plans: resolve its documentation conflicts against the adopted plan while preserving its VTS handoff and original evidence; renewed review remains necessary. An unrelated review cannot clear another author's requested changes. Module fixes remain with their owners unless separately delegated. No agent merges, enables auto-merge or submits coursework.
+Existing PRs continue on their original branches. PR64 is merged; retain its VTS handoff and original evidence while separately reviewing product adoption. An unrelated review cannot clear another author's requested changes. Module fixes remain with their owners unless separately delegated. No agent merges, enables auto-merge or submits coursework.
 
-Captain approved Project creation, five member writer grants, ten checkpoints, all independent delivery items and the existing-item associations. Git commit/push, the documentation PR, CI/ruleset changes and business implementation still need their respective approval. Publication records preserve returned IDs and actual changes. G1 activation still requires its documented adoption decisions; the existing advisory mode is not changed by this plan. G4 implementation and required checks remain independent owner work.
+Captain approved Project creation, five member writer grants, ten checkpoints, all independent delivery items and the existing-item associations. Local work and GitHub publication have separate authorization; publication records preserve returned IDs and actual changes. G1 activation still requires its documented adoption decisions; the existing advisory mode is not changed by this plan. G4 implementation and required checks remain independent owner work.

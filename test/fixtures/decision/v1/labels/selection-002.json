@@ -1,0 +1,24 @@
+{
+  "caseId": "selection-002",
+  "selectionScores": [
+    {
+      "disposition": "defer",
+      "selectedEventIds": [],
+      "score": 2
+    },
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-003"],
+      "score": 0
+    }
+  ],
+  "intentLabels": [
+    {
+      "selectedEventId": "message-003",
+      "acceptableIntents": ["clarify"],
+      "coverage": "partial",
+      "coverageRationale": null
+    }
+  ],
+  "rationale": "The input is unintelligible; waiting is preferred until a clearer input arrives. This draft is not adopted evidence."
+}
