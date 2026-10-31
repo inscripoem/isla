@@ -43,7 +43,35 @@ export interface DialogueTextSource {
   readonly modelVersion: string
   /** Model that actually served the call; null when unknown. */
   readonly resolvedModel: string | null
-  compose(view: AssembledDialogueContext, maxSegments: number): Promise<readonly string[]>
+  /*
+   * The per-call argument and the result wrapper widen this boundary additively,
+   * as agreed with M5 in coordination issue #44 (§2.2 abort propagation, §2.5
+   * per-call identity and usage). The third parameter is optional and the array
+   * arm of the return union stays, so a source written against the previous
+   * signature keeps compiling and behaving unchanged.
+   */
+  compose(
+    view: AssembledDialogueContext,
+    maxSegments: number,
+    call?: DialogueComposeCall,
+  ): Promise<readonly string[] | DialogueComposeResult>
+}
+
+/** Per-call context forwarded to a text source. Optional and additive: existing sources ignore it. */
+export interface DialogueComposeCall {
+  /** Aborted when the turn is revoked. A provider-backed source should stop composing early. */
+  readonly signal?: AbortSignal
+}
+
+/** Compose result wrapper for provider-backed sources: per-call served identity and measured usage. */
+export interface DialogueComposeResult {
+  /** Candidate lines for this call, in speaking order; one candidate may become one segment. */
+  readonly lines: readonly string[]
+  /** Model that actually served THIS call; null when the provider did not report one. */
+  readonly resolvedModel?: string | null
+  /** Measured token counts from the provider; null or absent stays usageMissing. */
+  readonly inputTokens?: number | null
+  readonly outputTokens?: number | null
 }
 
 export function createIntentTextSource(): DialogueTextSource {
@@ -59,6 +87,38 @@ export function createIntentTextSource(): DialogueTextSource {
        * and no filler line is ever invented here.
        */
       return view.replyTemplates.slice(0, Math.max(0, maxSegments))
+    },
+  }
+}
+
+/** Requested model identity recorded by `createUnconfiguredTextSource`. */
+export const UNCONFIGURED_DIALOGUE_SOURCE_MODEL = 'unconfigured-dialogue-source'
+export const UNCONFIGURED_DIALOGUE_SOURCE_MODEL_VERSION = 'unconfigured'
+
+/**
+ * Source used when the caller supplied no `textSource`.
+ *
+ * Coordination issue #44 §2.4 abolished the silent fixture fallback: a live
+ * selection whose configuration is missing must fail visibly instead of quietly
+ * serving fixture text. Deterministic offline sources remain available, but only
+ * when the caller names them (for example `createIntentTextSource`). The port
+ * therefore stays usable without a source - construction must not throw, since
+ * generation may never be requested - and the first compose attempt fails.
+ *
+ * Configuration is injected at the composition root; `src/dialogue` never reads
+ * the environment, so the message names that boundary rather than a variable.
+ */
+export function createUnconfiguredTextSource(): DialogueTextSource {
+  return {
+    model: UNCONFIGURED_DIALOGUE_SOURCE_MODEL,
+    modelVersion: UNCONFIGURED_DIALOGUE_SOURCE_MODEL_VERSION,
+    resolvedModel: null,
+    async compose() {
+      throw new Error(
+        'dialogue text source is not configured: pass textSource explicitly; ' +
+          'provider configuration is injected at the composition root ' +
+          '(ISLA_-prefixed variables are read there, never inside src/dialogue)',
+      )
     },
   }
 }
@@ -118,6 +178,12 @@ export interface DialoguePortOptions {
    * See `mayRecallCandidate` in ./memory-recall for what this gates.
    */
   audience?: AudienceIdentity
+  /**
+   * Text source for this port. Omitted means `createUnconfiguredTextSource`, whose
+   * compose fails loudly rather than serving fixture text (issue #44 §2.4): a
+   * caller that wants deterministic offline text passes `createIntentTextSource`
+   * explicitly, and a caller that wants a provider passes a provider-backed source.
+   */
   textSource?: DialogueTextSource
   /** Clamped to MAX_DIALOGUE_SEGMENTS whatever value is passed. */
   maxSegments?: number
@@ -200,9 +266,21 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
 
 export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
   const clock = options.clock
-  const source = options.textSource ?? createIntentTextSource()
+  const source = options.textSource ?? createUnconfiguredTextSource()
   const registry = createFinalizedSegmentRegistry()
   const maxSegments = clampMaxSegments(options.maxSegments)
+
+  /*
+   * What a text source reported for THIS call. The fields stay undefined when the
+   * source reported nothing: the end builder then keeps the source's
+   * construction-time `resolvedModel` and leaves usage explicitly missing, never
+   * zero (coordination issue #44 §2.4, §2.5).
+   */
+  interface CallSourceReport {
+    resolvedModel?: string | null
+    inputTokens?: number | null
+    outputTokens?: number | null
+  }
 
   const buildEnd = (
     request: DialogueRequest,
@@ -210,6 +288,7 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
     segmentCount: number,
     startedAtMs: number,
     usageStatus: UsageRecord['status'],
+    served: CallSourceReport,
   ): DialogueEnd =>
     dialogueEndSchema.parse({
       requestId: request.requestId,
@@ -223,7 +302,16 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
         elapsedMs: clock.nowMs() - startedAtMs,
         status: usageStatus,
         requestedModel: source.model,
-        resolvedModel: source.resolvedModel,
+        resolvedModel:
+          served.resolvedModel === undefined ? source.resolvedModel : served.resolvedModel,
+        /*
+         * Counts travel as one pair. A source reports both or neither, so a
+         * half-reported pair is omitted and stays `usageMissing` rather than
+         * pairing a measured count with an invented zero.
+         */
+        ...(served.inputTokens === undefined || served.outputTokens === undefined
+          ? {}
+          : { inputTokens: served.inputTokens, outputTokens: served.outputTokens }),
       }),
     })
 
@@ -275,6 +363,9 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
     ): Promise<DialogueEnd> {
       const startedAtMs = clock.nowMs()
 
+      /* What the text source reported for this call; never shared across calls. */
+      let served: CallSourceReport = {}
+
       /*
        * Deadline and cancellation handling.
        *
@@ -301,20 +392,23 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
       }
 
       /*
-       * One terminal path per invocation. It reports exactly once from the current
-       * counters and builds the matching end, so no branch repeats the payload.
-       * The throwing paths call it for the report and then rethrow the original
-       * error.
+       * One terminal path per invocation. It builds the matching end from the
+       * current counters and then reports exactly once, so no branch repeats the
+       * payload. Reporting follows successful construction: if the end fails
+       * validation no report is emitted, because no valid terminal state was
+       * reached. The throwing paths therefore rethrow the original error without
+       * a prior report on that path.
        */
       const terminal = (
         endStatus: DialogueEnd['status'],
         usageStatus: UsageRecord['status'],
       ): DialogueEnd => {
+        const end = buildEnd(request, endStatus, emitted, startedAtMs, usageStatus, served)
         if (!reported) {
           reported = true
           report({ request, endStatus, usageStatus, generated, emitted, discards })
         }
-        return buildEnd(request, endStatus, emitted, startedAtMs, usageStatus)
+        return end
       }
 
       if (context.signal.aborted) {
@@ -379,10 +473,29 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
        * Count everything it produced as `generated`, and account the cap overflow
        * explicitly, so no produced candidate disappears from the report. A source
        * that throws reports a failed outcome before the call rejects.
+       *
+       * The abort signal travels to the source (issue #44 §2.2) so a revoked turn
+       * can stop an in-flight provider call. A wrapped result additionally carries
+       * the per-call served identity and measured token counts (§2.5); a bare array
+       * leaves them unset, keeping the source's construction-time identity and
+       * explicitly missing usage.
        */
       const compose = async (): Promise<readonly string[]> => {
         try {
-          return await source.compose(view, maxSegments)
+          const result = await source.compose(view, maxSegments, { signal: context.signal })
+          if (Array.isArray(result)) return result as readonly string[]
+          const wrapped = result as DialogueComposeResult
+          /*
+           * Record the report before returning: the lines are consumed next, and a
+           * following Stop or deadline must still end with this call's identity and
+           * counts rather than the source's construction-time defaults.
+           */
+          served = {
+            ...(wrapped.resolvedModel === undefined ? {} : { resolvedModel: wrapped.resolvedModel }),
+            ...(wrapped.inputTokens === undefined ? {} : { inputTokens: wrapped.inputTokens }),
+            ...(wrapped.outputTokens === undefined ? {} : { outputTokens: wrapped.outputTokens }),
+          }
+          return wrapped.lines
         } catch (error) {
           terminal('failed', 'failed')
           throw error
