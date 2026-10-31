@@ -37,6 +37,11 @@ which is exactly where the cheapest defects hide.
 **Rule: the author runs all five before requesting review, and the reviewer repeats them. A review
 confirms; it does not discover.**
 
+**Two corollaries (BUG-017, 2026-10-29).** A *negative* claim requires a positive read: the field must be
+returned by the command and be empty (`[]`); an omitted field is `unknown`, never "none". And every claim
+about a live setting or an issue thread is re-read at the moment of writing, not carried from an earlier
+session.
+
 ## M6 coverage map (requirement/invariant → case → test)
 
 | Invariant / requirement | Case | Test that would fail if violated |
@@ -133,3 +138,56 @@ Output-preservation, strict-schema, and summary-recomputation tests remain suppo
 attempts or not-run entries”. Two variants, executed and not-run entries, temporary serialized input and the real
 R1 command are used; all-not-run refusal, output preservation and non-finite serialization refusal remain
 supporting boundary tests.
+
+## Effective enforcement — required status check (2026-10-29)
+
+Records the enforcement half of issue #84 (checkpoint 01, target 2026-10-30). This is an **evidence note, not a
+rule change**: ADR-006 D2 remains the decision, and this section records which of its conditions hold today.
+Measured on `main` `4e4f7cd` at 2026-10-29T10:57Z with `gh api repos/inscripoem/isla/rulesets/24803426` and
+`.../rules/branches/main`.
+
+| Property | Measured value |
+| --- | --- |
+| Ruleset | `Protect Main`, id 24803426, `enforcement: active`, target default branch (`main`) |
+| Required check | context `verify`, `integration_id 15368` (GitHub Actions) |
+| Review | 1 approval; approval required after the latest push; unresolved threads are not required to be resolved; code-owner review is not required |
+| History / merge | linear history; squash or rebase only |
+| Bypass | `current_user_can_bypass: "never"` for the verifying account; bypass actors are not readable with it |
+| Branch up to date | **off** (`strict_required_status_checks_policy: false`) |
+| Initial branch creation | not enforced (`do_not_enforce_on_create: true`) |
+| Last ruleset update | 2026-10-29T17:39:26+08:00 |
+
+Classic branch protection returns 404 for this repository; the ruleset is the enforcement path. The required
+context matches the real check: the `verify` job (`.github/workflows/ci.yml:31-32`) is the only workflow, and
+both recorded check runs on `4e4f7cd` report `verify`, `success`, app `github-actions` id `15368`.
+
+**What blocks a merge.** Every step of that job: G2 typecheck + lint, G3 readiness, trace, G5 regression,
+G6 AI-use log, G4 evaluation gate and the build. A red step anywhere makes the required check red.
+
+**What does not block.** G1, test approval. ADR-006 D2 makes it blocking when *the team agrees* **and** the
+check is required; the second condition now holds and the first does not — the step still runs
+`gate:test-approval advise` (`.github/workflows/ci.yml:99-105`) and cannot fail. Requiring `verify` did not
+activate G1.
+
+**What this does not establish.**
+
+- No refusal has been observed. One merge has occurred since the rule took effect: PR #57 merged as
+  `c1decc2` on 2026-10-29T11:58Z with a green `verify` (observed 2026-10-30). That is consistent with the
+  rule being satisfied, but it is not a refusal test. No merge with a failing `verify` has been attempted,
+  so enforcement remains unobserved.
+- The maintainer records that they applied the setting (issue #84, 2026-10-29T10:15:50Z), consistent with
+  the ruleset's `updated_at`. The previous required-check value is not recorded.
+- The maintainer records that an **administrator PR-only bypass** remains (same comment). It is not readable
+  with the account used here, so universal non-bypassability is not claimed.
+- A green check on an older base can still merge, because the branch is not required to be up to date.
+
+**Falsifier.** This section is false if `rulesets/24803426` no longer lists `verify`, or if an approved pull
+request merges while `verify` is failing.
+
+Re-measure with:
+
+```
+gh api repos/inscripoem/isla/rulesets/24803426
+gh api repos/inscripoem/isla/rules/branches/main
+gh api repos/inscripoem/isla/commits/main/check-runs
+```
