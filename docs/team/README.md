@@ -1,34 +1,48 @@
 # Team Development
 
-Document revision: 2026-10-29.1. The team-confirmed allocation is unchanged.
+Revision: 2026-10-31.2. Proposed coordination update, under review. Module allocation and product acceptance requirements remain unchanged.
 
-Start an agent from the repository root with a short request such as "I am M3. Start my first task." [AGENTS.md](../../AGENTS.md) maps the role to its task, directories, tests and planning workflow. If the tool does not load AGENTS.md automatically, explicitly ask it to read that file. Review its proposed plan before authorizing code changes; members do not need to repeat the full project instructions in each prompt.
+## Find your work
 
-| Document | Purpose |
+Start from your role issue and follow its current task or PR. Inspect what already exists before starting another implementation.
+
+| Role | Responsibility | Entry |
+| --- | --- | --- |
+| M1 | Speech, playback and avatar adapters | [Role issue #2](https://github.com/inscripoem/isla/issues/2) |
+| M2 | Console input, controls and output state | [Role issue #3](https://github.com/inscripoem/isla/issues/3) |
+| M3 | Response selection, intent and reactions | [Role issue #4](https://github.com/inscripoem/isla/issues/4) |
+| M4 | Dialogue, persona and memory | [Role issue #5](https://github.com/inscripoem/isla/issues/5) |
+| M5 | Runtime and team integration | [Role issue #6](https://github.com/inscripoem/isla/issues/6) |
+| M6 | Storage, replay and evaluation tooling | [Role issue #7](https://github.com/inscripoem/isla/issues/7) |
+
+Write an update on the actual PR when work is ready, a blocker needs another owner, or an estimate changes. Use the existing task issue if no PR exists. Include the result and its evidence link, next action and requested help. A result already recorded on the PR does not need another report on every linked issue.
+
+Record consequential interface, scope and acceptance decisions briefly on the relevant task, PR or repository document. M5 maintains the [six-member progress summary](https://github.com/users/inscripoem/projects/4/views/2) and [next product check](https://github.com/users/inscripoem/projects/4/views/4); members do not maintain duplicate board fields or weekly capacity forms.
+
+## Next product results
+
+| Target, UTC+8 | Observable result |
 | --- | --- |
-| [Current delivery sequence](DELIVERY-PLAN.en.md) | Repository-wide status review, next batches, owners, dependencies and acceptance conditions |
-| [Work plan](PLAN.en.md) | Confirmed roles, working directories, editing boundaries and first parallel tasks |
-| [Candidate requirements](REQUIREMENTS.en.md) | Six functional and six non-functional candidates, invariants and acceptance gaps |
-| [Interfaces and handoff](INTERFACES.en.md) | C1–C7 contracts, existing acceptance-case IDs and integration responsibilities |
-| [M5-01 handoff](HANDOFF-M5-01.en.md) | Production coordinator, actual verification, configuration and per-owner I1-01 requests |
-| [M4-01 handoff](HANDOFF-M4-01.en.md) | Production dialogue/persona/memory module, merged PR30 contract adoption and consumer handoff |
-| [M5 Step A handoff](HANDOFF-M5-CONTRACT-A.en.md) | Delivery attribution, explicit segment indices, reconciled shared-storage tests and M4/M6 rollout review |
-| [I1 application handoff](HANDOFF-I1-APPLICATION.en.md) | Local application transport, fixed-audio browser demo, authority rules and M2 integration; under review |
-| [M5 reconstruction handoff](HANDOFF-M5-RECONSTRUCTION.en.md) | Ordered archive selection, fail-closed validation, reconstructed runtime binding and loopback evidence; revision-specific evidence |
-| [M5 production composition handoff](HANDOFF-M5-PRODUCTION.en.md) | Production application over the real SQLite backend, controlled shutdown, deployment module contract and remaining peer dependencies; revision-specific evidence |
-| [M5 dynamic audio handoff](HANDOFF-M5-DYNAMIC-AUDIO.en.md) | Same-origin `POST /audio` resource route, authoritative lifecycle/scope rechecks, response-lifetime lease ownership and the assembled-turn and real-browser acceptance; revision-specific evidence |
-| [M5 physical synthesis handoff](HANDOFF-M5-PHYSICAL-SYNTHESIS.en.md) | Retained M1 adapter/provider, originating gate, physical settlement and owned release through actual worker exit; revision-specific evidence |
-| [M5 evaluation adapter handoff](HANDOFF-M5-EVALUATION-ADAPTER.en.md) | Real coordinator execution for the M6 runner, evidence-based outcomes, unknown metrics and cleanup diagnostics; revision-specific evidence |
-| [M5 VTS acquisition handoff](HANDOFF-M5-VTS-ACQUISITION.en.md) | Local candidate: bounded acquisition, record-aware credentials, cancellation/cleanup and explicit deployment gaps; under review |
-| [M5 mention follow-up](HANDOFF-M5-MENTIONS.en.md) | Local M4 outcome consumer integration, deadline handling, bounded input preparation and owner review limits |
-| [Readiness kits](READINESS-KITS.en.md) | Per-role commands, ports to implement, fixture replacement instructions and version-change coordination |
-| [Readiness review](READINESS-REVIEW.en.md) | Supervisory review of the approved contract and test design |
-| [Requirements registry](../req/requirements.yaml) | Machine-readable requirements with JSON schema, PRD and trace record under `docs/req/` |
+| November 1, 21:00 | [First I1 check](https://github.com/inscripoem/isla/issues/72): run the agreed console combination and record actual results and gaps. |
+| November 5, 21:00 | [Complete offline I1](https://github.com/inscripoem/isla/issues/73): console, rule decisions, dialogue, fixed audio/subtitles, receipts and recording work together. |
+| November 8, 21:00 | [Live reference application](https://github.com/inscripoem/isla/issues/74): approved real services and target-machine output work through the product. |
+| November 22, 21:00 | Complete submission candidate, with November 23-25 contingency. |
 
-Start by running the [foundation](../../README.md), then review the first offline contract/examples in the work plan. Members can implement their existing first tasks in parallel against the shared contracts in `src/contracts/app/` and the explicit fixtures in `test/support/`. Shared schemas, ports and conformance kits exist; passing a fixture kit proves contract boundaries, not live providers, browser audio or SQLite behavior.
+The [delivery plan](DELIVERY-PLAN.en.md) contains the full schedule and acceptance tests. Checkpoint 01 is M5's setup record under the proposed simpler process. Joint checks may use asynchronous consumer observations of the same agreed revision; record who actually ran each part and leave unobserved results as not-run.
 
-Directory conventions are maintained in [the architecture blueprint](../../architecture-blueprint.md). Do not create placeholder implementations merely to match the table. Current repository documents are English only. Chinese understanding copies, raw internal evidence and historical sharing ZIPs remain in OneDrive; English collaboration documents are the working reference.
+## Develop and review
 
-These files support ordinary team coordination and are not substitutes for the course-prescribed YAML registry, schema, architecture and governance artifacts. Prepare the final coursework package from an explicit deliverable whitelist rather than archiving the entire checkout.
+Use the [project README](../../README.md) for setup and run commands. Ask an agent to read [AGENTS.md](../../AGENTS.md), identify your role and inspect the next unfinished slice. Confirm its plan before code changes. Members do not need to repeat the project instructions or read every handoff before starting. [PLAN](PLAN.en.md) preserves the allocation and working directories; [READINESS-KITS](READINESS-KITS.en.md) gives the role commands and fixture-replacement instructions. [INTERFACES](INTERFACES.en.md) defines shared changes and consumer handoffs.
 
-Agents may prepare and publish a task branch or PR when explicitly instructed. Agents must never merge PRs, enable auto-merge or enqueue a merge; the final merge is performed by a human team member.
+Use the short PR template for routine changes and include interface/state details when they change. Required checks and affected-consumer review still apply. Agents may publish only when explicitly authorized; a human performs the final PR merge and coursework upload.
+
+## Reference material
+
+Consult the relevant document when the task needs it; its original measurements and source versions remain historical evidence.
+
+- Requirements and design: [candidate requirements](REQUIREMENTS.en.md), [machine-readable registry](../req/requirements.yaml), [architecture](../../architecture-blueprint.md), [readiness review](READINESS-REVIEW.en.md).
+- Core handoffs: [M5 coordinator](HANDOFF-M5-01.en.md), [M4 dialogue](HANDOFF-M4-01.en.md), [delivery attribution](HANDOFF-M5-CONTRACT-A.en.md), [I1 application](HANDOFF-I1-APPLICATION.en.md).
+- Runtime integration: [reconstruction](HANDOFF-M5-RECONSTRUCTION.en.md), [production composition](HANDOFF-M5-PRODUCTION.en.md), [dynamic audio](HANDOFF-M5-DYNAMIC-AUDIO.en.md), [physical synthesis](HANDOFF-M5-PHYSICAL-SYNTHESIS.en.md).
+- Further consumers: [evaluation adapter](HANDOFF-M5-EVALUATION-ADAPTER.en.md), [VTS acquisition](HANDOFF-M5-VTS-ACQUISITION.en.md), [outcome and prepared-input follow-up](HANDOFF-M5-MENTIONS.en.md).
+
+Repository collaboration documents are English. Chinese understanding copies and private evidence remain in OneDrive. Final course artifacts use the required paths and an explicit submission whitelist.

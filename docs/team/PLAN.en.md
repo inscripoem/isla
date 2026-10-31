@@ -1,10 +1,10 @@
 # Isla — Team Work Plan v0.2
 
-Status: under review · 2026-10-26.1 · [Project overview](../../README.md)
+Status: proposed coordination update, under review · 2026-10-31.2 · [Project overview](../../README.md)
 
 ## Requirements and course-deliverable work
 
-The [candidate register](REQUIREMENTS.en.md) defines FR-01–FR-06, NFR-01–NFR-06 and INV-01–INV-15 mapped to the established module responsibilities; requirement acceptance remains under review. INV-10–INV-12 are implemented in merged PR26; INV-13–INV-14 and their trace/log gates are adopted from merged PR27; M5 retains INV-09 and INV-15. M1–M6 are module roles, not requirement IDs. The preparation baseline has executable deterministic tests and an actual supervisory review record. Numerical targets, the comparison baseline and named team reviewers remain to be settled before claiming the corresponding product acceptance; they do not block offline module development.
+The [candidate register](REQUIREMENTS.en.md) defines FR-01–FR-06, NFR-01–NFR-06 and INV-01–INV-16 mapped to the established module responsibilities; requirement acceptance remains under review. INV-10–INV-12 are implemented in merged PR26; INV-13–INV-14 and their trace/log gates are adopted from merged PR27; M5 retains INV-09 and INV-15. M1–M6 are module roles, not requirement IDs. The preparation baseline has executable deterministic tests and an actual supervisory review record. Numerical targets, the comparison baseline and named team reviewers remain to be settled before claiming the corresponding product acceptance; they do not block offline module development.
 
 S1-01 is divided into six concrete work items: R1 requirements/schema; R2 architecture/context/state/traceability; R3 governance and six blocking gates; R4 requirement-linked tests and offline integration; R5 authentic process records and six-member report input; R6 controlled comparison and demo. R1/R2 are coordinated by M5 with module-owner input; M6 leads R3 tooling; each owner supplies R4 tests and R5 evidence; M3/M4 supply R6 cases, M6 measurements and M1/M2 visible outputs. M5 consolidates integration and delivery. These follow the existing role boundaries. Each owner supplies their module evidence; the leader consolidates rather than authors every deliverable.
 
@@ -24,16 +24,16 @@ SQLite stores sessions, events, delivery outcomes, profiles and versioned memory
 
 ## Working directories
 
-Directory convention: 2026-10-10; implementation status checked 2026-10-26. All paths are relative to the repository root. The team-confirmed role allocation and workload ratings are unchanged. The runtime directory includes the coordinator and production application; dedicated diagnostic and application entries retain separate purposes. Planned module directories are created when their real work starts, without placeholder implementations.
+Directories describe ownership. Current delivery and acceptance dates are maintained in the [submission checkpoint plan](DELIVERY-PLAN.en.md).
 
-| Role | Main directory | Status | Editing boundary |
-| --- | --- | --- | --- |
-| M1 | `src/performance/` | Synthesis/browser and VTS primitives merged, including PR56/59/60; full live acceptance pending | Speech synthesis, browser playback and avatar adapters. Place the browser player public interface under `src/performance/browser/`; keep Node-only/provider code outside that subtree. M2 imports this browser interface. |
-| M2 | `src/console/` | Existing | Console input, configuration, control and presentation; integrate M1's player without taking ownership of playback internals. |
-| M3 | `src/decision/` | PR57 open, changes requested | Response selection/intent policy, decision providers and rule reactions; no direct playback or authoritative session changes. |
-| M4 | `src/dialogue/` | PR23/30/35 merged; PR55 follow-up integration tracked in Issue61 | Dialogue providers, persona/context assembly and memory semantics; use M6 storage APIs instead of writing SQL directly. |
-| M5 — CHANG Xuben | `src/runtime/` | Existing | Authoritative session lifecycle, request scheduling, result validation, cancellation, dispatch and module composition. |
-| M6 | `src/storage/`, `src/evaluation/`, `.github/workflows/` | Storage, evaluation/report and gate tooling merged; real measurements and remaining recovery acceptance pending | SQLite/migrations, recording/replay, common evaluation tooling and CI. Each module owner still supplies their own assertions and cases. |
+| Role | Main directory | Editing boundary |
+| --- | --- | --- |
+| M1 | `src/performance/` | Synthesis, player and avatar adapters; browser API under `src/performance/browser/`, Node/provider code outside it. |
+| M2 | `src/console/` | Input, configuration, controls and presentation; consume M1's public browser interface. |
+| M3 | `src/decision/` | Selection/intent, decision adapters and rule reactions; M5 retains live authority. |
+| M4 | `src/dialogue/` | Text provider, persona/context and memory semantics; use M6 storage APIs. |
+| M5 | `src/runtime/` | Session authority, scheduling, validation, cancellation, dispatch and composition. |
+| M6 | `src/storage/`, `src/evaluation/`, `.github/workflows/` | Persistence/migrations, recording/replay, common evaluation and CI; each owner supplies module tests. |
 
 `src/contracts/` is shared: M5 coordinates changes and affected producers/consumers review them. Owners place their tests in `test/offline/`; provider-dependent tests will use `test/live/`. M6 coordinates common fixtures and CI, not all module tests. Runtime prompts will use `prompts/`, with M3/M4 owning their respective prompt content. `docs/team/` holds English collaboration documents; Chinese understanding copies remain in OneDrive; machine-readable requirements and formal architecture artifacts still belong at the course-prescribed paths when prepared.
 
@@ -41,16 +41,16 @@ Evaluation program code uses `src/evaluation/`. Test fixtures remain under `test
 
 ## Responsibilities and deliverables
 
-The six-role allocation has been confirmed by the team. CHANG Xuben owns M5 and team coordination; remaining personal names are not yet recorded in this document. This revision documents working locations and sequencing without changing assignments or ratings.
+The six-role allocation has been confirmed by the team. CHANG Xuben owns M5 and team coordination; GitHub owner accounts are recorded below; coursework names and student IDs are verified for the final report. This revision documents working locations and sequencing without changing assignments or ratings.
 
 | Owner | Concrete deliverable | First task | Next task | Difficulty / workload (1–5) |
 | --- | --- | --- | --- | --- |
-| M1 — engine member | Speech playback and VTS avatar adapter | M1-01: play/stop fixed audio, advertise mapped actions, report completion/cancellation | M1-02: connect local Kokoro/VTS through separate adapters; verify output and fixture substitution | 5 / 5 |
-| M2 — frontend member | Local console | M2-01: input, profile/configuration, Stop/Resume and output state; mount M1's player | Show selected message/intent/wait and provide a small batch-input fixture | 3 / 4 |
-| M3 — unnamed | Response selection, intent and decision adapters | M3-01: filter inputs; implement the response-plan contract and rule baselines for plans/reactions | M3-02: general-model/Jev response plans; own selection cases, validity and fallback checks | 5 / 5 |
-| M4 — unnamed | Dialogue model, persona and memory | M4-01: accept a response plan, produce fixture segments and correct delivery history | M4-02: real LLM/context/usage; own intent-to-dialogue mapping and intent-adherence cases | 5 / 5 |
+| M1 — Pioneer141 | Speech playback and VTS avatar adapter | M1-01: play/stop fixed audio, advertise mapped actions, report completion/cancellation | M1-02: connect local Kokoro/VTS through separate adapters; verify output and fixture substitution | 5 / 5 |
+| M2 — Warpshlczy | Local console | M2-01: input, profile/configuration, Stop/Resume and output state; mount M1's player | Show selected message/intent/wait and provide a small batch-input fixture | 3 / 4 |
+| M3 — shallight | Response selection, intent and decision adapters | M3-01: filter inputs; implement the response-plan contract and rule baselines for plans/reactions | M3-02: general-model/Jev response plans; own selection cases, validity and fallback checks | 5 / 5 |
+| M4 — L01nki1 | Dialogue model, persona and memory | M4-01: accept a response plan, produce fixture segments and correct delivery history | M4-02: real LLM/context/usage; own intent-to-dialogue mapping and intent-adherence cases | 5 / 5 |
 | M5 — CHANG Xuben | Conversation flow and overall integration | M5-01: schedule one response decision, validate and reserve the selection, control Stop/late results | Integrate modules and verify no duplicate or stale reply starts | 5 / 4, plus leadership |
-| M6 — unnamed | Recording, replay, comparison tools and shared CI | M6-01: SQLite storage/migrations, durable plans/outcomes, JSONL export/replay and invariant CI | M6-02: shared comparison runner and total latency/cost; owners supply domain cases and review labels | 4 / 5 |
+| M6 — MichaelLsh | Recording, replay, comparison tools and shared CI | M6-01: SQLite storage/migrations, durable plans/outcomes, JSONL export/replay and invariant CI | M6-02: shared comparison runner and total latency/cost; owners supply domain cases and review labels | 4 / 5 |
 
 Each owner writes their own tests and module instructions, supplies genuine OpenCode records, and fixes their integration issues. M6 owns shared test tooling. CHANG Xuben coordinates architecture, scope, progress, integration and final delivery. Review/planning/QA roles can rotate. Ratings are estimates, not contribution grades.
 
@@ -89,11 +89,20 @@ M1-02, M4-02 and M3-02 can subsequently proceed in parallel behind the unchanged
 
 M6-02 prepares measurement tooling alongside the offline work and compares implemented providers once usable results exist. M3/M4 supply semantic cases, M1/M2/M5 supply their observations. S1-01 records authentic evidence throughout; R1–R6 refine the existing course-deliverable work, not additional module assignments.
 
-Current readiness (October 26): main is `74e99953733eeb070f99d4b9c57554e22e928840`. PR35/36/40/43/48/49/50/51/52/53 and the M1 VTS increments PR56/59/60 are merged. Application transport, root HTTP/WebSocket routing, dynamic audio delivery, selected-history lifecycle and the production evaluation adapter have implementation and controlled evidence. PR60's reviewed and merged trees are identical; independent Linux verification passed 1207 tests across 63 files and main CI passed. These facts do not establish complete product-console, real-provider or acoustic acceptance.
+### Submission checkpoint responsibilities
 
-PR55's M5 outcome/deadline and prepared-input changes were merged only into `fix/m4-outcome-proposal-20261022` at `fccb0f2fbe743385df481a42a133b7e2c9ffeec4`; they are not on main. [Issue61](https://github.com/inscripoem/isla/issues/61) asks M4 to integrate them and submit a PR for M5 consumer review. [PR57](https://github.com/inscripoem/isla/pull/57) remains open with changes requested from M3. Do not recreate these owners' work or treat a dependency-branch merge as main adoption.
+Captain adopted the target schedule on October 29. Record delivery estimates when supplied; no separate weekly capacity return is required under this proposed process. Each cell points to existing work rather than a new module assignment. Members update the actual task or PR once; M5 maintains the Project summary. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md) for product acceptance and reviewer dependencies.
 
-The current M5 local candidate implements the approved first-stage VTS acquisition lifecycle: total acquisition deadline, cancellation and late-handle cleanup, identity/target-bound credential operations, pending-save exclusion and stopped replacement after confirmed cleanup. It remains uncommitted and under review, with independent M5 200/9 and full1230/64 verification passing; see the [VTS acquisition handoff](HANDOFF-M5-VTS-ACQUISITION.en.md). It consumes merged M1 interfaces without changing the synchronous renderer factory. It is independent of the pending M4 integration. Complete product adoption, real VTS/model/voice validation and S6 measurements remain later acceptance work. [Issue25](https://github.com/inscripoem/isla/issues/25) retains global-ID and storage coordination; [Issue37](https://github.com/inscripoem/isla/issues/37) tracks product adoption; [Issue41](https://github.com/inscripoem/isla/issues/41) tracks evaluation contracts. See the [delivery plan](DELIVERY-PLAN.en.md) for current evidence, responsibilities and remaining acceptance. Historical implementation descriptions in the handoffs retain their original version scope.
+| Member / role issue | I1 checks: Nov 1 / Nov 5 | I2: Nov 8 | Evaluation / faults: Nov 10-15 | Course closure: Nov 18-22 |
+| --- | --- | --- | --- | --- |
+| M1 / #2 / Pioneer141 | Playback/resource confirmation and consumer review | Real Kokoro/avatar acceptance | Physical observations and fault evidence | Output evidence and demo verification |
+| M2 / #3 / Warpshlczy | PR67 product-console acceptance | Live waiting/failure/output UI | Input/Stop measurement and recovery UI | Demo recording and candidate check |
+| M3 / #4 / shallight | Merged PR57 selection, ReactionPort and rule adoption | Prepare agreed comparison adapters in parallel | Corpus, labels, rubric, decision fault evidence | Evaluation interpretation and own process/reflection |
+| M4 / #5 / L01nki1 | Intent and delivery-history consumption | Real text provider | Persona/history rubric, privacy and recovery semantics | Memory/context architecture and own process/reflection |
+| M5 / #6 / inscripoem | Issue69 resource assembly, combined I1 candidate | Product deployment over merged PR64 acquisition | Capture, control, composition and requirement verdicts | Plan/architecture/report consolidation and package |
+| M6 / #7 / MichaelLsh | PR70 checker and storage support | Measurement tooling in parallel | PR63/66, runner/provenance, formal results | Gates, trace/QA and independent recovery check |
+
+Every member supplies authentic process records, contribution evidence and a verified personal reflection. Review and QA roles rotate without changing module owners. The initial I1 loop does not depend on complete cross-session recovery; checkpoint 6 covers committed product recovery obligations. Existing preparation and merged implementations are reused with their actual verification scope.
 
 ### Readiness command map
 

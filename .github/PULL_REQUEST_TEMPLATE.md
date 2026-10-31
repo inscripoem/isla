@@ -1,58 +1,26 @@
-<!-- Isla pull request. The cross-module handoff checklist follows INTERFACES §7
-     (see docs/team/INTERFACES.en.md). Fill it in for a module handoff; keep it
-     short for routine fixes. Never include credentials or raw private records. -->
+<!-- Use existing work links. Keep routine fixes short and remove irrelevant
+     prompts. Module handoffs still follow docs/team/INTERFACES.en.md §7.
+     Required CI, human approvals and frozen-path rules remain in effect. -->
 
-## Scope and provenance
-- Task / requirement / invariant / case IDs:
-- ADR / Delta:
-- Baseline commit and actual changes:
+## Change
+- What problem does this solve, and what will a user or consumer observe?
+- Existing task/PR, original task and applicable requirement/invariant/case IDs; baseline and actual change.
 
-## Producer / consumers
-- Owner:
-- Consuming modules + reviewed interface version:
+## Verification and records
+- Actual commands and results on the stated revision; relevant failure/Stop cases, skips and untested limits.
+- Distinguish offline, live and physical-output observations. Report applicable gates honestly, including advisory or not-run results.
+- If a gate changes, include a failing control that demonstrates its enforcement; routine changes do not need to re-prove every unchanged gate.
+- For source/prompt changes: AI-use-log entry, genuine session/commit references and review evidence; keep raw private records outside the repository.
 
-## Inputs / outputs
-- Fixtures, exact supported variants, intentional omissions:
+## Review and remaining work
+- Owner and affected consumers; identify the concrete review or handoff requested.
+- Link an existing acceptance issue if implementation alone does not complete the delivery. Record the consumer result when available; do not invent a closing keyword or create a duplicate task.
+- Known blocker and requested owner; estimate when supplied.
 
-## State and cancellation
-- Authority, idempotence, expiry/epoch behavior, outcomes that remain unknown:
+## Handoff details, when applicable
+- Changed interface/version, supported examples and substitutes.
+- State, idempotence, cancellation/deadline/authority behavior and outcomes that remain unknown.
+- Configuration names and supplier, migration/cleanup, service or platform limits; never include credentials.
+- Shared/frozen changes and the required ADR/Delta or owner decision.
 
-## Run instructions
-- Commands + dependency versions + expected observable outputs:
-
-## Configuration
-- Config names only (no keys/tokens); who supplies them:
-
-## Verification
-- Offline/live results (distinguished); negative cases; failure examples; untested scope:
-
-## Operational limits
-- Unsupported assets/actions; service availability; measurement conditions:
-
-## Pre-review self-check (the author runs this first; the reviewer repeats it)
-
-- [ ] **1 — Does each gate actually run in CI?** Named command, the inputs it needs, and the events that
-      trigger it. A unit test of a function is not the pipeline.
-- [ ] **2 — Does a failure go red?** No `|| true`, no swallowed error, no fallback that turns a broken
-      check into a pass.
-- [ ] **3 — Do the claims match the facts?** The counts and commands in this description equal this head's
-      actual run; a file's prose agrees with its data (for example an `Owner` cell and the header).
-- [ ] **4 — Does documented behaviour match the mechanism?** Every promise in a document is executable —
-      "CI re-runs when the label is added" implies the workflow lists that trigger.
-- [ ] **5 — Did you run it yourself?** Frozen install, the role command and `verify`, plus each gate CLI
-      with a valid, an invalid and an empty input — and the numbers quoted above come from that run.
-
-## Gates (D7)
-- [ ] G1 tests approved before implementation (label `tests-approved`)
-- [ ] G2 static/boundary green
-- [ ] G3 requirements schema valid
-- [ ] G5 regression green
-- [ ] G6 AI-use log updated (`docs/ai-use-log.yaml`)
-- [ ] trace — traceability fitness functions green
-- [ ] Frozen paths untouched, or an ADR accompanies the change
-
-## Consumer acknowledgement
-- Consumer's actual test/inspection result and remaining integration issue:
-
-## Records
-- Real OpenCode session / commit / evidence references and review rationale:
+Before requesting review, check that the claims match this revision and actual output, applicable checks passed, and remaining limits are explicit. A consumer's inspection, a CI result and product acceptance each retain their actual scope.
