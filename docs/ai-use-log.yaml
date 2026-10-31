@@ -3689,6 +3689,102 @@ entries:
       These are supervisor results, not new OpenCode or M1 measurements.
       Native session export and exact source hashes are retained outside the
       repository in project evidence/local-followup-20261028.
+
+  - date: "2026-10-28"
+    task: M5-I1-adoption-checks
+    branch: m5-i1-independent-20261028-detached-uncommitted
+    member: M5
+    change: >-
+      Add a small test-only I1 adoption entry and seven checks: a held
+      selection timeout with a late result, an unchanged deferred candidate set,
+      synthesis failure before any output followed by a successful fresh turn,
+      synthesis failure after a delivered prefix, reconnect during unconfirmed
+      playback, reading an explicitly supplied event store, and closing a
+      started harness when setup is refused. Correct the terminal `turn.ended`
+      status for a completed dialogue whose cycle failed, and classify a failed
+      dialogue in the evaluation adapter from the recorded dialogue end.
+    requirements: [FR-01, FR-04, FR-05, FR-06]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.2.0
+    launch_flags: ["-m", "self-api/deepseek-v4-flash#xhigh", "--agent", "build", "--format", "json"]
+    sessions: [ses_e813b6114ffedTdxhlGftM8AF3]
+    supervision: >-
+      OpenCode authored the test-only adoption helper, the checks, the harness
+      synthesis seam, the coordinator terminal-status correction, the
+      evaluation-adapter classification change, the role-script update and the
+      English handoff, trace and README edits. Captain approved the local M5 I1
+      adoption scope; the implementation kept red-before-fix evidence and
+      inspected every `turn.ended` consumer. The Codex supervisor, not Captain
+      personally, requested this session's detailed failure semantics, the
+      bounded follow-up checks and the provenance correction. The supervisor
+      added the owner-replacement table to the handoff and independently ran
+      the role, composition, full, readiness, actual-range trace and G6 checks,
+      plus five consecutive repetitions of the seven adoption checks. No subagent,
+      live provider, Git mutation or remote write was used.
+    human_review: >-
+      Captain authorized the local M5 I1 adoption scope only; Captain did not
+      personally authorize the detailed failure semantics or code acceptance.
+      Those requests came from the Codex supervisor. Candidate human review
+      remains pending and the changes remain uncommitted.
+    verification:
+      base: 74e99953733eeb070f99d4b9c57554e22e928840
+      baseline: "pnpm test:m5: 177 passed / 8 files; worktree clean."
+      red_green: >-
+        Before the coordinator fix the new synthesis check failed because
+        `turn.ended` recorded `completed` while the cycle had failed; the same
+        check passed after the fix. Logs are kept under
+        `.cache/m5-i1-independent/`.
+      focused: >-
+        `pnpm test:m5`: 184 passed / 9 files; `m5-i1-adoption`: 7 passed;
+        focused evaluation, recovery and application suites: 57 passed /
+        3 files; typecheck and lint passed.
+      full_verify: >-
+        `pnpm verify` passed: 1214 tests / 64 files, typecheck, lint and build
+        (exit 0). Follow-up logs are `test-m5-followup.log` and
+        `verify-followup.log`; the original green logs are unchanged.
+    scope: >-
+      Fixed WAV catalog and controlled media events only; event reads are from
+      the in-memory test store, not restart-durable persistence. No acoustic,
+      live provider, SQLite restart/recovery or product console claim. C-05,
+      C-08, C-09 and C-16 remain pending; no register, owner or case change.
+
+  - date: "2026-10-29"
+    task: M5-I1-original-increment-main-adoption
+    member: M5
+    change: >-
+      Adopt the original OpenCode-authored M5 I1 increment on main 4e4f7cd,
+      preserving PR65's outcome and prepared-input changes. Source/test deltas
+      apply unchanged; new adoption files match the original candidate bytes.
+      Update the current handoff and extend the existing test:m5 command.
+    requirements: [FR-01, FR-04, FR-05, FR-06]
+    invariants: []
+    cases: []
+    commits: [5da4ffb1c279c8b9bc574fa8958c2634b4d01208]
+    agent: codex-supervisor
+    sessions: [ses_e813b6114ffedTdxhlGftM8AF3]
+    supervision: >-
+      Captain approved continued local implementation, publication and existing
+      task follow-up. Codex extracted already-authored code, coordinated the
+      package test command and documentation, and ran independent verification.
+      No new OpenCode code-authoring session or teammate implementation is claimed.
+    human_review: >-
+      Owner consumption and complete I1 acceptance remain pending. Original
+      supervision, failed checks and original verification records are preserved.
+    verification:
+      base: 4e4f7cd7cab751486cec21efbf613364ca7dc07d
+      full_verify: "1346/1346 tests in 71 files; typecheck, lint, build passed."
+      m5: "214/214 in 10 files."
+      trace: "41/41 with the actual ten-file tracked/untracked diff."
+      g6: "Passed against the unchanged main AI-use log."
+      evidence: "External evidence/m5-i1-adoption-20261029/verification.json"
+    scope: >-
+      Controlled loopback and test-only adoption support; no real M3 provider,
+      formal M2 console, live services, acoustic or full I1/case completion claim.
   - date: "2026-10-23"
     task: M3-01-selection-prerequisite
     branch: m3-minimal-delivery-20261023
@@ -3802,6 +3898,125 @@ entries:
       registry edit. selection-001 is human-reviewed; selection-002 remains
       draft. Synthetic review fixtures validate mechanics only and do not
       certify corpus evidence.
+
+  - date: "2026-10-30"
+    task: I1-01-real-rule-selection-adoption
+    change: >-
+      Adopt the merged M3 rule SelectionPort in the runnable I1 loop and the
+      reusable M5 adoption harness using the runtime clock, including recovery
+      successors. Add consuming regressions for two competing inputs through
+      real M4 and exact recorded outputs, recovery, foreign-clock fallback and
+      explicit cancellation settlement. Retain the reaction and catalogue-text
+      substitutes, original peer implementations and shared case statuses.
+    requirements: [FR-01, FR-04, FR-05, FR-06]
+    invariants: [INV-15]
+    commits: []
+    agent: opencode/build
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    opencode_version: 2.2.0
+    launch_flags: [--agent, build, --format, json]
+    sessions: [ses_e740bebbeffeMIymYrx6cKvG6o]
+    supervision: >-
+      Captain approved the local implementation and requires separate approval
+      before publication. OpenCode authored code and tests in two supervised
+      rounds. Codex traced consumers, requested the competing-input and settled
+      cancellation assertions, maintained paired documentation and independently
+      verified the final candidate. No other module was repaired on its owner's
+      behalf; no subagent was used.
+    human_review: >-
+      Under review. Captain authorized local implementation; code publication,
+      review submission and progress-board updates require separate confirmation.
+      Final merge and full product acceptance remain human-owned.
+    transcript_record: >-
+      Authentic session export is retained outside this repository in the course
+      project evidence/m5-selection-adoption-20261030 directory. Verification
+      commands, results and limits are recorded there against the final file hashes.
+    scope: >-
+      Test/demo composition wiring and consuming tests, plus English documentation.
+      This does not supply M3 ReactionPort, formal M2 console recovery, live
+      providers, acoustic measurements or complete I1 acceptance.
+
+  - date: "2026-10-31"
+    task: M5-I1-controlled-deployment-rule-selection
+    branch: m5-i1-refresh-20261031
+    member: M5
+    change: >-
+      Add an explicitly selected test-only deployment entry that composes the
+      existing controlled production deployment and replaces only the selection
+      peer with M3's real deterministic rule port bound to the deployment's
+      runtime clock. Leave reaction, dialogue text, renderer, synthesis, the
+      initial archive selection and the optional owned release as the base
+      deployment built them, so the separate audio candidate stays independent.
+      Add application-level behaviour tests over the real socket and real SQLite
+      for two sequential turns, plan provenance against fixture and fallback, the
+      substituted reaction port, the exact deployment context clock with a
+      deadline-exceeded probe, and the production CLI module seam with the
+      persisted completed turn. Follow-up from the M4 review of head 9a675873:
+      extend the existing failed-prefix adoption case so the real M4 in-memory
+      delivery store is compared with M6 confirmed history and the committed
+      delivery event; exactly the delivered first segment is present with
+      matching identity and content, and no record exists for the segment whose
+      synthesis failed. The delivery finalizer awaits that M4 commit before the
+      turn ends, so the test observes the actual store state rather than a later
+      reconstruction or a synthetic admission claim.
+    requirements: [FR-01, FR-04, FR-05, FR-06]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/build
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    opencode_version: 2.2.2
+    launch_flags: [--agent, build, --format, json]
+    model_id: self-api/deepseek-v4-flash#xhigh
+    sessions: [ses_e7232e5e5ffe8bQ7llyVawnK2M]
+    supervision: >-
+      Captain approved this local M5 work. The Codex supervisor scoped the
+      increment: a separate deployment entry, no edit to production-kit.ts or
+      production-deployment.ts, reaction kept substituted, and no claim beyond
+      the checks actually run. OpenCode authored the entry, the tests, the
+      manifest token and the English handoff text in this session. An initial
+      repository search exceeded the requested path boundary and was
+      interrupted; the session then resumed under restricted search permissions.
+      No credential value appeared in displayed output, and this record does not
+      claim that the interrupted search avoided secret-named paths. OpenCode
+      reported the first failing test results and their corrections instead of
+      presenting a green result early. No subagent, service or network tool call, other-owner
+      module, shared contract, dependency change, staging, commit or remote
+      write was used.
+    human_review: >-
+      M4 approved PR131 head 9a675873 for its dialogue-side scope and identified
+      this non-blocking coverage gap; the follow-up assertion remains under
+      Captain review. Publication, review submission and merging stay separate
+      human decisions. No product, formal-console or full-I1 acceptance is
+      claimed.
+    verification:
+      base: "9a67587 local PR131 candidate; current main 5e7abfb merged in this worktree"
+      focused: >-
+        pnpm test:m5: 246 passed / 12 files after the corrections, including the
+        three deployment cases and the M4 follow-up in the failed-prefix adoption
+        case. That case asserts m4Memory.records() and its spoken confirmedHistory
+        match the one M6 history row and the delivery.committed event (segment 0,
+        fully-delivered, completed), with no record for the failed segment 1.
+        The first run failed three deployment cases: the real selection
+        disposition is accepted rather than ok; a negative clock origin is
+        invalid because persisted event timestamps must be non-negative; and the
+        spawned CLI child needed IPC enabled for the shutdown message. Each was
+        fixed and the suite rerun. pnpm typecheck passed; oxlint reported no
+        diagnostics; pnpm test:readiness 42/42; pnpm test:trace 41/41.
+      limits: >-
+        Dependencies were installed offline. The full suite, combined PR130 audio
+        candidate, browser runs, live providers and acoustic output were not run.
+    scope: >-
+      Test-support and test code plus English documentation only. The real rule
+      port is deterministic and local; reaction remains the explicit fixture
+      substitute until M3 delivers #89, and the audio resources that PR130 may
+      add were not present in this worktree. No src, shared contract, dependency,
+      lockfile, other-owner module or registered ID changed, and the merge
+      conflict resolution from the earlier round is preserved.
   - date: "2026-10-28"
     task: issue-68-boundary-parser
     change: >-

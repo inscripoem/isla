@@ -215,3 +215,40 @@ These are supporting module tests, not a newly registered global case. Existing 
 The [M5 mention handoff](../team/HANDOFF-M5-MENTIONS.en.md) records outcome/deadline consumer checks and bounded input preparation. `test/offline/m5-dialogue-outcome.test.ts`, `m5-production-application.test.ts` and `m5-evaluation-adapter.test.ts` supply scoped regression evidence. They do not redefine an existing registered case or allocate an ID. C-05/C-16 remain pending until the agreed cross-owner verifiers, real execution conditions and semantic evidence are reviewed. Deterministic boundary tests do not close NFR-03 or establish S6/G4.
 
 The final coordinator regressions cover exact selection/reaction deadlines, accepted clarify intent and exact candidate expiry; their full executable names are in the linked handoff. Coordinator/adapter checks passed 121/2; M5 passed 203/9 and full verification passed 1223/69. These results do not promote C-05/C-16 to registered completed verifiers.
+
+## M5 I1 adoption checks
+
+The local M5 I1 adoption increment on 2026-10-28 adds a test-only adoption entry,
+five loopback checks, and two helper checks (explicit store access and
+failed-setup cleanup) for selection timeout with a late result, unchanged
+deferral, synthesis failure before any output followed by a successful fresh
+turn, synthesis failure after a delivered prefix, and reconnect during
+unconfirmed playback. The helper closes a started harness when setup is refused
+and reads an explicitly supplied event store. It also corrects the terminal
+`turn.ended` status for a completed dialogue whose cycle failed, and the
+evaluation adapter now classifies a failed dialogue from the recorded dialogue
+end rather than the turn end. This is scoped evidence for the existing
+FR-01/FR-04/FR-05/FR-06 traces only: C-05, C-08, C-09 and C-16 remain pending,
+with no case-registry, requirement-owner or invariant change. Status: under
+review; committed at `bc66257`; subsequently adopted on current main and awaiting
+a fresh combined-head review.
+
+The 2026-10-30 local follow-up wires the merged M3 rule `SelectionPort` into the
+runnable I1 loop and the reusable adoption entry with the runtime's monotonic
+clock, including recovery successors. The adoption harness builds one rule port
+and reuses it for every composition; the runnable demo creates a port per
+composition from the same clock. `test/offline/m5-i1-adoption.test.ts` holds the
+first scheduler pass so two accepted inputs compete, then observes the real
+`oldest-offered` choice, the selected text and supported answer intent reaching
+real M4, and exactly four ordered `fully-delivered` committed segments. Its Stop
+check awaits underlying-call settlement plus the recorded aborted-call and
+stale-selection events, and asserts no `selection.plan` was adopted and no turn,
+dialogue, offer, grant or delivery exists. Recovery-successor and foreign-clock
+regressions remain. `test/offline/i1-loop-demo.test.ts` pins the runnable demo's
+plan. After the follow-up, independent Linux checks passed M5 218/218, M3 47/47,
+trace41, actual-range G6 and full `pnpm verify` 1395/1395 in 71 files with
+typecheck, lint and build. The isolated-loop browser recovery check passed
+10/10 with zero page errors. This remains scoped evidence for
+FR-01/FR-04/FR-05/FR-06 only: C-05,
+C-08, C-09 and C-16 stay pending, and no case-registry, requirement-owner,
+invariant or shared-contract change is made.

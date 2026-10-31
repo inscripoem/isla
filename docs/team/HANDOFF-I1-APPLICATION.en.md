@@ -1,6 +1,6 @@
 # I1 application transport handoff (protocol 0.2)
 
-Status: under review · 2026-10-18.3 · Owner: M5 (runtime) · Consumer: M2 (console)
+Status: under review · 2026-10-30 · Owner: M5 (runtime) · Consumer: M2 (console)
 
 Explicit operator session recovery (`session.recover`) is implemented under review; see [Explicit session recovery](#explicit-session-recovery). The shared case registry is unchanged: the existing C-08 row stays pending and is not re-registered here.
 
@@ -16,7 +16,8 @@ runtime. It is the M5 application transport, separate from diagnostic protocol
 ## Run the loop
 
 The demo uses real M4 context, generation and delivery memory against M6 history.
-M3 and the dialogue text provider remain explicit `test/support` substitutes. The
+Selection uses the merged M3 rule port with the runtime clock. M3 reaction and
+the dialogue text provider remain explicit `test/support` substitutes. The
 provider returns the exact registered WAV text; this is not a live-model result.
 Production source imports no test code.
 
@@ -311,13 +312,16 @@ shared wire definitions are already in `src/contracts/app/transport.ts`.
 
 ## Known gaps
 
-M3 adoption, live dialogue/TTS/VTS, SQLite durability, full C-05/C-08/C-09/C-16
-and physical audio/silence verification remain pending. Explicit operator
-session recovery is implemented for the in-memory I1 loop only; disk or
-process-crash restart recovery over the SQLite backend remains M6 work and is
-not claimed here. The automated loop uses a controlled media driver that emits
-synthetic media events, so its receipts are M1 controller logic evidence, not
-acoustic proof. This handoff validates the offline loop only.
+The merged M3 rule selection is now wired into the runnable loop and the
+adoption harness (see below); a live or model-backed selection adapter, an
+M3-owned reaction port beyond the explicit fixture substitute, live
+dialogue/TTS/VTS, SQLite durability, full C-05/C-08/C-09/C-16 and physical
+audio/silence verification remain pending. Explicit operator session recovery is
+implemented for the in-memory I1 loop only; disk or process-crash restart
+recovery over the SQLite backend remains M6 work and is not claimed here. The
+automated loop uses a controlled media driver that emits synthetic media events,
+so its receipts are M1 controller logic evidence, not acoustic proof. This
+handoff validates the offline loop only.
 
 ## Historical I1 verification and ownership
 
@@ -440,3 +444,195 @@ recovery. This is lifecycle recovery over the existing in-memory store, not SQLi
 restart recovery; no new shared register or case id was introduced and C-08 stays
 pending with no verifier. OpenCode authored the implementation in `ses_eb2014c63ffePhR2Ga1C7G7sxo` and continued after the approved branch migration in `ses_eb180c970ffeoD5t6ywKvYKwFS`. The supervisor independently repeated `pnpm verify` (809 / 46, exit 0) and all ten browser scenarios with zero page errors. The results remain
 under review. The checks above precede publication; Captain subsequently authorized the follow-up branch commit, push and new PR.
+
+## Adoption checks for selection, synthesis and reconnect
+
+### Merged M3 rule selection (2026-10-30)
+
+The October 30 M5 follow-up under issue #90 wires the merged M3 rule
+`SelectionPort` (`createRuleSelectionPort`, `src/decision/selection.ts`) into the
+runnable I1 loop (`test/browser/loop-server.ts`) and the reusable adoption harness
+(`test/support/i1-harness.ts`, `test/support/i1-adoption.ts`). `openAdoptionSession`
+creates the monotonic clock once (`options.clock ?? createMonotonicClock()`) and
+passes it to the harness; the harness constructs one rule port from that clock and
+reuses that single instance for the initial, reconstructed and every recovery
+successor composition, so a successor cannot silently fall back to a fixture or a
+second clock domain. The runnable demo differs: `createLoopCompositionBuilder`
+creates a rule port per composition, but every port is bound to the same
+`deps.clock` created once by the demo entry. `LoopHarnessOptions.selection` still
+overrides the default for controlled negative tests. The explicit M3-owned
+reaction substitute and the deterministic catalog dialogue text provider are
+unchanged. This is partial I1 adoption, not a live M3/M4 provider, acoustic output
+or formal console acceptance.
+
+`test/offline/m5-i1-adoption.test.ts` adds four checks over the actual
+application endpoint:
+
+- two competing candidates: the first scheduler pass is held until both inputs
+  are accepted, so the real rule is offered `[firstId, secondId]` in that order
+  and records `oldest-offered` selecting the first; the later turn selects the
+  remaining input. Real M4 receives `selectedInputText` equal to each selected
+  input with `replyIntent: 'answer'`; exactly four catalog segments commit as
+  `fully-delivered` audio in segment order, and the same rows appear in confirmed
+  history and M4 memory;
+- recovery successor: after explicit operator recovery, the successor's first
+  turn still records an `m3-rules` plan selecting its own accepted input;
+- clock/deadline negative control: a rule port bound to a foreign clock is
+  recorded as a `failed` selection call, and the turn proceeds only through the
+  M5 fallback plan, so a mismatched clock cannot masquerade as an M3 decision;
+- Stop settlement: Stop while the rule selection is held; the test awaits the
+  held underlying rule call's settlement and the recorded `provider.call` and
+  `result.stale` events instead of a fixed delay, then asserts no `selection.plan`
+  was adopted and no turn, dialogue, offer, grant or delivery exists, with the
+  selection call `aborted`.
+
+`test/offline/i1-loop-demo.test.ts` now also asserts that the actual demo
+composition records an `m3-rules` plan selecting the accepted input.
+
+Final independent Linux checks after the review follow-up: `pnpm test:m5`
+218/218 in 10 files; `pnpm test:m3` 47/47; actual-PR-range trace41 and G6 passed;
+`pnpm verify` 1395/1395 tests in 71 files with typecheck, lint and build. The
+maintained browser recovery check passed 10/10 with zero page errors using
+Nix Chromium 156.0.8078.47. Its real DOM media observations belong to the isolated
+loop page, not the formal M2 console or acoustic output. The four new adoption
+checks and the runnable-demo check were also run by OpenCode in the focused
+12/12 test set. Controlled media and the catalog text provider remain explicit
+in the Node tests. The November 1 team inspection is still NOT RUN; use
+[FIRST-I1-INSPECTION](FIRST-I1-INSPECTION.en.md) for its source-bound record. Live selection/model adapters, M3 rule ReactionPort adoption,
+SQLite restart recovery, physical output and full
+I1/C-05/C-08/C-09/C-16 acceptance remain pending. No shared contract,
+M2/M3/M4 module implementation or case ID changed.
+
+### Controlled formal deployment selection entry (2026-10-31)
+
+A controlled test deployment can use real rule selection without editing either
+existing deployment module. `test/support/production-deployment-rule-selection.ts` is a separate,
+explicitly selected test-only entry: it calls `createTestProductionDeployment`
+and replaces only `peers.selection` with `createRuleSelectionPort` bound to
+`context.clock`. Every other peer and factory, the initial archive selection and
+the optional deployment-owned `release` are inherited unchanged, so a later audio
+integration that supplies `createSynthesis` or `audioResources` remains
+independent of this file. Reaction stays the base deployment's explicit
+`fixture-rule` substitute until M3 delivers #89.
+
+`test/offline/m5-deployment-selection.test.ts`, added to `pnpm test:m5`, drives the
+actual application over the real socket and real SQLite in three cases: two
+sequential turns whose persisted `selection.plan` rows are `m3-rules` /
+`oldest-offered` and select their own accepted input, with every selection
+`provider.call` accepted and no fixture or fallback plan; the composed
+deployment's own selection port bound to a mutable deployment clock, which
+resolves for a live deadline, rejects with `deadline-exceeded` after that same
+clock advances past the request and call deadline, while a fresh monotonic clock
+receives the same request and still resolves, so the negative assertion cannot
+pass for an unrelated clock; and the production CLI loading the entry through
+`ISLA_DEPLOYMENT_MODULE`, where the persisted plan is again `m3-rules` and the
+persisted `turn.ended` for the turn opened by that plan reports `completed`. The
+composed peers' reaction port is asserted to report `fixture-rule` directly.
+Focused results: `pnpm test:m5` 246/246 in 12 files, `pnpm typecheck`,
+`pnpm test:readiness` 42/42, `pnpm test:trace` 41/41, and oxlint with no
+diagnostics.
+
+M4 review follow-up (head 9a675873): the existing failed-prefix synthesis case in
+`test/offline/m5-i1-adoption.test.ts` now also inspects the real M4 in-memory
+store. The delivery finalizer awaits M4's commit before the turn ends, so the
+observation needs no later context assembly. At that point `m4Memory.records()`
+holds exactly one record: segment 0, `fully-delivered` with terminal outcome
+`completed`, whose session, turn, segment, text, text hash, output, receipt,
+classification, modality and persona identity equal the single M6
+confirmed-history row. Its turn, segment, output and classification also match
+the committed delivery event. M4's spoken
+`confirmedHistory` equals the same row, and neither view contains segment 1,
+whose synthesis failed before any delivery. This observes the actual store; it
+does not convert the catalog text substitute into live M4 generation.
+
+Remaining gaps: the foreign-clock fallback path (a foreign port recorded as a
+failed call and replaced by the M5 fallback plan) is still covered in
+`m5-i1-adoption.test.ts` rather than this entry, which proves the shared clock by
+direct deadline refusal. PR130's audio modules are not in this worktree. At the
+time of this OpenCode run, the combined candidate, full suite, browser runs, live
+providers and acoustic output had not been exercised. M3 rule `ReactionPort`
+(#89), the formal M2 console,
+SQLite restart recovery and the November 1 inspection remain open. No product or
+formal-console acceptance is claimed.
+
+Historical adoption basis (2026-10-29): the original OpenCode-authored increment below
+has been applied without source/test conflict to main `4e4f7cd`, which includes
+PR65. Independent Linux checks on this combination passed full `pnpm verify`
+1346/1346 in 71 files, M5 214/214 in 10 files, actual-range trace41/41 and G6.
+The original detached source and session `ses_e813b6114ffedTdxhlGftM8AF3` are
+preserved; no new code-authoring session is claimed for this extraction.
+The new files are byte-identical to that candidate and the source delta was
+applied as-is. The earlier counts and uncommitted state below describe the
+October 28 candidate only. Current adoption is under review for delivery #90
+and checkpoint #73; M2/M3 owner-port and product-console acceptance remains open.
+
+The local M5 I1 adoption increment (2026-10-28, detached worktree
+`m5-i1-independent-20261028`, uncommitted) adds a test-only adoption entry
+(`test/support/i1-adoption.ts`) and seven checks in
+`test/offline/m5-i1-adoption.test.ts`: five loopback scenarios, a supplied-store
+read check and a setup-refusal cleanup check:
+
+- selection timeout: a held selection becomes stale; its late valid result is
+  never used for dialogue or playback, and a later candidate completes;
+- defer: an unchanged deferred candidate set is not polled again; a new input is
+  selected and delivered;
+- synthesis failure before any output: the turn ends failed with no offer,
+  delivery or confirmed history; after the fault is cleared, a fresh input
+  completes a normal turn and the failed attempt is not retried or replayed;
+- synthesis failure after a delivered first segment: the completed prefix stays
+  in confirmed history, the failed segment commits nothing, `dialogue.result`
+  stays `completed`, and `turn.ended` records `failed`;
+- reconnect during unconfirmed playback: Resume is refused, fresh input is
+  accepted, and the cycle is blocked before selection, offer or grant.
+
+The timeout, defer and failure checks correlate accepted input event ids with
+the selected plan and the completed turn's delivery rather than only counting
+history rows, so a concurrent later cycle cannot stand in for the observed one.
+The adoption helper closes the harness it already started when setup is refused
+and rethrows the original error; its `events()` reads an explicitly supplied
+event store instead of assuming the harness's default backend. These are reads
+of the in-memory test store, not restart-durable persistence.
+
+The coordinator's terminal record now distinguishes a completed turn from a
+failed cycle: a dialogue that completed while a dependency or playback stage
+failed records `turn.ended: failed`; genuine dialogue `failed`/`cancelled` ends
+are preserved. `CycleOutcome.status` keeps its legacy coarse `cancelled` value
+for a failed cycle; that value is not an operator-cancellation claim, and
+`session.stopped` remains the cancellation evidence. The evaluation adapter
+therefore classifies a failed dialogue from the recorded dialogue end rather
+than the turn end, while a recorded operator Stop still maps to `cancelled`.
+Persistence, replay and console observers consume `session.event` payloads
+generically, so no consumer change was required. `test/support/contract-runner.ts`
+still mirrors the older terminal status and remains test-only.
+
+Owner adoption after a reviewable delivery is available:
+
+| Consumer | Replacement and checks |
+| --- | --- |
+| M3 / M5 | The merged M3 rule selection is now the harness and runnable-loop default, bound to the runtime monotonic clock; `LoopHarnessOptions.selection` remains for controlled negative tests. M3 still owns a live/model adapter and intent quality. The M3-owned reaction port remains an explicit fixture substitute, supplied through `LoopHarnessOptions.reaction` in the same clock domain. Recheck accepted-input identity, supported intent, defer, expiry and Stop; these tests do not grade intent quality. |
+| M2 / M1 / M5 | M2 owns the browser-safe production client and console extraction. Adopt `/app` and `/operator/bootstrap`, snapshot-first binding, one performer, offer/ready/grant, status-before-receipt, and explicit recovery. Repeat the transport scenarios with that client; the existing test performer is not evidence of M2 adoption. Root routes already exist on the merged base. |
+| M5 | Record each adopted commit and replace one owner at a time. The current base includes merged PR57 and PR65. Keep PR64/130/131 consumer reviews tied to their actual heads and run the final module combination once it exists; this local selection increment does not accept full I1. |
+
+No public wire contract, owner assignment or shared case status changes in this
+increment. The fixed WAV catalogue, catalogue text source, controlled media and
+test renderer remain explicit substitutes; passing this entry does not connect
+live services or approve the product console.
+
+Actual local commands (detached base `74e9995`):
+
+- baseline `pnpm test:m5`: 177 passed / 8 files;
+- before the fix, the new synthesis assertion failed: `turn.ended` was
+  `completed` while the cycle had failed (`.cache/m5-i1-independent/adoption-red.log`);
+- after the fix, `m5-i1-adoption`: 7 passed; `pnpm test:m5`: 184 passed /
+  9 files; typecheck and lint passed; `pnpm verify`: 1214 passed / 64 files,
+  typecheck, lint and build passed; these follow-up runs are logged separately
+  (`test-m5-followup.log`, `verify-followup.log`) so the original green record
+  stays intact;
+- focused `m5-evaluation-adapter`, `i1-recovery` and `i1-application`:
+  57 passed / 3 files.
+
+Logs are under `.cache/m5-i1-independent/`. Limitations: fixed WAV catalog and
+controlled media events, no acoustic proof, no live provider, no SQLite
+restart/recovery and no product console integration. C-05, C-08, C-09 and C-16
+stay pending; these checks add scoped evidence only and do not close a case or
+promote a requirement. Status: under review; uncommitted.

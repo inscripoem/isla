@@ -2,7 +2,7 @@
 
 Isla is a planned AI VTuber framework: a configurable character runtime with replaceable decision, dialogue, speech and avatar adapters, plus a local console.
 
-This checkout contains the shared contracts, M5 coordinator, M1 speech/rendering/browser interfaces, M4 dialogue context and M6 in-memory/SQLite storage. The application transport (PR36) and explicit session recovery (PR45) are merged. The standard console provides diagnostics; the separate interactive demo uses deterministic dialogue text and fixed audio. This branch adds an under-review production application lifecycle over real SQLite with deployment-supplied peers and an under-review dynamic audio resource route served to a same-origin browser over `POST /audio`. A coordinator-backed evaluation adapter is also available for explicit peers and consumers; see the [evaluation handoff](docs/team/HANDOFF-M5-EVALUATION-ADAPTER.en.md). A complete product deployment, M3 decisions, live dialogue, the browser product resolver and VTube Studio acceptance remain open. See the [current delivery plan](docs/team/DELIVERY-PLAN.en.md) for component and PR status.
+This checkout contains the shared contracts, M5 coordinator, M1 speech/rendering/browser interfaces, M4 dialogue context and M6 in-memory/SQLite storage. The application transport (PR36) and explicit session recovery (PR45) are merged. The standard console provides diagnostics; the separate interactive demo uses deterministic dialogue text and fixed audio. This branch adds an under-review production application lifecycle over real SQLite with deployment-supplied peers and an under-review dynamic audio resource route served to a same-origin browser over `POST /audio`. A coordinator-backed evaluation adapter is also available for explicit peers and consumers; see the [evaluation handoff](docs/team/HANDOFF-M5-EVALUATION-ADAPTER.en.md). The merged M3 rule SelectionPort is adopted by the isolated I1 loop in this local follow-up. A complete product deployment, rule ReactionPort/model-adapter adoption, live dialogue, the browser product resolver and VTube Studio acceptance remain open. See the [current delivery plan](docs/team/DELIVERY-PLAN.en.md) for component and PR status.
 
 ## Run locally
 
@@ -28,9 +28,12 @@ The runtime listens on `127.0.0.1:4317`. Vite proxies `/health` and `/diag` (dia
 The offline product loop (input → selection/intent → dialogue → fixed
 audio/subtitle/reaction → real player receipts → history) runs against the real
 M5 runtime, M4 dialogue/context/memory, M1 playback and M6 in-memory storage.
-M3 and the dialogue text provider are explicit `test/support` substitutes. The
+The loop uses the merged M3 rule SelectionPort with the runtime clock. Reaction
+and the dialogue text provider remain explicit `test/support` substitutes; the
 fixed text matches the registered WAV assets exactly. Production source imports
-no test code.
+no test code. This is partial I1 adoption; the formal M2 console is a separate
+consumer. Use the [first joint inspection preparation](docs/team/FIRST-I1-INSPECTION.en.md)
+to record the November 1 source, actual results and remaining owner actions.
 
 ```sh
 pnpm dev:loop                                        # loop runtime on 127.0.0.1:4317
@@ -89,11 +92,10 @@ ISLA_DEPLOYMENT_MODULE=/absolute/path/to/deployment.ts pnpm runtime:production
 | `ISLA_STORAGE_DB_PATH` | SQLite database path; default `.cache/isla/isla.db`, kept outside OneDrive. |
 | `ISLA_RUNTIME_HOST`, `ISLA_RUNTIME_PORT` | Loopback bind address; default `127.0.0.1:4317`. |
 
-No product deployment module exists in this checkout yet. This local increment
-adopts M1 PR33/34 and adds a retained synthesis factory; landing those PRs remains
-pending. See the [physical synthesis handoff](docs/team/HANDOFF-M5-PHYSICAL-SYNTHESIS.en.md)
-for the shared adapter, originating gate and owned-release contract. M3 selection/reaction and a live M4 text source remain
-owner deliverables. M5 owns dynamic audio HTTP/resource assembly and physical
+No complete product deployment module exists in this checkout yet. M1 PR33/34
+are merged, and the runtime has a retained synthesis factory. See the [physical synthesis handoff](docs/team/HANDOFF-M5-PHYSICAL-SYNTHESIS.en.md)
+for the shared adapter, originating gate and owned-release contract. The M3 rule SelectionPort is available; rule ReactionPort, the selected model
+adapters and a live M4 text source retain their owner deliverables. M5 owns dynamic audio HTTP/resource assembly and physical
 provider lifecycle; M2 is the browser consumer. The module under
 `test/support/` is test-only and is used by the automated CLI suite, not by the
 product entry. SIGINT/SIGTERM perform the controlled shutdown: stop the transport,
@@ -139,7 +141,7 @@ Start with [the team development index](docs/team/README.md). The [work plan](do
 | --- | --- | --- |
 | M1 speech/player/avatar | `src/performance/` | Synthesis, mapped rendering, browser player and guarded Kokoro worker implemented; live product acceptance pending |
 | M2 console | `src/console/` | Diagnostic console exists; product transport integration pending |
-| M3 response decisions | `src/decision/` | Planned |
+| M3 response decisions | `src/decision/` | Rule SelectionPort merged and adopted by the isolated I1 loop; ReactionPort/model adapters remain open |
 | M4 dialogue/memory | `src/dialogue/` | PR23/PR30 merged; live provider pending |
 | M5 runtime — CHANG Xuben | `src/runtime/` | Application loop, selected-history reconstruction and production composition under review; [reconstruction](docs/team/HANDOFF-M5-RECONSTRUCTION.en.md) and [production](docs/team/HANDOFF-M5-PRODUCTION.en.md) handoffs |
 | M6 storage/evaluation/CI | `src/storage/`, `src/evaluation/`, `.github/workflows/` | Storage, recovery acceptance and shared evaluation bench merged; recorded-run tooling and live measurements pending |
