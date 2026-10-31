@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
   ClockPort,
+  CommitDelivery,
+  ConfirmedDelivery,
   ControlAck,
   EventStorePort,
   RuntimeEvent,
@@ -148,6 +150,28 @@ function selectionCallDisposition(events: readonly RuntimeEvent[]): unknown {
   return call?.payload.disposition
 }
 
+/** All recorded selection plan payloads, in persisted order. */
+function planPayloads(events: readonly RuntimeEvent[]): Array<Record<string, unknown>> {
+  return events
+    .filter((event) => event.type === 'selection.plan')
+    .map((event) => (event.payload as { plan?: Record<string, unknown> }).plan ?? {})
+}
+
+/** Disposition recorded for the provider call that carried this request id. */
+function selectionCallDispositionFor(
+  events: readonly RuntimeEvent[],
+  requestId: unknown,
+): unknown {
+  if (typeof requestId !== 'string') return undefined
+  const call = events.find(
+    (event) =>
+      event.type === 'provider.call' &&
+      event.payload.call === 'selection' &&
+      event.payload.requestId === requestId,
+  )
+  return call?.payload.disposition
+}
+
 function completedTurns(events: readonly RuntimeEvent[]): RuntimeEvent[] {
   return events.filter(
     (event) => event.type === 'turn.ended' && event.payload.status === 'completed',
@@ -166,6 +190,28 @@ function performanceOffers(session: AdoptionSession): number {
 
 function turnEndStatuses(events: readonly RuntimeEvent[]): unknown[] {
   return events.filter((event) => event.type === 'turn.ended').map((event) => event.payload.status)
+}
+
+/**
+ * The identity and content fields shared by M4's committed delivery record and
+ * M6's confirmed-history projection, so the two views can be compared without
+ * treating either module's extra fields as evidence.
+ */
+function deliveryIdentity(record: CommitDelivery | ConfirmedDelivery) {
+  return {
+    sessionId: record.sessionId,
+    turnId: record.turnId,
+    segmentId: record.segmentId,
+    segmentIndex: record.segmentIndex,
+    text: record.text,
+    textHash: record.textHash,
+    outputId: record.outputId,
+    receiptId: record.receiptId,
+    classification: record.classification,
+    modality: record.modality,
+    personaProfileId: record.personaProfileId,
+    personaProfileVersion: record.personaProfileVersion,
+  }
 }
 
 /**
@@ -289,14 +335,20 @@ describe('M5 I1 adoption checks', () => {
     expect(plans).toHaveLength(2)
     expect(plans[0]?.selectedEventIds).toEqual([firstId])
     expect(plans[1]?.selectedEventIds).toEqual([secondId])
-    expect(firstPlanPayload(events)).toMatchObject({
-      disposition: 'respond',
-      provider: 'm3-rules',
-      modelVersion: 'm3-rules-v0.1',
-      reasonCode: 'oldest-offered',
-      replyIntent: 'answer',
-    })
-    expect(selectionCallDisposition(events)).toBe('accepted')
+    // Both plans carry the real rule provider, and the call that produced each
+    // plan was accepted; the second turn is checked as strictly as the first.
+    const payloads = planPayloads(events)
+    expect(payloads).toHaveLength(2)
+    for (const payload of payloads) {
+      expect(payload).toMatchObject({
+        disposition: 'respond',
+        provider: 'm3-rules',
+        modelVersion: 'm3-rules-v0.1',
+        reasonCode: 'oldest-offered',
+        replyIntent: 'answer',
+      })
+      expect(selectionCallDispositionFor(events, payload.requestId)).toBe('accepted')
+    }
 
     // Real M4 receives the rule-selected text and the supported answer intent.
     expect(views).toHaveLength(2)
@@ -750,6 +802,32 @@ describe('M5 I1 adoption checks', () => {
     expect(history).toHaveLength(1)
     expect(history[0]?.segmentIndex).toBe(0)
     expect(session.harness.composition.coordinator.deliveries()).toHaveLength(1)
+
+    // The delivery finalizer awaits M4's memory commit before the turn ends, so
+    // the real in-memory store already holds the admitted prefix at this point;
+    // no later context assembly is needed to observe it. Compare its identity
+    // and content to the durable M6 history and the committed delivery event.
+    const memory = session.harness.m4Memory
+    if (memory === null) throw new Error('the real M4 composition supplied no memory store')
+    const records = memory.records()
+    expect(records).toHaveLength(1)
+    expect(records.map(deliveryIdentity)).toEqual(history.map(deliveryIdentity))
+    expect(records[0]?.segmentIndex).toBe(0)
+    expect(records[0]?.text).toBe(M1_FIXTURE_SEGMENT_0_TEXT)
+    expect(records[0]?.classification).toBe('fully-delivered')
+    expect(records[0]?.terminalOutcome).toBe('completed')
+    expect(records[0]?.turnId).toBe(committed[0]?.turnId)
+    expect(records[0]?.segmentId).toBe(committed[0]?.segmentId)
+    expect(records[0]?.outputId).toBe(committed[0]?.outputId)
+    expect(records[0]?.classification).toBe(committed[0]?.payload.classification)
+
+    // The second segment reached dialogue generation but its synthesis failed,
+    // so M4 must hold no delivery record or spoken admission for it.
+    expect(records.some((record) => record.segmentIndex === 1)).toBe(false)
+    expect(records.some((record) => record.text === M1_FIXTURE_SEGMENT_1_TEXT)).toBe(false)
+    const admitted = await memory.confirmedHistory(session.harness.currentSessionId())
+    expect(admitted.map(deliveryIdentity)).toEqual(history.map(deliveryIdentity))
+    expect(admitted.some((record) => record.segmentIndex === 1)).toBe(false)
   })
 
   it('accepts fresh input after an unconfirmed reconnect but blocks before selection or playback', async () => {

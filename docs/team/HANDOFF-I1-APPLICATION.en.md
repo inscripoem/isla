@@ -503,6 +503,58 @@ SQLite restart recovery, physical output and full
 I1/C-05/C-08/C-09/C-16 acceptance remain pending. No shared contract,
 M2/M3/M4 module implementation or case ID changed.
 
+### Controlled formal deployment selection entry (2026-10-31)
+
+A controlled test deployment can use real rule selection without editing either
+existing deployment module. `test/support/production-deployment-rule-selection.ts` is a separate,
+explicitly selected test-only entry: it calls `createTestProductionDeployment`
+and replaces only `peers.selection` with `createRuleSelectionPort` bound to
+`context.clock`. Every other peer and factory, the initial archive selection and
+the optional deployment-owned `release` are inherited unchanged, so a later audio
+integration that supplies `createSynthesis` or `audioResources` remains
+independent of this file. Reaction stays the base deployment's explicit
+`fixture-rule` substitute until M3 delivers #89.
+
+`test/offline/m5-deployment-selection.test.ts`, added to `pnpm test:m5`, drives the
+actual application over the real socket and real SQLite in three cases: two
+sequential turns whose persisted `selection.plan` rows are `m3-rules` /
+`oldest-offered` and select their own accepted input, with every selection
+`provider.call` accepted and no fixture or fallback plan; the composed
+deployment's own selection port bound to a mutable deployment clock, which
+resolves for a live deadline, rejects with `deadline-exceeded` after that same
+clock advances past the request and call deadline, while a fresh monotonic clock
+receives the same request and still resolves, so the negative assertion cannot
+pass for an unrelated clock; and the production CLI loading the entry through
+`ISLA_DEPLOYMENT_MODULE`, where the persisted plan is again `m3-rules` and the
+persisted `turn.ended` for the turn opened by that plan reports `completed`. The
+composed peers' reaction port is asserted to report `fixture-rule` directly.
+Focused results: `pnpm test:m5` 246/246 in 12 files, `pnpm typecheck`,
+`pnpm test:readiness` 42/42, `pnpm test:trace` 41/41, and oxlint with no
+diagnostics.
+
+M4 review follow-up (head 9a675873): the existing failed-prefix synthesis case in
+`test/offline/m5-i1-adoption.test.ts` now also inspects the real M4 in-memory
+store. The delivery finalizer awaits M4's commit before the turn ends, so the
+observation needs no later context assembly. At that point `m4Memory.records()`
+holds exactly one record: segment 0, `fully-delivered` with terminal outcome
+`completed`, whose session, turn, segment, text, text hash, output, receipt,
+classification, modality and persona identity equal the single M6
+confirmed-history row. Its turn, segment, output and classification also match
+the committed delivery event. M4's spoken
+`confirmedHistory` equals the same row, and neither view contains segment 1,
+whose synthesis failed before any delivery. This observes the actual store; it
+does not convert the catalog text substitute into live M4 generation.
+
+Remaining gaps: the foreign-clock fallback path (a foreign port recorded as a
+failed call and replaced by the M5 fallback plan) is still covered in
+`m5-i1-adoption.test.ts` rather than this entry, which proves the shared clock by
+direct deadline refusal. PR130's audio modules are not in this worktree. At the
+time of this OpenCode run, the combined candidate, full suite, browser runs, live
+providers and acoustic output had not been exercised. M3 rule `ReactionPort`
+(#89), the formal M2 console,
+SQLite restart recovery and the November 1 inspection remain open. No product or
+formal-console acceptance is claimed.
+
 Historical adoption basis (2026-10-29): the original OpenCode-authored increment below
 has been applied without source/test conflict to main `4e4f7cd`, which includes
 PR65. Independent Linux checks on this combination passed full `pnpm verify`
