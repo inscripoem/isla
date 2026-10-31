@@ -1,4 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs'
+import { createServer } from 'node:http'
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import type { Socket } from 'node:net'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { collectDialogueViolations } from '../conformance/dialogue.conformance'
@@ -17,11 +21,14 @@ import {
   MAX_STANDING_FACT_CHARACTERS,
   MAX_STANDING_FACTS,
   PERSONA_AUTHORING_STATUS,
+  PROVIDER_DIALOGUE_MODEL_VERSION,
   SPOKEN_ADMISSION,
   classifyMemoryBucket,
   collectPersonaContentIssues,
   createDeliveryMemoryStore,
   createDialoguePort,
+  createIntentTextSource,
+  createOpenAiCompatibleTextSource,
   deriveSegmentId,
   intentTemplatesFor,
   isAllowedDeliveryPair,
@@ -151,7 +158,7 @@ describe('M4 dialogue conformance', () => {
   it('satisfies every dialogue assertion with the real implementation', async () => {
     const memory = createDeliveryMemoryStore()
     const violations = await collectDialogueViolations(() => ({
-      dialogue: createDialoguePort({ clock: FIXTURE_CLOCK,  history: memory }),
+      dialogue: createDialoguePort({ clock: FIXTURE_CLOCK,  history: memory, textSource: createIntentTextSource() }),
       commit: memory,
       history: memory,
     }))
@@ -189,7 +196,7 @@ describe('M4 generation invariants', () => {
   it('reports cancelled with no segments when stopped before the first segment', async () => {
     const context = createCallContext()
     context.abort()
-    const outcome = await generate(createDialoguePort({ clock: FIXTURE_CLOCK }), fixtureDialogueRequest(), context)
+    const outcome = await generate(createDialoguePort({ clock: FIXTURE_CLOCK, textSource: createIntentTextSource() }), fixtureDialogueRequest(), context)
     expect(outcome.segments).toHaveLength(0)
     expect(outcome.end.status).toBe('cancelled')
     expect(outcome.end.segmentCount).toBe(0)
@@ -199,7 +206,7 @@ describe('M4 generation invariants', () => {
   it('keeps already emitted segments when stopped midway', async () => {
     const context = createCallContext()
     const segments: DialogueSegment[] = []
-    const end = await createDialoguePort({ clock: FIXTURE_CLOCK }).generate(fixtureDialogueRequest(), context, {
+    const end = await createDialoguePort({ clock: FIXTURE_CLOCK, textSource: createIntentTextSource() }).generate(fixtureDialogueRequest(), context, {
       segment: async (segment) => {
         segments.push(segment)
         context.abort()
@@ -211,7 +218,7 @@ describe('M4 generation invariants', () => {
   })
 
   it('treats a passed deadline as a deadline_exceeded timeout and stops generating', async () => {
-    const port = createDialoguePort({ clock: { nowMs: () => 10_000 } })
+    const port = createDialoguePort({ clock: { nowMs: () => 10_000 }, textSource: createIntentTextSource() })
     const outcome = await generate(port, fixtureDialogueRequest(), createCallContext(5_000))
     expect(outcome.segments).toHaveLength(0)
     expect(outcome.end.status).toBe('deadline_exceeded')
@@ -219,7 +226,7 @@ describe('M4 generation invariants', () => {
   })
 
   it('treats a deadline exactly at the clock time as expired (>= boundary)', async () => {
-    const port = createDialoguePort({ clock: { nowMs: () => 5_000 } })
+    const port = createDialoguePort({ clock: { nowMs: () => 5_000 }, textSource: createIntentTextSource() })
     const outcome = await generate(port, fixtureDialogueRequest(), createCallContext(5_000))
     expect(outcome.segments).toHaveLength(0)
     expect(outcome.end.status).toBe('deadline_exceeded')
@@ -322,7 +329,7 @@ describe('M4 generation invariants', () => {
 
   it('fails generation for an unknown character profile', async () => {
     const outcome = await generate(
-      createDialoguePort({ clock: FIXTURE_CLOCK }),
+      createDialoguePort({ clock: FIXTURE_CLOCK, textSource: createIntentTextSource() }),
       fixtureDialogueRequest({
         characterProfileId: 'character-unknown',
         characterProfileVersion: '9',
@@ -337,7 +344,7 @@ describe('M4 generation invariants', () => {
     for (const intent of REPLY_INTENTS) {
       const plan = fixtureDialogueRequest().responsePlan
       const outcome = await generate(
-        createDialoguePort({ clock: FIXTURE_CLOCK }),
+        createDialoguePort({ clock: FIXTURE_CLOCK, textSource: createIntentTextSource() }),
         fixtureDialogueRequest({ responsePlan: { ...plan, replyIntent: intent } }),
       )
       expect(outcome.segments.length).toBeGreaterThan(0)
@@ -361,7 +368,7 @@ describe('M4 generation invariants', () => {
 describe('M4 delivery memory', () => {
   it('keeps generated text out of spoken history until delivery is confirmed', async () => {
     const memory = createDeliveryMemoryStore()
-    const outcome = await generate(createDialoguePort({ clock: FIXTURE_CLOCK,  history: memory }))
+    const outcome = await generate(createDialoguePort({ clock: FIXTURE_CLOCK,  history: memory, textSource: createIntentTextSource() }))
     expect(outcome.segments.length).toBeGreaterThan(0)
     expect(await memory.confirmedHistory(FIXTURE_SESSION_ID)).toHaveLength(0)
 
@@ -1384,3 +1391,737 @@ describe('M4 coordinated attribution adoption', () => {
     expect(view?.estimatedCharacters).toBe(chargedHistory)
   })
 })
+
+/**
+ * One request as the loopback server observed it. The server is the only
+ * witness to the wire format, so the fields are recorded verbatim.
+ */
+interface LoopbackRequest {
+  method: string | undefined
+  path: string | undefined
+  authorization: string | undefined
+  contentType: string | undefined
+  /** Parsed JSON body, or null when the body was not JSON. */
+  body: unknown
+  /** Raw body text, kept so a header-only assertion cannot hide a malformed payload. */
+  rawBody: string
+}
+
+interface LoopbackServer {
+  url: string
+  close(): Promise<void>
+  requests: LoopbackRequest[]
+}
+
+/** Answers one captured request. Every handler under test is deterministic. */
+type LoopbackResponder = (response: ServerResponse) => void
+
+/**
+ * Starts a loopback HTTP server on an ephemeral port.
+ *
+ * This is the single declared substitute for the provider negative coverage: it
+ * pins the OpenAI wire format M4 sends and serves controlled failure responses.
+ * It stands in for no M3, M5 or M6 component; the real provider wiring belongs to
+ * the composition root (issue #44 §4). The caller must always close it.
+ */
+async function startLoopback(responder: LoopbackResponder): Promise<LoopbackServer> {
+  const requests: LoopbackRequest[] = []
+  const server = createServer((request: IncomingMessage, response: ServerResponse) => {
+    const chunks: Buffer[] = []
+    request.on('data', (chunk: Buffer) => {
+      chunks.push(chunk)
+    })
+    request.on('end', () => {
+      const rawBody = Buffer.concat(chunks).toString('utf8')
+      let body: unknown = null
+      try {
+        body = JSON.parse(rawBody)
+      } catch {
+        body = null
+      }
+      const record: LoopbackRequest = {
+        method: request.method,
+        path: request.url,
+        authorization: request.headers.authorization,
+        contentType: request.headers['content-type'],
+        body,
+        rawBody,
+      }
+      requests.push(record)
+      if (record.method === 'POST') responder(response)
+    })
+  })
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject)
+      resolve()
+    })
+  })
+  const address = server.address() as AddressInfo
+  return {
+    url: `http://127.0.0.1:${address.port}`,
+    requests,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.closeAllConnections()
+        server.close((error) => {
+          if (error === undefined) resolve()
+          else reject(error)
+        })
+      }),
+  }
+}
+
+/**
+ * Starts a loopback server whose handler owns the raw socket as well as the
+ * response, so a case can observe the peer reading the body and can break the
+ * connection at a chosen point instead of ending the response cleanly.
+ *
+ * The request is captured exactly as `startLoopback` does, and the handler runs
+ * once the whole request has arrived. The caller must always close it.
+ */
+async function startRawLoopback(
+  responder: (response: ServerResponse, socket: Socket) => void,
+): Promise<LoopbackServer> {
+  const requests: LoopbackRequest[] = []
+  const server = createServer((request: IncomingMessage, response: ServerResponse) => {
+    const chunks: Buffer[] = []
+    request.on('data', (chunk: Buffer) => {
+      chunks.push(chunk)
+    })
+    request.on('end', () => {
+      const rawBody = Buffer.concat(chunks).toString('utf8')
+      let body: unknown = null
+      try {
+        body = JSON.parse(rawBody)
+      } catch {
+        body = null
+      }
+      requests.push({
+        method: request.method,
+        path: request.url,
+        authorization: request.headers.authorization,
+        contentType: request.headers['content-type'],
+        body,
+        rawBody,
+      })
+      responder(response, request.socket)
+    })
+  })
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject)
+      resolve()
+    })
+  })
+  const address = server.address() as AddressInfo
+  return {
+    url: `http://127.0.0.1:${address.port}`,
+    requests,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.closeAllConnections()
+        server.close((error) => {
+          if (error === undefined) resolve()
+          else reject(error)
+        })
+      }),
+  }
+}
+/** Returns the `messages` entries of a recorded body as plain records, or none if absent. */
+function recordedEntries(body: unknown): Array<Record<string, unknown>> {
+  if (typeof body !== 'object' || body === null) return []
+  const messages = (body as { messages?: unknown }).messages
+  if (!Array.isArray(messages)) return []
+  return messages.filter(
+    (entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null,
+  )
+}
+
+describe('M4 dialogue provider source (offline negatives)', () => {
+  it('sends the OpenAI wire format and honours the per-call usage and served model', async () => {
+    const server = await startLoopback((response) => {
+      response.writeHead(200, { 'Content-Type': 'application/json' })
+      response.end(
+        JSON.stringify({
+          choices: [{ message: { content: 'First spoken line.\n\nSecond spoken line.' } }],
+          model: 'served-model-77',
+          usage: { prompt_tokens: 11, completion_tokens: 7 },
+        }),
+      )
+    })
+    try {
+      const port = createDialoguePort({
+        clock: FIXTURE_CLOCK,
+        textSource: createOpenAiCompatibleTextSource({
+          baseUrl: server.url,
+          model: 'requested-model-5',
+          apiKey: 'test-key-offline',
+        }),
+      })
+      const outcome = await generate(port, fixtureDialogueRequest(), createCallContext(5_000))
+
+      // The request must be exactly what the chat-completions contract expects;
+      // otherwise a real provider would reject a call the fixture never sees.
+      expect(server.requests).toHaveLength(1)
+      const recorded = server.requests[0]
+      expect(recorded?.method).toBe('POST')
+      expect(recorded?.path?.endsWith('/chat/completions')).toBe(true)
+      expect(recorded?.authorization).toBe('Bearer test-key-offline')
+      const body = recorded?.body
+      if (typeof body !== 'object' || body === null) throw new Error('request body is not JSON')
+      const payload = body as Record<string, unknown>
+      expect(typeof payload.model).toBe('string')
+      expect(payload.stream).toBe(false)
+      const messages = recordedEntries(body)
+      expect(messages.length).toBeGreaterThan(0)
+      // Both roles are present: the instruction and the assembled dialogue prompt.
+      const roles = messages.map((entry) => String(entry.role))
+      expect(roles).toContain('system')
+      expect(roles).toContain('user')
+
+      // Two lines survive as two candidates, and only the spoken ones reach the sink.
+      expect(outcome.segments).toHaveLength(2)
+      expect(outcome.end.status).toBe('completed')
+      expect(outcome.end.usage.inputTokens).toBe(11)
+      expect(outcome.end.usage.outputTokens).toBe(7)
+      expect(outcome.end.usage.usageMissing).toBe(false)
+      // The served identity is the per-call value, which differs from the request.
+      expect(outcome.end.usage.resolvedModel).toBe('served-model-77')
+      expect(outcome.end.usage.requestedModel).toBe('requested-model-5')
+      for (const segment of outcome.segments) {
+        expect(segment.model).toBe('requested-model-5')
+        expect(segment.modelVersion).toBe(PROVIDER_DIALOGUE_MODEL_VERSION)
+      }
+    } finally {
+      await server.close()
+    }
+  })
+
+  it('fails visibly without a configured source instead of serving fixture text', async () => {
+    const reports: DialogueOutcomeReport[] = []
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      onOutcome: (report) => reports.push(report),
+    })
+    const segments: DialogueSegment[] = []
+
+    // The no-fallback default (issue #44 §2.4) must reject, not complete with
+    // substitute text, and the message must name the missing configuration.
+    const failure: unknown = await port
+      .generate(fixtureDialogueRequest(), createCallContext(5_000), sinkOf(segments))
+      .then(
+        () => null,
+        (error: unknown) => error,
+      )
+    expect(failure).toBeInstanceOf(Error)
+    const message = failure instanceof Error ? failure.message : ''
+    expect(message).toMatch(/not configured|missing/i)
+    expect(message).toContain('textSource')
+    // The rejection names the configuration boundary, never the fixture source.
+    expect(message.toLowerCase()).not.toContain('fixture')
+
+    expect(segments).toHaveLength(0)
+    expect(reports).toHaveLength(1)
+    expect(reports[0]).toMatchObject({
+      endStatus: 'failed',
+      usageStatus: 'failed',
+      generated: 0,
+      emitted: 0,
+      discarded: 0,
+    })
+  })
+
+  it('rejects a blank apiKey before any request reaches the wire', async () => {
+    const server = await startLoopback((response) => {
+      // A valid completion would be served if the source ever got here; it must not.
+      response.writeHead(200, { 'Content-Type': 'application/json' })
+      response.end(
+        JSON.stringify({
+          choices: [{ message: { content: 'Should never be spoken.' } }],
+          model: 'served-model-77',
+          usage: { prompt_tokens: 1, completion_tokens: 1 },
+        }),
+      )
+    })
+    try {
+      const reports: DialogueOutcomeReport[] = []
+      const port = createDialoguePort({
+        clock: FIXTURE_CLOCK,
+        textSource: createOpenAiCompatibleTextSource({
+          baseUrl: server.url,
+          model: 'm',
+          apiKey: '   ',
+        }),
+        onOutcome: (report) => reports.push(report),
+      })
+      const segments: DialogueSegment[] = []
+
+      const failure: unknown = await port
+        .generate(fixtureDialogueRequest(), createCallContext(5_000), sinkOf(segments))
+        .then(
+          () => null,
+          (error: unknown) => error,
+        )
+      expect(failure).toBeInstanceOf(Error)
+      const message = failure instanceof Error ? failure.message : ''
+      expect(message).toMatch(/apiKey/i)
+
+      // A blank key is a configuration fault, so the provider never sees a request.
+      expect(server.requests).toHaveLength(0)
+      expect(segments).toHaveLength(0)
+      expect(reports).toHaveLength(1)
+      expect(reports[0]).toMatchObject({ endStatus: 'failed', usageStatus: 'failed' })
+
+      // The message names the missing key without echoing a credential-shaped value.
+      expect(message).not.toMatch(/Bearer|sk-[A-Za-z0-9]|test-key-offline/)
+    } finally {
+      await server.close()
+    }
+  })
+
+  it('fails honestly on an HTTP error response without echoing its body (bad response 1)', async () => {
+    const server = await startLoopback((response) => {
+      response.writeHead(500, { 'Content-Type': 'application/json' })
+      response.end(JSON.stringify({ error: { message: 'backend exploded' } }))
+    })
+    try {
+      const reports: DialogueOutcomeReport[] = []
+      const port = createDialoguePort({
+        clock: FIXTURE_CLOCK,
+        textSource: createOpenAiCompatibleTextSource({
+          baseUrl: server.url,
+          model: 'requested-model-5',
+          apiKey: 'test-key-offline',
+        }),
+        onOutcome: (report) => reports.push(report),
+      })
+      const segments: DialogueSegment[] = []
+      const failure: unknown = await port
+        .generate(fixtureDialogueRequest(), createCallContext(5_000), sinkOf(segments))
+        .then(
+          () => null,
+          (error: unknown) => error,
+        )
+      expect(failure).toBeInstanceOf(Error)
+      const message = failure instanceof Error ? failure.message : ''
+      // The fault names the status, never the provider's body.
+      expect(message).toContain('500')
+      expect(message).not.toContain('backend exploded')
+      expect(message.toLowerCase()).not.toContain('fixture')
+
+      expect(server.requests).toHaveLength(1)
+      expect(segments).toHaveLength(0)
+      expect(reports).toHaveLength(1)
+      expect(reports[0]).toMatchObject({
+        endStatus: 'failed',
+        usageStatus: 'failed',
+        generated: 0,
+        emitted: 0,
+        discarded: 0,
+      })
+    } finally {
+      await server.close()
+    }
+  })
+
+  it('fails honestly on a non-JSON response body (bad response 2)', async () => {
+    const server = await startLoopback((response) => {
+      response.writeHead(200, { 'Content-Type': 'text/plain' })
+      response.end('not-json-at-all')
+    })
+    try {
+      const reports: DialogueOutcomeReport[] = []
+      const port = createDialoguePort({
+        clock: FIXTURE_CLOCK,
+        textSource: createOpenAiCompatibleTextSource({
+          baseUrl: server.url,
+          model: 'requested-model-5',
+          apiKey: 'test-key-offline',
+        }),
+        onOutcome: (report) => reports.push(report),
+      })
+      const segments: DialogueSegment[] = []
+      const failure: unknown = await port
+        .generate(fixtureDialogueRequest(), createCallContext(5_000), sinkOf(segments))
+        .then(
+          () => null,
+          (error: unknown) => error,
+        )
+      expect(failure).toBeInstanceOf(Error)
+      const message = failure instanceof Error ? failure.message : ''
+      expect(message).toMatch(/JSON/i)
+      // A malformed body is never echoed back into the error message.
+      expect(message).not.toContain('not-json-at-all')
+      expect(message.toLowerCase()).not.toContain('fixture')
+
+      expect(server.requests).toHaveLength(1)
+      expect(segments).toHaveLength(0)
+      expect(reports).toHaveLength(1)
+      expect(reports[0]).toMatchObject({
+        endStatus: 'failed',
+        usageStatus: 'failed',
+        generated: 0,
+        emitted: 0,
+        discarded: 0,
+      })
+    } finally {
+      await server.close()
+    }
+  })
+
+  it('keeps the cancelled path when the turn is revoked during compose', async () => {
+    const entered = createGate()
+    const release = createGate()
+    // The source ignores the signal and returns two lines anyway, so the port's
+    // post-compose re-check, not the source, has to classify the call.
+    const source: DialogueTextSource = {
+      model: 'test-source',
+      modelVersion: 'test-v1',
+      resolvedModel: null,
+      async compose(_view, maxSegments) {
+        entered.release()
+        await release.promise
+        return ['first line', 'second line'].slice(0, Math.max(0, maxSegments))
+      },
+    }
+    const reports: DialogueOutcomeReport[] = []
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      textSource: source,
+      onOutcome: (report) => reports.push(report),
+    })
+    const context = createCallContext(5_000)
+    const segments: DialogueSegment[] = []
+    const pending = port.generate(fixtureDialogueRequest(), context, sinkOf(segments))
+    await entered.promise
+    // The abort arrives while compose is still awaited, before any line exists.
+    context.abort()
+    release.release()
+    const end = await pending
+
+    expect(end.status).toBe('cancelled')
+    expect(end.usage.status).toBe('cancelled')
+    // No segment was written after the abort point.
+    expect(segments).toHaveLength(0)
+    expect(reports).toHaveLength(1)
+    expect(reports[0]).toMatchObject({
+      endStatus: 'cancelled',
+      usageStatus: 'cancelled',
+      generated: 2,
+      emitted: 0,
+      discarded: 2,
+    })
+    expect(reports[0]?.discards).toEqual({ aborted: 2 })
+  })
+
+  it('reports a provider call aborted mid-flight as cancelled, not failed', async () => {
+    const context = createCallContext(5_000)
+    // The handler deliberately never responds: the request stays open until the
+    // client aborts it, so the abort competes with a real in-flight fetch.
+    const server = await startLoopback(() => {
+      context.abort()
+    })
+    try {
+      const reports: DialogueOutcomeReport[] = []
+      const port = createDialoguePort({
+        clock: FIXTURE_CLOCK,
+        textSource: createOpenAiCompatibleTextSource({
+          baseUrl: server.url,
+          model: 'requested-model-5',
+          apiKey: 'test-key-offline',
+        }),
+        onOutcome: (report) => reports.push(report),
+      })
+      const segments: DialogueSegment[] = []
+      const end = await port.generate(fixtureDialogueRequest(), context, sinkOf(segments))
+
+      // The server saw the request, so the abort happened after the wire call began.
+      expect(server.requests).toHaveLength(1)
+      // The source returns no lines on abort; the port's re-check decides the status.
+      expect(end.status).toBe('cancelled')
+      expect(end.usage.status).toBe('cancelled')
+      expect(segments).toHaveLength(0)
+      expect(reports).toHaveLength(1)
+      expect(reports[0]).toMatchObject({
+        endStatus: 'cancelled',
+        usageStatus: 'cancelled',
+        generated: 0,
+        emitted: 0,
+        discarded: 0,
+      })
+    } finally {
+      await server.close()
+    }
+  })
+
+  /*
+   * A Stop that arrives after the headers are on the wire rejects the body read
+   * itself, not the fetch. Without abort handling around `response.text()` the
+   * rejection escapes compose and the turn is reported `failed` even though Stop
+   * was applied, so the direct source call below fails first.
+   */
+  it('classifies a Stop during body consumption as cancelled (body read abort)', async () => {
+    const partialBody = '{"choices":[{"message":{"content":"Half a li'
+    const portContext = createCallContext(5_000)
+    let portStarted: (() => void) | null = null
+    /*
+     * The response is held open after the prefix, so only the abort can settle
+     * the client's body read. The held state is reported from the server's write
+     * callback, which is the observable proof that the prefix left the server and
+     * the body read is therefore in progress; no fixed sleep is used.
+     */
+    const server = await startRawLoopback((response) => {
+      response.writeHead(200, { 'Content-Type': 'application/json' })
+      response.write(partialBody, () => {
+        portStarted?.()
+      })
+    })
+    try {
+      /*
+       * The port re-check alone would also report `cancelled` if compose threw, so
+       * it cannot isolate the source. The source is called directly first, against
+       * a fetch stub that resolves the body-read entry explicitly; with the abort
+       * handling removed from the body read its compose throws, which fails this
+       * case before the port assertions run. A real assembled view is captured from
+       * the port so the direct call renders the same prompt.
+       */
+      const capture = captureView()
+      await generate(
+        createDialoguePort({ clock: FIXTURE_CLOCK, textSource: capturingTextSource(capture) }),
+      )
+      const view = capture.view
+      if (view === null) throw new Error('the capturing source never received the context')
+      /*
+       * The direct call uses a stubbed fetch so the body-read entry is resolved
+       * explicitly: the stub reports entry from inside `text()`, then waits for the
+       * abort. No setImmediate race decides which branch runs, and the abort can
+       * only land inside readBody, never on the pre-read check.
+       */
+      const originalFetch = globalThis.fetch
+      let entered = () => {}
+      const bodyReadEntered = new Promise<void>((resolve) => {
+        entered = resolve
+      })
+      try {
+        const stubContext = createCallContext(5_000)
+        globalThis.fetch = (async () => ({
+          status: 200,
+          text: async () => {
+            entered()
+            await new Promise((_, reject) => {
+              stubContext.signal.addEventListener(
+                'abort',
+                () => {
+                  const e = new Error('aborted')
+                  e.name = 'AbortError'
+                  reject(e)
+                },
+                { once: true },
+              )
+            })
+            throw new Error('unreachable')
+          },
+        })) as unknown as typeof globalThis.fetch
+        const source = createOpenAiCompatibleTextSource({
+          baseUrl: server.url,
+          model: 'requested-model-5',
+          apiKey: 'test-key-offline',
+        })
+        const sourceCall = source.compose(view, 2, { signal: stubContext.signal })
+        await bodyReadEntered
+        stubContext.abort()
+        let composed: Awaited<ReturnType<typeof source.compose>>
+        try {
+          composed = await sourceCall
+        } catch (error) {
+          throw new Error(
+            `compose must resolve after a Stop during the body read, but it threw: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          )
+        }
+        // A provider result, not the legacy bare-array arm: the identity is unclaimed.
+        if (!('lines' in composed)) throw new Error('the provider source returned a bare array')
+        expect(composed.lines).toEqual([])
+        // The abort path returns the same shape as the fetch-level abort path.
+        expect(composed).toMatchObject({ lines: [] })
+        // The body-read abort branch, not the pre-read branch, produced the result.
+        expect(composed.resolvedModel).toBeNull()
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+
+      const reports: DialogueOutcomeReport[] = []
+      const port = createDialoguePort({
+        clock: FIXTURE_CLOCK,
+        textSource: createOpenAiCompatibleTextSource({
+          baseUrl: server.url,
+          model: 'requested-model-5',
+          apiKey: 'test-key-offline',
+        }),
+        onOutcome: (report) => reports.push(report),
+      })
+      const portHeld = new Promise<void>((resolve) => {
+        portStarted = resolve
+      })
+      const segments: DialogueSegment[] = []
+      const pending = port.generate(fixtureDialogueRequest(), portContext, sinkOf(segments))
+      await portHeld
+      portContext.abort()
+      // Resolves rather than rejects: a rejection would be reported `failed`.
+      const end = await pending
+
+      // Only the port half reaches the loopback: the direct call before it uses the stub.
+      expect(server.requests).toHaveLength(1)
+      expect(segments).toHaveLength(0)
+      expect(end.status).toBe('cancelled')
+      expect(end.usage.status).toBe('cancelled')
+      expect(reports).toHaveLength(1)
+      expect(reports[0]).toMatchObject({
+        endStatus: 'cancelled',
+        usageStatus: 'cancelled',
+        generated: 0,
+        emitted: 0,
+        discarded: 0,
+      })
+    } finally {
+      await server.close()
+    }
+  })
+
+  /*
+   * The counterpart of the case above: with the signal untouched, a torn body is
+   * a real fault and must reject. If readBody swallowed every body error the call
+   * would resolve and this case would turn red.
+   */
+  it('still fails when the body read breaks without a Stop', async () => {
+    const secretBody = 'secret-provider-payload-not-json'
+    const server = await startRawLoopback((response, socket) => {
+      response.writeHead(200, { 'Content-Type': 'application/json' })
+      response.write(secretBody, () => {
+        // Break the connection mid-body after the prefix has left the server, so
+        // the client observes a torn response rather than a clean end.
+        socket.destroy()
+      })
+    })
+    try {
+      const reports: DialogueOutcomeReport[] = []
+      const port = createDialoguePort({
+        clock: FIXTURE_CLOCK,
+        textSource: createOpenAiCompatibleTextSource({
+          baseUrl: server.url,
+          model: 'requested-model-5',
+          apiKey: 'test-key-offline',
+        }),
+        onOutcome: (report) => reports.push(report),
+      })
+      const segments: DialogueSegment[] = []
+      const failure: unknown = await port
+        .generate(fixtureDialogueRequest(), createCallContext(5_000), sinkOf(segments))
+        .then(
+          () => null,
+          (error: unknown) => error,
+        )
+      expect(failure).toBeInstanceOf(Error)
+      const message = failure instanceof Error ? failure.message : ''
+      // The fault is named, and neither the body nor the credential is echoed.
+      expect(message.toLowerCase()).toMatch(/body/)
+      expect(message).not.toContain(secretBody)
+      expect(message).not.toContain('test-key-offline')
+      expect(message).not.toMatch(/Bearer/)
+
+      expect(server.requests).toHaveLength(1)
+      expect(segments).toHaveLength(0)
+      expect(reports).toHaveLength(1)
+      expect(reports[0]).toMatchObject({ endStatus: 'failed', usageStatus: 'failed' })
+    } finally {
+      await server.close()
+    }
+  })
+
+  it('keeps the turn when a usage count is fractional', async () => {
+    const server = await startLoopback((response) => {
+      response.writeHead(200, { 'Content-Type': 'application/json' })
+      response.end(
+        JSON.stringify({
+          choices: [{ message: { content: 'One spoken line.' } }],
+          usage: { prompt_tokens: 1.5, completion_tokens: 3 },
+        }),
+      )
+    })
+    try {
+      const reports: DialogueOutcomeReport[] = []
+      const port = createDialoguePort({
+        clock: FIXTURE_CLOCK,
+        textSource: createOpenAiCompatibleTextSource({
+          baseUrl: server.url,
+          model: 'requested-model-5',
+          apiKey: 'test-key-offline',
+        }),
+        onOutcome: (report) => reports.push(report),
+      })
+      const outcome = await generate(port, fixtureDialogueRequest(), createCallContext(5_000))
+
+      // The line is spoken text, so a doubtful count must not cost the turn.
+      expect(server.requests).toHaveLength(1)
+      expect(outcome.segments).toHaveLength(1)
+      expect(outcome.segments[0]?.text).toBe('One spoken line.')
+      expect(outcome.end.status).toBe('completed')
+      expect(outcome.end.usage.status).toBe('ok')
+      expect(reports).toHaveLength(1)
+      // endStatus speaks the end-status vocabulary; usageStatus speaks the
+      // usage-record one, so a finishing call reports 'ok' there.
+      expect(reports[0]).toMatchObject({ endStatus: 'completed', usageStatus: 'ok' })
+
+      /*
+       * 1.5 is not an integer measurement: it is neither rounded nor invented.
+       * The measured output count still travels, while the unmeasurable input
+       * count stays null and the record is marked as missing usage.
+       */
+      expect(outcome.end.usage.usageMissing).toBe(true)
+      expect(outcome.end.usage.inputTokens).toBeNull()
+      expect(outcome.end.usage.outputTokens).toBe(3)
+    } finally {
+      await server.close()
+    }
+  })
+
+  it('does not report a terminal state that fails validation', async () => {
+    /*
+     * A resolved model reaches the end through the public per-call report, and
+     * the usage record requires a string or null there. The cast only silences
+     * TypeScript; at runtime 42 is still a number, so dialogueEndSchema rejects
+     * the end on the success path and the turn fails before any report.
+     */
+    const source: DialogueTextSource = {
+      model: 'test-source',
+      modelVersion: 'test-v1',
+      resolvedModel: null,
+      async compose() {
+        return { lines: ['Line.'], resolvedModel: 42 as unknown as string }
+      },
+    }
+    const reports: DialogueOutcomeReport[] = []
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      textSource: source,
+      onOutcome: (report) => reports.push(report),
+    })
+    const segments: DialogueSegment[] = []
+
+    const failure: unknown = await port
+      .generate(fixtureDialogueRequest(), createCallContext(5_000), sinkOf(segments))
+      .then(
+        () => null,
+        (error: unknown) => error,
+      )
+    expect(failure).toBeInstanceOf(Error)
+
+    // Reporting follows construction: no valid terminal state, no report.
+    expect(reports).toHaveLength(0)
+  })
+})
+

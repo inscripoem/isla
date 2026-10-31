@@ -3802,6 +3802,165 @@ entries:
       registry edit. selection-001 is human-reviewed; selection-002 remains
       draft. Synthetic review fixtures validate mechanics only and do not
       certify corpus evidence.
+  - date: "2026-10-30"
+    task: M4-04-loopback-evidence-and-verify-windows-fix
+    change: >-
+      For issue #91's offline verification half, test/offline/m4-loopback.test.ts
+      gains two cases (bd972ec, +172/-4): a real-selection intent case that
+      grounds createRuleSelectionPort (src/decision/selection.ts) over the
+      reviewed decision corpus and injects it through createLoopHarness
+      options.selection sharing one ClockPort instance with the harness, with
+      profile.allowedIntents ["clarify"] forcing the non-default intent so the
+      loopback view must show replyIntent clarify, its reply template, and only
+      that intent's reference line in renderDialoguePrompt (intent reorders
+      recall priority, never admission); and a delivery-history admission case
+      reusing the established m4-storage-integration.test fixtures. Header and
+      in-test comments declare which substitutes remain (reaction pending issue
+      #89, provider text pending issue #93) instead of implying production
+      parity. Separately, package.json's verify script (b8669ce) drops nested
+      pnpm run calls for direct tsc/oxlint/vitest/build invocations, because
+      nested pnpm invokes the broken Windows pnpm shim on this machine; the
+      full suite remains gated by remote CI.
+    requirements: []
+    invariants: []
+    commits: [bd972ec, b8669ce]
+    agent: opencode/deepseek-v4-flash
+    provider: cslabllm
+    model: CS5351/DeepSeek-V4-Flash
+    supervision: >-
+      Member M4's scheduled inspection workflow (ZCode, GLM-5.3-Flash) selected
+      the slice, wrote the English task briefs and supervised. OpenCode build
+      agent authored all test and package.json changes across three unattended
+      --auto --standalone sessions (loopback intent, delivery-history, verify
+      Windows fix; briefs kept in gitignored .cache/). The supervising agent
+      reviewed each diff, ran the targeted suites plus test:m4/tsc/oxlint, and
+      pushed the two commits ahead of the member's manual review; remote CI
+      passed on both commits. Local full-suite verify remains blocked by the
+      pre-existing Windows spawn ENOENT baseline noted in earlier entries.
+  - date: "2026-10-30"
+    task: M4-04-provider-text-source
+    change: >-
+      For issue #93's offline-verifiable half, the provider slice lands additively
+      (e382df2, +938/-23). src/dialogue/provider-text-source.ts (new) adds
+      createOpenAiCompatibleTextSource over the OpenAI chat-completions wire: baseUrl,
+      model and apiKey arrive through the injected config object and nothing in
+      src/dialogue reads the environment; every fault — a blank key checked before any
+      request is issued, an HTTP status outside 200-299, a non-JSON body, a missing
+      choices[0].message.content, or a transport error not caused by the per-call
+      abort signal — throws into the existing failure path, so DialogueEnd.status
+      reports failed and fixture text is never substituted; an aborted per-call
+      signal returns no lines so the port's existing post-compose re-check
+      classifies the call as cancelled. src/dialogue/dialogue-port.ts widens
+      DialogueTextSource.compose additively per the M5-confirmed #44 §2 decisions
+      (optional per-call { signal } argument; optional result wrapper carrying the
+      per-call served resolvedModel and measured inputTokens/outputTokens, with
+      absent counts left usageMissing rather than invented zeros) and replaces the
+      silent line-203 default with createUnconfiguredTextSource(), whose compose
+      always throws, so a port built without a textSource fails visibly while
+      createIntentTextSource remains available by explicit caller choice; thirteen
+      M4-owned call sites now pass the intent source explicitly. The three live
+      it.todo placeholders in test/live/m4-text-source.live.test.ts become real
+      assertions mapped to the HANDOFF-M4-01 criteria (schema-valid usage; a missing
+      key fails instead of falling back to the fixture source; the credential stays
+      out of the repository, the logs and the error messages, checked by a
+      repository scan and no-echo assertions). test/offline/m4-dialogue.test.ts
+      gains seven offline negatives (missing configuration fails and is never
+      fixture text; a blank apiKey fails with zero wire requests; an HTTP 500 and a
+      non-JSON body fail with honest outcome counts and no response-body echo; a
+      Stop during compose keeps the existing cancelled path; a provider call
+      aborted mid-flight reports cancelled, not failed). The slice's single
+      declared substitute is a local loopback HTTP server inside M4's own offline
+      test file that pins the OpenAI wire format and serves controlled failures —
+      a boundary tool for M4's own seam, standing in for no M3/M5/M6 component;
+      real provider wiring stays with the composition root (#44 §4).
+    requirements: []
+    invariants: []
+    commits: [e382df2]
+    agent: opencode/deepseek-v4-flash
+    provider: cslabllm
+    model: CS5351/DeepSeek-V4-Flash
+    supervision: >-
+      Member M4's scheduled inspection workflow (ZCode, GLM-5.3-Flash) selected
+      the slice, wrote the English task briefs and supervised. OpenCode build
+      agent (deepseek-v4-flash) authored all code and test changes across four
+      unattended --auto --standalone sessions (provider source and no-fallback
+      default, live assertions, offline negatives, one live-test fix; briefs kept
+      in gitignored .cache/). The supervising agent reviewed each diff and
+      committed e382df2 only after the local gates: pnpm exec tsc -b clean,
+      pnpm exec oxlint clean, pnpm test:m4 244/244 (237 baseline plus 7 new), the
+      live suite cleanly skipped with ISLA_LIVE_TEXT_* unset, and pnpm verify
+      showing zero new failures against the 14-case Windows-host baseline
+      recorded on issue #44 on 2026-10-29 (same six files and spawn-ENOENT
+      unhandled errors; vite build passes standalone). The real-provider
+      assertion remains skipped until the operator supplies ISLA_LIVE_TEXT_*; per
+      AGENTS.md no live-provider success is claimed from fixtures. Full-suite
+      final review belongs to remote CI.
+
+  - date: "2026-10-30"
+    task: M4-04-withdraw-out-of-scope-edits
+    branch: feat/m4-04
+    change: >-
+      Withdrawal only; no application code was authored. df6cc58 mixed an
+      M4-owned refactor with three changes outside M4's ownership, so this
+      commit restores the out-of-scope paths to their df6cc58^ content and
+      deletes the two files that existed only to serve them: M6's
+      test/offline/boundaries.test.ts (PR #70 supersedes it; the withdrawn
+      version had deleted three existing cases, relaxed the production
+      test-import rule to resolved paths only, and cited a
+      moduleSpecifiers.test.ts that does not exist), src/contracts/protocol.ts
+      plus src/runtime/{diagnostics,server}.ts and test/offline/server.test.ts
+      (shared contract and M5-owned wiring), and the package.json test:m4 entry
+      naming the withdrawn protocol test. The deleted files are
+      src/runtime/memory-inspect-reply.ts and
+      test/offline/m4-memory-inspect-protocol.test.ts. Retained as M4's own:
+      src/dialogue/memory-inspect-contract.ts, which declares the payload once,
+      states that admission.admitted counts admitted history SEGMENTS while
+      recall.delivery.* counts recalled TURNS, and keeps consistency.incomplete
+      first-class so a zero finding count with incomplete true cannot read as an
+      all-clear; src/dialogue/memory-inspect.ts now builds on that declaration
+      and src/dialogue/index.ts re-exports it. The contracts-to-dialogue type
+      import that motivated the checker exception is gone with protocol.ts, so
+      no boundary rule needed widening.
+    requirements: []
+    invariants: []
+    commits: [3014648]
+    agent: workbuddy/deepseek-v4.1-flash
+    provider: deepseek
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Member M4 reviewed the alignment report for origin/main 02276f6, chose the
+      split option (withdraw the out-of-scope paths, retain the dialogue-owned
+      declaration) and authorised this commit. The agent restored the withdrawn
+      paths from df6cc58^, deleted the two dependent files and made the commit;
+      it did not write or alter application logic, and the retained declaration
+      comes from df6cc58, whose authorship is not restated or re-claimed here.
+      The disclosure to M6 was posted as a comment on PR #70 before this
+      withdrawal, so the defects in the withdrawn checker version are on record
+      rather than silently reverted.
+    human_review: >-
+      Captain (M4) authorised the split in session on 2026-10-30 after reading
+      the conflict report (ownership, shared contract, manifest). No reviewer
+      approval, merge or case closure is claimed by this entry.
+    transcript_record: >-
+      The conversation is retained in the WorkBuddy session; no separate export
+      was created.
+    verification:
+      base: 7733dfa
+      commands: >-
+        pnpm typecheck; pnpm lint; pnpm test:m4; pnpm test:readiness;
+        pnpm test:trace; pnpm test
+      results: >-
+        typecheck clean; lint 0 warnings / 0 errors on 251 files; test:m4
+        233/233 in 10 files; trace 41/41; readiness 38/42 and the full suite
+        1376/1393 with 17 failures, all of the documented Windows class
+        (boundaries x3 restored by design by this withdrawal, cli x3,
+        production-cli x4, m5-process-restart x1, m6-02-boundary x2,
+        m6-sqlite x3, requirements x1). The three restored boundaries failures
+        are the Windows-only absent-path negatives reported to M6 on PR #70;
+        they are not new regressions from this commit.
+      not_run: >-
+        No live provider run and no Windows-green or product claim; this entry
+        reverts and re-homes declarations only.
   - date: "2026-10-28"
     task: issue-68-boundary-parser
     change: >-
@@ -3832,3 +3991,75 @@ entries:
       not_verified: >-
         M2's failing branch is not fetched locally; Windows remains at the known path-resolution
         failures; live CI and branch protection were not measured.
+  - date: "2026-10-31"
+    task: pr-134-review-fixes-revoked-body-read-and-terminal-order
+    change: >-
+      Address the two defects the M5 review reported on PR #134. (1) A Stop that
+      lands while the provider response body is being consumed now ends the turn
+      as cancelled instead of failed: readBody returns null when response.text()
+      rejects on a revoked signal, and compose returns { lines: [],
+      resolvedModel: null } for that outcome, so the revocation is a distinct
+      result rather than an empty string that JSON.parse would reject. Every
+      other body-read rejection still fails with the same message, which never
+      echoes the body, the headers or the key. (2) A terminal state is now built
+      and validated before it is reported: the terminal closure in generate
+      calls buildEnd first and report only after it returns, so an end that
+      fails dialogueEndSchema can no longer be announced as completed to M5 and
+      M6, while a successful terminal path still reports exactly once. (3)
+      isValidCount now requires an integer, so a fractional provider count is
+      treated as an unreported measurement (null, usageMissing) instead of
+      reaching the schema after the turn already completed; counts are neither
+      rounded nor clamped.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4.1-flash
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Four scoped OpenCode sessions ran against a local HTTP server, because the
+      CLI's stdio transport hangs in this environment. The supervisor wrote the
+      briefs, read every diff, and rejected two intermediate states: a first
+      attempt that left console.log instrumentation and a DEBUG error string in
+      provider-text-source.ts, and a second that weakened the new discriminator
+      from expect(composed.resolvedModel).toBeNull() to a toMatchObject that
+      could not tell the revoked body read from the earlier early-return branch.
+      Both were sent back to a fresh session rather than edited by hand; every
+      src and test line in this commit was written by an OpenCode session. The
+      supervisor only reverted and restored files during the sensitivity runs
+      below. One specification error was corrected by the agent, not by the
+      supervisor: usageStatus uses the usage-record vocabulary ('ok'), not the
+      end-status one ('completed').
+    human_review: >-
+      Captain (M4) authorised the fix in session on 2026-10-31 after reading the
+      two reproduced defects and the proposed file scope. No reviewer approval,
+      no merge and no case closure is claimed by this entry; PR #134 remains
+      CHANGES_REQUESTED until M5 re-reviews.
+    transcript_record: >-
+      The conversation is retained in the WorkBuddy session; briefs and run logs
+      stay in the gitignored .cache directory.
+    verification:
+      platform: Windows 11, Node 22.22.2, pnpm 12.11.2
+      base: 25ecacc
+      commands: >-
+        pnpm typecheck; pnpm lint; pnpm test:m4; pnpm test
+      results: >-
+        typecheck clean; lint 0 warnings / 0 errors on 254 files; test:m4
+        237/237 in 10 files, up from 233 with the four new cases; full suite
+        1407/1425 in 71 files with 18 failures, all of the documented Windows
+        class and none in M4 (boundaries x4, cli x3, production-cli x4,
+        m6-sqlite x3, m6-02-boundary x2, requirements x1, m5-process-restart x1).
+      mutations: >-
+        Sensitivity, each reverted and re-run green. (a) Making readBody return
+        '' again failed "classifies a Stop during body consumption as cancelled
+        (body read abort)" with "compose must resolve after a Stop during the
+        body read, but it threw: openai-compatible dialogue response is not
+        valid JSON", which is exactly the defect M5 reported. (b) Moving report
+        back before buildEnd failed "does not report a terminal state that fails
+        validation" on the empty-reports assertion. The first case was also
+        rewritten to use a fetch stub instead of a setImmediate race, because the
+        race let the pre-body-read abort check absorb the Stop and proved
+        nothing.
+      not_run: >-
+        No live provider run; the live half of #93 still needs operator
+        credentials. No Linux CI run locally and no product, Windows-green or
+        case-closure claim.
