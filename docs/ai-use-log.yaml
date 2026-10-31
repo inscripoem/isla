@@ -3876,3 +3876,22 @@ entries:
       not_verified: >-
         M2's failing branch is not fetched locally; Windows remains at the known path-resolution
         failures; live CI and branch protection were not measured.
+  - date: "2026-10-31"
+    task: M5-issue133-publication-record
+    change: >-
+      Record publication of the diagnostic CLI readiness-signal implementation
+      in PR135 without changing the original implementation or its prior log.
+    requirements: []
+    invariants: []
+    cases: []
+    commits: [cd0fee7999804cd52fde0881b910561ae9c82b99]
+    agent: codex-supervisor
+    supervision: >-
+      Captain approved publication of the previously verified implementation.
+      OpenCode authored the original code and tests in the session already
+      recorded in the preceding implementation entry; this entry records the
+      published commit only and does not claim a new implementation session.
+    verification: >-
+      The published implementation had focused CLI 6/6 and Linux full verify
+      1412/1412 in 71 files. macOS retest remains pending; the three direct-signal
+      tests are skipped on Windows.
