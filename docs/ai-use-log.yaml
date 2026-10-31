@@ -3961,3 +3961,33 @@ entries:
       not_run: >-
         No live provider run and no Windows-green or product claim; this entry
         reverts and re-homes declarations only.
+  - date: "2026-10-28"
+    task: issue-68-boundary-parser
+    change: >-
+      Replace the boundary checker's single regular expression with a TypeScript AST read, so
+      only real import/export declarations and literal import()/require() calls become graph
+      edges and an exported string literal is no longer read as a module specifier.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4.1-flash
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Read-only failure investigation, then an approved HOW slice. The Captain approved the
+      classification, the branch and the artifact set; no production path was edited.
+    human_review: >-
+      Approved in-session. Published from m6-issue-68-boundary-parser as a PR for review; no
+      merge was performed.
+    verification:
+      platform: macOS arm64, Node 23.5.0, repository pnpm 12
+      base: 4e4f7cd
+      focused: >-
+        boundaries 12/12; readiness 45/45; typecheck, lint and build passed; full offline suite
+        1342/1342 in 70 files.
+      mutations: >-
+        Six checks, each reverted: literal array read as specifier, missing re-export branch,
+        missing import-equals branch, literal-only dynamic import, require matched on a member
+        call, and every file parsed as .ts all failed for their intended test.
+      not_verified: >-
+        M2's failing branch is not fetched locally; Windows remains at the known path-resolution
+        failures; live CI and branch protection were not measured.
