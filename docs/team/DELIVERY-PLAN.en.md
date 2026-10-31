@@ -1,24 +1,22 @@
 # Submission checkpoint plan
 
-Revision: 2026-10-29.2. Status: under review. Captain has adopted these target dates; individual capacity, review slots and forecasts require member acknowledgement. All times are UTC+8; each target is 21:00. No checkpoint is marked accepted by this document.
+Revision: 2026-10-31.2. Status: proposed coordination update, under review. Captain's adopted target dates remain; individual estimates are recorded when supplied. All times are UTC+8; each target is 21:00. This local revision accepts no checkpoint and changes no product test or module allocation.
 
 Scope: CS5351 submission and the agreed Isla requirements only. Preserve M1-M6 ownership, workload ratings, existing task/requirement/case IDs and genuine evidence. Checkpoint numbers are schedule positions, not new requirement/case IDs. I1-01, I2-01 and S1-01 remain the original task references. Any scope reduction needs an explicit recorded decision.
 
-The team agreed November 22 as the complete-candidate date (reported by Captain on October 29). The planning time is 21:00 UTC+8; individual delivery capacity and intermediate forecasts still need owner confirmation.
+The team agreed November 22 as the complete-candidate date (reported by Captain on October 29). The planning time is 21:00 UTC+8. Ask for an estimate when a dependency needs it; record an uncertain estimate as uncertain rather than inferring a member's time commitment.
 
 ## Start here
 
-The public [Isla Roadmap](https://github.com/users/inscripoem/projects/4) is published with the five other members granted writer access. The live views are [Team progress](https://github.com/users/inscripoem/projects/4/views/2), [Checkpoints](https://github.com/users/inscripoem/projects/4/views/3) and [Next checkpoint](https://github.com/users/inscripoem/projects/4/views/4). This document holds schedule and acceptance definitions; Project fields hold operational status. Member forecasts still await confirmation.
+Start from your [role entry](README.md), then its actual task or PR. Update that work once when ready, blocked or rescheduled: give the result/evidence link, next action and requested help. Record consequential technical decisions there or in the repository.
 
-The Team progress table contains six explicit member rows. Checkpoints uses a Roadmap with Planned start and Target; Next checkpoint uses a Board with Status columns. These browser display settings were saved and verified after reload. Planned start denotes scheduling rather than actual work or member capacity. The board is for Isla throughout its lifetime; the current ten checkpoints cover the course delivery. The Next checkpoint view shows unaccepted Delivery items for checkpoint 01; its filter changes only after explicit checkpoint acceptance. These summaries and filters require maintenance. No automatic roll-up or acceptance is claimed.
-
-Keep the main view short: member, next delivery, status, target, forecast, blocker and latest evidence. A member update changes the canonical delivery once. Do not repeat changing status across every handoff. Missing or outdated confirmation is unknown, not evidence of inactivity or completion.
+M5 maintains [Team progress](https://github.com/users/inscripoem/projects/4/views/2) and the [next product check](https://github.com/users/inscripoem/projects/4/views/4); PR pages carry current commits, CI and reviews. Members do not copy reports or maintain weekly capacity forms. Keep the full [schedule](https://github.com/users/inscripoem/projects/4/views/3) for planning. The daily view may show checkpoint 02 while setup remains open; that display accepts no checkpoint.
 
 ## Published tracking structure
 
-There are ten checkpoint Issues (#71-#80) and 50 canonical child delivery Issues, reusing #68/#69 and creating 48 missing delivery trackers. Each checkpoint links its children and acceptance dependencies. The Checkpoints view exposes native Sub-issues progress; this counts accepted/closed delivery issues, not implementation percentage. Existing source and evidence are reused.
+The original ten checkpoint issues (#71-#80) and 50 delivery issues retain their history. This revision proposes retiring [#82](https://github.com/inscripoem/isla/issues/82) and [#83](https://github.com/inscripoem/isla/issues/83) as not planned, removing their active acceptance links and archiving their Project cards. Retirement is not product progress.
 
-Current checkpoint: [01 - scope and delivery queue](https://github.com/inscripoem/isla/issues/71), In progress. Its four remaining deliveries are [plan publication #81](https://github.com/inscripoem/isla/issues/81), [member capacity #82](https://github.com/inscripoem/isla/issues/82), [PR queue confirmation #83](https://github.com/inscripoem/isla/issues/83) and [required verify #84](https://github.com/inscripoem/isla/issues/84). No delivery or checkpoint has been marked Accepted by administrative setup.
+[Checkpoint 01](https://github.com/inscripoem/isla/issues/71) becomes M5's setup check for [plan #81](https://github.com/inscripoem/isla/issues/81) and [required-check record #84](https://github.com/inscripoem/isla/issues/84). The next product check is [#72](https://github.com/inscripoem/isla/issues/72); preparation follows technical dependencies, without waiting for capacity returns. Current status stays on the actual PR/Project; historical handoffs retain their source versions.
 
 ## Schedule
 
@@ -41,13 +39,15 @@ Do not schedule joint acceptance on the November 2 quiz or November 4 Phase 2 de
 
 ## Deliveries and acceptance
 
-An ordinary PR should be ready at least 24 hours before acceptance, and a cross-module or safety change at least 48 hours before it. A missed slot changes the forecast immediately; the original target remains visible. Preparation, live adapters, evaluation tooling, CI and report inputs proceed in parallel. Shared references do not require all work on a long-lived role issue to finish before one scoped delivery is accepted.
+Plan 24 hours for ordinary review and 48 hours for cross-module or safety review, as allowances rather than mandatory waits for routine documentation fixes. Preserve the original target when estimates change. Technical preparation and course-evidence work proceed in parallel.
 
 Use Planned -> In progress -> In review -> Ready for acceptance -> Accepted. Blocked is a separate reason/owner, not a completion state. Accepted requires evidence and named human confirmation; a merged PR can remain Ready for acceptance. A checkpoint with mandatory unmet criteria remains open. Checkpoint 2 is explicitly an inspection checkpoint that can close with an agreed, dated failure/gap list; complete I1 is checkpoint 3.
 
-Each delivery records one primary owner, reviewers, original task, source/PR, target and forecast, blockers, and actual acceptance evidence. Existing issues and PRs are reused first. Create a child issue only for independently owned, scheduled work or a blocker. Never automatically close an acceptance issue merely because its implementation PR merged. Evidence PRs are excluded from delivery-count summaries to prevent double counting.
+Each delivery needs an owner, relevant reviewers, original task, source link and observable result. Add an estimate or blocker when relevant. Create a new issue only for distinct actionable work or a concrete handoff that existing discussions cannot cover. A schedule row needs no duplicate issue. Keep product acceptance separate when implementation alone does not prove the result.
 
-At each acceptance slot record exact source revision, conditions, commands/results, pass/fail/not-run, remaining owner actions and accepter. Future dates are targets, not claims that members agreed them. Report slippage when known and summarize twice weekly; daily duplicate reports are not required. Essential safety remains an obligation in I1/I2 rather than being postponed to checkpoint 6.
+At acceptance record source, conditions, commands/results, pass/fail/not-run, remaining actions and accepter. Joint checks may use asynchronous observations of the same agreed revision; name the actual observers and leave missing results as not-run. Required approvals and affected-consumer review remain. An old review is not a new approval after a base refresh.
+
+Keep authentic course contribution records separately from future availability estimates. Essential safety remains required in I1/I2. Request a specific answer or artifact from its responsible owner; a status summary needs no all-member mention.
 
 <a id="checkpoint-01"></a>
 
@@ -62,11 +62,11 @@ Acceptance dependencies: preparation may start now; follow the prerequisites in 
 | Owner | Delivery | Reviewer / accepter | Existing work |
 | --- | --- | --- | --- |
 | M5 | Planning PR: submission requirements, target platform, comparison baseline, checkpoint dates and acceptance boundaries. | M1-M6 | docs/team/PLAN.en.md; docs/team/DELIVERY-PLAN.en.md |
-| M1-M6 | Each member confirms next delivery, review availability, unpublished work and seven-day capacity on the existing role issue. | M5 | Issues #2-#7 |
-| M5 | For every open PR, record its current head, author action, consumer reviewer, forecast and checkpoint; obtain owner acknowledgement. | respective owners | PRs #57/#63/#64/#66/#67/#70 |
 | M6 + human maintainer | Prepare and approve the required-check setting for existing verify; maintainer applies it and records effective rules. | M5 | Existing CI and Protect Main ruleset |
 
-Pass condition: All six next deliveries are visible; critical dependencies have owners and forecasts; adopted scope and actual required-check settings are recorded. Member capacity is not inferred from silence.
+Pass condition: M5 identifies the adopted plan revision and effective required-check record; a named human records the setup decision. Unresolved product scope or interface decisions remain linked to their actual owners and tasks. This is an internal setup check; it needs no all-member capacity return, repeated queue acknowledgement or six-person meeting. The original reviewer responsibilities for substantive plan changes remain.
+
+After this revised process is adopted, #82/#83 are retired as administrative tasks, with their history retained. #81 and #84 close when their actual work is accepted. Retiring a task does not declare its old conditions fulfilled.
 
 <a id="checkpoint-02"></a>
 
@@ -100,7 +100,7 @@ Acceptance dependencies: checkpoint 02.
 
 | Owner | Delivery | Reviewer / accepter | Existing work |
 | --- | --- | --- | --- |
-| M3 | Finish PR57 review fixes and obtain current-head consumer acceptance for the rule SelectionPort. | M6/M5; M4 rubric | PR #57; role Issue #4 |
+| M3 | Preserve the merged PR57 rule SelectionPort and its accepted consumer review; support adoption in the combined revision. | M6/M5; M4 rubric | PR #57; Issue #88; role Issue #4 |
 | M3 | Deliver rule ReactionPort and its tests as a separate PR if no existing implementation covers the agreed scope. | M1/M5 | M3-01; shared ReactionPort |
 | M5 | I1 adoption PR: reuse applicable local eleven-file preparation; wire real module factories with a shared clock and run one combined revision. | M1/M3/M4/M6 | Local m5-i1-independent-20261028; Issue #6 |
 | M4 | Validate selected text, intent and delivered-versus-unconfirmed history through the real dialogue module; repair owned defects. | M5/M6 | Merged PR65; Issue #5 |
@@ -122,7 +122,7 @@ Acceptance dependencies: checkpoint 03.
 | --- | --- | --- | --- |
 | M4 | Live text-provider PR with cancellation, deadlines and honest usage; replace live todo cases with actual assertions. | M5/M6 | DialogueTextSource; M4 live harness |
 | M1 | Verify existing Kokoro and selected avatar implementation on the target machine; submit focused fixes only for demonstrated defects. | M2/M5 | Merged M1 providers; Issue #2 |
-| M5 | Resolve PR64 conflicts with current main and obtain renewed review; implement remaining product connector/store/budget/assembly work required by the selected VTS deployment. | M1 | PR #64; Issue #58 |
+| M5 | Build the remaining product connector/store/budget/assembly work on the merged PR64 acquisition lifecycle and obtain M1 review. | M1 | PR #64; Issues #58/#95 |
 | M5 | Product deployment PR: real peers, explicit configuration failure and owned cleanup; reference one reproducible startup command. | M1/M4/M6 | Existing production CLI and composition |
 | M2 | Verify live waiting/failure/output states through the formal console and fix owned UI defects. | M1/M5 | Adopted PR67; Issue #3 |
 
@@ -257,8 +257,8 @@ Source basis checked October 29, 2026: `CS5351-2026-2027-project.pdf`, project P
 
 ## Transition and change control
 
-The ten checkpoint issues (#71-#80) are published and open. Their bodies mirror this plan's acceptance definitions; approved schedule changes update both. Operational status belongs to each linked delivery item. Role issues #2-#7 retain responsibilities and history. Long coordination threads #25/#37/#41/#44/#58 remain intact; add approved concise current-action links rather than replacing past discussions. Historical handoffs are version-bound evidence, not the current project status.
+The checkpoint issues (#71-#80) retain their identifiers and target dates. This proposed management revision changes checkpoint 01's administrative conditions; publish the matching #71 update before retiring #82/#83, and remove retired tasks from active acceptance counts. Product criteria for checkpoints 02-10 are unchanged. Keep role issues #2-#7 as stable entry points, use the actual task or PR for work updates, and retain decisions in #25/#37/#41/#44/#58 or the relevant repository document. Historical handoffs remain version-bound evidence.
 
-Existing PRs continue on their original branches. PR64 also edits team plans: resolve its documentation conflicts against the adopted plan while preserving its VTS handoff and original evidence; renewed review remains necessary. An unrelated review cannot clear another author's requested changes. Module fixes remain with their owners unless separately delegated. No agent merges, enables auto-merge or submits coursework.
+Existing PRs continue on their original branches. PR64 is merged; retain its VTS handoff and original evidence while separately reviewing product adoption. An unrelated review cannot clear another author's requested changes. Module fixes remain with their owners unless separately delegated. No agent merges, enables auto-merge or submits coursework.
 
-Captain approved Project creation, five member writer grants, ten checkpoints, all independent delivery items and the existing-item associations. Git commit/push, the documentation PR, CI/ruleset changes and business implementation still need their respective approval. Publication records preserve returned IDs and actual changes. G1 activation still requires its documented adoption decisions; the existing advisory mode is not changed by this plan. G4 implementation and required checks remain independent owner work.
+Captain approved Project creation, five member writer grants, ten checkpoints, all independent delivery items and the existing-item associations. Local work and GitHub publication have separate authorization; publication records preserve returned IDs and actual changes. G1 activation still requires its documented adoption decisions; the existing advisory mode is not changed by this plan. G4 implementation and required checks remain independent owner work.

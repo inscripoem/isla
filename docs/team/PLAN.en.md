@@ -1,6 +1,6 @@
 # Isla — Team Work Plan v0.2
 
-Status: under review · 2026-10-29.2 · [Project overview](../../README.md)
+Status: proposed coordination update, under review · 2026-10-31.2 · [Project overview](../../README.md)
 
 ## Requirements and course-deliverable work
 
@@ -91,15 +91,15 @@ M6-02 prepares measurement tooling alongside the offline work and compares imple
 
 ### Submission checkpoint responsibilities
 
-Captain adopted the target schedule on October 29; member capacity acknowledgements remain pending. Each cell points to existing work rather than a new module assignment. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md) for individual PR/acceptance deliveries and reviewer dependencies.
+Captain adopted the target schedule on October 29. Record delivery estimates when supplied; no separate weekly capacity return is required under this proposed process. Each cell points to existing work rather than a new module assignment. Members update the actual task or PR once; M5 maintains the Project summary. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md) for product acceptance and reviewer dependencies.
 
 | Member / role issue | I1 checks: Nov 1 / Nov 5 | I2: Nov 8 | Evaluation / faults: Nov 10-15 | Course closure: Nov 18-22 |
 | --- | --- | --- | --- | --- |
 | M1 / #2 / Pioneer141 | Playback/resource confirmation and consumer review | Real Kokoro/avatar acceptance | Physical observations and fault evidence | Output evidence and demo verification |
 | M2 / #3 / Warpshlczy | PR67 product-console acceptance | Live waiting/failure/output UI | Input/Stop measurement and recovery UI | Demo recording and candidate check |
-| M3 / #4 / shallight | PR57 review follow-up, ReactionPort and rule adoption | Prepare agreed comparison adapters in parallel | Corpus, labels, rubric, decision fault evidence | Evaluation interpretation and own process/reflection |
+| M3 / #4 / shallight | Merged PR57 selection, ReactionPort and rule adoption | Prepare agreed comparison adapters in parallel | Corpus, labels, rubric, decision fault evidence | Evaluation interpretation and own process/reflection |
 | M4 / #5 / L01nki1 | Intent and delivery-history consumption | Real text provider | Persona/history rubric, privacy and recovery semantics | Memory/context architecture and own process/reflection |
-| M5 / #6 / inscripoem | Issue69 resource assembly, combined I1 candidate | PR64 review/conflict follow-up and deployment | Capture, control, composition and requirement verdicts | Plan/architecture/report consolidation and package |
+| M5 / #6 / inscripoem | Issue69 resource assembly, combined I1 candidate | Product deployment over merged PR64 acquisition | Capture, control, composition and requirement verdicts | Plan/architecture/report consolidation and package |
 | M6 / #7 / MichaelLsh | PR70 checker and storage support | Measurement tooling in parallel | PR63/66, runner/provenance, formal results | Gates, trace/QA and independent recovery check |
 
 Every member supplies authentic process records, contribution evidence and a verified personal reflection. Review and QA roles rotate without changing module owners. The initial I1 loop does not depend on complete cross-session recovery; checkpoint 6 covers committed product recovery obligations. Existing preparation and merged implementations are reused with their actual verification scope.
