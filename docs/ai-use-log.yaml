@@ -3802,3 +3802,47 @@ entries:
       registry edit. selection-001 is human-reviewed; selection-002 remains
       draft. Synthetic review fixtures validate mechanics only and do not
       certify corpus evidence.
+  - date: "2026-10-31"
+    task: M5-issue133-diagnostic-cli-readiness-signal
+    member: M5
+    change: >-
+      Register SIGINT and SIGTERM handlers before the diagnostic runtime CLI
+      publishes its listening event, while preserving startup failure reporting,
+      the bound address, and the existing idempotent shutdown. Add direct-child
+      readiness-window regressions and a test-only output gate; check both
+      signals, repeated signals, and reuse of the released bound port.
+    requirements: []
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/build
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    opencode_version: 2.2.2
+    launch_flags: [--agent, build, --format, json]
+    model_id: self-api/deepseek-v4-flash#xhigh
+    sessions: [ses_e7055c128ffegY9rapRNSosxO6]
+    supervision: >-
+      Captain authorised local work. The Codex supervisor scoped Issue 133,
+      inspected the affected entry and callers, and ran the checks. OpenCode
+      authored the source change, the tests and their helper. An initial test
+      used the tsx launcher and passed on the unfixed code, so it was replaced
+      with a direct-child PID handshake. The revised regression failed on both
+      SIGINT and SIGTERM before the fix and passed after it. A first full verify
+      then failed on two helper type errors; OpenCode corrected those errors and
+      the supervisor reran the full command. The supervisor added this factual
+      log entry after the checks; no user approval or remote publication of this
+      candidate is implied.
+    verification:
+      regression_before: "Three original cases passed and two forced readiness-window cases failed on SIGINT/SIGTERM termination."
+      focused_after: "Six cases passed, including the original three, both readiness-window signals, repeated signals and bound-port reuse."
+      verify: "Linux Node 22.23.4: pnpm verify exit 0, 1412 passed in 71 files; typecheck, lint and build passed."
+      platforms: >-
+        The three new direct-signal cases are skipped on Windows because
+        subprocess.kill force-terminates there. M2 reported intermittent
+        macOS failures; macOS verification of this candidate is still pending.
+    scope: >-
+      Diagnostic runtime CLI only; production-cli.ts and shared contracts are
+      unchanged. This does not establish physical output, live providers,
+      Windows shutdown, checkpoint acceptance or closure of Issue 133.
