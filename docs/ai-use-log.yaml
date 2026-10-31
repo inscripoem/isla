@@ -3832,3 +3832,62 @@ entries:
       not_verified: >-
         M2's failing branch is not fetched locally; Windows remains at the known path-resolution
         failures; live CI and branch protection were not measured.
+  - date: "2026-10-31"
+    task: issue-116-align-m4-handoff-with-accepted-implementation
+    change: >-
+      Align M4's own handoff with the accepted implementation, which is the part
+      of issue #116 that M4 can settle without waiting on another owner. Added a
+      dated current-state record beside the 2026-10-15/16 table rather than
+      rewriting it, since that table is a historical record of two earlier
+      revisions: test:m4 237/237 in 10 files, typecheck clean, lint 0/0 on 254
+      files, full suite 1407/1425 in 71 files with 18 failures broken down by
+      file and attributed to the documented Windows classes, and the measured
+      fact that pnpm verify does execute here and stops at its test step. Added
+      a retention, privacy and recovery section stating what M4 does and does
+      not do: receipt-required admission, no retraction or deletion entry point
+      in src/dialogue, no persisted owner identity so automatic cross-session
+      recall refuses by design, and no recovery of its own, with the
+      process-restart acceptance left to M6 on #106. Also stated that the
+      role command test:m4 does not include the loopback evidence file, which
+      is a manifest decision owned by M5.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    model: deepseek-v4-flash
+    supervision: >-
+      Three scoped OpenCode sessions against a local HTTP server: the two
+      insertions, a one-sentence reconciliation of the boundaries case count
+      against the older table, and a paragraph reflow. The supervisor wrote the
+      briefs with the measured figures, confirmed no figure was re-measured or
+      invented, and rejected the intermediate state where the reconciling
+      sentence had been run into the middle of the preceding paragraph. One
+      session disclosed that a scripted attempt truncated the file before it
+      repaired it; the supervisor verified the final tree independently
+      (git diff --stat shows +57/-0 in one file, the file ends on its intended
+      closing line, and the historical table is byte-identical) rather than
+      accepting the session's own claim.
+    human_review: >-
+      Captain (M4) authorised the branch, the commit and the issue #116 work in
+      session on 2026-10-31. No reviewer approval, merge or case closure is
+      claimed; the accepter named by #116 is M2 and has not seen this yet.
+    transcript_record: >-
+      The conversation is retained in the WorkBuddy session; briefs and run logs
+      stay in the gitignored .cache directory.
+    verification:
+      platform: Windows 11, Node 22.22.2, pnpm 12.11.2
+      base: edb406f
+      commands: >-
+        pnpm test:m4; pnpm typecheck; pnpm lint; pnpm test; pnpm verify; the
+        AI-use log gate over the changed file
+      results: >-
+        test:m4 237/237 in 10 files; typecheck clean; lint 0 warnings / 0 errors
+        on 254 files; pnpm test 1407/1425 in 71 files with 18 failures, all of
+        the documented Windows class and none in src/dialogue; pnpm verify
+        executes and stops at its test step on those same failures, so its build
+        step is unexercised on this host; the G6 gate passes over the changed
+        file.
+      not_run: >-
+        No test was re-run on the documentation branch itself, since the change
+        is prose only. No claim that the documentation change is product
+        acceptance; no case identifier added or reused.
