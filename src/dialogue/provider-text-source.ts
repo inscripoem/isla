@@ -46,7 +46,7 @@ function isNonBlank(value: string): boolean {
 }
 
 function isValidCount(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+  return typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0
 }
 
 /** Joins the configured base URL with the endpoint path regardless of trailing slashes. */
@@ -76,6 +76,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  */
 function isAborted(signal: AbortSignal | undefined): boolean {
   return signal?.aborted === true
+}
+
+/**
+ * Reads the response body with the call's revocation in view.
+ *
+ * `fetch` can resolve as soon as the headers arrive, so a Stop that lands while
+ * the body is still being consumed rejects `response.text()` instead of the
+ * request. Once the signal is aborted that is a revoked turn, not a fault, and
+ * the caller must return the empty result so the port re-check classifies the
+ * call as 'cancelled'. Every other rejection stays a failure whose message names
+ * the fault only: the body, the headers and the credential are never echoed.
+ */
+async function readBody(
+  response: Response,
+  signal: AbortSignal | undefined,
+): Promise<string | null> {
+  try {
+    return await response.text()
+  } catch (error) {
+    if (isAborted(signal)) return null
+    const reason = error instanceof Error ? error.message : 'unknown body read error'
+    throw new Error(`openai-compatible dialogue response body could not be read: ${reason}`)
+  }
 }
 
 export function createOpenAiCompatibleTextSource(
@@ -148,7 +171,8 @@ export function createOpenAiCompatibleTextSource(
       }
       if (isAborted(signal)) return { lines: [] }
 
-      const text = await response.text()
+      const text = await readBody(response, signal)
+      if (text === null) return { lines: [], resolvedModel: null }
       let body: unknown
       try {
         body = JSON.parse(text)

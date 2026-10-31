@@ -3991,3 +3991,75 @@ entries:
       not_verified: >-
         M2's failing branch is not fetched locally; Windows remains at the known path-resolution
         failures; live CI and branch protection were not measured.
+  - date: "2026-10-31"
+    task: pr-134-review-fixes-revoked-body-read-and-terminal-order
+    change: >-
+      Address the two defects the M5 review reported on PR #134. (1) A Stop that
+      lands while the provider response body is being consumed now ends the turn
+      as cancelled instead of failed: readBody returns null when response.text()
+      rejects on a revoked signal, and compose returns { lines: [],
+      resolvedModel: null } for that outcome, so the revocation is a distinct
+      result rather than an empty string that JSON.parse would reject. Every
+      other body-read rejection still fails with the same message, which never
+      echoes the body, the headers or the key. (2) A terminal state is now built
+      and validated before it is reported: the terminal closure in generate
+      calls buildEnd first and report only after it returns, so an end that
+      fails dialogueEndSchema can no longer be announced as completed to M5 and
+      M6, while a successful terminal path still reports exactly once. (3)
+      isValidCount now requires an integer, so a fractional provider count is
+      treated as an unreported measurement (null, usageMissing) instead of
+      reaching the schema after the turn already completed; counts are neither
+      rounded nor clamped.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4.1-flash
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Four scoped OpenCode sessions ran against a local HTTP server, because the
+      CLI's stdio transport hangs in this environment. The supervisor wrote the
+      briefs, read every diff, and rejected two intermediate states: a first
+      attempt that left console.log instrumentation and a DEBUG error string in
+      provider-text-source.ts, and a second that weakened the new discriminator
+      from expect(composed.resolvedModel).toBeNull() to a toMatchObject that
+      could not tell the revoked body read from the earlier early-return branch.
+      Both were sent back to a fresh session rather than edited by hand; every
+      src and test line in this commit was written by an OpenCode session. The
+      supervisor only reverted and restored files during the sensitivity runs
+      below. One specification error was corrected by the agent, not by the
+      supervisor: usageStatus uses the usage-record vocabulary ('ok'), not the
+      end-status one ('completed').
+    human_review: >-
+      Captain (M4) authorised the fix in session on 2026-10-31 after reading the
+      two reproduced defects and the proposed file scope. No reviewer approval,
+      no merge and no case closure is claimed by this entry; PR #134 remains
+      CHANGES_REQUESTED until M5 re-reviews.
+    transcript_record: >-
+      The conversation is retained in the WorkBuddy session; briefs and run logs
+      stay in the gitignored .cache directory.
+    verification:
+      platform: Windows 11, Node 22.22.2, pnpm 12.11.2
+      base: 25ecacc
+      commands: >-
+        pnpm typecheck; pnpm lint; pnpm test:m4; pnpm test
+      results: >-
+        typecheck clean; lint 0 warnings / 0 errors on 254 files; test:m4
+        237/237 in 10 files, up from 233 with the four new cases; full suite
+        1407/1425 in 71 files with 18 failures, all of the documented Windows
+        class and none in M4 (boundaries x4, cli x3, production-cli x4,
+        m6-sqlite x3, m6-02-boundary x2, requirements x1, m5-process-restart x1).
+      mutations: >-
+        Sensitivity, each reverted and re-run green. (a) Making readBody return
+        '' again failed "classifies a Stop during body consumption as cancelled
+        (body read abort)" with "compose must resolve after a Stop during the
+        body read, but it threw: openai-compatible dialogue response is not
+        valid JSON", which is exactly the defect M5 reported. (b) Moving report
+        back before buildEnd failed "does not report a terminal state that fails
+        validation" on the empty-reports assertion. The first case was also
+        rewritten to use a fetch stub instead of a setImmediate race, because the
+        race let the pre-body-read abort check absorb the Stop and proved
+        nothing.
+      not_run: >-
+        No live provider run; the live half of #93 still needs operator
+        credentials. No Linux CI run locally and no product, Windows-green or
+        case-closure claim.

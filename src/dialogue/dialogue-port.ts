@@ -392,20 +392,23 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
       }
 
       /*
-       * One terminal path per invocation. It reports exactly once from the current
-       * counters and builds the matching end, so no branch repeats the payload.
-       * The throwing paths call it for the report and then rethrow the original
-       * error.
+       * One terminal path per invocation. It builds the matching end from the
+       * current counters and then reports exactly once, so no branch repeats the
+       * payload. Reporting follows successful construction: if the end fails
+       * validation no report is emitted, because no valid terminal state was
+       * reached. The throwing paths therefore rethrow the original error without
+       * a prior report on that path.
        */
       const terminal = (
         endStatus: DialogueEnd['status'],
         usageStatus: UsageRecord['status'],
       ): DialogueEnd => {
+        const end = buildEnd(request, endStatus, emitted, startedAtMs, usageStatus, served)
         if (!reported) {
           reported = true
           report({ request, endStatus, usageStatus, generated, emitted, discards })
         }
-        return buildEnd(request, endStatus, emitted, startedAtMs, usageStatus, served)
+        return end
       }
 
       if (context.signal.aborted) {
