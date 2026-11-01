@@ -1,10 +1,17 @@
-import type { AssembledDialogueContext, ContextExclusionReason } from './context'
 import type {
+  InspectConsistencySummary,
+  InspectHistorySource,
   InspectRecall,
   MemoryInspectPayload,
   RecallProvenance,
-} from './memory-inspect-contract'
-import { MEMORY_INSPECT_SCHEMA_VERSION } from './memory-inspect-contract'
+} from '../contracts'
+import { MEMORY_INSPECT_SCHEMA_VERSION } from '../contracts'
+import type {
+  AssembledDialogueContext,
+  ContextExclusionReason,
+  HistorySource,
+} from './context'
+import type { ConsistencyAuditSummary } from './consistency'
 
 /**
  * Operator memory inspection for one assembled turn.
@@ -27,12 +34,50 @@ import { MEMORY_INSPECT_SCHEMA_VERSION } from './memory-inspect-contract'
  *     M6 supplies. "Confirmed by M6" is NOT "admitted by M4"; the operator console
  *     must label them separately.
  *
- * The declared payload shape lives in ./memory-inspect-contract, so the
- * protocol-1 boundary and the browser consumer can share it without importing
- * assembly internals. This file only builds it.
+ * The declared payload shape lives in the wire contract at
+ * src/contracts/diagnostics.ts, so the protocol-1 boundary and the browser
+ * consumer can share it without importing assembly internals. This file only
+ * builds it.
  */
 
-export type { InspectRecall, MemoryInspectPayload, RecallProvenance }
+/*
+ * Explicit wire mapping for the history source. The switch is exhaustive so
+ * that adding a fourth internal value in ./context fails compilation here
+ * instead of silently flowing onto the wire.
+ */
+function toWireHistorySource(source: HistorySource): InspectHistorySource {
+  switch (source) {
+    case 'history-port':
+      return 'history-port'
+    case 'local-stand-in':
+      return 'local-stand-in'
+    case 'none':
+      return 'none'
+    default: {
+      const unexpected: never = source
+      return unexpected
+    }
+  }
+}
+
+/*
+ * Explicit wire mapping for the consistency summary: every field is copied by
+ * name so that a field added internally does not reach the wire unnoticed.
+ */
+function toWireConsistencySummary(
+  summary: ConsistencyAuditSummary,
+): InspectConsistencySummary {
+  return {
+    findings: summary.findings,
+    incomplete: summary.incomplete,
+    statementsOffered: summary.statementsOffered,
+    statementsVisited: summary.statementsVisited,
+    statementsExamined: summary.statementsExamined,
+    textUnits: summary.textUnits,
+    claims: summary.claims,
+    comparisons: summary.comparisons,
+  }
+}
 
 /**
  * Build the redacted inspection payload for an assembled context.
@@ -55,7 +100,10 @@ export function buildMemoryInspect(
 
   const results: InspectRecall[] = [
     ...context.recalledFacts.map((entry) => ({
-      provenance: { kind: 'persona-fact' as const, factId: entry.fact.id },
+      provenance: {
+        kind: 'persona-fact' as const,
+        factId: entry.fact.id,
+      } satisfies RecallProvenance,
       score: entry.score,
     })),
     ...context.recalledTurns.map((entry) => ({
@@ -63,7 +111,7 @@ export function buildMemoryInspect(
         kind: 'delivery-turn' as const,
         sessionId: entry.turn.sessionId,
         turnId: entry.turn.turnId,
-      },
+      } satisfies RecallProvenance,
       score: entry.score,
     })),
   ]
@@ -97,8 +145,8 @@ export function buildMemoryInspect(
       truncatedByTurnLimit: context.truncatedByTurnLimit,
       truncatedByCharacterLimit: context.truncatedByCharacterLimit,
     },
-    consistency: { ...context.consistencyAudit },
-    historySource: context.historySource,
+    consistency: toWireConsistencySummary(context.consistencyAudit),
+    historySource: toWireHistorySource(context.historySource),
     warnings: [...context.warnings],
   }
 }
