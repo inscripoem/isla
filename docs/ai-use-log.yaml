@@ -4063,3 +4063,60 @@ entries:
         No live provider run; the live half of #93 still needs operator
         credentials. No Linux CI run locally and no product, Windows-green or
         case-closure claim.
+  - date: "2026-11-01"
+    task: m4-04-memory-inspect-wire-declarations-contracts-reoffer
+    change: >-
+      Re-offer the memory.inspect diagnostic surface as the data-only wire
+      declaration M5 selected (plan A, issue #44 comment 6543824190): the
+      payload declaration moves out of the dialogue module into
+      src/contracts/diagnostics.ts, so the protocol-1 boundary and the M2
+      browser consumer can share one declaration without a contracts -> dialogue
+      import edge, which test/offline/boundaries.test.ts forbids. The declared
+      shape stays data only: no imports at all, with the two carried summaries
+      declared locally as wire mirrors of their internal counterparts, and the
+      reply envelope additions (MemoryInspectOutcome, MemoryInspectUnavailable,
+      MemoryInspectReply) placed beside it rather than in ./protocol so every
+      other reply kind keeps its existing shape. The payload's units are stated
+      explicitly (admitted history segments versus recalled persona facts versus
+      recalled turns) because the earlier builder documented `admitted` only as
+      ambiguous "records". M4 keeps producer ownership of payload construction,
+      redaction and unavailable semantics in src/dialogue/memory-inspect.ts.
+      No dialogue behaviour, recall policy or existing contract semantics
+      change.
+    requirements: []
+    invariants: []
+    commits: [d1a4739]
+    agent: opencode/deepseek-v4.1-flash
+    model: deepseek-v4.1-flash
+    supervision: >-
+      The declaration and builder rework was authored through OpenCode
+      (deepseek-v4.1-flash) under the M4 supervision loop; the member records
+      the authorship and confirms no production line outside the four declared
+      files was touched. This entry is recorded after the fact, alongside PR
+      #137.
+    human_review: >-
+      Captain (M4) confirmed the OpenCode authorship and directed this entry on
+      2026-11-01. The re-offer implements M5's plan-A selection on issue #44 and
+      awaits M2's serialized-shape review and M5's caller trace on PR #137; no
+      reviewer approval, merge or case closure is claimed by this entry.
+    transcript_record: >-
+      The OpenCode session record is retained per the M4 loop's usual practice;
+      briefs and run logs stay in the gitignored .cache directory.
+    verification:
+      platform: Windows 11, Node 24.21.0, pnpm 12.11.2
+      base: 3f66d00
+      commands: >-
+        pnpm typecheck; pnpm lint; pnpm test:m4; gate:ai-use-log reproduced
+        locally against the merge-base log and the five-file changed set
+      results: >-
+        typecheck clean; lint 0 warnings / 0 errors; test:m4 237/237 in 10
+        files; the local G6 reproduction passes with this entry present and
+        fails without it (a code change must add a log entry). On Linux CI at
+        d1a4739 the diff acquisition, G1 advisory, G2 static analysis +
+        boundary, G3 requirements schema, trace fitness and G5 regression gates
+        all passed; G6 failed solely because this entry was missing and build
+        was skipped after it.
+      not_run: >-
+        No live provider run and no M2 consumer validation yet; the boundaries
+        suite was not run on this Windows host (documented pre-existing Windows
+        class); no product or case-closure claim.
