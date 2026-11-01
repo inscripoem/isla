@@ -1,25 +1,29 @@
-import type { HistorySource } from './context'
-import type { ConsistencyAuditSummary } from './consistency'
-
-export type { ConsistencyAuditSummary }
-
 /*
  * Serialized `memory.inspect` contract, on the diagnostics plane (protocol 1).
  *
- * This file exists apart from ./memory-inspect so that BOTH ends of the wire can
- * share one declaration without importing assembly internals:
+ * This file lives in ./contracts rather than inside the dialogue module so that
+ * BOTH ends of the wire can share one declaration without importing assembly
+ * internals:
  *
  *   - M4 (producer) builds the payload from an assembled context in
- *     ./memory-inspect, which imports `AssembledDialogueContext`;
- *   - the protocol-1 boundary parses an incoming reply in src/contracts, which
- *     must stay free of `src/dialogue` (test/offline/boundaries.test.ts forbids
- *     a contracts -> dialogue edge);
+ *     src/dialogue/memory-inspect;
+ *   - the protocol-1 boundary parses an incoming reply in this directory
+ *     (src/contracts), which must stay free of `src/dialogue`
+ *     (test/offline/boundaries.test.ts forbids a contracts -> dialogue edge);
  *   - M2 (consumer) validates the reply in the browser, where a
  *     `src/dialogue` import is likewise forbidden.
  *
- * So the declared shape lives here, with type-only dependencies on the two
- * summaries it carries. It contains no behavior, no assembly logic and no
- * import of `./context`'s runtime values.
+ * Reply envelope additions (`MemoryInspectOutcome`, `MemoryInspectUnavailable`,
+ * `MemoryInspectReply`) live here rather than in ./protocol so the protocol
+ * module keeps its existing shape for every other kind. `outcome` separates
+ * "there is no inspection to report" from a protocol error: a stopped or
+ * not-yet-started runtime is a valid, correlatable answer, not a malformed
+ * request.
+ *
+ * The declared shape is data only. It contains no behavior, no assembly logic
+ * and no imports at all: the two summaries it carries are declared locally
+ * (as wire mirrors of their internal counterparts) so that neither end has to
+ * reach into `src/dialogue` for a type.
  *
  * Versioning. `MEMORY_INSPECT_SECTION` identifies the section of a protocol-1
  * reply; `MEMORY_INSPECT_SCHEMA_VERSION` is the payload's own version and is
@@ -76,6 +80,43 @@ export interface InspectAdmission {
 }
 
 /**
+ * Redacted completion summary of the consistency audit, carried on the wire.
+ *
+ * Counts and a completeness flag only, never statement text. This mirrors the
+ * internal `ConsistencyAuditSummary` in src/dialogue/consistency.ts and must be
+ * kept in sync with it.
+ */
+export interface InspectConsistencySummary {
+  /** Contradictions reported; partial when `incomplete`. */
+  findings: number
+  /** True when some offered statement or pair was not examined, or reporting stopped at the findings cap. */
+  incomplete: boolean
+  statementsOffered: number
+  statementsVisited: number
+  /** Statements that passed the size gates and produced claims. */
+  statementsExamined: number
+  /** UTF-16 units of statement text preprocessed. */
+  textUnits: number
+  claims: number
+  /** Pair iterations attempted, bounded by MAX_CONSISTENCY_COMPARISONS. */
+  comparisons: number
+}
+
+/**
+ * Which source supplied the confirmed records for an assembly.
+ *
+ * This mirrors the internal `HistorySource` union in src/dialogue/context.ts
+ * and must be kept in sync with it.
+ *
+ *  - 'history-port': the durable source (M6). Authoritative.
+ *  - 'local-stand-in': the in-memory store, used only because no durable source
+ *    was supplied. An offline/test stand-in that must never be mistaken for
+ *    durable history.
+ *  - 'none': no source at all, so the assembly carries no confirmed history.
+ */
+export type InspectHistorySource = 'history-port' | 'local-stand-in' | 'none'
+
+/**
  * Redacted memory inspection for one turn.
  *
  * Redaction boundary, by default: identifiers, counts, reasons and character
@@ -113,9 +154,9 @@ export interface MemoryInspectPayload {
    * a consumer must render it as "partial audit" and must not present the zero
    * as evidence of no contradictions.
    */
-  consistency: ConsistencyAuditSummary
+  consistency: InspectConsistencySummary
   /** Where the assembled history came from. */
-  historySource: HistorySource
+  historySource: InspectHistorySource
   warnings: readonly string[]
 }
 
