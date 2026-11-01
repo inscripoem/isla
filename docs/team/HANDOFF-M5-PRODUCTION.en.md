@@ -158,7 +158,10 @@ synthesis/registry and owner-supplied M3 selection/reaction and M4 live text;
 merged M1 provider/loader interfaces do not by themselves establish deployment. M5
 owns the dynamic audio HTTP/routing and resource assembly; M2 is the browser
 consumer. `test/support/production-deployment.ts` is a test-only module used by
-the CLI suite; production source never imports it.
+the CLI suite; it also supplies the real M1 registry and serves the prepared fixed
+WAV catalog through the existing `/audio` route (see the [dynamic audio
+handoff](HANDOFF-M5-DYNAMIC-AUDIO.en.md#controlled-deployment-catalog-serving-2026-10-29)).
+Production source never imports it, and no product deployment is claimed.
 
 ## Receipts after the operation seal
 
