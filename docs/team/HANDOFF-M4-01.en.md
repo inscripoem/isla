@@ -29,6 +29,8 @@ The dialogue module turns one validated `DialogueRequest` into at most two order
   - *Delivery recall* (`src/dialogue/memory-recall.ts`). **Opt-in, the only one of the three with a default-off state.** It runs only when a `deliveryRecall` port is supplied, and with no port the result is the empty list, so a caller that does not opt in gets exactly the pre-recall context. It searches the turns the recency window dropped, charges to the same budget, and renders in its own `Earlier, confirmed:` section with per-turn provenance so it never blends into the recent chronology.
 - **`maxTurns` is a combined bound, not just a window size.** Recalled turns are still history, so they displace recent turns instead of adding to them: with `maxTurns: 0` nothing is rendered at all, and at any limit `turns + recalledTurns` never exceeds it. Displacement starts with the oldest unpinned turn so a pinned turn keeps its protection; displaced turns are recorded as `turn-limit` exclusions, and the recall allowance itself is capped at `min(MAX_RECALLED_TURNS, maxTurns)`. Displacement identifies a record by the `(sessionId, turnId)` pair, never by `turnId` alone: the turn counter is session-scoped, so a restored session reuses ids, and keying by the bare id made an unrelated turn in another session disappear with the intended one — and took a pinned record with it. This follows M5's C2 finding — an earlier version let recall exceed the caller's request limit.
 - Usage is honest. When no model was called the module reports `inputTokens`/`outputTokens` as `null` with `usageMissing: true`, matching the M5 fallback convention. A fixture answer is never presented as a real provider call.
+- Since PR #134 the text-source seam carries the real provider: `createOpenAiCompatibleTextSource` in `src/dialogue/provider-text-source.ts` speaks to an OpenAI-compatible chat-completions endpoint with `baseUrl`/`model`/`apiKey` injected at the composition root — nothing in `src/dialogue` reads the environment, and the credential is used only as an Authorization header, never logged or echoed. The silent fixture fallback is gone (coordination issue #44 §2.4): with no `textSource` supplied the port constructs an unconfigured source whose first compose fails visibly, so a missing configuration can no longer quietly serve fixture text. Every provider fault throws and is reported by the port as `failed`; the single exception is an already-revoked signal, which ends as `cancelled`.
+- PR #137 moved the `memory.inspect` wire declarations into `src/contracts/diagnostics.ts`: the read-only protocol-1 payload shape is now declared in the shared wire contract, re-exported by `src/dialogue/index.ts`, and `src/dialogue/memory-inspect.ts` only builds the payload, so the browser consumer can share the shape without importing assembly internals.
 
 ## Entry points and local configuration
 
@@ -39,7 +41,7 @@ Import `createDialoguePort` and `DialoguePortOptions` from `src/dialogue/dialogu
 | Option | Purpose / default |
 | --- | --- |
 | `clock` | Injected time source. Required; no default. Must share the domain of `CallContext.deadline.atMs`. |
-| `textSource` | Dialogue text source. Defaults to the fixture source; M4-02 supplies a real provider implementation. |
+| `textSource` | Dialogue text source. Omitted, the port constructs an unconfigured source whose first compose fails visibly — the silent fixture default was abolished with PR #134 (coordination issue #44 §2.4). The real provider implementation is `createOpenAiCompatibleTextSource`; deterministic offline sources remain available when the caller names them. |
 | `history` | Durable history source (M6). When supplied it is **authoritative** and defines the record set. |
 | `memory` | Local record source, offered to `MemoryEntrySource`. Used only when no durable history was supplied; persona attribution still comes from each record's persisted fields, so this side cannot fill in a missing component. |
 | `personaRecall` | `PersonaRecallPort`. Omitted resolves to `createDisabledPersonaRecall()`. |
@@ -97,9 +99,9 @@ pnpm test:m4
 pnpm verify
 ```
 
-### Current state (2026-10-31, `feat/m4-04` at `edb406f`)
+### Current state (2026-11-03, `docs/m4-116` at `606ccf5`)
 
-Windows 11, Node 22.22.2, pnpm 12.11.2, measured by the M4 owner on the branch tip:
+Windows 11, Node 24.21.0, pnpm 12.11.2, measured on this branch over the code tree of `606ccf5`:
 
 | Command | Result |
 | --- | --- |
@@ -107,15 +109,22 @@ Windows 11, Node 22.22.2, pnpm 12.11.2, measured by the M4 owner on the branch t
 | `pnpm typecheck` | clean, no diagnostics |
 | `pnpm lint` | 0 warnings, 0 errors, 254 files |
 | `pnpm test` | 1407 passed, 18 failed (1425 tests, 71 files) |
-| `pnpm verify` | runs, and stops at its `test` step on those 18 failures, so `pnpm build` is not reached |
+| `pnpm verify` | does not start on this host today (see below); measured step by step instead: `typecheck` clean, `lint` 0/0, `test` stops on those 18 failures, so `pnpm build` is not reached |
 
 The 18 failures are the documented Windows classes and none is in `src/dialogue`:
 `boundaries.test.ts` x4, `cli.test.ts` x3, `production-cli.test.ts` x4, `m6-sqlite.test.ts` x3,
 `m6-02-boundary.test.ts` x2, `requirements.test.ts` x1, `m5-process-restart.test.ts` x1.
 
-`pnpm verify` executing on this host is worth stating explicitly: the script chains
-`typecheck`, `lint`, `test` and `build`, and on this branch it gets through the first two and
-fails only at `test`, so the `build` step is unexercised here rather than unreachable.
+`pnpm verify` deserves the same explicit statement, because it changed since the previous
+record: the script chains `typecheck`, `lint`, `test` and `build`, but on this host today it
+does not reach its first step — the nested `pnpm` invocation inside the script resolves to an
+extensionless shim that the Windows shell cannot execute (`...npm\node_modules\pnpm\pnpm` is
+not recognized as a command), a host toolchain change after this host moved to Node 24.21.0;
+the 2026-10-31 record this section replaces still ran the chain and stopped at `test`. Each step was
+therefore measured individually on the same tree with the same tool versions — `typecheck`
+clean, `lint` 0/0, `test` with exactly the 18 failures listed above — so the chain, were it
+runnable, would still stop at `test`, and the `build` step remains unexercised here rather
+than unreachable.
 
 The fourth `boundaries.test.ts` case is the one that arrived with the AST
 boundary checker merged as PR #70, and it fails on Windows on the same

@@ -4179,3 +4179,62 @@ entries:
         No test was re-run on the documentation branch itself, since the change
         is prose only. No claim that the documentation change is product
         acceptance; no case identifier added or reused.
+  - date: "2026-11-03"
+    task: issue-116-handoff-current-state-refresh
+    change: >-
+      Refresh the handoff's dated current-state record on the docs/m4-116
+      carrier branch for issue #116 and PR #136: the heading now names
+      docs/m4-116 over the code tree of 606ccf5, which carries the merged
+      PR #134 and PR #137, and the record's figures were re-measured on that
+      branch today. The Implemented behaviour narrative gains one pointer
+      sentence each for PR #134 (createOpenAiCompatibleTextSource, the silent
+      fixture fallback abolished, every provider fault reported as failed) and
+      PR #137 (memory.inspect wire declarations moved to
+      src/contracts/diagnostics.ts), and the single options-table row PR #134
+      made stale (the textSource default) is corrected in place. The
+      2026-10-15/16 revision table, the failure-class breakdown and the
+      retention section are untouched, and no case identifier is added or
+      reused.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    model: deepseek-v4-flash
+    supervision: >-
+      Two scoped OpenCode sessions (DeepSeek-V4-Flash, build agent): one for the
+      handoff edits and one for this entry plus a one-phrase correction the
+      supervisor caught in review. Each brief was written by the supervisor with
+      the measured figures copied verbatim, so no session re-measured or
+      invented a figure; the supervisor reviewed the diffs, confirmed the
+      historical tables are byte-identical, and re-ran the M4 suite and the
+      static gates over the edited tree.
+    human_review: >-
+      Authorised for this round by the M4-04 slice plan: the docs/m4-116 branch
+      work, its commit and push, and the PR #136 body update. No reviewer
+      approval, merge or case closure is claimed; the accepter named by #116 is
+      M2 and has not seen this yet.
+    transcript_record: >-
+      The OpenCode conversations are retained in the runner's session store;
+      briefs and run logs stay in the gitignored .cache directory.
+    verification:
+      platform: Windows 11, Node 24.21.0, pnpm 12.11.2
+      base: 606ccf5
+      commands: >-
+        pnpm test:m4; pnpm typecheck; pnpm lint; pnpm test; pnpm verify; each
+        re-run on the documentation branch itself
+      results: >-
+        test:m4 237/237 in 10 files; typecheck clean; lint 0 warnings / 0 errors
+        on 254 files; pnpm test 1407/1425 in 71 files with the same 18 failures
+        as the previous record (boundaries x4, cli x3, production-cli x4,
+        m6-sqlite x3, m6-02-boundary x2, requirements x1, m5-process-restart x1),
+        all of the documented Windows classes and none in src/dialogue; pnpm
+        verify no longer starts on this host because its nested pnpm invocation
+        resolves to an extensionless shim the Windows shell cannot execute after
+        the host moved to Node 24.21.0, so its chain was measured step by step
+        instead (typecheck clean, lint 0/0, test as above) and its build step
+        remains unexercised here.
+      not_run: >-
+        pnpm build was not run, because the verify chain does not reach it on
+        this host and the record claims only that it is unexercised. No claim
+        that the documentation change is product acceptance; no case identifier
+        added or reused.
