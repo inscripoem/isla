@@ -16,7 +16,8 @@ Read `docs/req/case-registry.yaml` at the PR base (`606ccf5`) and the named veri
 **covered** only when a registered verifier asserts that case's own claim; a test that exercises the same
 mechanism is **partly**. Test titles are quoted as they appear at `606ccf5`; the case registry remains the
 source of truth for which verifier is registered, so a renamed title must be re-checked against the
-registry rather than trusted from this table.
+registry rather than trusted from this table. The registry also contains C-64 (implemented, M4 admission);
+it is outside this map's C-05/C-16 scope and is not evaluated here.
 
 ## Map
 

@@ -47,4 +47,5 @@ latency.
 ## What this does not claim
 
 No S6, quality, latency, cap or acoustic result. No existing recording is relabelled. M3 confirmed the
-`wall` sentence on 2026-10-29; M4 signs the assembly exclusion; M5 confirms the `planMs` boundary.
+`wall` sentence on 2026-10-29; M4 requested the assembly exclusion and will sign it on review; M5
+confirms the `planMs` boundary.
