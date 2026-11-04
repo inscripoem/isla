@@ -4120,3 +4120,60 @@ entries:
         No live provider run and no M2 consumer validation yet; the boundaries
         suite was not run on this Windows host (documented pre-existing Windows
         class); no product or case-closure claim.
+  - date: "2026-11-04"
+    task: M3-01-rule-reaction-port
+    branch: feat/m3-rule-reaction-port
+    change: >-
+      Add the M3-01 deterministic rule ReactionPort in src/decision/reaction.ts
+      for Issue #89: m3-rules provider/model constants, ReactionCallError codes,
+      clock/deadline/abort validation, request deep-freeze and the
+      positive-cue/smile, neutral, first-eligible and no-op rules against the
+      frozen C3 DecisionRequest/DecisionResult contract. Re-export the module
+      from src/decision/index.ts, switch the decision conformance adapter to the
+      real port and add 19 unit tests in test/offline/m3-decision.test.ts, and
+      add the FR-03 trace-matrix row plus the runtime reaction fallback row in
+      the runtime policy catalog. No frozen path changed.
+    requirements: [FR-03]
+    invariants: []
+    cases: [C-06, C-11]
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    launch_flags: [--pure, --agent, build, --variant, xhigh]
+    sessions: [ses_e57fb418dffegAQv7BTzclPKpi]
+    supervision: >-
+      Captain (M3) directed the Issue #89 slice and required the deterministic
+      rule port to mirror the established rule SelectionPort style without
+      changing the frozen C3 contracts. The OpenCode build agent authored the
+      production module, tests and trace/policy updates in the recorded session
+      under --pure --agent build --variant xhigh; no subagent was used and no
+      application provider call was made.
+    human_review: >-
+      Captain (M3) requested this entry after reviewing the rule port and the
+      adapted contract scope. No reviewer approval, merge or case closure is
+      claimed by this entry.
+    transcript_record: >-
+      The work is identified by OpenCode session
+      ses_e57fb418dffegAQv7BTzclPKpi. No separate transcript export was copied
+      into the checkout.
+    verification:
+      platform: macOS arm64, Node 22.23.4, pnpm 12.16.1
+      base: 606ccf5
+      commands: >-
+        pnpm test:m3; pnpm test:readiness; pnpm test:trace; pnpm verify;
+        gate:ai-use-log with AI_USE_LOG_BASE_FILE set to the main copy of
+        docs/ai-use-log.yaml
+      results: >-
+        test:m3 66/66 in 1 file; test:readiness 45/45 in 3 files; test:trace
+        41/41 in 1 file; pnpm verify 1444/1444 across 71 files with typecheck,
+        lint and build passing; the G6 AI-use log gate passed with this entry
+        added against the main base log.
+      not_run: >-
+        No live provider run and no runtime composition of the rule ReactionPort
+        with M5; no Linux CI run locally and no product or case-closure claim.
+    scope: >-
+      Module-level M3-01 rule ReactionPort and offline decision evidence only.
+      Full runtime composition, timeout/stop integration and the complete
+      C-06/C-11 acceptance remain M5/I1 scope. No frozen contract, storage,
+      provider, database or credential change is included.
