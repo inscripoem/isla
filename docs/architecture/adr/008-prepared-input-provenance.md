@@ -172,6 +172,8 @@ own triggers; this ADR deliberately does not take it.
 | 2 | ~~Does `history.source: 'none'` carry the empty-set digest or `null`?~~ | M4 | **Closed 2026-10-28** — empty-set digest for `none`; `null` means unobserved |
 | 3 | Who exports the per-input acknowledgement, and in what shape? | M5 | `requestMessageId`/`eventId` may stay `null`; correlation is `missing` |
 
+Rows 1 and 2 are closed by M3's and M4's answers; row 3 is the only blocking decision left.
+
 ## Re-open triggers
 
 - A future corpus version changes the identity tuple → update D5 and the proposal (M3 confirmed the v1 tuple
@@ -185,4 +187,5 @@ own triggers; this ADR deliberately does not take it.
 
 ADR-007 (measurement bench); `docs/architecture/evaluation-provenance.md` (proposal in PR #63);
 FR-06; NFR-03; NFR-04; INV-16; issues #41 and #25 (2026-10-24 to 2026-11-04), including M3's identity
-confirmation (2026-10-29) and M4's no-history answer (2026-10-28).
+confirmation ([2026-10-29](https://github.com/inscripoem/isla/issues/41#issuecomment-6508103610)) and M4's
+no-history answer ([2026-10-28](https://github.com/inscripoem/isla/issues/41#issuecomment-6476254278)).
