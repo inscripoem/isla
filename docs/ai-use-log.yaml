@@ -4120,3 +4120,58 @@ entries:
         No live provider run and no M2 consumer validation yet; the boundaries
         suite was not run on this Windows host (documented pre-existing Windows
         class); no product or case-closure claim.
+
+  - date: "2026-11-05"
+    task: M4-04-live-deadline-stop-cases
+    change: >-
+      Test-only increment to the live acceptance suite for issue #93
+      (02dceb8, +166/-0, one file): two cases appended inside the existing
+      describe.skipIf(!report.available) block of
+      test/live/m4-text-source.live.test.ts, extending to the real provider
+      path the deadline and Stop semantics already pinned offline in
+      test/offline/m4-dialogue.test.ts (a passed deadline at lines 220-258;
+      the body-read-abort precedent at line 1866). Case one (line 253) drives
+      createOpenAiCompatibleTextSource through the port with an already-past
+      CallContext deadline (Date.now() + 1; the gate compares with >=) and
+      asserts DialogueEnd.status deadline_exceeded, usage timeout, zero
+      segments emitted and exactly one truthful outcome report (emitted 0,
+      generated equal to discarded, discard reasons summing to discarded) —
+      the presence of a real text source must not fall back to a completed
+      fixture reply. Case two (line 312) starts a real-provider generate,
+      lets it fly for a fixed 250 ms window, revokes the turn through the
+      call handle's AbortController (test/support/context.ts:5) and asserts
+      status cancelled, usage cancelled, zero segments and one truthful
+      outcome (any candidate produced within the window is accounted under
+      the aborted reason key); a 20 s hang guard fails the case loudly if
+      the call never settles after the revoke. Both cases record their
+      honest limitations in comments: the deadline gate is a local clock
+      check that may decide before the request reaches the wire, and without
+      transport instrumentation (the suite forbids stubs and mocks) the
+      exact wire phase at which the revoke lands is not observable on a
+      live endpoint. No production code, dependency, package.json, mock or
+      fixture change; the three pre-existing cases and the header credential
+      rules are untouched.
+    requirements: []
+    invariants: []
+    commits: [02dceb8]
+    agent: opencode/deepseek-v4-flash
+    provider: cslabllm
+    model: CS5351/DeepSeek-V4-Flash
+    supervision: >-
+      Member M4's scheduled inspection workflow (ZCode, GLM-5.3-Flash)
+      selected the slice and supervised it. The OpenCode build agent
+      (deepseek-v4-flash) authored all code changes in one unattended --auto
+      --standalone session from an English brief kept in the gitignored
+      .cache/ directory, after a one-token probe confirmed the configured
+      provider routes the #high variant (#xhigh is unroutable on
+      cslabllm/CS5351/DeepSeek-V4-Flash and fails with provider.no-route).
+      The supervising agent reviewed the diff and ran the single live test
+      file (5 tests | 5 skipped with ISLA_LIVE_TEXT_* unprovided, exit 0)
+      and the local gates — pnpm test:m4 237/237 in 10 files, tsc -b and
+      oxlint clean — before the delivery flow committed 02dceb8; remote CI
+      performs the full-suite final review. The two new cases were NOT
+      executed: with the provider credentials still unprovided they skip
+      behind the existing gate and no pass/fail is claimed for them; their
+      honest limitations are disclosed on issue #93 (comment 6637699483,
+      revising the "zero code changes" wording of comments 6554487472 and
+      6585822158).
