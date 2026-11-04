@@ -1,7 +1,7 @@
 # Evaluation conditions — text source, clock and planMs
 
 Status: proposed wording for review. No code, no schema change, no `schemaVersion` change.
-Anchors: NFR-01, NFR-03, NFR-04; ADR-007 D7; INV-16. Updated: 2026-10-27.
+Anchors: NFR-01, NFR-03, NFR-04; ADR-007 D7; INV-16. Updated: 2026-11-04.
 
 ## `textSource`
 
@@ -29,17 +29,22 @@ outcome, not a missing value. No third value is introduced.
 
 Dependency injection alone does not make a run `injected`: a production `ClockPort` implementation is
 `wall`. The report refuses measured stage durations under `injected` because they are not observations of
-real time (`src/evaluation/report.ts:184-187`).
+real time (`src/evaluation/report.ts:184-187`). M3 confirmed this distinction on 2026-10-29: the corpus
+runner's virtual clock is a fixture, and its `usage.elapsedMs: 0` is a synthetic placeholder, never a
+measured duration.
 
 ## `planMs`
 
 `planMs` measures the selection stage only: from selection entry to the terminal selection outcome,
 including validation, deadline and cancellation handling, local processing and waiting on the provider. It
 stops when the selection returns; late physical settlement is a separate stage. `planMs` is `null` when
-the stage was not observed (`src/evaluation/comparison.ts:90`, `src/evaluation/metrics.ts:45`). Stages are
-never summed into an end-to-end latency.
+the stage was not observed (`src/evaluation/comparison.ts:90`, `src/evaluation/metrics.ts:45`).
+
+History assembly, admission, recall scoring and the bounded consistency audit run inside context assembly,
+after selection has returned; they are **not** part of `planMs`, and no stage is summed into end-to-end
+latency.
 
 ## What this does not claim
 
-No S6, quality, latency, cap or acoustic result. No existing recording is relabelled. M3 confirms the
-`wall` sentence; M5 confirms the `planMs` boundary.
+No S6, quality, latency, cap or acoustic result. No existing recording is relabelled. M3 confirmed the
+`wall` sentence on 2026-10-29; M4 signs the assembly exclusion; M5 confirms the `planMs` boundary.

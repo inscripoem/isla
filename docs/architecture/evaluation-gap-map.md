@@ -1,7 +1,7 @@
 # Evaluation evidence gap map — C-05 and C-16
 
 Status: analysis only. **C-05 and C-16 remain open.** This document closes no case, allocates no ID and
-claims no S6 evidence. Anchors: FR-01, FR-02, NFR-03 (cases C-05/C-16); FR-06. Updated: 2026-10-27.
+claims no S6 evidence. Anchors: FR-01, FR-02, NFR-03 (cases C-05/C-16); FR-06. Updated: 2026-11-04.
 
 ## Why this exists
 
@@ -12,9 +12,9 @@ before requesting any new case, so a later allocation starts from facts rather t
 
 ## Method
 
-Read `docs/req/case-registry.yaml` on `main` (`74e9995`) and the named verifier files. A case is
+Read `docs/req/case-registry.yaml` at the PR base (`606ccf5`) and the named verifier files. A case is
 **covered** only when a registered verifier asserts that case's own claim; a test that exercises the same
-mechanism is **partly**. Test titles are quoted as they appear at `74e9995`; the case registry remains the
+mechanism is **partly**. Test titles are quoted as they appear at `606ccf5`; the case registry remains the
 source of truth for which verifier is registered, so a renamed title must be re-checked against the
 registry rather than trusted from this table.
 
