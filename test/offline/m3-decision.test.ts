@@ -10,12 +10,17 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type {
   ClockPort,
+  DecisionRequest,
   SelectionPort,
   SelectionRequest,
 } from '../../src/contracts'
 import { selectionResultSchema } from '../../src/contracts'
 import {
+  RULE_REACTION_MODEL_VERSION,
+  RULE_REACTION_PROVIDER,
+  ReactionCallError,
   SelectionCallError,
+  createRuleReactionPort,
   createRuleSelectionPort,
 } from '../../src/decision'
 import { collectDecisionViolations } from '../conformance/decision.conformance'
@@ -41,6 +46,7 @@ import {
 } from '../support/decision-runner'
 import { createSyntheticReviewedCorpus } from '../support/decision-synthetic-review'
 import {
+  fixtureDecisionRequest,
   fixtureInputEvent,
   fixtureSelectionRequest,
   fixtureSelectionResult,
@@ -69,6 +75,15 @@ function ruleSelection() {
   return {
     createSelection: (clock: ClockPort) => createRuleSelectionPort({ clock }),
   }
+}
+
+function reactionRequest(
+  overrides: Partial<DecisionRequest> = {},
+): DecisionRequest {
+  return fixtureDecisionRequest({
+    deadline: { atMs: 3000 },
+    ...overrides,
+  })
 }
 
 function reviewedRecord(reviewedAt: string) {
@@ -202,9 +217,10 @@ function findObservation(
 
 describe('M3 decision conformance', () => {
   it('accepts the correct selection and reaction adapters', async () => {
+    const clock = createVirtualClock(0)
     const violations = await collectDecisionViolations(() => ({
       selection: correct.createFixtureSelectionPort(),
-      reaction: correct.createFixtureReactionPort(),
+      reaction: createRuleReactionPort({ clock }),
     }))
     expect(violations).toEqual([])
   })
@@ -335,6 +351,257 @@ describe('M3 rule SelectionPort (actual implementation)', () => {
     await expect(port.select(ruleRequest(), context)).rejects.toMatchObject({
       code: 'aborted',
     })
+  })
+})
+
+describe('M3 rule ReactionPort (actual implementation)', () => {
+  it('exports the rule provider and model metadata', async () => {
+    expect(RULE_REACTION_PROVIDER).toBe('m3-rules')
+    expect(RULE_REACTION_MODEL_VERSION).toBe('m3-rules-v0.1')
+
+    const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
+    const result = await port.decide(
+      reactionRequest({ eligibleActionIds: ['neutral'] }),
+      createCallContext(3000),
+    )
+    expect(result.provider).toBe(RULE_REACTION_PROVIDER)
+    expect(result.modelVersion).toBe(RULE_REACTION_MODEL_VERSION)
+  })
+
+  it('selects smile when a positive cue appears in the segment text', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
+    const result = await port.decide(
+      reactionRequest({
+        segmentText: 'Thank you, that was great!',
+        eligibleActionIds: ['neutral', 'smile'],
+      }),
+      createCallContext(3000),
+    )
+    expect(result.actionId).toBe('smile')
+    expect(result.reasonCode).toBe('rule:positive-segment-cue')
+  })
+
+  it('selects smile when a positive cue appears in the interaction state', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
+    const result = await port.decide(
+      reactionRequest({
+        segmentText: 'We talked about the concert.',
+        interactionState: 'happy and welcoming',
+        eligibleActionIds: ['neutral', 'smile'],
+      }),
+      createCallContext(3000),
+    )
+    expect(result.actionId).toBe('smile')
+    expect(result.reasonCode).toBe('rule:positive-segment-cue')
+  })
+
+  it('defaults to neutral when no positive cue matches', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
+    const result = await port.decide(
+      reactionRequest({
+        segmentText: 'We talked about the concert.',
+        interactionState: 'calm',
+        eligibleActionIds: ['neutral', 'smile'],
+      }),
+      createCallContext(3000),
+    )
+    expect(result.actionId).toBe('neutral')
+    expect(result.reasonCode).toBe('rule:default-eligible-neutral')
+  })
+
+  it('defaults to neutral when smile is not eligible even with a positive cue', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
+    const result = await port.decide(
+      reactionRequest({
+        segmentText: 'Thank you, that was great!',
+        interactionState: 'happy',
+        eligibleActionIds: ['neutral', 'listening'],
+      }),
+      createCallContext(3000),
+    )
+    expect(result.actionId).toBe('neutral')
+    expect(result.reasonCode).toBe('rule:default-eligible-neutral')
+  })
+
+  it('falls back to the first non-no-op eligible action', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
+    const result = await port.decide(
+      reactionRequest({
+        segmentText: 'We talked about the concert.',
+        interactionState: 'calm',
+        eligibleActionIds: ['no-op', 'listening', 'surprise'],
+      }),
+      createCallContext(3000),
+    )
+    expect(result.actionId).toBe('listening')
+    expect(result.reasonCode).toBe('rule:first-eligible-action')
+  })
+
+  it('returns no-op when it is the only eligible action', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
+    const result = await port.decide(
+      reactionRequest({
+        segmentText: 'Thank you, that was great!',
+        interactionState: 'happy',
+        eligibleActionIds: ['no-op'],
+      }),
+      createCallContext(3000),
+    )
+    expect(result.actionId).toBe('no-op')
+    expect(result.reasonCode).toBe('rule:no-op-only-eligible')
+  })
+
+  it('preserves request identity and capability revision', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
+    const request = reactionRequest({
+      requestId: 'decision-req-echo',
+      sessionId: 'session-echo',
+      epoch: 4,
+      turnId: 'turn-echo',
+      segmentId: 'segment-echo',
+      snapshotRevision: 7,
+      capabilityRevision: 9,
+      eligibleActionIds: ['neutral'],
+    })
+    const result = await port.decide(request, createCallContext(3000))
+    expect(result).toMatchObject({
+      requestId: 'decision-req-echo',
+      sessionId: 'session-echo',
+      epoch: 4,
+      turnId: 'turn-echo',
+      segmentId: 'segment-echo',
+      snapshotRevision: 7,
+      capabilityRevision: 9,
+    })
+  })
+
+  it('freezes the request inputs without mutating their values', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
+    const request = reactionRequest({ eligibleActionIds: ['neutral', 'smile'] })
+    const snapshot = structuredClone(request)
+
+    await port.decide(request, createCallContext(3000))
+
+    expect(Object.isFrozen(request)).toBe(true)
+    expect(Object.isFrozen(request.eligibleActionIds)).toBe(true)
+    expect(Object.isFrozen(request.deadline)).toBe(true)
+    expect(request).toEqual(snapshot)
+  })
+
+  it('rejects a pre-expired reaction call', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(3001) })
+    await expect(
+      port.decide(reactionRequest(), createCallContext(3000)),
+    ).rejects.toMatchObject({ code: 'REACTION_DEADLINE_EXCEEDED' })
+  })
+
+  it('rejects a reaction call exactly at the governing deadline', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(3000) })
+    await expect(
+      port.decide(reactionRequest(), createCallContext(3000)),
+    ).rejects.toMatchObject({ code: 'REACTION_DEADLINE_EXCEEDED' })
+  })
+
+  it('uses the earlier of the request and CallContext deadlines', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(2500) })
+    await expect(
+      port.decide(
+        reactionRequest({ deadline: { atMs: 3000 } }),
+        createCallContext(2000),
+      ),
+    ).rejects.toMatchObject({ code: 'REACTION_DEADLINE_EXCEEDED' })
+    await expect(
+      port.decide(
+        reactionRequest({ deadline: { atMs: 2000 } }),
+        createCallContext(3000),
+      ),
+    ).rejects.toMatchObject({ code: 'REACTION_DEADLINE_EXCEEDED' })
+  })
+
+  it('rejects a non-finite request or CallContext deadline', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
+    await expect(
+      port.decide(
+        reactionRequest({ deadline: { atMs: Number.POSITIVE_INFINITY } }),
+        createCallContext(3000),
+      ),
+    ).rejects.toMatchObject({ code: 'REACTION_INVALID_REQUEST' })
+    await expect(
+      port.decide(reactionRequest(), createCallContext(Number.NaN)),
+    ).rejects.toMatchObject({ code: 'REACTION_INVALID_REQUEST' })
+  })
+
+  it('rejects a pre-aborted reaction call', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
+    const context = createCallContext(3000)
+    context.abort()
+    await expect(port.decide(reactionRequest(), context)).rejects.toMatchObject({
+      code: 'REACTION_ABORTED',
+    })
+  })
+
+  it('rejects an abort observed after rule evaluation', async () => {
+    const context = createCallContext(3000)
+    let calls = 0
+    const port = createRuleReactionPort({
+      clock: {
+        nowMs: () => {
+          calls += 1
+          if (calls === 2) context.abort()
+          return 1000
+        },
+      },
+    })
+    await expect(port.decide(reactionRequest(), context)).rejects.toMatchObject({
+      code: 'REACTION_ABORTED',
+    })
+  })
+
+  it('rejects a deadline reached after rule evaluation', async () => {
+    let calls = 0
+    const port = createRuleReactionPort({
+      clock: {
+        nowMs: () => {
+          calls += 1
+          return calls === 1 ? 1000 : 3000
+        },
+      },
+    })
+    await expect(
+      port.decide(reactionRequest(), createCallContext(3000)),
+    ).rejects.toMatchObject({ code: 'REACTION_DEADLINE_EXCEEDED' })
+  })
+
+  it('rejects invalid ClockPort options', () => {
+    expect(() => createRuleReactionPort(undefined as never)).toThrow(
+      ReactionCallError,
+    )
+    expect(() => createRuleReactionPort({} as never)).toThrow(ReactionCallError)
+    expect(() =>
+      createRuleReactionPort({ clock: {} } as never),
+    ).toThrow(ReactionCallError)
+    expect(() =>
+      createRuleReactionPort({ clock: { nowMs: 1 } } as never),
+    ).toThrow(ReactionCallError)
+  })
+
+  it('rejects a clock that returns a non-finite time', async () => {
+    const port = createRuleReactionPort({
+      clock: { nowMs: () => Number.NaN },
+    })
+    await expect(
+      port.decide(reactionRequest(), createCallContext(3000)),
+    ).rejects.toMatchObject({ code: 'REACTION_INVALID_OPTIONS' })
+  })
+
+  it('rejects a request with no eligible actions', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
+    await expect(
+      port.decide(
+        reactionRequest({ eligibleActionIds: [] }),
+        createCallContext(3000),
+      ),
+    ).rejects.toMatchObject({ code: 'REACTION_INVALID_REQUEST' })
   })
 })
 
