@@ -9,8 +9,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type {
+  CallContext,
   ClockPort,
   DecisionRequest,
+  PerformanceCommand,
+  ReactionPort,
   SelectionPort,
   SelectionRequest,
 } from '../../src/contracts'
@@ -26,7 +29,8 @@ import {
 import { collectDecisionViolations } from '../conformance/decision.conformance'
 import * as correct from '../support/correct-ports'
 import * as faulty from '../support/faulty-ports'
-import { createCallContext } from '../support/context'
+import { createCallContext, createGate } from '../support/context'
+import { createCountingPlayer } from '../support/gated-ports'
 import {
   DecisionCorpusError,
   decisionReferenceLabelSchema,
@@ -51,7 +55,9 @@ import {
   fixtureSelectionRequest,
   fixtureSelectionResult,
 } from '../support/fixture-data'
+import { createCoordinatorRunner } from '../support/runner-factories'
 import { createVirtualClock } from '../support/virtual-clock'
+import type { VirtualClock } from '../support/virtual-clock'
 
 const CORPUS_DIR = join(process.cwd(), 'test', 'fixtures', 'decision', 'v1')
 const CORPUS_MANIFEST = join(CORPUS_DIR, 'manifest.json')
@@ -217,9 +223,17 @@ function findObservation(
 
 describe('M3 decision conformance', () => {
   it('accepts the correct selection and reaction adapters', async () => {
-    const clock = createVirtualClock(0)
     const violations = await collectDecisionViolations(() => ({
       selection: correct.createFixtureSelectionPort(),
+      reaction: correct.createFixtureReactionPort(),
+    }))
+    expect(violations).toEqual([])
+  })
+
+  it('accepts the actual rule selection and reaction ports', async () => {
+    const clock = createVirtualClock(0)
+    const violations = await collectDecisionViolations(() => ({
+      selection: createRuleSelectionPort({ clock }),
       reaction: createRuleReactionPort({ clock }),
     }))
     expect(violations).toEqual([])
@@ -354,6 +368,38 @@ describe('M3 rule SelectionPort (actual implementation)', () => {
   })
 })
 
+function buildRuleCoordinator(
+  wrapReaction?: (base: ReactionPort, clock: VirtualClock) => ReactionPort,
+) {
+  const player = createCountingPlayer(correct.createFixturePlayer())
+  const commands: PerformanceCommand[] = []
+  const baseRenderer = correct.createFixtureRendererPort()
+  const renderer = correct.createCountingRenderer({
+    capabilities: () => baseRenderer.capabilities(),
+    async execute(command, context) {
+      commands.push(command)
+      return baseRenderer.execute(command, context)
+    },
+  })
+  let selectionPort: SelectionPort | undefined
+  let reactionPort: ReactionPort | undefined
+  const runner = createCoordinatorRunner({
+    selection: {
+      select: (request, context) => selectionPort!.select(request, context),
+    },
+    reaction: {
+      decide: (request, context) => reactionPort!.decide(request, context),
+    },
+    player,
+    renderer,
+  })
+  selectionPort = createRuleSelectionPort({ clock: runner.clock })
+  const base = createRuleReactionPort({ clock: runner.clock })
+  reactionPort =
+    wrapReaction === undefined ? base : wrapReaction(base, runner.clock)
+  return { runner, player, renderer, commands }
+}
+
 describe('M3 rule ReactionPort (actual implementation)', () => {
   it('exports the rule provider and model metadata', async () => {
     expect(RULE_REACTION_PROVIDER).toBe('m3-rules')
@@ -381,12 +427,25 @@ describe('M3 rule ReactionPort (actual implementation)', () => {
     expect(result.reasonCode).toBe('rule:positive-segment-cue')
   })
 
-  it('selects smile when a positive cue appears in the interaction state', async () => {
+  it('does not treat interactionState as a reaction cue', async () => {
     const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
     const result = await port.decide(
       reactionRequest({
         segmentText: 'We talked about the concert.',
         interactionState: 'happy and welcoming',
+        eligibleActionIds: ['neutral', 'smile'],
+      }),
+      createCallContext(3000),
+    )
+    expect(result.actionId).toBe('neutral')
+    expect(result.reasonCode).toBe('rule:default-eligible-neutral')
+  })
+
+  it('documents the lexical baseline: a negated positive token still matches', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
+    const result = await port.decide(
+      reactionRequest({
+        segmentText: 'I am not happy about this.',
         eligibleActionIds: ['neutral', 'smile'],
       }),
       createCallContext(3000),
@@ -475,31 +534,39 @@ describe('M3 rule ReactionPort (actual implementation)', () => {
     })
   })
 
-  it('freezes the request inputs without mutating their values', async () => {
+  it('does not mutate the request or its eligibleActionIds', async () => {
     const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
+    const frozen = deepFreeze(
+      reactionRequest({ eligibleActionIds: ['neutral', 'smile'] }),
+    )
+    const frozenSnapshot = structuredClone(frozen)
+    await port.decide(frozen, createCallContext(3000))
+    expect(frozen).toEqual(frozenSnapshot)
+
     const request = reactionRequest({ eligibleActionIds: ['neutral', 'smile'] })
-    const snapshot = structuredClone(request)
-
+    expect(Object.isFrozen(request)).toBe(false)
+    expect(Object.isExtensible(request)).toBe(true)
     await port.decide(request, createCallContext(3000))
-
-    expect(Object.isFrozen(request)).toBe(true)
-    expect(Object.isFrozen(request.eligibleActionIds)).toBe(true)
-    expect(Object.isFrozen(request.deadline)).toBe(true)
-    expect(request).toEqual(snapshot)
+    expect(Object.isFrozen(request)).toBe(false)
+    expect(Object.isFrozen(request.eligibleActionIds)).toBe(false)
+    expect(Object.isExtensible(request)).toBe(true)
+    expect(() => {
+      request.eligibleActionIds.push('surprise')
+    }).not.toThrow()
   })
 
   it('rejects a pre-expired reaction call', async () => {
     const port = createRuleReactionPort({ clock: createVirtualClock(3001) })
     await expect(
       port.decide(reactionRequest(), createCallContext(3000)),
-    ).rejects.toMatchObject({ code: 'REACTION_DEADLINE_EXCEEDED' })
+    ).rejects.toMatchObject({ code: 'deadline-exceeded' })
   })
 
   it('rejects a reaction call exactly at the governing deadline', async () => {
     const port = createRuleReactionPort({ clock: createVirtualClock(3000) })
     await expect(
       port.decide(reactionRequest(), createCallContext(3000)),
-    ).rejects.toMatchObject({ code: 'REACTION_DEADLINE_EXCEEDED' })
+    ).rejects.toMatchObject({ code: 'deadline-exceeded' })
   })
 
   it('uses the earlier of the request and CallContext deadlines', async () => {
@@ -509,26 +576,32 @@ describe('M3 rule ReactionPort (actual implementation)', () => {
         reactionRequest({ deadline: { atMs: 3000 } }),
         createCallContext(2000),
       ),
-    ).rejects.toMatchObject({ code: 'REACTION_DEADLINE_EXCEEDED' })
+    ).rejects.toMatchObject({ code: 'deadline-exceeded' })
     await expect(
       port.decide(
         reactionRequest({ deadline: { atMs: 2000 } }),
         createCallContext(3000),
       ),
-    ).rejects.toMatchObject({ code: 'REACTION_DEADLINE_EXCEEDED' })
+    ).rejects.toMatchObject({ code: 'deadline-exceeded' })
   })
 
-  it('rejects a non-finite request or CallContext deadline', async () => {
+  it('rejects a non-finite request, CallContext or clock deadline', async () => {
     const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
     await expect(
       port.decide(
         reactionRequest({ deadline: { atMs: Number.POSITIVE_INFINITY } }),
         createCallContext(3000),
       ),
-    ).rejects.toMatchObject({ code: 'REACTION_INVALID_REQUEST' })
+    ).rejects.toMatchObject({ code: 'invalid-deadline' })
     await expect(
       port.decide(reactionRequest(), createCallContext(Number.NaN)),
-    ).rejects.toMatchObject({ code: 'REACTION_INVALID_REQUEST' })
+    ).rejects.toMatchObject({ code: 'invalid-deadline' })
+    const nonFiniteClock = createRuleReactionPort({
+      clock: { nowMs: () => Number.NaN },
+    })
+    await expect(
+      nonFiniteClock.decide(reactionRequest(), createCallContext(3000)),
+    ).rejects.toMatchObject({ code: 'invalid-deadline' })
   })
 
   it('rejects a pre-aborted reaction call', async () => {
@@ -536,8 +609,20 @@ describe('M3 rule ReactionPort (actual implementation)', () => {
     const context = createCallContext(3000)
     context.abort()
     await expect(port.decide(reactionRequest(), context)).rejects.toMatchObject({
-      code: 'REACTION_ABORTED',
+      code: 'aborted',
     })
+  })
+
+  it('checks abort before deadline validity', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
+    const context = createCallContext(3000)
+    context.abort()
+    await expect(
+      port.decide(
+        reactionRequest({ deadline: { atMs: Number.NaN } }),
+        context,
+      ),
+    ).rejects.toMatchObject({ code: 'aborted' })
   })
 
   it('rejects an abort observed after rule evaluation', async () => {
@@ -553,7 +638,7 @@ describe('M3 rule ReactionPort (actual implementation)', () => {
       },
     })
     await expect(port.decide(reactionRequest(), context)).rejects.toMatchObject({
-      code: 'REACTION_ABORTED',
+      code: 'aborted',
     })
   })
 
@@ -569,29 +654,18 @@ describe('M3 rule ReactionPort (actual implementation)', () => {
     })
     await expect(
       port.decide(reactionRequest(), createCallContext(3000)),
-    ).rejects.toMatchObject({ code: 'REACTION_DEADLINE_EXCEEDED' })
+    ).rejects.toMatchObject({ code: 'deadline-exceeded' })
   })
 
   it('rejects invalid ClockPort options', () => {
-    expect(() => createRuleReactionPort(undefined as never)).toThrow(
-      ReactionCallError,
+    expect(() => createRuleReactionPort(undefined as never)).toThrow(TypeError)
+    expect(() => createRuleReactionPort({} as never)).toThrow(TypeError)
+    expect(() => createRuleReactionPort({ clock: {} } as never)).toThrow(
+      TypeError,
     )
-    expect(() => createRuleReactionPort({} as never)).toThrow(ReactionCallError)
-    expect(() =>
-      createRuleReactionPort({ clock: {} } as never),
-    ).toThrow(ReactionCallError)
     expect(() =>
       createRuleReactionPort({ clock: { nowMs: 1 } } as never),
-    ).toThrow(ReactionCallError)
-  })
-
-  it('rejects a clock that returns a non-finite time', async () => {
-    const port = createRuleReactionPort({
-      clock: { nowMs: () => Number.NaN },
-    })
-    await expect(
-      port.decide(reactionRequest(), createCallContext(3000)),
-    ).rejects.toMatchObject({ code: 'REACTION_INVALID_OPTIONS' })
+    ).toThrow(TypeError)
   })
 
   it('rejects a request with no eligible actions', async () => {
@@ -601,7 +675,147 @@ describe('M3 rule ReactionPort (actual implementation)', () => {
         reactionRequest({ eligibleActionIds: [] }),
         createCallContext(3000),
       ),
-    ).rejects.toMatchObject({ code: 'REACTION_INVALID_REQUEST' })
+    ).rejects.toMatchObject({ code: 'invalid-request' })
+  })
+
+  it('rejects an empty eligible action id', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
+    await expect(
+      port.decide(
+        reactionRequest({ eligibleActionIds: [''] }),
+        createCallContext(3000),
+      ),
+    ).rejects.toMatchObject({ code: 'invalid-request' })
+  })
+
+  it('rejects uncontracted fields and empty segment text without leaking a ZodError', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
+    const withDeadlineMs = {
+      ...reactionRequest(),
+      deadlineMs: 3000,
+    } as DecisionRequest
+    await expect(
+      port.decide(withDeadlineMs, createCallContext(3000)),
+    ).rejects.toBeInstanceOf(ReactionCallError)
+    await expect(
+      port.decide(withDeadlineMs, createCallContext(3000)),
+    ).rejects.toMatchObject({ code: 'invalid-request' })
+    const emptySegment = reactionRequest({ segmentText: '' })
+    await expect(
+      port.decide(emptySegment, createCallContext(3000)),
+    ).rejects.toBeInstanceOf(ReactionCallError)
+    await expect(
+      port.decide(emptySegment, createCallContext(3000)),
+    ).rejects.toMatchObject({ code: 'invalid-request' })
+  })
+
+  it('rejects a missing CallContext deadline', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
+    const context = {
+      signal: new AbortController().signal,
+    } as CallContext
+    await expect(
+      port.decide(reactionRequest(), context),
+    ).rejects.toMatchObject({ code: 'invalid-deadline' })
+  })
+
+  it('rejects a null request or null context', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
+    await expect(
+      port.decide(null as never, createCallContext(3000)),
+    ).rejects.toMatchObject({ code: 'invalid-request' })
+    await expect(
+      port.decide(reactionRequest(), null as never),
+    ).rejects.toMatchObject({ code: 'invalid-request' })
+  })
+
+  it('is deterministic across repeated calls', async () => {
+    const port = createRuleReactionPort({ clock: createVirtualClock(1000) })
+    const request = reactionRequest({
+      segmentText: 'That was great, thank you.',
+      eligibleActionIds: ['neutral', 'smile'],
+    })
+    const first = await port.decide(request, createCallContext(3000))
+    const second = await port.decide(request, createCallContext(3000))
+    expect(first).toEqual(second)
+    expect(first.actionId).toBe('smile')
+  })
+
+  it('reports selected status, null confidence and elapsed usage', async () => {
+    let nowMs = 1000
+    const port = createRuleReactionPort({
+      clock: {
+        nowMs: () => {
+          nowMs += 250
+          return nowMs
+        },
+      },
+    })
+    const result = await port.decide(
+      reactionRequest({ eligibleActionIds: ['neutral'] }),
+      createCallContext(3000),
+    )
+    expect(result.status).toBe('selected')
+    expect(result.confidence).toBeNull()
+    expect(result.usage).toMatchObject({
+      provider: RULE_REACTION_PROVIDER,
+      requestedModel: RULE_REACTION_MODEL_VERSION,
+      resolvedModel: RULE_REACTION_MODEL_VERSION,
+      elapsedMs: 250,
+      usageMissing: true,
+      status: 'ok',
+      inputTokens: null,
+      outputTokens: null,
+      pricingRef: null,
+    })
+  })
+
+  it('integrates with the M5 coordinator for eligible dispatch, deadline fallback to no-op, and abort revocation', async () => {
+    const dispatched = buildRuleCoordinator()
+    await dispatched.runner.resume()
+    await dispatched.runner.accept('rule reaction dispatch')
+    const completed = await dispatched.runner.runTurn()
+    expect(completed.status).toBe('completed')
+    expect(dispatched.commands).toHaveLength(1)
+    expect(dispatched.commands[0]?.actionId).toBe('neutral')
+    expect(dispatched.renderer.calls()).toBe(1)
+    expect(dispatched.player.executeCalls()).toBe(1)
+
+    const fallback = buildRuleCoordinator((base, clock) => ({
+      async decide(request, context) {
+        const decision = await base.decide(request, context)
+        clock.advance(request.deadline.atMs - clock.nowMs() + 1)
+        return decision
+      },
+    }))
+    await fallback.runner.resume()
+    await fallback.runner.accept('rule reaction deadline')
+    const expired = await fallback.runner.runTurn()
+    expect(expired.status).toBe('completed')
+    expect(fallback.renderer.calls()).toBe(0)
+    expect(fallback.player.executeCalls()).toBe(1)
+    expect(fallback.runner.deliveries()).toHaveLength(1)
+
+    const gate = createGate()
+    const entered = createGate()
+    const revoked = buildRuleCoordinator((base) => ({
+      async decide(request, context) {
+        entered.release()
+        await gate.promise
+        return base.decide(request, context)
+      },
+    }))
+    await revoked.runner.resume()
+    await revoked.runner.accept('rule reaction revoke')
+    const turnPromise = revoked.runner.runTurn()
+    await entered.promise
+    await revoked.runner.stop()
+    gate.release()
+    const turn = await turnPromise
+    expect(turn.status).toBe('cancelled')
+    expect(revoked.renderer.calls()).toBe(0)
+    expect(revoked.player.executeCalls()).toBe(0)
+    expect(revoked.runner.deliveries()).toHaveLength(0)
   })
 })
 

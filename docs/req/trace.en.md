@@ -144,8 +144,8 @@ C-74 — `test/offline/m5-process-restart.test.ts`:
 | INV-15 | M5 | C-47, C-50 (turn reconstruction ordering and M4 agreement guard) | M4/M6 consumer acceptance |
 | INV-16 | M6 | C-52, C-53, C-54, C-55, C-69, C-70, C-71 | — |
 
-> **M3-01 module-level prerequisite.** `src/decision/selection.ts` (FR-01, NFR-03)
-> and `src/decision/reaction.ts` (FR-03), with
+> **M3-01 module-level prerequisite.** `src/decision/selection.ts` (FR-01) and
+> `src/decision/reaction.ts` (FR-03), with
 > `test/offline/m3-decision.test.ts`, provide module-level evidence for the
 > rule port, reaction rule, corpus loading and exact-one/deadline/failure observations. This is
 > not a registered composition case: C-13 remains the registered

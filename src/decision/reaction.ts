@@ -5,7 +5,12 @@ import type {
   DecisionResult,
   ReactionPort,
 } from '../contracts'
-import { NO_OP_ACTION, decisionResultSchema } from '../contracts'
+import {
+  BASE_ACTION_IDS,
+  NO_OP_ACTION,
+  decisionRequestSchema,
+  decisionResultSchema,
+} from '../contracts'
 
 /**
  * M3's minimal deterministic segment-reaction rule.
@@ -17,10 +22,10 @@ import { NO_OP_ACTION, decisionResultSchema } from '../contracts'
  */
 
 export type ReactionCallErrorCode =
-  | 'REACTION_ABORTED'
-  | 'REACTION_DEADLINE_EXCEEDED'
-  | 'REACTION_INVALID_OPTIONS'
-  | 'REACTION_INVALID_REQUEST'
+  | 'aborted'
+  | 'deadline-exceeded'
+  | 'invalid-deadline'
+  | 'invalid-request'
 
 /** A local call-boundary failure, not a DecisionResult and not a fallback. */
 export class ReactionCallError extends Error {
@@ -44,72 +49,48 @@ export interface RuleReactionPortOptions {
 export const RULE_REACTION_PROVIDER = 'm3-rules'
 export const RULE_REACTION_MODEL_VERSION = 'm3-rules-v0.1'
 
-/**
- * The C3 reaction request/decision shapes. These aliases keep the rule port's
- * public vocabulary separate from the frozen contract names while remaining
- * structurally identical to them.
- */
-export type ReactionRequest = DecisionRequest
-export type ReactionDecision = DecisionResult
+const SMILE_ACTION = BASE_ACTION_IDS[2]
+const NEUTRAL_ACTION = BASE_ACTION_IDS[0]
 
+/**
+ * A deterministic lexical-token baseline over `segmentText` only. It matches
+ * individual cue words and deliberately does not parse negation, intensity or
+ * the surrounding sentiment context; that interpretation belongs to the M3-02
+ * model adapters.
+ */
 const POSITIVE_CUE =
   /\b(thank|thanks|great|happy|awesome|glad|nice|love|welcome|yay)\b/i
 
-type DeadlineExtension = {
-  readonly deadlineMs?: number
-  readonly deadline?: { readonly atMs?: number }
+function isUsableContext(value: CallContext): boolean {
+  const candidate = value as unknown
+  if (candidate === null || typeof candidate !== 'object') return false
+  const signal = (candidate as { readonly signal?: unknown }).signal
+  return signal !== null && typeof signal === 'object'
 }
 
-type ContextDeadlineExtension = {
-  readonly deadlineMs?: number
-  readonly deadline?: { readonly atMs?: number }
+function isUsableRequest(value: DecisionRequest): boolean {
+  return value !== null && typeof value === 'object'
 }
 
-function requestDeadlineMs(request: ReactionRequest): number | undefined {
-  const extended = request as ReactionRequest & DeadlineExtension
-  if (typeof extended.deadlineMs === 'number') return extended.deadlineMs
-  return extended.deadline?.atMs
-}
-
-function contextDeadlineMs(
-  context: CallContext | undefined,
-): number | undefined {
-  if (context === undefined || context === null) return undefined
-  const extended = context as CallContext & ContextDeadlineExtension
-  if (typeof extended.deadlineMs === 'number') return extended.deadlineMs
-  return extended.deadline?.atMs
-}
-
-function isAborted(context: CallContext | undefined): boolean {
-  return context?.signal?.aborted === true
-}
-
-function deepFreeze<T>(value: T, seen = new WeakSet<object>()): T {
-  if (value === null || typeof value !== 'object') return value
-  if (seen.has(value)) return value
-  seen.add(value)
-  for (const child of Object.values(value as Record<string, unknown>)) {
-    deepFreeze(child, seen)
-  }
-  return Object.freeze(value)
+function isAborted(context: CallContext): boolean {
+  return context.signal.aborted === true
 }
 
 function chooseReactionActionId(
-  request: ReactionRequest,
-): { readonly actionId: string; readonly reason: string } {
-  const combined = [request.segmentText, request.interactionState ?? ''].join(' ')
+  request: DecisionRequest,
+): { readonly actionId: string; readonly reasonCode: string } {
   const eligible = request.eligibleActionIds
-  if (POSITIVE_CUE.test(combined) && eligible.includes('smile')) {
-    return { actionId: 'smile', reason: 'rule:positive-segment-cue' }
+  if (POSITIVE_CUE.test(request.segmentText) && eligible.includes(SMILE_ACTION)) {
+    return { actionId: SMILE_ACTION, reasonCode: 'rule:positive-segment-cue' }
   }
-  if (eligible.includes('neutral')) {
-    return { actionId: 'neutral', reason: 'rule:default-eligible-neutral' }
+  if (eligible.includes(NEUTRAL_ACTION)) {
+    return { actionId: NEUTRAL_ACTION, reasonCode: 'rule:default-eligible-neutral' }
   }
   const firstNonNoOp = eligible.find((actionId) => actionId !== NO_OP_ACTION)
   if (firstNonNoOp !== undefined) {
-    return { actionId: firstNonNoOp, reason: 'rule:first-eligible-action' }
+    return { actionId: firstNonNoOp, reasonCode: 'rule:first-eligible-action' }
   }
-  return { actionId: NO_OP_ACTION, reason: 'rule:no-op-only-eligible' }
+  return { actionId: NO_OP_ACTION, reasonCode: 'rule:no-op-only-eligible' }
 }
 
 export function createRuleReactionPort(
@@ -122,88 +103,95 @@ export function createRuleReactionPort(
     typeof options.clock !== 'object' ||
     typeof options.clock.nowMs !== 'function'
   ) {
-    throw new ReactionCallError(
-      'REACTION_INVALID_OPTIONS',
-      'createRuleReactionPort requires a valid ClockPort',
-    )
+    throw new TypeError('rule reaction port requires a ClockPort')
   }
   const { clock } = options
 
   return {
     async decide(
-      request: ReactionRequest,
+      request: DecisionRequest,
       context: CallContext,
-    ): Promise<ReactionDecision> {
-      const startedAtMs = clock.nowMs()
-      if (!Number.isFinite(startedAtMs)) {
+    ): Promise<DecisionResult> {
+      if (!isUsableContext(context)) {
         throw new ReactionCallError(
-          'REACTION_INVALID_OPTIONS',
-          'ClockPort.nowMs must return a finite number',
+          'invalid-request',
+          'reaction requires a valid CallContext',
         )
       }
-
-      deepFreeze(request)
-
-      const requestDeadline = requestDeadlineMs(request)
-      const contextDeadline = contextDeadlineMs(context)
-      if (
-        requestDeadline === undefined ||
-        !Number.isFinite(requestDeadline) ||
-        (contextDeadline !== undefined && !Number.isFinite(contextDeadline))
-      ) {
-        throw new ReactionCallError(
-          'REACTION_INVALID_REQUEST',
-          'ReactionRequest deadlineMs and CallContext deadlineMs must be finite numbers',
-        )
-      }
-      const effectiveDeadlineMs =
-        contextDeadline === undefined
-          ? requestDeadline
-          : Math.min(requestDeadline, contextDeadline)
-
       if (isAborted(context)) {
         throw new ReactionCallError(
-          'REACTION_ABORTED',
-          'ReactionRequest aborted before decision started',
+          'aborted',
+          'reaction aborted before rule evaluation',
         )
       }
-
-      if (startedAtMs >= effectiveDeadlineMs) {
+      if (!isUsableRequest(request)) {
         throw new ReactionCallError(
-          'REACTION_DEADLINE_EXCEEDED',
-          `ReactionRequest deadline exceeded before decision started (now=${startedAtMs}, deadline=${effectiveDeadlineMs})`,
+          'invalid-request',
+          'reaction requires a valid DecisionRequest',
         )
       }
 
+      const startedAtMs = clock.nowMs()
+      const requestAtMs = request.deadline?.atMs
+      const contextAtMs = context.deadline?.atMs
       if (
-        !Array.isArray(request.eligibleActionIds) ||
-        request.eligibleActionIds.length === 0
+        typeof requestAtMs !== 'number' ||
+        !Number.isFinite(requestAtMs) ||
+        typeof contextAtMs !== 'number' ||
+        !Number.isFinite(contextAtMs) ||
+        typeof startedAtMs !== 'number' ||
+        !Number.isFinite(startedAtMs)
       ) {
         throw new ReactionCallError(
-          'REACTION_INVALID_REQUEST',
-          'ReactionRequest requires at least one eligibleActionId',
+          'invalid-deadline',
+          'reaction requires finite request, call and clock deadlines',
+        )
+      }
+      const governingAtMs = Math.min(requestAtMs, contextAtMs)
+      if (startedAtMs >= governingAtMs) {
+        throw new ReactionCallError(
+          'deadline-exceeded',
+          `reaction deadline ${governingAtMs} has expired`,
+        )
+      }
+
+      const parsedRequest = decisionRequestSchema.safeParse(request)
+      if (
+        !parsedRequest.success ||
+        parsedRequest.data.segmentText.trim().length === 0 ||
+        parsedRequest.data.eligibleActionIds.some(
+          (actionId) => actionId.trim().length === 0,
+        )
+      ) {
+        throw new ReactionCallError(
+          'invalid-request',
+          'reaction request failed schema validation',
         )
       }
 
       const choice = chooseReactionActionId(request)
 
       const completedAtMs = clock.nowMs()
-      if (!Number.isFinite(completedAtMs)) {
+      if (
+        typeof completedAtMs !== 'number' ||
+        !Number.isFinite(completedAtMs)
+      ) {
         throw new ReactionCallError(
-          'REACTION_INVALID_OPTIONS',
-          'ClockPort.nowMs must return a finite number',
+          'invalid-deadline',
+          'reaction requires finite request, call and clock deadlines',
         )
       }
       if (isAborted(context)) {
-        throw new ReactionCallError('REACTION_ABORTED', 'ReactionRequest aborted')
+        throw new ReactionCallError('aborted', 'reaction aborted')
       }
-      if (completedAtMs >= effectiveDeadlineMs) {
+      if (completedAtMs >= governingAtMs) {
         throw new ReactionCallError(
-          'REACTION_DEADLINE_EXCEEDED',
-          `ReactionRequest deadline exceeded (now=${completedAtMs}, deadline=${effectiveDeadlineMs})`,
+          'deadline-exceeded',
+          `reaction deadline ${governingAtMs} has expired`,
         )
       }
 
+      const elapsedMs = Math.max(0, completedAtMs - startedAtMs)
       return decisionResultSchema.parse({
         requestId: request.requestId,
         sessionId: request.sessionId,
@@ -216,7 +204,7 @@ export function createRuleReactionPort(
         actionId: choice.actionId,
         provider: RULE_REACTION_PROVIDER,
         modelVersion: RULE_REACTION_MODEL_VERSION,
-        reasonCode: choice.reason,
+        reasonCode: choice.reasonCode,
         confidence: null,
         usage: {
           provider: RULE_REACTION_PROVIDER,
@@ -226,7 +214,7 @@ export function createRuleReactionPort(
           inputTokens: null,
           outputTokens: null,
           usageMissing: true,
-          elapsedMs: 0,
+          elapsedMs,
           status: 'ok',
           pricingRef: null,
         },
