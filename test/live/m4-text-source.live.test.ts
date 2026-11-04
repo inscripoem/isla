@@ -34,6 +34,28 @@ const report = readLiveTextProviderConfig()
 /** Wall-clock domain, matching `Date.now()`-based deadlines built below. */
 const clock = { nowMs: () => Date.now() }
 
+/**
+ * How long a live call is left in flight before a Stop is sent. This suite forbids
+ * stubs and mocks, so the transport cannot signal "headers received" or "body
+ * read started"; a short fixed window lands the revoke while a real completion is
+ * still being produced, without stretching the case towards the suite timeout.
+ */
+const IN_FLIGHT_WINDOW_MS = 250
+
+/**
+ * Upper bound for awaiting a live call after its own Stop or deadline. It only
+ * guards against a hang: the guard's rejection is the case's failure, never a
+ * substitute verdict, and it stays well under the live config's 30 s timeout.
+ */
+const HANG_GUARD_MS = 20_000
+
+/** Resolves after `ms`, used to hold a live call in flight before a Stop. */
+function delay(ms: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
 /** Collects the segments a port emits. A sink write resolves once the segment is kept. */
 function collectingSink(): DialogueSink & { readonly segments: DialogueSegment[] } {
   const segments: DialogueSegment[] = []
@@ -216,5 +238,149 @@ describe.skipIf(!report.available)('M4 live text source (M4-02 acceptance)', () 
     const offenders = scanned.filter((path) => readFileSync(path, 'utf8').includes(config.apiKey))
     /* Paths only: a matching file's contents are never shown. */
     expect(offenders.map((path) => path.slice(root.length + 1))).toEqual([])
+  })
+
+  /*
+   * Deadline on the live path: an expired deadline must end the call as
+   * `deadline_exceeded`/`timeout` with nothing emitted, mirroring the offline
+   * precedent. Honest limitation: the port's deadline gate is a local check
+   * against the injected clock, so on this path the gate may decide before the
+   * request reaches the wire. What is proven is the observable contract on the
+   * live-configured source - an expired deadline ends the call as a timeout with
+   * nothing emitted, and the presence of a real text source does not fall back to
+   * a `completed` fixture reply.
+   */
+  it('ends a real-source call as deadline_exceeded when the deadline has already passed', async () => {
+    const config = report.config!
+    const textSource = createOpenAiCompatibleTextSource(config)
+    const outcomes: DialogueOutcomeReport[] = []
+    const port = createDialoguePort({
+      clock,
+      textSource,
+      onOutcome: (outcome) => {
+        outcomes.push(outcome)
+      },
+    })
+    const sink = collectingSink()
+
+    /*
+     * An already-past deadline. The gate compares with `>=`, so the deadline has
+     * expired by the time `generate` runs its checks; any later boundary sees the
+     * same expired deadline.
+     */
+    const end: DialogueEnd = await port.generate(
+      fixtureDialogueRequest(),
+      createCallContext(Date.now() + 1),
+      sink,
+    )
+
+    /* The visible outcome: a timeout, not a completed reply from the real source. */
+    expect(end.status).toBe('deadline_exceeded')
+    expect(end.usage.status).toBe('timeout')
+
+    /* Zero segments: nothing was emitted before the expiry was observed. */
+    expect(end.segmentCount).toBe(0)
+    expect(sink.segments).toHaveLength(0)
+
+    /*
+     * Exactly one truthful outcome report. `generated` is deliberately not pinned:
+     * the gate may trip at the pre-flight check or at a later await boundary if the
+     * clock read races the boundary, and the accounting identity holds on both.
+     */
+    expect(outcomes).toHaveLength(1)
+    const outcome = outcomes[0]!
+    expect(outcome.endStatus).toBe('deadline_exceeded')
+    expect(outcome.usageStatus).toBe('timeout')
+    expect(outcome.emitted).toBe(0)
+    expect(outcome.generated).toBe(outcome.discarded)
+    const discardsSum = Object.values(outcome.discards).reduce((total, count) => total + count, 0)
+    expect(discardsSum).toBe(outcome.discarded)
+  })
+
+  /*
+   * Stop on the live path: a revoke that arrives during an in-flight real call
+   * must end the call as `cancelled`/`cancelled` with nothing emitted and exactly
+   * one truthful outcome, mirroring the offline body-read-abort precedent.
+   * Honest limitation: without instrumenting the transport (this suite forbids
+   * stubs and mocks) the exact wire phase at which the revoke lands - request
+   * dispatch, headers or body read - is not observable on a live endpoint. The
+   * fixed short window exists to land the revoke while a real completion is still
+   * being produced. What is proven is the observable revocation contract on the
+   * live path; if a provider ever answered within the window, the `cancelled`
+   * assertion below fails loudly rather than passing falsely.
+   */
+  it('ends an in-flight real-provider call as cancelled when the turn is revoked mid-request', async () => {
+    const config = report.config!
+    const textSource = createOpenAiCompatibleTextSource(config)
+    const outcomes: DialogueOutcomeReport[] = []
+    const port = createDialoguePort({
+      clock,
+      textSource,
+      onOutcome: (outcome) => {
+        outcomes.push(outcome)
+      },
+    })
+    const sink = collectingSink()
+
+    /* A valid deadline: this case is about the Stop, not the timeout. */
+    const context = createCallContext(Date.now() + 60_000)
+    const pending = port.generate(fixtureDialogueRequest(), context, sink)
+
+    /* Let the request go in flight, then revoke the turn. */
+    await delay(IN_FLIGHT_WINDOW_MS)
+    context.abort()
+
+    /*
+     * Await the call raced against a hang guard. If the guard fires the case FAILS
+     * with its rejection; it never produces a passing verdict of its own.
+     */
+    let guardTimer: ReturnType<typeof setTimeout> | undefined
+    const hangGuard = new Promise<never>((_, reject) => {
+      guardTimer = setTimeout(() => {
+        reject(
+          new Error(
+            `real-provider call did not settle within ${HANG_GUARD_MS} ms after the turn was revoked`,
+          ),
+        )
+      }, HANG_GUARD_MS)
+    })
+    let end: DialogueEnd
+    try {
+      end = await Promise.race([pending, hangGuard])
+    } finally {
+      clearTimeout(guardTimer)
+    }
+    /*
+     * A late rejection must never surface as an unhandled rejection; the awaited
+     * result above is what is asserted.
+     */
+    void pending.catch(() => {})
+
+    /* The visible outcome: a revocation, not a completed or failed reply. */
+    expect(end.status).toBe('cancelled')
+    expect(end.usage.status).toBe('cancelled')
+
+    /* Zero segments: the Stop arrived before any candidate could reach the sink. */
+    expect(end.segmentCount).toBe(0)
+    expect(sink.segments).toHaveLength(0)
+
+    /*
+     * Exactly one truthful outcome report. `generated` is not pinned: it is zero
+     * when the source returned nothing on the revoked signal, and positive only if
+     * the provider answered within the in-flight window.
+     */
+    expect(outcomes).toHaveLength(1)
+    const outcome = outcomes[0]!
+    expect(outcome.endStatus).toBe('cancelled')
+    expect(outcome.usageStatus).toBe('cancelled')
+    expect(outcome.emitted).toBe(0)
+    expect(outcome.generated).toBe(outcome.discarded)
+    const discardsSum = Object.values(outcome.discards).reduce((total, count) => total + count, 0)
+    expect(discardsSum).toBe(outcome.discarded)
+
+    /* Candidates produced before the revoke are accounted as `aborted`. */
+    if (outcome.generated > 0) {
+      expect(outcome.discards['aborted'] ?? 0).toBeGreaterThanOrEqual(1)
+    }
   })
 })
