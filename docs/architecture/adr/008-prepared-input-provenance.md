@@ -1,6 +1,6 @@
 # ADR-008 — Prepared-input provenance companion (M6-02)
 
-Status: **proposed.** Date: 2026-10-28. Owner: M6 (evaluation infrastructure).
+Status: **proposed.** Date: 2026-11-04 (first published 2026-10-28). Owner: M6 (evaluation infrastructure).
 Affected reviewers: **M5, M3, M4**. Number reserved by M5 in #25 on 2026-10-28.
 Related: ADR-007 (measurement bench) · `docs/architecture/evaluation-provenance.md` (proposal, PR #63) ·
 issue #41 (M5/M4 answers) · issue #25 (allocation).
@@ -15,7 +15,7 @@ M5's reservation in #25 (2026-10-28), excerpts:
 > This reserves the number only: it does not approve the design, authorise production implementation or
 > close S6/G4. M6 authors the ADR; affected owners review it before implementation.
 
-M6 rechecked before creating this file, as the reservation asked:
+M6 rechecked before creating this file, as the reservation asked (the state below is as of 2026-10-28):
 
 - `docs/architecture/adr/` on `main` `74e9995` ends at `007`;
 - no open PR head adds an `008-*` file: #57 `2a354ca`, #62 `19ced26`, #63 `21fde6f`, #64 `7847a25`,
@@ -51,7 +51,7 @@ re-validate corpus labels under a changed persona, history or timing.
 - `RecordedRunV1` (`schemaVersion: 1`) is frozen and shared; `parseRecordedRun` refuses unknown fields, so
   provenance cannot ride inside the run artifact without a v2 schema and its own decision.
 - The production adapter submits **1–5 inputs** and stops submitting after a rejection or throw
-  (`evaluation-adapter.ts`, PR55 dependency `fccb0f2`; not on `main` at `74e9995`).
+  (`evaluation-adapter.ts`, PR55 dependency `fccb0f2`; merged into `main` through #65 as `4e4f7cd`).
 - M5 does not export each acknowledgement today, and its prepared resolver accepts only `source`, `text`
   and `actorId` (extra fields are refused).
 - Missing evidence must stay unknown, never zero (INV-16, NFR-04).
@@ -76,24 +76,26 @@ Duplicate companion keys are refused; a digest mismatch is refused.
 
 ### D3 — Every input carries an explicit status
 
-`inputs[]` holds 1–5 entries in submission order, each with
-`status ∈ { accepted, duplicate, rejected, not-submitted, no-acknowledgement }`. Status is recorded, never
-inferred. `requestMessageId` and `eventId` are `null` when the observation does not support them — a
-rejected submission has a request id and no event id.
+`inputs[]` holds one entry per prepared input in submission order, each with
+`status ∈ { accepted, duplicate, rejected, not-submitted, no-acknowledgement }`; later entries stay
+`not-submitted` when the batch stops, and the list is empty only when nothing was submitted. Status is
+recorded, never inferred. `requestMessageId` and `eventId` are `null` when the observation does not support
+them — a rejected submission has a request id and no event id.
 
 ### D4 — Observed and unobserved are different facts
 
 A `notRun` case still retains every input that was **actually submitted and observed**, including a rejected
-or unacknowledged submission. Only a failure **before any submission** leaves no observed inputs. An
-unavailable batch cannot honestly supply 1–5 observed inputs; a not-run entry never receives an invented
+or unacknowledged submission. Only a failure **before any submission** leaves no observed inputs. A batch
+that never submitted an input supplies zero observed inputs; a not-run entry never receives an invented
 acknowledgement.
 
 ### D5 — Input identity is a tuple, and it is not observable yet
 
-The intended identity is `(corpusVersion, casesSha256, caseId, candidate.eventId)`, proposed by M5 on
-2026-10-28 and pending M3's confirmation. Until M3 confirms it and M5 exports it on the acknowledgement,
-`inputs[].inputId` is recorded as **not-yet-observable**; the case is `unscored` with a reason. It is never
-inferred from text, array position or runtime ids.
+The identity is `(corpusVersion, casesSha256, caseId, candidate.eventId)`, proposed by M5 on 2026-10-28 and
+**confirmed by M3 on 2026-10-29** ([#41](https://github.com/inscripoem/isla/issues/41#issuecomment-6508103610))
+for v1. It is a fixture identity, not a runtime event id. Until M5 exports it on the acknowledgement,
+`inputs[].inputId` is recorded as **not-yet-observable** and the case is `unscored` with reason
+`missing-input-identity`. It is never inferred from text, array position or runtime ids.
 
 ### D6 — An exact link does not bypass condition eligibility
 
@@ -108,9 +110,20 @@ condition-eligibility requirement.
 **per attempt at admission time**; with `history.source: 'durable'` the set grows between attempts, so a
 per-run value cannot say which set an attempt admitted. `null` never satisfies `correlation: exact`.
 
-The `null` rule for a run with `history.source: 'none'` is **open**: M4 has not answered whether such a run
-carries the digest of the empty set. M5 supports that reading (2026-10-28). Until M4 answers, the rule is
-recorded as open, not decided.
+The null rule is decided (M4, [#41](https://github.com/inscripoem/isla/issues/41#issuecomment-6476254278),
+2026-10-28):
+
+| Captured evidence at admission | `recordSetRevision` | `correlation` |
+| --- | --- | --- |
+| M4 assembly observed, admitted set empty | digest of the empty set | may be `exact` |
+| M4 assembly observed, admitted set non-empty | digest of that set | may be `exact` |
+| M4 assembly observed, set not captured | `null` | `missing` |
+| No M4 assembly observation | `null` | `missing` (unobserved) |
+
+`null` means only that the set was genuinely unobserved. `history.source: 'none'` and `'local'` (M4's
+`local-stand-in`) are explicit, observable assembly decisions, not capture failures, and carry the digest of
+the set M4 observed — the empty set for `none`. `correlation: exact` is never derived from `history.source`
+alone.
 
 ### D8 — Refusal, not a partial join
 
@@ -135,8 +148,8 @@ own triggers; this ADR deliberately does not take it.
   smoothed over. That is the intended cost.
 - Implementation needs new code (types, validation, report consumption, tests), so it is **not** authorised by
   this record. The reservation and this proposal are not an implementation approval.
-- The corpus/rubric rows stay open until M3 supplies the identity and the reviewed corpus; the evaluation
-  table stays absent and G4 stays not run.
+- The corpus/rubric rows stay open until the reviewed corpus and rubric are accepted (the v1 identity is
+  confirmed); the evaluation table stays absent and G4 stays not run.
 
 ## Alternatives considered
 
@@ -147,20 +160,23 @@ own triggers; this ADR deliberately does not take it.
 - **Restating `FixedConditions` in the companion** — rejected by M4: two copies drift, and a restated
   condition can disagree with the run it claims to describe.
 - **Recording only `runId`** — rejected: it cannot separate attempts that share a case and variant.
+- **`null` for a known-empty set** — rejected (M4, 2026-10-28): a decidable correlation filed in the unscored
+  bucket destroys the stratification signal a no-history run is meant to provide.
 - **Promoting a missing link to `exact`** — rejected by INV-16 and the honesty rule: unknown is not a pass.
 
 ## Open decisions (blocking implementation)
 
 | # | Question | Owner | Effect while open |
 | --- | --- | --- | --- |
-| 1 | Is `(corpusVersion, casesSha256, caseId, candidate.eventId)` the stable corpus identity? | M3 | `inputId` stays not-yet-observable; link-dependent cases are unscored |
-| 2 | Does `history.source: 'none'` carry the empty-set digest or `null`? | M4 | D7's null rule is recorded as open |
+| 1 | ~~Is `(corpusVersion, casesSha256, caseId, candidate.eventId)` the stable corpus identity?~~ | M3 | **Closed 2026-10-29** — confirmed for v1; `inputId` still needs M5's export |
+| 2 | ~~Does `history.source: 'none'` carry the empty-set digest or `null`?~~ | M4 | **Closed 2026-10-28** — empty-set digest for `none`; `null` means unobserved |
 | 3 | Who exports the per-input acknowledgement, and in what shape? | M5 | `requestMessageId`/`eventId` may stay `null`; correlation is `missing` |
 
 ## Re-open triggers
 
-- M3 confirms or replaces the corpus identity → update D5 and the proposal.
-- M4 answers the no-history question → close D7.
+- A future corpus version changes the identity tuple → update D5 and the proposal (M3 confirmed the v1 tuple
+  2026-10-29).
+- A future history source is neither observed nor absent → revisit D7's null rule (M4 answered 2026-10-28).
 - M5 exports acknowledgements → implement the companion with tests.
 - A run needs provenance that the companion cannot express → revisit D1 before extending it.
 - A real S6 run exists → record whether the companion was used and whether any case stayed unscored.
@@ -168,4 +184,5 @@ own triggers; this ADR deliberately does not take it.
 ## References
 
 ADR-007 (measurement bench); `docs/architecture/evaluation-provenance.md` (proposal in PR #63);
-FR-06; NFR-03; NFR-04; INV-16; issues #41 and #25 (2026-10-24 to 2026-10-28).
+FR-06; NFR-03; NFR-04; INV-16; issues #41 and #25 (2026-10-24 to 2026-11-04), including M3's identity
+confirmation (2026-10-29) and M4's no-history answer (2026-10-28).
