@@ -1,6 +1,6 @@
 # Team Development
 
-Revision: 2026-10-31.2. Proposed coordination update, under review. Module allocation and product acceptance requirements remain unchanged.
+Revision: 2026-11-06.1. Local coordination draft, under review. Module allocation and product acceptance requirements remain unchanged.
 
 ## Find your work
 
@@ -23,12 +23,12 @@ Record consequential interface, scope and acceptance decisions briefly on the re
 
 | Target, UTC+8 | Observable result |
 | --- | --- |
-| November 1, 21:00 | [First I1 check](https://github.com/inscripoem/isla/issues/72): run the agreed console combination and record actual results and gaps. |
-| November 5, 21:00 | [Complete offline I1](https://github.com/inscripoem/isla/issues/73): console, rule decisions, dialogue, fixed audio/subtitles, receipts and recording work together. |
+| November 1, 21:00, original target; not run | [First I1 check](https://github.com/inscripoem/isla/issues/72): inspect one reproducible current-main combination and record actual results and gaps; named acceptance is pending. |
+| November 5, 21:00, original target; acceptance not recorded | [Complete offline I1](https://github.com/inscripoem/isla/issues/73): console, rule decisions, dialogue, fixed audio/subtitles, receipts and recording work together. |
 | November 8, 21:00 | [Live reference application](https://github.com/inscripoem/isla/issues/74): approved real services and target-machine output work through the product. |
 | November 22, 21:00 | Complete submission candidate, with November 23-25 contingency. |
 
-The [delivery plan](DELIVERY-PLAN.en.md) contains the full schedule and acceptance tests. Checkpoint 01 is M5's setup record under the proposed simpler process. Joint checks may use asynchronous consumer observations of the same agreed revision; record who actually ran each part and leave unobserved results as not-run.
+The [delivery plan](DELIVERY-PLAN.en.md) contains the full schedule and acceptance tests. Checkpoint 01 is M5's setup record. Joint checks may use asynchronous consumer observations of the same agreed revision; record who actually ran each part and leave unobserved results as not-run. Captain may reconcile planning metadata and conditionally carry unchanged code reviews forward as specified there; routine schedule updates do not restart all-member review.
 
 ## Develop and review
 

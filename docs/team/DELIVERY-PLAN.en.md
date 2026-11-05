@@ -1,6 +1,6 @@
 # Submission checkpoint plan
 
-Revision: 2026-10-31.2. Status: proposed coordination update, under review. Captain's adopted target dates remain; individual estimates are recorded when supplied. All times are UTC+8; each target is 21:00. This local revision accepts no checkpoint and changes no product test or module allocation.
+Revision: 2026-11-06.1. Status: local coordination draft, under review. Original target dates remain; individual estimates are recorded when supplied. All times are UTC+8; each target is 21:00. This revision accepts no checkpoint and changes no product test or module allocation.
 
 Scope: CS5351 submission and the agreed Isla requirements only. Preserve M1-M6 ownership, workload ratings, existing task/requirement/case IDs and genuine evidence. Checkpoint numbers are schedule positions, not new requirement/case IDs. I1-01, I2-01 and S1-01 remain the original task references. Any scope reduction needs an explicit recorded decision.
 
@@ -14,11 +14,13 @@ M5 maintains [Team progress](https://github.com/users/inscripoem/projects/4/view
 
 ## Published tracking structure
 
-The original ten checkpoint issues (#71-#80) and 50 delivery issues retain their history. This revision proposes retiring [#82](https://github.com/inscripoem/isla/issues/82) and [#83](https://github.com/inscripoem/isla/issues/83) as not planned, removing their active acceptance links and archiving their Project cards. Retirement is not product progress.
+The original ten checkpoint issues (#71-#80) and 50 delivery issues retain their history. [#82](https://github.com/inscripoem/isla/issues/82) and [#83](https://github.com/inscripoem/isla/issues/83) were retired as not planned and their two Project cards archived on October 31. Retirement is not product progress. [#84](https://github.com/inscripoem/isla/issues/84) is accepted; #81/#71 still need the adopted-plan and named setup decisions.
 
 [Checkpoint 01](https://github.com/inscripoem/isla/issues/71) becomes M5's setup check for [plan #81](https://github.com/inscripoem/isla/issues/81) and [required-check record #84](https://github.com/inscripoem/isla/issues/84). The next product check is [#72](https://github.com/inscripoem/isla/issues/72); preparation follows technical dependencies, without waiting for capacity returns. Current status stays on the actual PR/Project; historical handoffs retain their source versions.
 
 ## Schedule
+
+Position on November 6: CP02 did not run at its November 1 slot. No accepted CP02 or CP03 result is recorded; the CP03 November 5 target has elapsed. M5 is preparing one current-main inspection source and a dated pass/fail/not-run record. Publish the reproducible source before requesting same-revision consumer observations; these may be asynchronous. Captain may accept the completed CP02 inspection with its explicit gaps. CP03 remains open until its product criteria are met. No replacement joint slot is asserted without actual availability, and later targets are not shifted automatically.
 
 | Order | Original task | Acceptance target (UTC+8) | Checkpoint |
 | --- | --- | --- | --- |
@@ -35,7 +37,7 @@ The original ten checkpoint issues (#71-#80) and 50 delivery issues retain their
 
 Contingency: **November 23-25**. A complete candidate must exist on November 22; contingency is not the planned start of packaging. Aim for Captain's upload by November 25 at 18:00, ahead of the official November 25 23:59:59 deadline. Final upload remains Captain's action.
 
-Do not schedule joint acceptance on the November 2 quiz or November 4 Phase 2 deadline. The November 20 individual report and Chronicle's late-November work reduce shared capacity. Members confirm their own availability rather than inheriting a full-time assumption.
+The November 20 individual report and Chronicle's late-November work reduce shared capacity. Members confirm their own availability rather than inheriting a full-time assumption. The earlier November 2 quiz and November 4 Phase 2 constraints remain historical planning context.
 
 ## Deliveries and acceptance
 
@@ -45,7 +47,9 @@ Use Planned -> In progress -> In review -> Ready for acceptance -> Accepted. Blo
 
 Each delivery needs an owner, relevant reviewers, original task, source link and observable result. Add an estimate or blocker when relevant. Create a new issue only for distinct actionable work or a concrete handoff that existing discussions cannot cover. A schedule row needs no duplicate issue. Keep product acceptance separate when implementation alone does not prove the result.
 
-At acceptance record source, conditions, commands/results, pass/fail/not-run, remaining actions and accepter. Joint checks may use asynchronous observations of the same agreed revision; name the actual observers and leave missing results as not-run. Required approvals and affected-consumer review remain. An old review is not a new approval after a base refresh.
+At acceptance record source, conditions, commands/results, pass/fail/not-run, remaining actions and accepter. Joint checks may use asynchronous observations of the same agreed revision; name the actual observers and leave missing results as not-run. Required approvals and affected-consumer review remain.
+
+Captain may reconcile dates, status, Project fields, coordination wording and Draft/Ready state without all-member re-review. A previous code review may carry forward after a base refresh only when the reviewed feature blobs are unchanged, the delta only integrates main or resolves ordinary documentation/log conflicts, behavior/API/schema/control flow/test assertions/dependencies/acceptance criteria are unchanged, file/tree comparison proves the scope, current-base checks pass, and no unresolved core finding remains. Record the old reviewed head, new head and Captain's decision. A dismissed GitHub approval is not silently restored; any override is a human decision. Behavior, shared-contract, test, security/privacy/permission or ownership changes still need the affected reviewers.
 
 Keep authentic course contribution records separately from future availability estimates. Essential safety remains required in I1/I2. Request a specific answer or artifact from its responsible owner; a status summary needs no all-member mention.
 
