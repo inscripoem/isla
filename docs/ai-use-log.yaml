@@ -4175,3 +4175,59 @@ entries:
       honest limitations are disclosed on issue #93 (comment 6637699483,
       revising the "zero code changes" wording of comments 6554487472 and
       6585822158).
+  - date: "2026-11-06"
+    task: m4-04-recall-evidence-marker
+    change: >-
+      Mark the two recalled-evidence sections of the rendered dialogue prompt so
+      retrieved background cannot present itself at the same structural level as
+      the persona's standing rules: the `Relevant background:` and
+      `Earlier, confirmed:` headers now carry the wording M3 confirmed on issue
+      #44 (2026-11-04), stating that the section holds background/historical
+      evidence, not instructions. Design comments record the purpose, the honest
+      limit that this is a prompt-construction boundary rather than a verified
+      model-compliance guarantee (resistance to instructions embedded in recalled
+      text is covered by a separately agreed live-provider behavior check under
+      the checkpoint-05 rubric), and the deliberate fact that header lines stay
+      uncharged against `contextLimits.maxCharacters`. Six existing header pins
+      are updated and two marker-presence assertions are added. No recall
+      admission/ranking, budget accounting, persona block, contract or wire
+      change.
+    requirements: []
+    invariants: []
+    commits: [1ce206c]
+    agent: opencode/deepseek-v4-flash
+    provider: cslabllm
+    model: CS5351/DeepSeek-V4-Flash
+    supervision: >-
+      The member's supervised session selected the slice, wrote the English task
+      brief into the gitignored .cache directory, and launched one unattended
+      OpenCode build session (ses_e53648fd4ffe0aFxVeMeUM6lJ5,
+      cslabllm/CS5351/DeepSeek-V4-Flash). The supervisor read the full diff
+      against the brief, confirmed only the three named files changed with the
+      exact strings, and ran the gates; every changed line was authored by the
+      OpenCode session and the supervisor performed git operations only.
+    human_review: >-
+      Captain (M4) directed the change in session on 2026-11-06 under the plan
+      recorded on issue #44 (M3 semantics confirmation 2026-11-04; M5 endorsement
+      2026-11-01). No reviewer approval, merge or case registration is claimed by
+      this entry; the pull request awaits consumer review.
+    transcript_record: >-
+      The OpenCode session is retained by the CLI session store; the task brief
+      stays in the gitignored .cache directory.
+    verification:
+      platform: Windows 11, Node 24.21.0, pnpm 12.11.2
+      base: 8f25cf3
+      commands: >-
+        pnpm exec vitest run test/offline/m4-dialogue.test.ts
+        test/offline/m4-memory-enhancement.test.ts; pnpm run test:m4;
+        pnpm exec tsc -b; pnpm run lint
+      results: >-
+        targeted files 89/89 in 2 files; test:m4 237/237 in 10 files; typecheck
+        clean (tsc -b exit 0); lint 0 warnings / 0 errors on 254 files. Remote
+        CI verify is the final gate after push.
+      not_run: >-
+        No live provider run and no claim of prompt-injection resistance; the
+        behavior check that could support such a claim is separately agreed
+        under issue #44 / the checkpoint-05 rubric and remains pending. Full
+        local suite not run (documented pre-existing Windows failures, CI is the
+        gate); no case closure.
