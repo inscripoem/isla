@@ -150,6 +150,26 @@ bug: **symptom, reproduction, classification, root cause, fix, and the invariant
   separately authorized publication produces new CI evidence.
 - Invariant gap: an exception that is not itself verified turns a strict gate into a whitelist.
 
+## BUG-016 — A boundary checker read exported string literals as module specifiers
+- Symptom: `test/offline/boundaries.test.ts` recorded a Node import edge from a browser-safe
+  module that declared no import; a constant array beginning `'http'` was read as `import 'http'`.
+- Reproduction: `moduleSpecifiers("export const A = ['http', …] as const")` returned `["http"]`.
+  On that tree the same expression produced 382 phantom specifiers across 88 of 109 source
+  files (console graph: 186 edge entries where 77 exist; contracts: 117 where 34 exist).
+- Classification: test defect / verification tooling (false positive; a template-literal
+  dynamic import was also missed, though none occurs in the current tree).
+- Root cause: `MODULE_PATTERN` treated the first quoted token after any `import`/`export` as a
+  specifier. A regular expression cannot distinguish a string literal from a module reference.
+- Fix: `moduleSpecifiers` reads the TypeScript AST — import/export declarations,
+  `import x = require(…)`, and literal `import()`/`require()` calls — and `collectEdges` passes
+  the file name so `.tsx` parses as TSX. Positive and precision controls were added; the
+  existing negative controls are unchanged.
+- Status: committed on `m6-issue-68-boundary-parser`; rebased onto `main` `5e7abfb`; readiness
+  45/45, full suite 1412/1412 in 71 files, typecheck/lint/build passed; six mutation checks failed
+  for the intended test. M2 removes its `operator-bootstrap` workaround after this lands.
+- Invariant gap: a gate that infers syntax from a lexical shortcut can certify a graph the code
+  does not have. No registered invariant covers the import boundary; the checker's positive
+  control is the regression guard.
 ## BUG-017 — An enforcement record certified "no bypass actors" from an omitted API field
 - Symptom: the "Effective enforcement" section of `verification-constraints.md` (2026-10-29)
   recorded `current_user_can_bypass: "never"` as "no bypass actors" — a stronger claim than the
@@ -167,8 +187,8 @@ bug: **symptom, reproduction, classification, root cause, fix, and the invariant
   not establish"; the actor line cites the maintainer's statement and keeps the previous value
   unrecorded. Two rules were added to the reviewer's five questions: a negative claim requires a
   positive read, and a live setting or thread is re-read at the moment of writing.
-- Status: uncommitted on `m6-issue-68-boundary-parser` (base `4e4f7cd`); no gate change, no
-  production code touched.
+- Status: merged on `main` via PR #132 (`ec44213`, then `02276f6`); no gate change, no production
+  code touched.
 - Invariant gap: no registered invariant covers prose claims about live configuration, and an
   offline test cannot read a live ruleset, so the guard is review plus the recorded rule — not a
   test. Recorded as DEBT-08.

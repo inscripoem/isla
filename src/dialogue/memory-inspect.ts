@@ -1,6 +1,17 @@
-import type { AssembledDialogueContext, ContextExclusionReason, HistorySource } from './context'
+import type {
+  InspectConsistencySummary,
+  InspectHistorySource,
+  InspectRecall,
+  MemoryInspectPayload,
+  RecallProvenance,
+} from '../contracts'
+import { MEMORY_INSPECT_SCHEMA_VERSION } from '../contracts'
+import type {
+  AssembledDialogueContext,
+  ContextExclusionReason,
+  HistorySource,
+} from './context'
 import type { ConsistencyAuditSummary } from './consistency'
-import type { ReplyIntent } from '../contracts'
 
 /**
  * Operator memory inspection for one assembled turn.
@@ -22,62 +33,50 @@ import type { ReplyIntent } from '../contracts'
  *   - durable confirmed (M6) — durable `fully-delivered` evidence, an audit view
  *     M6 supplies. "Confirmed by M6" is NOT "admitted by M4"; the operator console
  *     must label them separately.
+ *
+ * The declared payload shape lives in the wire contract at
+ * src/contracts/diagnostics.ts, so the protocol-1 boundary and the browser
+ * consumer can share it without importing assembly internals. This file only
+ * builds it.
  */
 
-/** Provenance of one recall, as structured fields (not a rendered string). */
-export type RecallProvenance =
-  | { kind: 'persona-fact'; factId: string }
-  | { kind: 'delivery-turn'; sessionId: string; turnId: string }
-
-/** One recall actually injected into the assembled context. */
-export interface InspectRecall {
-  provenance: RecallProvenance
-  /** Deterministic overlap score that selected the item. */
-  score: number
+/*
+ * Explicit wire mapping for the history source. The switch is exhaustive so
+ * that adding a fourth internal value in ./context fails compilation here
+ * instead of silently flowing onto the wire.
+ */
+function toWireHistorySource(source: HistorySource): InspectHistorySource {
+  switch (source) {
+    case 'history-port':
+      return 'history-port'
+    case 'local-stand-in':
+      return 'local-stand-in'
+    case 'none':
+      return 'none'
+    default: {
+      const unexpected: never = source
+      return unexpected
+    }
+  }
 }
 
-/** Admission summary for the assembled turn. */
-export interface InspectAdmission {
-  /**
-   * Number of records admitted into spoken history (M4 admission). This is the
-   * "may be recalled" view; it is not the M6 durable-confirmed audit view.
-   */
-  admitted: number
-  /** Records excluded from admission, grouped by the reason, with counts. */
-  exclusions: Readonly<Partial<Record<ContextExclusionReason, number>>>
-  /** Explicit mention of the M6 durable-confirmed view, which is audit-only here. */
-  readonly noteM6Confirmed: 'audit-only'
-}
-
-/** Redacted memory inspection for one turn. */
-export interface MemoryInspectPayload {
-  sessionId: string
-  turnId: string
-  replyIntent: ReplyIntent
-  admission: InspectAdmission
-  recall: {
-    /** Persona facts injected and dropped (budget), with counts. */
-    persona: { used: number; dropped: number }
-    /** Delivery-memory turns injected and dropped (budget), with counts. */
-    delivery: { used: number; dropped: number }
-    /** The recalls actually injected, with score and structured provenance. */
-    results: readonly InspectRecall[]
+/*
+ * Explicit wire mapping for the consistency summary: every field is copied by
+ * name so that a field added internally does not reach the wire unnoticed.
+ */
+function toWireConsistencySummary(
+  summary: ConsistencyAuditSummary,
+): InspectConsistencySummary {
+  return {
+    findings: summary.findings,
+    incomplete: summary.incomplete,
+    statementsOffered: summary.statementsOffered,
+    statementsVisited: summary.statementsVisited,
+    statementsExamined: summary.statementsExamined,
+    textUnits: summary.textUnits,
+    claims: summary.claims,
+    comparisons: summary.comparisons,
   }
-  budget: {
-    /** Estimated characters charged to the shared context budget. */
-    estimatedCharacters: number
-    truncatedByTurnLimit: boolean
-    truncatedByCharacterLimit: boolean
-  }
-  /**
-   * Redacted completion summary of the consistency audit (./consistency):
-   * counts and a completeness flag only, never statement text. `incomplete`
-   * means the audit was cut short by a work ceiling or the findings cap, so the
-   * reported finding count is partial.
-   */
-  consistency: ConsistencyAuditSummary
-  historySource: HistorySource
-  warnings: readonly string[]
 }
 
 /**
@@ -101,7 +100,10 @@ export function buildMemoryInspect(
 
   const results: InspectRecall[] = [
     ...context.recalledFacts.map((entry) => ({
-      provenance: { kind: 'persona-fact' as const, factId: entry.fact.id },
+      provenance: {
+        kind: 'persona-fact' as const,
+        factId: entry.fact.id,
+      } satisfies RecallProvenance,
       score: entry.score,
     })),
     ...context.recalledTurns.map((entry) => ({
@@ -109,12 +111,13 @@ export function buildMemoryInspect(
         kind: 'delivery-turn' as const,
         sessionId: entry.turn.sessionId,
         turnId: entry.turn.turnId,
-      },
+      } satisfies RecallProvenance,
       score: entry.score,
     })),
   ]
 
   return {
+    schemaVersion: MEMORY_INSPECT_SCHEMA_VERSION,
     sessionId,
     turnId,
     replyIntent: context.replyIntent,
@@ -142,8 +145,8 @@ export function buildMemoryInspect(
       truncatedByTurnLimit: context.truncatedByTurnLimit,
       truncatedByCharacterLimit: context.truncatedByCharacterLimit,
     },
-    consistency: { ...context.consistencyAudit },
-    historySource: context.historySource,
+    consistency: toWireConsistencySummary(context.consistencyAudit),
+    historySource: toWireHistorySource(context.historySource),
     warnings: [...context.warnings],
   }
 }
