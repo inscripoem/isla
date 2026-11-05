@@ -1,6 +1,8 @@
 # Isla — Team Work Plan v0.2
 
-Status: proposed coordination update, under review · 2026-10-31.2 · [Project overview](../../README.md)
+Status: local coordination draft, under review · 2026-11-06.1 · [Project overview](../../README.md)
+
+Current scheduling and review carry-forward are recorded in the [delivery plan](DELIVERY-PLAN.en.md). CP02/CP03 acceptance is not recorded; their original dates remain visible. Module responsibilities and product criteria below are unchanged.
 
 ## Requirements and course-deliverable work
 
