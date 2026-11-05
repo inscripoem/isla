@@ -25,7 +25,7 @@ measured pilot baseline (§5). No S6, G4, quality, latency or cost result is cla
 | `planMs` | M3 | selection entry → terminal selection outcome; excludes history assembly, admission, recall scoring and the consistency audit | `null` |
 | `dialogueMs` | M4 | dialogue stage | `null` |
 | `synthesisMs` | M1 | synthesis stage; a deadline budget is not a measurement | `null` |
-| `firstAudibleMs` | M1/M2 | physical output observation only | `null` |
+| `firstAudibleMs` | M1 (observation); M2 (console) | physical output observation only | `null` |
 | `stopToSilenceMs` | M1/M2 | physical silence observation only | `null` |
 | usage / cost | M5 | provider-reported tokens and price; a partial total is unknown | `unknown` |
 | outcome counts | M6 | completed / failed / cancelled over executed attempts; a not-run entry is not an attempt | `—` for an empty sample |
