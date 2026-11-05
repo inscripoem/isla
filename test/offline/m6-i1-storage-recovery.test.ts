@@ -19,8 +19,8 @@ import {
 import type { RunnerDeps } from '../support/contract-runner'
 import { createCoordinatorContractRunner } from '../support/coordinator-runner'
 import * as correct from '../support/correct-ports'
-import { FIXTURE_SESSION_ID } from '../support/fixture-data'
 import { createGate } from '../support/context'
+import { FIXTURE_SESSION_ID } from '../support/fixture-data'
 import { createVirtualClock } from '../support/virtual-clock'
 
 /**
@@ -369,19 +369,23 @@ describe('M6-01 coordinator SQLite recovery (C-32/C-33, C-68, INV-12)', () => {
     const ends = events.filter((event) => event.type === 'turn.ended')
     expect(ends).toHaveLength(2)
     expect(ends.map((event) => event.payload.status)).toEqual(['completed', 'cancelled'])
+    // The terminal record belongs to the turn it describes, not merely carries the right status.
+    expect(ends[0]?.turnId).toBe(first.turnId)
+    expect(ends[1]?.turnId).toBe(stopped.turnId)
 
-    // Neither the stopped turn nor the late attempt is recorded as delivered.
+    // The stopped turn is never recorded as delivered.
     const stoppedDeliveries = runner
       .deliveries()
       .filter((delivery) => delivery.turnId === stopped.turnId)
-    expect(stoppedDeliveries.every((delivery) => delivery.classification !== 'fully-delivered')).toBe(
-      true,
-    )
     expect(
-      runner
-        .deliveries()
-        .some((delivery) => delivery.turnId === late.turnId && delivery.classification === 'fully-delivered'),
-    ).toBe(false)
+      stoppedDeliveries.filter((delivery) => delivery.classification === 'fully-delivered'),
+    ).toHaveLength(0)
+
+    // A selection-stage stale return carries no turn id, so it cannot be delivered.
+    // This is current coordinator behaviour, not a contract: if the combined
+    // revision (#131) gives the stale selection return a turn id, update this
+    // assertion with that change rather than dropping the case.
+    expect(late.turnId).toBeNull()
 
     // Only the first turn reaches confirmed history.
     expect((await history.confirmedHistory(sessionId)).map((record) => record.turnId)).toEqual([
