@@ -1,13 +1,14 @@
 # Trace matrix
 
-Status: under review. M6 and M5 rows contributed here; other owners' rows pending. Shared document —
-Step A and I1 coordination under review. Updated: 2026-10-22.
+Status: under review. M3, M6 and M5 rows contributed here; other owners' rows pending. Shared document —
+Step A and I1 coordination under review. Updated: 2026-11-04.
 
 Every requirement maps to its enforcing component, interface, test/evidence and runtime monitor.
 
 | Requirement | Consequence | Enforcing component | Interface | Case | Test / evidence | Runtime monitor | ADR | Status | Owner |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | FR-01 | Deterministic rule selection over offered candidates; module-level prerequisite, not full-pipeline replay | `src/decision/selection.ts` | `SelectionPort` | C-13 (registered composition verifier; no new case ID) | `test/offline/m3-decision.test.ts` (rule port, exact-one, deadline and failure observations); `test/fixtures/decision/v1/manifest.json` (`m3-selection-v1`) | runtime-policy catalog: Standalone corpus-runner selection failure; Runtime selection timeout, cancellation, expired authority or superseded snapshot; Fresh runtime selection rejection or invalid proposal | — | under review; C-05/C-16 pending | M3 |
+| FR-03 | Deterministic rule reaction over eligible actions; module-level prerequisite, not full runtime dispatch | `src/decision/reaction.ts` | `ReactionPort` | C-06, C-11 (registered composition verifiers; no new case ID) | `test/offline/m3-decision.test.ts` (rule reaction selection, coordinator integration, deadline, abort and invalid-input checks) | runtime-policy catalog: Runtime reaction cancellation or revocation; Runtime reaction timeout, rejection, invalid decision or stale capability | — | under review | M1 / M3 |
 | FR-06 | Durable, ordered, replayable records; delivery + supporting event commit atomically | `src/storage/event-store.ts` | `EventStorePort` | C-17, C-19 | `test/conformance/storage.conformance.ts` (`atomic-commits-both`, `read-ordered`, `export-matches`) | `failed` acks (`storage_unavailable`) | ADR-001 | in review | M6 |
 | FR-06 | Confirmed history excludes partial/unspoken records | `src/storage/history-query.ts` | `HistoryQueryPort` | C-17, C-21 | storage conformance `history-fully-delivered-only`; `m6-storage.test.ts` (confirmed-history tests) | count of `fully-delivered` | — | in review | M6 |
 | FR-06 | JSONL export carries event version attribution (`versions`) | `src/storage/event-store.ts` (`exportJsonl`) | `EventStorePort` | C-22 | `test/offline/m6-storage.test.ts` (version attribution) | — | — | in review | M6 |
