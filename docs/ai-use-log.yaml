@@ -5100,6 +5100,57 @@ entries:
       Controlled M5 test deployment and test code plus English documentation.
       M3 implementation and shared contracts are unchanged. This does not
       establish a live model, physical audio, avatar output or Windows result.
+  - date: "2026-11-06"
+    task: "M6-02 / #100"
+    branch: m6-02-provenance
+    change: >-
+      Add the ADR-008 prepared-input provenance companion as a pure, strict
+      parser (src/evaluation/provenance.ts): a versioned root binding (runId
+      plus runDigest over the exact run artifact bytes) and one entry per
+      attempt carrying the flat per-attempt fields, with inputs in submission
+      order. Refusals are data, not exceptions: unknown keys, a digest or runId
+      mismatch, a missing, extra or duplicate (caseId, variantId, attempt) key,
+      an input order that cannot be established, `correlation: exact` with a
+      null record-set revision, and more than five prepared inputs. Twelve
+      offline cases (two acceptances, ten refusals) and the test:m6
+      selection. The report command does not consume the companion yet, so no
+      published table can depend on it. No provider, runtime, schema or
+      dependency change.
+    requirements: [NFR-01, NFR-04]
+    invariants: []
+    cases: []
+    commits: [53ec4ef]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
+      the Captain approved the local slice on 2026-11-06. The shape reading
+      (root binding plus an `attempts` array) is stated in the module header
+      because the merged proposal lists the per-attempt fields flat while also
+      requiring one object per run; that reading is still unconfirmed, and the
+      report integration is deliberately excluded so a wrong reading cannot
+      reach a published table.
+    human_review: >-
+      Captain (M6) approved the local implementation slice; no independent
+      reviewer has read the parser and no merge is claimed.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export was produced.
+    verification:
+      platform: macOS, Node 24, pnpm 12
+      base: 7a6eec2
+      focused: "test/offline/m6-02-provenance.test.ts: 12 passed."
+      role: "test:m6 194/194 in 15 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0: 1437/1437 in 72 files; typecheck clean; lint 0/0; build ok."
+      mutation: >-
+        Eight rule mutations each turned one case red and were restored:
+        unknown root key, digest mismatch, duplicate occurrence key, input
+        order, exact-with-null revision, five-input cap, missing occurrence and
+        extra occurrence.
+      not_run: >-
+        No live provider run, no report-command integration, no reviewer
+        reading and no case allocation. The planning revision's 1538-test
+        figure was not reproducible from a published source in this session.
 
   - date: "2026-11-10"
     task: M2-01-boundary-workaround-removal
