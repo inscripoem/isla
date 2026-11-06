@@ -4140,7 +4140,7 @@ entries:
       is a manifest decision owned by M5.
     requirements: []
     invariants: []
-    commits: []
+    commits: [53fe0f7]
     agent: opencode/deepseek-v4-flash
     model: deepseek-v4-flash
     supervision: >-
@@ -4197,7 +4197,7 @@ entries:
       reused.
     requirements: []
     invariants: []
-    commits: []
+    commits: [17f42d8]
     agent: opencode/deepseek-v4-flash
     model: deepseek-v4-flash
     supervision: >-

@@ -109,22 +109,34 @@ Windows 11, Node 24.21.0, pnpm 12.11.2, measured on this branch over the code tr
 | `pnpm typecheck` | clean, no diagnostics |
 | `pnpm lint` | 0 warnings, 0 errors, 254 files |
 | `pnpm test` | 1407 passed, 18 failed (1425 tests, 71 files) |
-| `pnpm verify` | does not start on this host today (see below); measured step by step instead: `typecheck` clean, `lint` 0/0, `test` stops on those 18 failures, so `pnpm build` is not reached |
+| `pnpm verify` | starts through a POSIX shell, does not start through the Windows `pnpm.cmd` wrapper (see below); measured step by step either way: `typecheck` clean, `lint` 0/0, `test` stops on those 18 failures, so `pnpm build` is not reached |
 
 The 18 failures are the documented Windows classes and none is in `src/dialogue`:
 `boundaries.test.ts` x4, `cli.test.ts` x3, `production-cli.test.ts` x4, `m6-sqlite.test.ts` x3,
 `m6-02-boundary.test.ts` x2, `requirements.test.ts` x1, `m5-process-restart.test.ts` x1.
 
-`pnpm verify` deserves the same explicit statement, because it changed since the previous
-record: the script chains `typecheck`, `lint`, `test` and `build`, but on this host today it
-does not reach its first step — the nested `pnpm` invocation inside the script resolves to an
-extensionless shim that the Windows shell cannot execute (`...npm\node_modules\pnpm\pnpm` is
-not recognized as a command), a host toolchain change after this host moved to Node 24.21.0;
-the 2026-10-31 record this section replaces still ran the chain and stopped at `test`. Each step was
-therefore measured individually on the same tree with the same tool versions — `typecheck`
-clean, `lint` 0/0, `test` with exactly the 18 failures listed above — so the chain, were it
-runnable, would still stop at `test`, and the `build` step remains unexercised here rather
-than unreachable.
+`pnpm verify` needs a qualified statement rather than a single one, because it does not have a
+single answer on this host. The script chains `typecheck`, `lint`, `test` and `build`, and whether
+the chain starts depends on which `pnpm` entry point the nested invocation resolves to — not on the
+Node major version.
+
+- **Through the npm-global Windows wrapper, it does not reach its first step.** The last line of
+  `%APPDATA%\npm\pnpm.cmd` invokes `"%dp0%\node_modules\pnpm\pnpm"`, and `node_modules\pnpm\pnpm`
+  is the extensionless POSIX shell shim shipped inside the package (the real entry point is
+  `bin/pnpm.mjs`), so `cmd.exe` refuses it: `...npm\node_modules\pnpm\pnpm` is not recognized as a
+  command. That is the observation this section recorded on 2026-11-03.
+- **Through a POSIX shell with a working shim first on `PATH`, the chain starts and stops at
+  `test`** on the 18 failures above, so `build` is not reached. Measured on 2026-11-06 under
+  **both** Node 22.22.2 and Node 24.21.0 with pnpm 12.11.2, with identical results.
+
+An earlier revision of this paragraph attributed the failure to this host moving to Node 24.21.0.
+That attribution was wrong and is retracted here: the outcome is identical under both majors, and
+the distinguishing variable is the wrapper, not the runtime. This also retracts the wider form of
+the claim — `pnpm verify` is neither an unusable script nor an unconditionally working one, and a
+verifier on Windows should expect the failure mode above, not a missing capability. The conclusion
+for a verifier is the same either way and was measured step by step on the same tree: `typecheck`
+clean, `lint` 0/0, `test` with exactly the 18 failures listed above, so the `build` step is
+unexercised here rather than unreachable.
 
 The fourth `boundaries.test.ts` case is the one that arrived with the AST
 boundary checker merged as PR #70, and it fails on Windows on the same
