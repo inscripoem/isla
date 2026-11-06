@@ -41,7 +41,8 @@ named reasons, and the attempt keeps its completed/failed/cancelled classificati
 1. The run has a companion record; without one, the result is `unscored` `no-provenance-record`.
 2. The input-to-acknowledgement link is `exact`; `missing` or `ambiguous` gives
    `missing-acknowledgement-link` or `ambiguous-acknowledgement-link`.
-3. `inputs[].inputId` was observable; otherwise `missing-input-identity`.
+3. `inputs[].inputId` was observable; an unexported identity is recorded as
+   `not-yet-observable` (rendered from `null`), and the case is `missing-input-identity`.
 4. The admitted record set was captured; otherwise `missing-history-observation`. A `history.source:
    'none'` run that was observed carries the empty-set digest and is eligible — a known-empty set is not
    an unobserved one.
@@ -87,8 +88,9 @@ Preparation (may run before checkpoint 4):
 2. Produce the recorded run with the bench harness (`runBench` in `src/evaluation/bench.ts`), using the
    eligible set and the declared conditions.
 3. Render the table: `pnpm evaluation:report --input <recorded-run.json> --output <evaluation-table.md>`.
-4. Record the companion and validate it against the run digest (parser: the #100 slice; the report
-   command does not yet consume it).
+4. Record the companion and validate it against the run digest with
+   `--provenance <path>` (parser and command: the #100 slice). The command refuses a run-id,
+   digest, key-set or input-order mismatch and writes no table.
 
 Pilot pass conditions:
 
