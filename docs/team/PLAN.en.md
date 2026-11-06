@@ -1,8 +1,8 @@
 # Isla — Team Work Plan v0.2
 
-Status: local coordination draft, under review · 2026-11-06.1 · [Project overview](../../README.md)
+Status: local coordination draft, under review · 2026-11-06.2 · [Project overview](../../README.md)
 
-Current scheduling and review carry-forward are recorded in the [delivery plan](DELIVERY-PLAN.en.md). CP02/CP03 acceptance is not recorded; their original dates remain visible. Module responsibilities and product criteria below are unchanged.
+Current scheduling and review carry-forward are recorded in the [delivery plan](DELIVERY-PLAN.en.md). PR63 is merged; M5 approvals on PR138 and PR136 are published. The November 6 inspection is recorded locally, while CP02/CP03 acceptance is not recorded and their original dates remain visible. Module responsibilities and product criteria below are unchanged.
 
 ## Requirements and course-deliverable work
 

@@ -1,6 +1,6 @@
 # Team Development
 
-Revision: 2026-11-06.1. Local coordination draft, under review. Module allocation and product acceptance requirements remain unchanged.
+Revision: 2026-11-06.2. Local coordination draft, under review. Module allocation and product acceptance requirements remain unchanged.
 
 ## Find your work
 
@@ -21,9 +21,11 @@ Record consequential interface, scope and acceptance decisions briefly on the re
 
 ## Next product results
 
+PR63 is merged in main `7a6eec2`; M5's reviews on PR138 and PR136 are published. The [delivery plan](DELIVERY-PLAN.en.md#schedule) links the exact source and reviews. The November 6 controlled inspection is prepared locally at `31ba86c`; source publication and named CP02 acceptance are pending. Full I1 remains CP03.
+
 | Target, UTC+8 | Observable result |
 | --- | --- |
-| November 1, 21:00, original target; not run | [First I1 check](https://github.com/inscripoem/isla/issues/72): inspect one reproducible current-main combination and record actual results and gaps; named acceptance is pending. |
+| November 1, 21:00, original slot not run | [First I1 check](https://github.com/inscripoem/isla/issues/72): actual November 6 controlled inspection recorded locally; publish that exact source and gap record, then obtain named acceptance. |
 | November 5, 21:00, original target; acceptance not recorded | [Complete offline I1](https://github.com/inscripoem/isla/issues/73): console, rule decisions, dialogue, fixed audio/subtitles, receipts and recording work together. |
 | November 8, 21:00 | [Live reference application](https://github.com/inscripoem/isla/issues/74): approved real services and target-machine output work through the product. |
 | November 22, 21:00 | Complete submission candidate, with November 23-25 contingency. |

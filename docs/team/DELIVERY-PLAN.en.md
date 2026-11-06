@@ -1,6 +1,6 @@
 # Submission checkpoint plan
 
-Revision: 2026-11-06.1. Status: local coordination draft, under review. Original target dates remain; individual estimates are recorded when supplied. All times are UTC+8; each target is 21:00. This revision accepts no checkpoint and changes no product test or module allocation.
+Revision: 2026-11-06.2. Status: local coordination draft, under review. Original target dates remain; individual estimates are recorded when supplied. All times are UTC+8; each target is 21:00. This revision accepts no checkpoint and changes no product test or module allocation.
 
 Scope: CS5351 submission and the agreed Isla requirements only. Preserve M1-M6 ownership, workload ratings, existing task/requirement/case IDs and genuine evidence. Checkpoint numbers are schedule positions, not new requirement/case IDs. I1-01, I2-01 and S1-01 remain the original task references. Any scope reduction needs an explicit recorded decision.
 
@@ -20,7 +20,9 @@ The original ten checkpoint issues (#71-#80) and 50 delivery issues retain their
 
 ## Schedule
 
-Position on November 6: CP02 did not run at its November 1 slot. No accepted CP02 or CP03 result is recorded; the CP03 November 5 target has elapsed. M5 is preparing one current-main inspection source and a dated pass/fail/not-run record. Publish the reproducible source before requesting same-revision consumer observations; these may be asynchronous. Captain may accept the completed CP02 inspection with its explicit gaps. CP03 remains open until its product criteria are met. No replacement joint slot is asserted without actual availability, and later targets are not shifted automatically.
+Published status checked on November 6: PR63 is merged in [main 7a6eec2340fb99589ebe1b7f8cd15840ea26bbdb](https://github.com/inscripoem/isla/commit/7a6eec2340fb99589ebe1b7f8cd15840ea26bbdb); ADR-008 was already merged through PR66. M5's [PR138 approval](https://github.com/inscripoem/isla/pull/138#pullrequestreview-5790732041) and [PR136 approval](https://github.com/inscripoem/isla/pull/136#pullrequestreview-5796392608) are published at their recorded heads. Both PRs remain open. M2's #116 delivery acceptance and the same-source product-consumer obligations remain separate. These updates accept no checkpoint.
+
+Position on November 6: CP02 did not run at its November 1 slot. M5's actual November 6 controlled inspection at local source `31ba86c876c6bc508c04f3381f7a1eaacfbe9ff9` passed 1538 tests and a 13-step muted-browser check; that source and the dated gap record await publication and named human acceptance. No accepted CP02 or CP03 result is recorded; the CP03 November 5 target has elapsed. Publish the reproducible source before requesting same-revision consumer observations; these may be asynchronous. Captain may accept the completed CP02 inspection with its explicit gaps. CP03 remains open until its product criteria are met. No replacement joint slot is asserted without actual availability, and later targets are not shifted automatically.
 
 | Order | Original task | Acceptance target (UTC+8) | Checkpoint |
 | --- | --- | --- | --- |
@@ -146,7 +148,7 @@ Acceptance dependencies: checkpoint 04. Preparation starts immediately in parall
 | --- | --- | --- | --- |
 | M3 | Versioned selection/intent corpus, detached human labels, held-out split and the comparison variants agreed at checkpoint 1. | M4/M6 | PR57 development examples; Issue #41 |
 | M4 | Dialogue/persona/history rubric and condition eligibility; independently review relevant reference labels. | M3/M6 | Issue #41; PR63/66 discussions |
-| M6 | Resolve PR63/66 wording and design reviews; deliver the approved run/provenance capture and validation needed by the agreed evaluation. | M3/M4/M5 | PRs #63/#66; ADR-008 reservation |
+| M6 | Build on merged PR63/66; deliver the approved run/provenance capture and validation needed by the agreed evaluation. | M3/M4/M5 | Merged PRs #63/#66; ADR-008 |
 | M5 | Adapter PR to export actual admission/acknowledgement and observable timings without changing frozen records silently. | M3/M4/M6 | Existing evaluation adapter; Issue #41 |
 | M1/M2 | Submit measurement methods and samples for input/playback/Stop on documented hardware and clocks. | M5/M6 | Existing browser and performance observations |
 | M6 + metric owners | Approve thresholds and protocol before formal evaluation; run a pilot from real input to valid recorded result. | M3/M4/M5 | NFR-01 through NFR-06; scoped comparison plan |
