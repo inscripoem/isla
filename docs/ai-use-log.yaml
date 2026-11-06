@@ -4238,3 +4238,52 @@ entries:
         this host and the record claims only that it is unexercised. No claim
         that the documentation change is product acceptance; no case identifier
         added or reused.
+  - date: "2026-11-06"
+    task: issue-116-pnpm-verify-entry-point-correction
+    change: >-
+      Correct the pnpm verify record in docs/team/HANDOFF-M4-01.en.md, which
+      gave two answers to one question and attributed the difference to a
+      cause that measurement does not support. The section now states that the
+      script chains typecheck, lint, test and build, and that whether the chain
+      starts depends on which pnpm entry point the nested invocation resolves
+      to: through the npm-global Windows wrapper it does not reach its first
+      step, because the wrapper's last line invokes
+      "%dp0%\node_modules\pnpm\pnpm", an extensionless POSIX shell shim
+      inside the package, which cmd.exe refuses; through a POSIX shell with a
+      working shim first on PATH the chain starts and stops at test on the
+      known failures. The 2026-11-03 attribution to this host moving to Node
+      24.21.0 is retracted in place, not deleted. The two AI-use entries that
+      recorded commits: [] while naming work with commits now name 53fe0f7 and
+      17f42d8.
+    requirements: []
+    invariants: []
+    commits: [f313181]
+    agent: workbuddy/deepseek-v4.1-flash
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Written directly by the supervising session, not by an OpenCode session:
+      the change is documentation, and AGENTS.md reserves the OpenCode
+      requirement for src/. The supervisor ran the two decisive experiments
+      itself rather than reasoning from the existing records — pnpm verify
+      under Node 22.22.2 (started, stopped at test) and under Node 24.21.0
+      (identical), then read %APPDATA%\npm\pnpm.cmd and confirmed its last
+      line targets an extensionless file while the real entry point is
+      bin/pnpm.mjs. The earlier Node-24 attribution was therefore rejected on
+      evidence, not adjusted to match the PR description.
+    human_review: >-
+      Captain (M4) authorised fixing PR #136 in session on 2026-11-06, after a
+      review of the open threads. No reviewer approval, merge or case closure is
+      claimed here; M5's scoped approval covered 17f42d8 and this commit
+      supersedes that head, so M5 and M6 must decide whether to re-approve.
+    verified: >-
+      pnpm verify under Node 22.22.2 and pnpm 12.11.2: tsc -b clean, oxlint 0
+      warnings / 0 errors over 254 files, vitest reaching the 18 documented
+      Windows failures. The same command under Node 24.21.0 with the same pnpm:
+      identical. Read %APPDATA%\npm\pnpm.cmd (its last line calls
+      "%dp0%\node_modules\pnpm\pnpm"), confirmed node_modules\pnpm\pnpm
+      exists and is extensionless, and that the package ships bin/pnpm.mjs.
+    not_run: >-
+      pnpm build was not run and remains unexercised on this host. No test count
+      was re-measured for this documentation change, so the figures in the
+      section are carried forward from 2026-11-03 rather than re-asserted. No
+      case identifier added or reused; no acceptance claim.
