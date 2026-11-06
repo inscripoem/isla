@@ -391,5 +391,23 @@ describe('M6-01 coordinator SQLite recovery (C-32/C-33, C-68, INV-12)', () => {
     expect((await history.confirmedHistory(sessionId)).map((record) => record.turnId)).toEqual([
       first.turnId,
     ])
+
+    // The two-turn log must survive a reopen, not only the current connection.
+    closeDatabase(db1)
+    const db2 = openFresh(config)
+    const backend2 = createSqliteBackend(db2)
+    const reopened = (await createEventStore(backend2).readSession(sessionId)).filter(
+      (event) => event.type === 'turn.ended',
+    )
+    expect(reopened).toHaveLength(2)
+    expect(reopened.map((event) => event.payload.status)).toEqual(['completed', 'cancelled'])
+    expect(reopened[0]?.turnId).toBe(first.turnId)
+    expect(reopened[1]?.turnId).toBe(stopped.turnId)
+    expect(
+      (await createHistoryQuery(backend2).confirmedHistory(sessionId)).map(
+        (record) => record.turnId,
+      ),
+    ).toEqual([first.turnId])
+    closeDatabase(db2)
   })
 })
