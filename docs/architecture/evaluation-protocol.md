@@ -48,9 +48,9 @@ named reasons, and the attempt keeps its completed/failed/cancelled classificati
 5. The attempt's conditions match the run's `FixedConditions`; a mismatch gives `condition-mismatch`. An
    exact link does **not** bypass this check.
 
-Rules 1–5 follow ADR-008 (`docs/architecture/adr/008-prepared-input-provenance.md`) and the companion
-proposal in PR #63; the wording is still under M5/M4 review, so this section cites the decision, not a
-merged proposal.
+Rules 1–5 follow ADR-008 (`docs/architecture/adr/008-prepared-input-provenance.md`) and the merged companion
+proposal (`docs/architecture/evaluation-provenance.md`, PR #63); this section cites the decision, not a
+result.
 
 ## 4. Refusal rules
 
@@ -87,7 +87,8 @@ Preparation (may run before checkpoint 4):
 2. Produce the recorded run with the bench harness (`runBench` in `src/evaluation/bench.ts`), using the
    eligible set and the declared conditions.
 3. Render the table: `pnpm evaluation:report --input <recorded-run.json> --output <evaluation-table.md>`.
-4. Record the companion (once implemented) and validate it against the run digest.
+4. Record the companion and validate it against the run digest (parser: the #100 slice; the report
+   command does not yet consume it).
 
 Pilot pass conditions:
 
