@@ -1,8 +1,10 @@
 # Isla
 
+Team delivery: [submission checkpoints and per-member handoffs](docs/team/DELIVERY-PLAN.en.md). The plan retains I1-01 / I2-01 and targets a complete candidate on November 22, with November 23-25 reserved for contingency. Progress board: [Isla Roadmap](https://github.com/users/inscripoem/projects/4).
+
 Isla is a planned AI VTuber framework: a configurable character runtime with replaceable decision, dialogue, speech and avatar adapters, plus a local console.
 
-This checkout contains the shared contracts, M5 coordinator, M1 speech/rendering/browser interfaces, M4 dialogue context and M6 in-memory/SQLite storage. The application transport (PR36) and explicit session recovery (PR45) are merged. The standard console provides diagnostics; the separate interactive demo uses deterministic dialogue text and fixed audio. This branch adds an under-review production application lifecycle over real SQLite with deployment-supplied peers and an under-review dynamic audio resource route served to a same-origin browser over `POST /audio`. A coordinator-backed evaluation adapter is also available for explicit peers and consumers; see the [evaluation handoff](docs/team/HANDOFF-M5-EVALUATION-ADAPTER.en.md). A complete product deployment, M3 decisions, live dialogue, the browser product resolver and VTube Studio acceptance remain open. See the [current delivery plan](docs/team/DELIVERY-PLAN.en.md) for component and PR status.
+This checkout contains the shared contracts, M5 coordinator, M1 speech/rendering/browser interfaces, M3 rule SelectionPort, M4 dialogue context and M6 in-memory/SQLite storage. The application transport (PR36), explicit session recovery (PR45), M3 rule selection (PR57) and bounded VTS acquisition (PR64) are merged. The standard console provides diagnostics; the separate interactive demo uses deterministic dialogue text, fixed audio and an M3 substitute. The production application uses real SQLite with deployment-supplied peers and a same-origin dynamic audio resource route over `POST /audio`. A coordinator-backed evaluation adapter is also available for explicit peers and consumers; see the [evaluation handoff](docs/team/HANDOFF-M5-EVALUATION-ADAPTER.en.md). Complete product deployment, M3 rule reactions, live dialogue, the browser product resolver and VTube Studio acceptance remain open. See the [current delivery plan](docs/team/DELIVERY-PLAN.en.md) for component and PR status.
 
 ## Run locally
 
@@ -89,11 +91,12 @@ ISLA_DEPLOYMENT_MODULE=/absolute/path/to/deployment.ts pnpm runtime:production
 | `ISLA_STORAGE_DB_PATH` | SQLite database path; default `.cache/isla/isla.db`, kept outside OneDrive. |
 | `ISLA_RUNTIME_HOST`, `ISLA_RUNTIME_PORT` | Loopback bind address; default `127.0.0.1:4317`. |
 
-No product deployment module exists in this checkout yet. This local increment
-adopts M1 PR33/34 and adds a retained synthesis factory; landing those PRs remains
-pending. See the [physical synthesis handoff](docs/team/HANDOFF-M5-PHYSICAL-SYNTHESIS.en.md)
-for the shared adapter, originating gate and owned-release contract. M3 selection/reaction and a live M4 text source remain
-owner deliverables. M5 owns dynamic audio HTTP/resource assembly and physical
+No product deployment module exists in this checkout yet. The retained synthesis
+factory uses the merged M1 PR33/34 interfaces. See the [physical synthesis
+handoff](docs/team/HANDOFF-M5-PHYSICAL-SYNTHESIS.en.md) for the shared adapter,
+originating gate and owned-release contract. M3 rule selection is merged, but
+its adoption in the controlled formal deployment, M3 rule reaction and a live M4
+text source remain open. M5 owns dynamic audio HTTP/resource assembly and physical
 provider lifecycle; M2 is the browser consumer. The module under
 `test/support/` is test-only and is used by the automated CLI suite, not by the
 product entry. SIGINT/SIGTERM perform the controlled shutdown: stop the transport,
@@ -115,7 +118,7 @@ Tests run locally without model services and exercise HTTP/WebSocket success, re
 
 ## Blocking gates (D7)
 
-The CI pipeline implements the six blocking gates plus the traceability fitness function; the design is recorded in [ADR-006](docs/architecture/adr/006-gate-tooling.md).
+The CI pipeline implements six gate checks plus the traceability fitness function; the design is recorded in [ADR-006](docs/architecture/adr/006-gate-tooling.md). G1 remains advisory, and G4 reports not run when its required evidence is absent.
 
 | Gate | Enforced by |
 | --- | --- |
@@ -127,9 +130,10 @@ The CI pipeline implements the six blocking gates plus the traceability fitness 
 | G6 — AI-use log | `pnpm gate:ai-use-log` over the pull-request diff |
 | traceability | `pnpm test:trace` (INV-13: the chain is machine-checked; a changed frozen path passes only on a verified default-branch restoration for a feature-branch push) |
 
-**Branch protection** — requiring passing CI to merge, with human review on safety-critical paths — is
-a repository setting applied by a human maintainer; this workflow does not assert it. Gaps are reported
-honestly: live providers, browser audio and semantic quality thresholds are not proven by these checks.
+The effective main rules require the GitHub Actions `verify` check, PR approval and linear history.
+Account-specific bypasses and the untested failed-check refusal are recorded in
+[verification constraints](docs/code-governance/verification-constraints.md). Live providers, browser
+audio and semantic quality thresholds are not proven by these checks.
 
 ## Team development
 
@@ -139,10 +143,10 @@ Start with [the team development index](docs/team/README.md). The [work plan](do
 | --- | --- | --- |
 | M1 speech/player/avatar | `src/performance/` | Synthesis, mapped rendering, browser player and guarded Kokoro worker implemented; live product acceptance pending |
 | M2 console | `src/console/` | Diagnostic console exists; product transport integration pending |
-| M3 response decisions | `src/decision/` | Planned |
-| M4 dialogue/memory | `src/dialogue/` | PR23/PR30 merged; live provider pending |
-| M5 runtime — CHANG Xuben | `src/runtime/` | Application loop, selected-history reconstruction and production composition under review; [reconstruction](docs/team/HANDOFF-M5-RECONSTRUCTION.en.md) and [production](docs/team/HANDOFF-M5-PRODUCTION.en.md) handoffs |
-| M6 storage/evaluation/CI | `src/storage/`, `src/evaluation/`, `.github/workflows/` | Storage, recovery acceptance and shared evaluation bench merged; recorded-run tooling and live measurements pending |
+| M3 response decisions | `src/decision/` | Rule SelectionPort merged in PR57; rule reaction and formal composition pending |
+| M4 dialogue/memory | `src/dialogue/` | PR23/30/35/65 merged; live provider pending |
+| M5 runtime — CHANG Xuben | `src/runtime/` | Application transport, reconstruction, production composition and bounded VTS acquisition implemented; combined product acceptance pending; [reconstruction](docs/team/HANDOFF-M5-RECONSTRUCTION.en.md) and [production](docs/team/HANDOFF-M5-PRODUCTION.en.md) handoffs |
+| M6 storage/evaluation/CI | `src/storage/`, `src/evaluation/`, `.github/workflows/` | Storage, recorded-run parser and evaluation tooling implemented; product recovery, run provenance and live measurements remain unaccepted |
 
 Shared contracts use `src/contracts/` (application schemas and ports under `src/contracts/app/`); tests use `test/offline/` and, when implemented, `test/live/`. The [architecture blueprint](architecture-blueprint.md) defines editing boundaries. Planned directories are not empty substitute implementations. Each owner can begin against the shared contracts and explicit fixtures; see [readiness kits](docs/team/READINESS-KITS.en.md).
 
