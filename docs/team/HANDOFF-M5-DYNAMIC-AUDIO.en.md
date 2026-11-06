@@ -101,6 +101,45 @@ lifecycle no longer matches is `conflict`.
   by POSTing this route with the explicit header; the browser acceptance performs
   exactly that fetch and is the reference evidence for the wire shape.
 
+## Controlled deployment catalog serving (2026-10-29)
+
+The test-only deployment module loaded by the production CLI
+(`test/support/production-deployment.ts`) now supplies the real M1
+`AudioResourceRegistry` and serves the prepared fixed WAV catalog through the
+existing `POST /audio` route. This is a controlled test deployment, not a
+product deployment; `createTestProductionPeers` defaults are unchanged.
+
+- The catalog identity is the exact tuple from `createM1ActualAssetEntries()`:
+  `We talked about the concert.` / `audio://fixture/segment-0` /
+  2344.081632653061 ms and `It was loud and fun.` /
+  `audio://fixture/segment-1` / 2029.251700680272 ms. The bytes are the prepared
+  files in `test/browser/assets`; deployment creation parses each RIFF header and
+  rejects a size, format, rate or duration that disagrees with the catalog and
+  manifest.
+- The registry generates its own reference per registration. A catalog-aware
+  source maps the stable catalog reference to the registration currently bound to
+  the live session/epoch and delegates admission, resolution, retirement and
+  leases to that one registry. No second authoritative registry is created.
+- A repeated preparation for the same session/epoch reuses the active
+  registration; after the registry reclaims it (a released lease or expiry), the
+  next preparation registers again. A binding owned by another session/epoch is
+  never replaced: the preparation fails visibly (`audio_resource_unavailable`).
+- Route authority, epoch/session retirement and response lease ownership are
+  unchanged. A released lease reclaims its entry, so a late fetch without a new
+  preparation is `404 not_found`; a stopped session is `409 conflict`; a retired
+  epoch is not served after Resume; disposal retires the session.
+- Evidence: `test/offline/m5-audio-deployment.test.ts` (3 tests) drives the
+  actual deployment factory, the real registry and the real application route.
+  It asserts the exact catalog text/ref/duration, the prepared bytes by sha256,
+  the frame-derived duration of the served WAV, both segment offers, the refusal
+  order (405/403/400/404), stopped and retired-epoch refusals, and lease
+  reclamation. No live provider, browser or acoustic behavior is claimed.
+- Local results on 2026-10-29: `pnpm test:m5` 210/210 in 10 files (207/207 in 9
+  before the change), `pnpm verify` exited 0 with 1342/1342 in 71 files plus
+  typecheck, lint and build, `pnpm test:trace` 41/41 with the actual changed-file
+  list, and the G6 AI-use gate passed with the log at HEAD as its base. Windows,
+  browser and product-deployment verification remain outside this result.
+
 ## Test-only fixtures
 
 - `test/support` keeps every substitute; production code imports no test module.
