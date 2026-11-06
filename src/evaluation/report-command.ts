@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
+import { parseProvenance } from './provenance'
 import { parseRecordedRun } from './recorded-run'
 import { writeEvaluationReport } from './report'
 
@@ -15,6 +16,12 @@ import { writeEvaluationReport } from './report'
 export interface ReportCommandArgs {
   readonly input: string
   readonly output: string
+  /**
+   * Optional ADR-008 companion. When present it is validated against the exact
+   * run artifact and refused on any mismatch; absent means the report carries
+   * the `no-provenance-record` note and no join is claimed.
+   */
+  readonly provenance?: string
 }
 
 export type ReportCommandParseResult =
@@ -22,11 +29,12 @@ export type ReportCommandParseResult =
   | { readonly ok: false; readonly message: string }
 
 const USAGE =
-  'usage: pnpm evaluation:report --input <recorded-run.json> --output <evaluation-table.md>'
+  'usage: pnpm evaluation:report --input <recorded-run.json> --output <evaluation-table.md> [--provenance <provenance.json>]'
 
 export function parseReportCommandArgs(argv: readonly string[]): ReportCommandParseResult {
   let input: string | undefined
   let output: string | undefined
+  let provenance: string | undefined
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]
@@ -49,12 +57,24 @@ export function parseReportCommandArgs(argv: readonly string[]): ReportCommandPa
       index += 1
       continue
     }
+    if (argument === '--provenance') {
+      if (provenance !== undefined) {
+        return { ok: false, message: `--provenance may be specified only once\n${USAGE}` }
+      }
+      const value = argv[index + 1]
+      if (value === undefined) {
+        return { ok: false, message: `--provenance requires a path\n${USAGE}` }
+      }
+      provenance = value
+      index += 1
+      continue
+    }
     return { ok: false, message: `unknown argument "${argument}"\n${USAGE}` }
   }
 
   if (input === undefined) return { ok: false, message: `--input is required\n${USAGE}` }
   if (output === undefined) return { ok: false, message: `--output is required\n${USAGE}` }
-  return { ok: true, value: { input, output } }
+  return { ok: true, value: { input, output, provenance } }
 }
 
 /**
@@ -91,8 +111,45 @@ export function runReportCommand(argv: readonly string[]): number {
     return 1
   }
 
+  let input = recorded.input
+  if (parsed.value.provenance !== undefined) {
+    let companionText: string
+    try {
+      companionText = readFileSync(parsed.value.provenance, 'utf8')
+    } catch (error) {
+      process.stderr.write(
+        `evaluation:report: cannot read ${parsed.value.provenance}: ${error instanceof Error ? error.message : String(error)}\n`,
+      )
+      return 2
+    }
+
+    let companionJson: unknown
+    try {
+      companionJson = JSON.parse(companionText)
+    } catch (error) {
+      process.stderr.write(
+        `evaluation:report: refused ${parsed.value.provenance}: not valid JSON (${error instanceof Error ? error.message : String(error)})\n`,
+      )
+      return 1
+    }
+
+    // The digest is computed from `text`, the exact bytes the run was parsed from,
+    // so the join is to this artifact and not to a re-serialised object.
+    const companion = parseProvenance(
+      companionJson,
+      { runId: recorded.input.meta.runId, records: recorded.input.run.records },
+      text,
+    )
+    if (!companion.ok) {
+      process.stderr.write(`evaluation:report: refused ${parsed.value.provenance}\n`)
+      for (const violation of companion.violations) process.stderr.write(`- ${violation}\n`)
+      return 1
+    }
+    input = { ...recorded.input, provenance: companion.companion }
+  }
+
   try {
-    const written = writeEvaluationReport(recorded.input, parsed.value.output)
+    const written = writeEvaluationReport(input, parsed.value.output)
     if (!written.ok) {
       process.stderr.write(`evaluation:report: refused ${parsed.value.input}\n`)
       for (const violation of written.violations) process.stderr.write(`- ${violation}\n`)
