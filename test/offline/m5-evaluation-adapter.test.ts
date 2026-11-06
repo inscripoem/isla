@@ -899,7 +899,15 @@ describe('M5 evaluation adapter through the M6 runner', () => {
       // or started: the machine refused the grant before playback.
       expect(media.createCount()).toBe(0)
       expect(media.handles()).toEqual([])
-      expect(consumer.receipts()).toEqual([])
+      // The machine now publishes its expiry through the local observer as well
+      // as the wire. This is local unknown evidence, not an accepted terminal.
+      const localReceipts = consumer.receipts()
+      expect(localReceipts).toHaveLength(1)
+      expect(localReceipts[0]).toMatchObject({
+        stage: 'unknown',
+        reasonCode: 'offer_expired',
+        source: 'performer-machine',
+      })
 
       expect(run.records).toHaveLength(1)
       expect(run.records[0].outcome).toBe('failed')
