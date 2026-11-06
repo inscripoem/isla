@@ -4618,3 +4618,60 @@ entries:
         under issue #44 / the checkpoint-05 rubric and remains pending. Full
         local suite not run (documented pre-existing Windows failures, CI is the
         gate); no case closure.
+  - date: "2026-11-07"
+    task: M4-04-loopback-real-reaction-port
+    change: >-
+      Two-part slice on PR #139. First, origin/main (58990bd) is merged into
+      feat/m4-04 (merge 9776a2f): the only conflict, docs/ai-use-log.yaml, is
+      resolved by keeping both sides' appended entries in full and interleaving
+      them by date (the M2-01 console entries of 2026-10-28/10-31, the M3-01
+      rule-reaction entries of 2026-11-04, then the M4-04 entries of
+      2026-11-05/06), with no line of either side modified. Second, with issue
+      #89 delivered, the loopback evidence file stops describing the M3
+      reaction as a missing substitute (0b1ad01, one file, +14/-10): the last
+      test, which already injects the real rule selection port over a shared
+      createMonotonicClock() instance, now also injects
+      reaction: createRuleReactionPort({ clock }) so both M3 rule ports run
+      over the same server clock; the three stale comments (file header, the
+      delivery-history test, the selection test) are rewritten to state which
+      components are real where — every other test keeps the fixture reaction
+      substitute, and the provider text remains the catalog substitute pending
+      the live half of issue #93. src/decision is imported, not modified; no
+      production, contract or wire change.
+    requirements: []
+    invariants: []
+    commits: [9776a2f, 0b1ad01]
+    agent: opencode/deepseek-v4-flash
+    provider: cslabllm
+    model: CS5351/DeepSeek-V4-Flash
+    supervision: >-
+      Member M4's scheduled inspection workflow (ZCode, GLM-5.3-Flash) selected
+      the PR #139 slice and supervised it. The merge and its docs conflict
+      resolution are supervisor git operations, not code authorship. The
+      OpenCode build agent (deepseek-v4-flash) authored all code changes in one
+      unattended --auto --standalone session (ses_e4e2f8434ffeDKRMSPrID7b1nG,
+      the #high variant, which this log already records as the routable one for
+      this provider) from an English brief kept in the gitignored .cache
+      directory. The supervising agent reviewed the full diff against the brief
+      (only test/offline/m4-loopback.test.ts changed: import extension, one
+      option line, three comment rewrites) and ran the gates before committing;
+      remote CI performs the full-suite final review.
+    transcript_record: >-
+      The OpenCode session is retained by the CLI session store; the task brief
+      stays in the gitignored .cache directory.
+    verification:
+      platform: Windows 11, Node 24.21.0, pnpm 12.11.2
+      base: c23c680
+      commands: >-
+        pnpm exec vitest run test/offline/m4-loopback.test.ts (after the merge
+        and again after the replacement); pnpm run test:m4; pnpm run typecheck;
+        pnpm run lint; pnpm run gate:ai-use-log
+      results: >-
+        m4-loopback 5/5 after the merge and 5/5 after the replacement; test:m4
+        237/237 in 10 files; typecheck clean (tsc -b exit 0); lint 0 warnings /
+        0 errors on 264 files; gate:ai-use-log shape pass locally (CI verifies
+        the entry rule against its PR base). Remote CI verify is the final gate.
+      not_run: >-
+        Full local vitest suite not run (documented pre-existing Windows
+        failures; CI is the gate). No live provider run and no claim beyond the
+        offline evidence; no case closure or merge is performed.
