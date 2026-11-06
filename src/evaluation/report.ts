@@ -11,6 +11,7 @@ import {
   type WindowSummary,
 } from './metrics'
 import type { ProvenanceCompanionV1, ProvenanceInputEntry } from './provenance'
+import { INPUT_STATUSES, provenanceBindingViolations } from './provenance'
 
 /**
  * M6-02 — the evaluation report.
@@ -78,9 +79,13 @@ export interface ReportInput {
    *
    * The digest can only be recomputed from the run artifact bytes, which the
    * command holds and the renderer does not. `parseProvenance` is therefore the
-   * single place that validates it; this field is evidence, not a claim.
+   * single place that validates it; this field is evidence, not a claim. The
+   * renderer still re-applies the binding rules it can check (run id and key
+   * set), so the exported API cannot publish another run's companion.
    */
   readonly provenance?: ProvenanceCompanionV1 | null
+  /** Where the companion was read from, so the artifact names its own source. */
+  readonly provenanceSource?: string
 }
 
 export type ReportResult =
@@ -271,12 +276,16 @@ function usage(summary: UsageSummary): string {
 /** One-line summary of an attempt's prepared inputs: counts by status, `none` when nothing was submitted. */
 function preparedInputs(inputs: readonly ProvenanceInputEntry[]): string {
   if (inputs.length === 0) return 'none'
-  const order = ['accepted', 'duplicate', 'rejected', 'no-acknowledgement', 'not-submitted'] as const
-  return order
-    .map((status) => [status, inputs.filter((entry) => entry.status === status).length] as const)
-    .filter(([, howMany]) => howMany > 0)
-    .map(([status, howMany]) => `${status} ${howMany}`)
-    .join(', ')
+  // Derived from INPUT_STATUSES so a new status cannot silently vanish here.
+  const counts = INPUT_STATUSES.map(
+    (status) => [status, inputs.filter((entry) => entry.status === status).length] as const,
+  ).filter(([, howMany]) => howMany > 0)
+  const parts = counts.map(([status, howMany]) => `${status} ${howMany}`)
+  const named = counts.reduce((total, [, howMany]) => total + howMany, 0)
+  if (named !== inputs.length) parts.push(`unrecognised ${inputs.length - named}`)
+  // ADR-008 D5: an unexported identity is a state, not a missing value.
+  if (inputs.some((entry) => entry.inputId === null)) parts.push('identity not-yet-observable')
+  return parts.join(', ')
 }
 
 /** A digest shown short enough to read; `null` is the unobserved case, never a sentinel digest. */
@@ -347,6 +356,16 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
   ]
 
   const provenance = input.provenance ?? null
+  if (provenance !== null) {
+    // The command has already validated the digest and key set; this re-applies
+    // the binding the renderer can check, so the exported API cannot publish a
+    // companion that belongs to a different run.
+    const binding = provenanceBindingViolations(provenance, {
+      runId: meta.runId,
+      records: run.records,
+    })
+    if (binding.length > 0) return { ok: false, violations: binding }
+  }
   if (provenance === null) {
     lines.push(
       '> No companion was supplied. Quality results for this run would be `unscored` with reason',
@@ -354,7 +373,12 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
     )
   } else {
     lines.push(
-      '> The companion is bound to this run by `runId` and by a SHA-256 digest over the exact run',
+      `> Companion source: ${
+        input.provenanceSource === undefined
+          ? 'not recorded in this call'
+          : `\`${cell(input.provenanceSource)}\``
+      }; run \`${cell(provenance.runId)}\`; digest \`${provenance.runDigest}\`.`,
+      '> The same section is bound to this run by `runId` and by a SHA-256 digest over the exact run',
       '> artifact. The command validates the digest, the occurrence-key set and the input order before',
       '> this table is written; this section repeats the accepted observations.',
       '',
@@ -369,8 +393,9 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
     lines.push(
       '',
       '> `null (unobserved)` means the admitted record set was not captured; `exact` correlation is',
-      '> refused in that case. Eligibility and scoring are not evaluated here — they require human',
-      '> labels (evaluation protocol §3).',
+      '> refused in that case. `identity not-yet-observable` marks an input whose fixture identity M5',
+      '> has not exported (ADR-008 D5); a scored result would be `unscored` with `missing-input-identity`.',
+      '> Eligibility and scoring are not evaluated here — they require human labels (protocol §3).',
     )
   }
 

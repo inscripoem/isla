@@ -2,8 +2,14 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { provenanceRunDigest } from '../../src/evaluation/provenance'
+import {
+  provenanceRunDigest,
+  type ProvenanceAttempt,
+  type ProvenanceCompanionV1,
+} from '../../src/evaluation/provenance'
+import { parseRecordedRun } from '../../src/evaluation/recorded-run'
 import { parseReportCommandArgs, runReportCommand } from '../../src/evaluation/report-command'
+import { renderEvaluationReport } from '../../src/evaluation/report'
 
 /**
  * M6-02 / ADR-008 D8 — the report command consumes the companion or refuses.
@@ -95,6 +101,17 @@ function companion(overrides: Record<string, unknown> = {}) {
   }
 }
 
+function typedAttempt(caseId: string): ProvenanceAttempt {
+  return {
+    caseId,
+    variantId: 'v1',
+    attempt: 1,
+    inputs: [INPUT],
+    recordSetRevision: REVISION,
+    correlation: 'exact',
+  }
+}
+
 const directories: string[] = []
 
 function workspace(): { dir: string; input: string; output: string; provenance: string } {
@@ -124,6 +141,8 @@ describe('evaluation:report --provenance', () => {
     expect(table).toContain('## Prepared-input provenance')
     expect(table).toContain('| case-1 | v1 | 1 | exact |')
     expect(table).toContain('accepted 1')
+    expect(table).toContain('Companion source:')
+    expect(table).toContain(provenance)
     expect(table).not.toContain('no-provenance-record')
   })
 
@@ -204,5 +223,52 @@ describe('evaluation:report --provenance', () => {
     expect(parsed.ok).toBe(false)
     if (parsed.ok) return
     expect(parsed.message).toContain('--provenance may be specified only once')
+  })
+
+  it('refuses a digest taken over different bytes of the same content', () => {
+    const { dir, output, provenance } = workspace()
+    const pretty = join(dir, 'recorded-run.pretty.json')
+    writeFileSync(pretty, JSON.stringify(RUN, null, 2), 'utf8')
+    // The digest names the compact artifact; the file on disk is the pretty one.
+    writeFileSync(provenance, JSON.stringify(companion()), 'utf8')
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
+    expect(runReportCommand(['--input', pretty, '--output', output, '--provenance', provenance])).toBe(
+      1,
+    )
+    expect(existsSync(output)).toBe(false)
+    expect(stderr.mock.calls.flat().join('')).toContain('runDigest does not match')
+  })
+
+  it('refuses to render a companion that belongs to another run', () => {
+    const parsed = parseRecordedRun(RUN_TEXT)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    const foreign: ProvenanceCompanionV1 = {
+      provenanceVersion: 1,
+      runId: 'another-run',
+      runDigest: DIGEST,
+      attempts: [typedAttempt('case-1'), typedAttempt('case-2')],
+    }
+    const result = renderEvaluationReport({ ...parsed.input, provenance: foreign })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.violations).toContain('runId does not match the run')
+  })
+
+  it('refuses to render a companion whose key set is not the run\'s', () => {
+    const parsed = parseRecordedRun(RUN_TEXT)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    const partial: ProvenanceCompanionV1 = {
+      provenanceVersion: 1,
+      runId: 'run-1',
+      runDigest: DIGEST,
+      attempts: [typedAttempt('case-1')],
+    }
+    const result = renderEvaluationReport({ ...parsed.input, provenance: partial })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.violations.some((violation) => violation.includes('missing an entry'))).toBe(true)
   })
 })
