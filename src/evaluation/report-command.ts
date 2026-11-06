@@ -94,15 +94,16 @@ export function runReportCommand(argv: readonly string[]): number {
     return 2
   }
 
-  let text: string
+  let runBytes: Buffer
   try {
-    text = readFileSync(parsed.value.input, 'utf8')
+    runBytes = readFileSync(parsed.value.input)
   } catch (error) {
     process.stderr.write(
       `evaluation:report: cannot read ${parsed.value.input}: ${error instanceof Error ? error.message : String(error)}\n`,
     )
     return 2
   }
+  const text = runBytes.toString('utf8')
 
   const recorded = parseRecordedRun(text)
   if (!recorded.ok) {
@@ -133,19 +134,23 @@ export function runReportCommand(argv: readonly string[]): number {
       return 1
     }
 
-    // The digest is computed from `text`, the exact bytes the run was parsed from,
-    // so the join is to this artifact and not to a re-serialised object.
+    // The digest is computed from the raw bytes read from disk, so the join is to
+    // this artifact — not to a re-serialised object and not to a lossy decode.
     const companion = parseProvenance(
       companionJson,
       { runId: recorded.input.meta.runId, records: recorded.input.run.records },
-      text,
+      runBytes,
     )
     if (!companion.ok) {
       process.stderr.write(`evaluation:report: refused ${parsed.value.provenance}\n`)
       for (const violation of companion.violations) process.stderr.write(`- ${violation}\n`)
       return 1
     }
-    input = { ...recorded.input, provenance: companion.companion }
+    input = {
+      ...recorded.input,
+      provenance: companion.companion,
+      provenanceSource: parsed.value.provenance,
+    }
   }
 
   try {

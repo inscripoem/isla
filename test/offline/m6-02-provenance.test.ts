@@ -240,4 +240,75 @@ describe('provenance companion (ADR-008)', () => {
     )
     expect(violations.some((violation) => violation.includes('.status must be one of'))).toBe(true)
   })
+
+  it('accepts an uppercase digest and normalises it', () => {
+    const result = parseProvenance(companion({ runDigest: DIGEST.toUpperCase() }), RUN, RUN_TEXT)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.companion.runDigest).toBe(DIGEST)
+  })
+
+  it('records an unexported input identity as null, from null or the literal (D5)', () => {
+    for (const inputId of [null, 'not-yet-observable']) {
+      const result = parseProvenance(
+        companion({
+          attempts: [
+            attempt({ inputs: [{ ...INPUT, inputId }] }),
+            attempt({ attempt: 2 }),
+          ],
+        }),
+        RUN,
+        RUN_TEXT,
+      )
+      expect(result.ok).toBe(true)
+      if (!result.ok) continue
+      expect(result.companion.attempts[0]?.inputs[0]?.inputId).toBeNull()
+    }
+  })
+
+  it('refuses a non-object root', () => {
+    const violations = refused(parseProvenance('not an object', RUN, RUN_TEXT))
+    expect(violations).toContain('the companion must be a JSON object')
+  })
+
+  it('refuses a non-array attempts field', () => {
+    const violations = refused(parseProvenance(companion({ attempts: 'none' }), RUN, RUN_TEXT))
+    expect(violations).toContain('attempts must be an array')
+  })
+
+  it('refuses an unknown provenance version', () => {
+    const violations = refused(parseProvenance(companion({ provenanceVersion: 2 }), RUN, RUN_TEXT))
+    expect(violations).toContain('provenanceVersion must be 1')
+  })
+
+  it('refuses a malformed record-set revision', () => {
+    const violations = refused(
+      parseProvenance(
+        companion({
+          attempts: [attempt({ recordSetRevision: 'not-a-digest' }), attempt({ attempt: 2 })],
+        }),
+        RUN,
+        RUN_TEXT,
+      ),
+    )
+    expect(
+      violations.some((violation) => violation.includes('.recordSetRevision must be a hex SHA-256')),
+    ).toBe(true)
+  })
+
+  it('refuses an input entry that is not an object', () => {
+    const violations = refused(
+      parseProvenance(
+        companion({
+          attempts: [
+            attempt({ inputs: ['not an object'] }),
+            attempt({ attempt: 2 }),
+          ],
+        }),
+        RUN,
+        RUN_TEXT,
+      ),
+    )
+    expect(violations.some((violation) => violation.includes('must be an object'))).toBe(true)
+  })
 })
