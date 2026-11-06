@@ -4180,128 +4180,6 @@ entries:
         No live provider run and no M2 consumer validation yet; the boundaries
         suite was not run on this Windows host (documented pre-existing Windows
         class); no product or case-closure claim.
-  - date: "2026-11-04"
-    task: M3-01-rule-reaction-port
-    branch: feat/m3-rule-reaction-port
-    change: >-
-      Add the M3-01 deterministic rule ReactionPort in src/decision/reaction.ts
-      for Issue #89: m3-rules provider/model constants, ReactionCallError codes,
-      clock/deadline/abort validation, request deep-freeze and the
-      positive-cue/smile, neutral, first-eligible and no-op rules against the
-      frozen C3 DecisionRequest/DecisionResult contract. Re-export the module
-      from src/decision/index.ts, switch the decision conformance adapter to the
-      real port and add 19 unit tests in test/offline/m3-decision.test.ts, and
-      add the FR-03 trace-matrix row plus the runtime reaction fallback row in
-      the runtime policy catalog. No frozen path changed.
-    requirements: [FR-03]
-    invariants: []
-    cases: [C-06, C-11]
-    commits: [c1c8ec4]
-    agent: opencode/deepseek-v4-flash
-    provider: personal-deepseek
-    model: deepseek-v4-flash
-    launch_flags: [--pure, --agent, build, --variant, xhigh]
-    sessions: [ses_e57fb418dffegAQv7BTzclPKpi]
-    supervision: >-
-      Captain (M3) directed the Issue #89 slice and required the deterministic
-      rule port to mirror the established rule SelectionPort style without
-      changing the frozen C3 contracts. The OpenCode build agent authored the
-      production module, tests and trace/policy updates in the recorded session
-      under --pure --agent build --variant xhigh; no subagent was used and no
-      application provider call was made.
-    human_review: >-
-      Captain (M3) requested this entry after reviewing the rule port and the
-      adapted contract scope. No reviewer approval, merge or case closure is
-      claimed by this entry.
-    transcript_record: >-
-      The work is identified by OpenCode session
-      ses_e57fb418dffegAQv7BTzclPKpi. No separate transcript export was copied
-      into the checkout.
-    verification:
-      platform: macOS arm64, Node 22.23.4, pnpm 12.16.1
-      base: 606ccf5
-      commands: >-
-        pnpm test:m3; pnpm test:readiness; pnpm test:trace; pnpm verify;
-        gate:ai-use-log with AI_USE_LOG_BASE_FILE set to the main copy of
-        docs/ai-use-log.yaml
-      results: >-
-        test:m3 66/66 in 1 file; test:readiness 45/45 in 3 files; test:trace
-        41/41 in 1 file; pnpm verify 1444/1444 across 71 files with typecheck,
-        lint and build passing; the G6 AI-use log gate passed with this entry
-        added against the main base log.
-      not_run: >-
-        No live provider run and no runtime composition of the rule ReactionPort
-        with M5; no Linux CI run locally and no product or case-closure claim.
-    scope: >-
-      Module-level M3-01 rule ReactionPort and offline decision evidence only.
-      Full runtime composition, timeout/stop integration and the complete
-      C-06/C-11 acceptance remain M5/I1 scope. No frozen contract, storage,
-      provider, database or credential change is included.
-  - date: "2026-11-04"
-    task: M3-01-rule-reaction-port-review-fixes
-    branch: feat/m3-rule-reaction-port
-    change: >-
-      Add the M3-01 deterministic rule ReactionPort in src/decision/reaction.ts
-      for Issue #89 against the frozen C3 DecisionRequest/DecisionResult
-      contract: m3-rules provider/model constants, ReactionCallError codes
-      aligned with the rule SelectionPort, strict CallContext/DecisionRequest
-      and finite-deadline validation, no freezing or mutation of caller input, a
-      segmentText-only positive-cue baseline, and the
-      smile/neutral/first-eligible/no-op rules. Re-export the module from
-      src/decision/index.ts, retain fixture-adapter conformance and add
-      actual-port conformance plus 27 rule and coordinator-composition tests
-      (75 total in the file) in test/offline/m3-decision.test.ts, and add the
-      FR-03 trace row plus two accurate runtime reaction policy rows. No frozen
-      path changed.
-    requirements: [FR-03]
-    invariants: []
-    cases: [C-06, C-11]
-    commits: [6780977]
-    agent: opencode/deepseek-v4-flash
-    provider: personal-deepseek
-    model: deepseek-v4-flash
-    launch_flags: [--pure, --agent, build, --variant, xhigh]
-    sessions: [ses_e57fb418dffegAQv7BTzclPKpi]
-    supervision: >-
-      Captain (M3) directed the Issue #89 slice and its review-driven fixes: the
-      rule port mirrors the established rule SelectionPort error and validation
-      style without changing the frozen C3 contracts, never freezes caller
-      input, matches positive cues on segmentText only, and is exercised through
-      the production M5 coordinator in the M3 suite. The OpenCode build agent
-      authored the production module, tests and trace/policy updates in the
-      recorded session under --pure --agent build --variant xhigh; no subagent
-      was used and no application provider call was made.
-    human_review: >-
-      Captain (M3) requested this entry after reviewing the rule port, the
-      review findings and the adapted contract scope. No reviewer approval,
-      merge or case closure is claimed by this entry.
-    transcript_record: >-
-      The work is identified by OpenCode session
-      ses_e57fb418dffegAQv7BTzclPKpi. No separate transcript export was copied
-      into the checkout.
-    verification:
-      platform: macOS arm64, Node 22.23.4, pnpm 12.16.1
-      base: 606ccf5
-      commands: >-
-        pnpm test:m3; pnpm test:readiness; pnpm test:trace; pnpm verify;
-        gate:ai-use-log with AI_USE_LOG_BASE_FILE set to the main copy of
-        docs/ai-use-log.yaml
-      results: >-
-        test:m3 75/75 in 1 file; test:readiness 45/45 in 3 files; test:trace
-        41/41 in 1 file; pnpm verify 1453/1453 across 71 files with typecheck,
-        lint and build passing; the G6 AI-use log gate passed with this entry
-        added against the main base log.
-      not_run: >-
-        No live provider run and no full product composition; the coordinator
-        composition test covers eligible dispatch, deadline fallback and abort
-        revocation only. No Linux CI run locally and no product or case-closure
-        claim.
-    scope: >-
-      Module-level M3-01 rule ReactionPort and offline decision evidence,
-      including M5 coordinator composition in the M3 suite. Full product runtime
-      composition and the complete C-06/C-11 acceptance remain M5/I1 scope. No
-      frozen contract, storage, provider, database or credential change is
-      included.
   - date: "2026-10-28"
     task: M2-01-console-production-transport-selection-and-recovery
     change: >-
@@ -4507,3 +4385,293 @@ entries:
       providers, acoustic verification, Windows behaviour and durable recovery
       are not claimed. No merge was performed and the local `package.json` edit
       remains uncommitted.
+  - date: "2026-11-04"
+    task: M3-01-rule-reaction-port
+    branch: feat/m3-rule-reaction-port
+    change: >-
+      Add the M3-01 deterministic rule ReactionPort in src/decision/reaction.ts
+      for Issue #89: m3-rules provider/model constants, ReactionCallError codes,
+      clock/deadline/abort validation, request deep-freeze and the
+      positive-cue/smile, neutral, first-eligible and no-op rules against the
+      frozen C3 DecisionRequest/DecisionResult contract. Re-export the module
+      from src/decision/index.ts, switch the decision conformance adapter to the
+      real port and add 19 unit tests in test/offline/m3-decision.test.ts, and
+      add the FR-03 trace-matrix row plus the runtime reaction fallback row in
+      the runtime policy catalog. No frozen path changed.
+    requirements: [FR-03]
+    invariants: []
+    cases: [C-06, C-11]
+    commits: [c1c8ec4]
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    launch_flags: [--pure, --agent, build, --variant, xhigh]
+    sessions: [ses_e57fb418dffegAQv7BTzclPKpi]
+    supervision: >-
+      Captain (M3) directed the Issue #89 slice and required the deterministic
+      rule port to mirror the established rule SelectionPort style without
+      changing the frozen C3 contracts. The OpenCode build agent authored the
+      production module, tests and trace/policy updates in the recorded session
+      under --pure --agent build --variant xhigh; no subagent was used and no
+      application provider call was made.
+    human_review: >-
+      Captain (M3) requested this entry after reviewing the rule port and the
+      adapted contract scope. No reviewer approval, merge or case closure is
+      claimed by this entry.
+    transcript_record: >-
+      The work is identified by OpenCode session
+      ses_e57fb418dffegAQv7BTzclPKpi. No separate transcript export was copied
+      into the checkout.
+    verification:
+      platform: macOS arm64, Node 22.23.4, pnpm 12.16.1
+      base: 606ccf5
+      commands: >-
+        pnpm test:m3; pnpm test:readiness; pnpm test:trace; pnpm verify;
+        gate:ai-use-log with AI_USE_LOG_BASE_FILE set to the main copy of
+        docs/ai-use-log.yaml
+      results: >-
+        test:m3 66/66 in 1 file; test:readiness 45/45 in 3 files; test:trace
+        41/41 in 1 file; pnpm verify 1444/1444 across 71 files with typecheck,
+        lint and build passing; the G6 AI-use log gate passed with this entry
+        added against the main base log.
+      not_run: >-
+        No live provider run and no runtime composition of the rule ReactionPort
+        with M5; no Linux CI run locally and no product or case-closure claim.
+    scope: >-
+      Module-level M3-01 rule ReactionPort and offline decision evidence only.
+      Full runtime composition, timeout/stop integration and the complete
+      C-06/C-11 acceptance remain M5/I1 scope. No frozen contract, storage,
+      provider, database or credential change is included.
+  - date: "2026-11-04"
+    task: M3-01-rule-reaction-port-review-fixes
+    branch: feat/m3-rule-reaction-port
+    change: >-
+      Add the M3-01 deterministic rule ReactionPort in src/decision/reaction.ts
+      for Issue #89 against the frozen C3 DecisionRequest/DecisionResult
+      contract: m3-rules provider/model constants, ReactionCallError codes
+      aligned with the rule SelectionPort, strict CallContext/DecisionRequest
+      and finite-deadline validation, no freezing or mutation of caller input, a
+      segmentText-only positive-cue baseline, and the
+      smile/neutral/first-eligible/no-op rules. Re-export the module from
+      src/decision/index.ts, retain fixture-adapter conformance and add
+      actual-port conformance plus 27 rule and coordinator-composition tests
+      (75 total in the file) in test/offline/m3-decision.test.ts, and add the
+      FR-03 trace row plus two accurate runtime reaction policy rows. No frozen
+      path changed.
+    requirements: [FR-03]
+    invariants: []
+    cases: [C-06, C-11]
+    commits: [6780977]
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    launch_flags: [--pure, --agent, build, --variant, xhigh]
+    sessions: [ses_e57fb418dffegAQv7BTzclPKpi]
+    supervision: >-
+      Captain (M3) directed the Issue #89 slice and its review-driven fixes: the
+      rule port mirrors the established rule SelectionPort error and validation
+      style without changing the frozen C3 contracts, never freezes caller
+      input, matches positive cues on segmentText only, and is exercised through
+      the production M5 coordinator in the M3 suite. The OpenCode build agent
+      authored the production module, tests and trace/policy updates in the
+      recorded session under --pure --agent build --variant xhigh; no subagent
+      was used and no application provider call was made.
+    human_review: >-
+      Captain (M3) requested this entry after reviewing the rule port, the
+      review findings and the adapted contract scope. No reviewer approval,
+      merge or case closure is claimed by this entry.
+    transcript_record: >-
+      The work is identified by OpenCode session
+      ses_e57fb418dffegAQv7BTzclPKpi. No separate transcript export was copied
+      into the checkout.
+    verification:
+      platform: macOS arm64, Node 22.23.4, pnpm 12.16.1
+      base: 606ccf5
+      commands: >-
+        pnpm test:m3; pnpm test:readiness; pnpm test:trace; pnpm verify;
+        gate:ai-use-log with AI_USE_LOG_BASE_FILE set to the main copy of
+        docs/ai-use-log.yaml
+      results: >-
+        test:m3 75/75 in 1 file; test:readiness 45/45 in 3 files; test:trace
+        41/41 in 1 file; pnpm verify 1453/1453 across 71 files with typecheck,
+        lint and build passing; the G6 AI-use log gate passed with this entry
+        added against the main base log.
+      not_run: >-
+        No live provider run and no full product composition; the coordinator
+        composition test covers eligible dispatch, deadline fallback and abort
+        revocation only. No Linux CI run locally and no product or case-closure
+        claim.
+    scope: >-
+      Module-level M3-01 rule ReactionPort and offline decision evidence,
+      including M5 coordinator composition in the M3 suite. Full product runtime
+      composition and the complete C-06/C-11 acceptance remain M5/I1 scope. No
+      frozen contract, storage, provider, database or credential change is
+      included.
+
+  - date: "2026-11-05"
+    task: M4-04-live-deadline-stop-cases
+    change: >-
+      Test-only increment to the live acceptance suite for issue #93
+      (02dceb8, +166/-0, one file): two cases appended inside the existing
+      describe.skipIf(!report.available) block of
+      test/live/m4-text-source.live.test.ts, extending to the real provider
+      path the deadline and Stop semantics already pinned offline in
+      test/offline/m4-dialogue.test.ts (a passed deadline at lines 220-258;
+      the body-read-abort precedent at line 1866). Case one (line 253) drives
+      createOpenAiCompatibleTextSource through the port with an already-past
+      CallContext deadline (Date.now() + 1; the gate compares with >=) and
+      asserts DialogueEnd.status deadline_exceeded, usage timeout, zero
+      segments emitted and exactly one truthful outcome report (emitted 0,
+      generated equal to discarded, discard reasons summing to discarded) —
+      the presence of a real text source must not fall back to a completed
+      fixture reply. Case two (line 312) starts a real-provider generate,
+      lets it fly for a fixed 250 ms window, revokes the turn through the
+      call handle's AbortController (test/support/context.ts:5) and asserts
+      status cancelled, usage cancelled, zero segments and one truthful
+      outcome (any candidate produced within the window is accounted under
+      the aborted reason key); a 20 s hang guard fails the case loudly if
+      the call never settles after the revoke. Both cases record their
+      honest limitations in comments: the deadline gate is a local clock
+      check that may decide before the request reaches the wire, and without
+      transport instrumentation (the suite forbids stubs and mocks) the
+      exact wire phase at which the revoke lands is not observable on a
+      live endpoint. No production code, dependency, package.json, mock or
+      fixture change; the three pre-existing cases and the header credential
+      rules are untouched.
+    requirements: []
+    invariants: []
+    commits: [02dceb8]
+    agent: opencode/deepseek-v4-flash
+    provider: cslabllm
+    model: CS5351/DeepSeek-V4-Flash
+    supervision: >-
+      Member M4's scheduled inspection workflow (ZCode, GLM-5.3-Flash)
+      selected the slice and supervised it. The OpenCode build agent
+      (deepseek-v4-flash) authored all code changes in one unattended --auto
+      --standalone session from an English brief kept in the gitignored
+      .cache/ directory, after a one-token probe confirmed the configured
+      provider routes the #high variant (#xhigh is unroutable on
+      cslabllm/CS5351/DeepSeek-V4-Flash and fails with provider.no-route).
+      The supervising agent reviewed the diff and ran the single live test
+      file (5 tests | 5 skipped with ISLA_LIVE_TEXT_* unprovided, exit 0)
+      and the local gates — pnpm test:m4 237/237 in 10 files, tsc -b and
+      oxlint clean — before the delivery flow committed 02dceb8; remote CI
+      performs the full-suite final review. The two new cases were NOT
+      executed: with the provider credentials still unprovided they skip
+      behind the existing gate and no pass/fail is claimed for them; their
+      honest limitations are disclosed on issue #93 (comment 6637699483,
+      revising the "zero code changes" wording of comments 6554487472 and
+      6585822158).
+  - date: "2026-11-06"
+    task: m4-04-recall-evidence-marker
+    change: >-
+      Mark the two recalled-evidence sections of the rendered dialogue prompt so
+      retrieved background cannot present itself at the same structural level as
+      the persona's standing rules: the `Relevant background:` and
+      `Earlier, confirmed:` headers now carry the wording M3 confirmed on issue
+      #44 (2026-11-04), stating that the section holds background/historical
+      evidence, not instructions. Design comments record the purpose, the honest
+      limit that this is a prompt-construction boundary rather than a verified
+      model-compliance guarantee (resistance to instructions embedded in recalled
+      text is covered by a separately agreed live-provider behavior check under
+      the checkpoint-05 rubric), and the deliberate fact that header lines stay
+      uncharged against `contextLimits.maxCharacters`. Six existing header pins
+      are updated and two marker-presence assertions are added. No recall
+      admission/ranking, budget accounting, persona block, contract or wire
+      change.
+    requirements: []
+    invariants: []
+    commits: [1ce206c]
+    agent: opencode/deepseek-v4-flash
+    provider: cslabllm
+    model: CS5351/DeepSeek-V4-Flash
+    supervision: >-
+      The member's supervised session selected the slice, wrote the English task
+      brief into the gitignored .cache directory, and launched one unattended
+      OpenCode build session (ses_e53648fd4ffe0aFxVeMeUM6lJ5,
+      cslabllm/CS5351/DeepSeek-V4-Flash). The supervisor read the full diff
+      against the brief, confirmed only the three named files changed with the
+      exact strings, and ran the gates; every changed line was authored by the
+      OpenCode session and the supervisor performed git operations only.
+    human_review: >-
+      Captain (M4) directed the change in session on 2026-11-06 under the plan
+      recorded on issue #44 (M3 semantics confirmation 2026-11-04; M5 endorsement
+      2026-11-01). No reviewer approval, merge or case registration is claimed by
+      this entry; the pull request awaits consumer review.
+    transcript_record: >-
+      The OpenCode session is retained by the CLI session store; the task brief
+      stays in the gitignored .cache directory.
+    verification:
+      platform: Windows 11, Node 24.21.0, pnpm 12.11.2
+      base: 8f25cf3
+      commands: >-
+        pnpm exec vitest run test/offline/m4-dialogue.test.ts
+        test/offline/m4-memory-enhancement.test.ts; pnpm run test:m4;
+        pnpm exec tsc -b; pnpm run lint
+      results: >-
+        targeted files 89/89 in 2 files; test:m4 237/237 in 10 files; typecheck
+        clean (tsc -b exit 0); lint 0 warnings / 0 errors on 254 files. Remote
+        CI verify is the final gate after push.
+      not_run: >-
+        No live provider run and no claim of prompt-injection resistance; the
+        behavior check that could support such a claim is separately agreed
+        under issue #44 / the checkpoint-05 rubric and remains pending. Full
+        local suite not run (documented pre-existing Windows failures, CI is the
+        gate); no case closure.
+  - date: "2026-11-07"
+    task: M4-04-loopback-real-reaction-port
+    change: >-
+      Two-part slice on PR #139. First, origin/main (58990bd) is merged into
+      feat/m4-04 (merge 9776a2f): the only conflict, docs/ai-use-log.yaml, is
+      resolved by keeping both sides' appended entries in full and interleaving
+      them by date (the M2-01 console entries of 2026-10-28/10-31, the M3-01
+      rule-reaction entries of 2026-11-04, then the M4-04 entries of
+      2026-11-05/06), with no line of either side modified. Second, with issue
+      #89 delivered, the loopback evidence file stops describing the M3
+      reaction as a missing substitute (0b1ad01, one file, +14/-10): the last
+      test, which already injects the real rule selection port over a shared
+      createMonotonicClock() instance, now also injects
+      reaction: createRuleReactionPort({ clock }) so both M3 rule ports run
+      over the same server clock; the three stale comments (file header, the
+      delivery-history test, the selection test) are rewritten to state which
+      components are real where — every other test keeps the fixture reaction
+      substitute, and the provider text remains the catalog substitute pending
+      the live half of issue #93. src/decision is imported, not modified; no
+      production, contract or wire change.
+    requirements: []
+    invariants: []
+    commits: [9776a2f, 0b1ad01]
+    agent: opencode/deepseek-v4-flash
+    provider: cslabllm
+    model: CS5351/DeepSeek-V4-Flash
+    supervision: >-
+      Member M4's scheduled inspection workflow (ZCode, GLM-5.3-Flash) selected
+      the PR #139 slice and supervised it. The merge and its docs conflict
+      resolution are supervisor git operations, not code authorship. The
+      OpenCode build agent (deepseek-v4-flash) authored all code changes in one
+      unattended --auto --standalone session (ses_e4e2f8434ffeDKRMSPrID7b1nG,
+      the #high variant, which this log already records as the routable one for
+      this provider) from an English brief kept in the gitignored .cache
+      directory. The supervising agent reviewed the full diff against the brief
+      (only test/offline/m4-loopback.test.ts changed: import extension, one
+      option line, three comment rewrites) and ran the gates before committing;
+      remote CI performs the full-suite final review.
+    transcript_record: >-
+      The OpenCode session is retained by the CLI session store; the task brief
+      stays in the gitignored .cache directory.
+    verification:
+      platform: Windows 11, Node 24.21.0, pnpm 12.11.2
+      base: c23c680
+      commands: >-
+        pnpm exec vitest run test/offline/m4-loopback.test.ts (after the merge
+        and again after the replacement); pnpm run test:m4; pnpm run typecheck;
+        pnpm run lint; pnpm run gate:ai-use-log
+      results: >-
+        m4-loopback 5/5 after the merge and 5/5 after the replacement; test:m4
+        237/237 in 10 files; typecheck clean (tsc -b exit 0); lint 0 warnings /
+        0 errors on 264 files; gate:ai-use-log shape pass locally (CI verifies
+        the entry rule against its PR base). Remote CI verify is the final gate.
+      not_run: >-
+        Full local vitest suite not run (documented pre-existing Windows
+        failures; CI is the gate). No live provider run and no claim beyond the
+        offline evidence; no case closure or merge is performed.
