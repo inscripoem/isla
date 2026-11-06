@@ -10,6 +10,7 @@ import {
   type UsageSummary,
   type WindowSummary,
 } from './metrics'
+import type { ProvenanceCompanionV1, ProvenanceInputEntry } from './provenance'
 
 /**
  * M6-02 — the evaluation report.
@@ -72,6 +73,14 @@ export interface ReportInput {
   readonly variants: readonly Variant[]
   readonly conditions: FixedConditions
   readonly meta: RunMeta
+  /**
+   * ADR-008 companion, already validated against this run by the caller.
+   *
+   * The digest can only be recomputed from the run artifact bytes, which the
+   * command holds and the renderer does not. `parseProvenance` is therefore the
+   * single place that validates it; this field is evidence, not a claim.
+   */
+  readonly provenance?: ProvenanceCompanionV1 | null
 }
 
 export type ReportResult =
@@ -259,6 +268,22 @@ function usage(summary: UsageSummary): string {
   return `${count(summary.inputTokens)} in / ${count(summary.outputTokens)} out / $${cost(summary.costUsd)}`
 }
 
+/** One-line summary of an attempt's prepared inputs: counts by status, `none` when nothing was submitted. */
+function preparedInputs(inputs: readonly ProvenanceInputEntry[]): string {
+  if (inputs.length === 0) return 'none'
+  const order = ['accepted', 'duplicate', 'rejected', 'no-acknowledgement', 'not-submitted'] as const
+  return order
+    .map((status) => [status, inputs.filter((entry) => entry.status === status).length] as const)
+    .filter(([, howMany]) => howMany > 0)
+    .map(([status, howMany]) => `${status} ${howMany}`)
+    .join(', ')
+}
+
+/** A digest shown short enough to read; `null` is the unobserved case, never a sentinel digest. */
+function revision(revisionDigest: string | null): string {
+  return revisionDigest === null ? 'null (unobserved)' : `\`${revisionDigest.slice(0, 12)}…\``
+}
+
 const STAGE_LABEL: Record<(typeof TIMING_STAGES)[number], string> = {
   submitMs: 'submit (M5)',
   planMs: 'plan (M3)',
@@ -317,11 +342,45 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
     `| maxTurns | ${count(conditions.recall.maxTurns)} |`,
     `| Recall port | ${conditions.recall.supplied ? 'supplied' : 'not supplied'} |`,
     '',
+    '## Prepared-input provenance',
+    '',
+  ]
+
+  const provenance = input.provenance ?? null
+  if (provenance === null) {
+    lines.push(
+      '> No companion was supplied. Quality results for this run would be `unscored` with reason',
+      '> `no-provenance-record` (ADR-008 D8); this table reports latency, cost and outcome only.',
+    )
+  } else {
+    lines.push(
+      '> The companion is bound to this run by `runId` and by a SHA-256 digest over the exact run',
+      '> artifact. The command validates the digest, the occurrence-key set and the input order before',
+      '> this table is written; this section repeats the accepted observations.',
+      '',
+      '| Case | Variant | Attempt | Correlation | Record-set revision | Prepared inputs |',
+      '| --- | --- | --- | --- | --- | --- |',
+    )
+    for (const attempt of provenance.attempts) {
+      lines.push(
+        `| ${cell(attempt.caseId)} | ${cell(attempt.variantId)} | ${attempt.attempt} | ${attempt.correlation} | ${revision(attempt.recordSetRevision)} | ${preparedInputs(attempt.inputs)} |`,
+      )
+    }
+    lines.push(
+      '',
+      '> `null (unobserved)` means the admitted record set was not captured; `exact` correlation is',
+      '> refused in that case. Eligibility and scoring are not evaluated here — they require human',
+      '> labels (evaluation protocol §3).',
+    )
+  }
+
+  lines.push(
+    '',
     '## Results by variant',
     '',
     '| Variant | Kind | Combined | Bench attempts | Completed | Cancelled | Failed | Failure rate | Usage |',
     '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
-  ]
+  )
 
   for (const variant of variants) {
     const records = run.records.filter((record) => record.variantId === variant.id)
