@@ -8,10 +8,20 @@ import type {
   ConsoleTransportPort,
   ControlAck,
   InputAck,
+  InputEvent,
   PerformanceCancel,
   PerformanceCommand,
+  ReplyIntent,
+  SelectionResult,
   ServerMessage,
 } from '../../src/contracts'
+import {
+  createBatchInputScenario,
+  deliveryCommittedMessage,
+  inputAcceptedMessage,
+  selectionPlanMessage,
+  turnStartedMessage,
+} from '../support/m2-batch-input'
 import { ConsoleApp } from '../../src/console/ConsoleApp'
 import type { TransportStatusReporter } from '../../src/console/ConsoleApp'
 import { createPlaybackBinding } from '../../src/console/player-binding'
@@ -25,8 +35,11 @@ import type { AudioLease, AudioResolver } from '../../src/performance/browser'
  *
  * The fixture is the only substitute in this composition: it answers with the
  * agreed v0.2 messages (input acknowledgement, control acknowledgement, session
- * snapshot, session events) instead of a runtime. The console UI, the
- * application transport logic, the M1 playback controller and the real
+ * snapshot, session events) instead of a runtime, and it acts as the server by
+ * publishing `input.accepted`, `selection.plan`, `turn.started` and
+ * `delivery.committed` session events. These are fixture-authored server
+ * substitute events; they are never browser-observed evidence. The console UI,
+ * the application transport logic, the M1 playback controller and the real
  * `createDomMediaDriver()` are the actual implementations. No runtime, provider
  * or Node code is involved here, and this page is never part of the production
  * entry.
@@ -72,6 +85,13 @@ interface FixtureState {
   segmentIndex: number
   sequence: number
 }
+
+/**
+ * The fixture's standing batch. The plan selects the second text by default, so
+ * a reviewer sees the batch projection without typing three messages by hand.
+ */
+const BATCH = createBatchInputScenario({ sessionId: SESSION_ID, epoch: 1, startSeq: 0 })
+const BATCH_TEXTS: readonly string[] = BATCH.inputs.map((input) => input.text)
 
 function createFixtureTransport(reporter: TransportStatusReporter): ConsoleTransportPort {
   const listeners = new Set<(message: ServerMessage) => void>()
@@ -130,6 +150,87 @@ function createFixtureTransport(reporter: TransportStatusReporter): ConsoleTrans
     payload: command,
   })
 
+  /**
+   * Publish one accepted input as the fixture server: the accepted event, the
+   * selection plan that selects it, the turn it starts, and finally the
+   * committed delivery once a segment has been dispatched.
+   */
+  const projectAcceptedInput = (input: InputEvent): void => {
+    state.seq += 1
+    const acceptedSeq = state.seq
+    push(
+      inputAcceptedMessage({
+        sessionId: SESSION_ID,
+        epoch: state.epoch,
+        seq: acceptedSeq,
+        input,
+      }),
+    )
+
+    const plan: SelectionResult = {
+      requestId: `fixture-plan-${input.eventId}`,
+      sessionId: SESSION_ID,
+      epoch: state.epoch,
+      snapshotRevision: 1,
+      disposition: 'respond',
+      selectedEventIds: [input.eventId],
+      replyIntent: 'answer',
+      reasonCode: 'fixture-batch',
+      provider: 'fixture-provider',
+      modelVersion: 'fixture-model-v1',
+      usage: {
+        provider: 'fixture-provider',
+        requestedModel: 'fixture-model-v1',
+        resolvedModel: 'fixture-model-v1',
+        requestId: `fixture-plan-${input.eventId}`,
+        inputTokens: 1,
+        outputTokens: 1,
+        usageMissing: false,
+        elapsedMs: 1,
+        status: 'ok',
+        pricingRef: null,
+      },
+    }
+    state.seq += 1
+    push(selectionPlanMessage({ sessionId: SESSION_ID, epoch: state.epoch, seq: state.seq, plan, synthetic: false }))
+
+    state.seq += 1
+    const turnId = `fixture-turn-${input.eventId}`
+    const replyIntent: ReplyIntent = 'answer'
+    push(turnStartedMessage({ sessionId: SESSION_ID, epoch: state.epoch, seq: state.seq, replyIntent }))
+
+    const segment = SEGMENTS[state.segmentIndex % SEGMENTS.length]
+    state.segmentIndex += 1
+    state.sequence += 1
+    if (segment === undefined) return
+    const outputId = `fixture-output-${state.sequence}`
+    const segmentId = `fixture-segment-${state.sequence}`
+    push(
+      executeMessage({
+        outputId,
+        sessionId: SESSION_ID,
+        epoch: state.epoch,
+        turnId,
+        segmentId,
+        audioRef: segment.ref,
+        subtitleText: segment.text,
+        actionId: 'smile',
+        capabilityRevision: 1,
+      }),
+    )
+    // The delivery is the fixture server's committed classification, not local
+    // playback evidence observed in this browser.
+    state.seq += 1
+    push(
+      deliveryCommittedMessage({
+        sessionId: SESSION_ID,
+        epoch: state.epoch,
+        seq: state.seq,
+        classification: 'fully-delivered',
+      }),
+    )
+  }
+
   return {
     bootstrap(): Promise<BootstrapSnapshot> {
       reporter.onStatus('open', null)
@@ -176,9 +277,20 @@ function createFixtureTransport(reporter: TransportStatusReporter): ConsoleTrans
               seq: previous.seq,
             }
           } else {
-            const event = eventMessage()
-            if (event.kind !== 'session.event') throw new Error('fixture: expected a session event')
-            const acceptedEvent = { eventId: `fixture-input-${state.seq}`, seq: event.payload.seq }
+            state.seq += 1
+            const acceptedSeq = state.seq
+            const input: InputEvent = {
+              eventId: `fixture-input-${acceptedSeq}`,
+              sessionId: SESSION_ID,
+              epoch: state.epoch,
+              source: message.payload.source,
+              actorId: 'fixture-audience',
+              text: message.payload.text,
+              receivedAtMs: REPLY_DELAY_MS,
+              expiresAtMs: REPLY_DELAY_MS + 30_000,
+              trust: 'untrusted-content',
+            }
+            const acceptedEvent = { eventId: input.eventId, seq: acceptedSeq }
             accepted.set(key, acceptedEvent)
             ack = {
               status: 'accepted',
@@ -188,6 +300,10 @@ function createFixtureTransport(reporter: TransportStatusReporter): ConsoleTrans
               epoch: state.epoch,
               seq: acceptedEvent.seq,
             }
+            push(inputAckMessage(ack, message.messageId))
+            projectAcceptedInput(input)
+            resolve(ack)
+            return
           }
           push(inputAckMessage(ack, message.messageId))
           resolve(ack)
@@ -291,8 +407,49 @@ function createConsolePlayback(bootstrap: BootstrapSnapshot, callbacks: Playback
 const root = document.getElementById('root')
 if (root === null) throw new Error('console demo: missing #root')
 
+/**
+ * Demo-only batch helper. It renders no production behaviour: it submits the
+ * default batch texts through the console's existing form path so a reviewer can
+ * see the batch projection without typing three messages. Each submission types
+ * the text into the message field and activates the form's submit button, so the
+ * console's own dispatch remains the only path to the fixture transport.
+ */
+function submitDefaultBatch(): void {
+  const field = document.getElementById('console-text')
+  if (!(field instanceof HTMLInputElement)) return
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+  let delay = 0
+  for (const text of BATCH_TEXTS) {
+    window.setTimeout(() => {
+      setter?.call(field, text)
+      field.dispatchEvent(new Event('input', { bubbles: true }))
+      // Let React commit the controlled value before activating the form.
+      window.setTimeout(() => {
+        field.form?.requestSubmit()
+      }, 0)
+    }, delay)
+    delay += REPLY_DELAY_MS + 200
+  }
+}
+
+const batchHelper = (
+  <div className="console__stack" style={{ padding: '0.75rem 1rem 0' }}>
+    <p className="console__hint" style={{ margin: 0 }}>
+      Demo fixture: the batch helper submits {BATCH_TEXTS.length} default texts through the message form. The
+      fixture server then publishes accepted inputs, a selection, a turn and a delivery. These are fixture
+      substitute events, not browser-observed evidence.
+    </p>
+    <div className="console__actions">
+      <button type="button" className="console__batch-helper" onClick={submitDefaultBatch}>
+        Submit the default batch
+      </button>
+    </div>
+  </div>
+)
+
 createRoot(root).render(
   <StrictMode>
+    {batchHelper}
     <ConsoleApp transportFactory={createFixtureTransport} playbackFactory={createConsolePlayback} />
   </StrictMode>,
 )
