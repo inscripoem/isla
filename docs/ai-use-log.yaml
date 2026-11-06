@@ -4602,3 +4602,46 @@ entries:
       not_run: >-
         No live provider run, no quality scoring and no label join. The companion
         shape is still unconfirmed and no reviewer has read the new section.
+  - date: "2026-11-06"
+    task: "M6-02 / #100"
+    branch: m6-02-provenance
+    change: >-
+      Apply the M6 CORE review fixes to the provenance companion. The renderer
+      re-applies the binding it can check (runId and occurrence-key set) through a
+      helper shared with the parser, so the exported API cannot publish another
+      run's evidence. An unexported input identity is a state: `inputId` is
+      `string | null`, the documented literal is normalised to null, and the table
+      renders `identity not-yet-observable` with the `missing-input-identity`
+      note. The artifact names its source (companion path, run id, full digest).
+      Digests are validated case-insensitively and normalised; hashing is over the
+      bytes read from disk; the status order is derived from `INPUT_STATUSES` and
+      a count mismatch is reported. Adds one trace-matrix row for ADR-008.
+    requirements: [NFR-01, NFR-04]
+    invariants: []
+    cases: []
+    commits: [c210260]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
+      the Captain approved the review fixes. The companion shape (root binding
+      plus `attempts`) remains unconfirmed and is recorded as such in the trace
+      row.
+    human_review: >-
+      The fixes respond to the M6 CORE self-review memo; no independent reviewer
+      has read them and no merge is claimed.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export was produced.
+    verification:
+      platform: macOS, Node 24, pnpm 12
+      base: 7a6eec2
+      role: "test:m6 212/212 in 16 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0: 1455/1455 in 73 files; typecheck clean; lint 0/0."
+      mutation: >-
+        Four mutations each turned a case red and were restored: the renderer
+        binding guard, the literal-identity handling, the source threading and the
+        uppercase digest normalisation.
+      not_run: >-
+        No live provider run, no label join and no independent review. The shape
+        remains unconfirmed.
