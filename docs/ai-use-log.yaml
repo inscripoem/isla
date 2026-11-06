@@ -4686,3 +4686,43 @@ entries:
       not_run: >-
         No independent review of the rebased head, no live provider run and no
         shape confirmation.
+  - date: "2026-11-06"
+    task: "M6-02 / #103"
+    branch: m6-eligibility
+    change: >-
+      Add scoring eligibility per attempt (protocol §3): `eligible`, or `unscored`
+      with a named reason (`no-provenance-record`, `missing/ambiguous-acknowledgement-link`,
+      `missing-input-identity`, `missing-history-observation`). Checks run in
+      protocol order and stop at the first failure. The report gains an
+      `Eligibility` column and states that no attempt is scored and that
+      `condition-mismatch` is not evaluated (no per-attempt conditions). The
+      positional occurrence-key rule is exported from `provenance.ts` and shared,
+      not duplicated. No scoring rule, provider call, label join or threshold.
+    requirements: [NFR-01, NFR-04]
+    invariants: []
+    cases: []
+    commits: [d930a0e]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
+      the Captain approved the Wave 1 slice. The companion shape remains
+      unconfirmed; eligibility consumes the same reading as the parser.
+    human_review: >-
+      Captain (M6) approved the local slice; no independent reviewer has read it
+      and no merge is claimed.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export was produced.
+    verification:
+      platform: macOS, Node 24, pnpm 12
+      base: 99df88b (stacked on the #140 branch)
+      role: "test:m6 222/222 in 17 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0: 1465/1465 in 74 files; typecheck clean; lint 0/0."
+      mutation: >-
+        Four mutations each turned a case red and were restored: the
+        no-companion branch, the correlation rules, the identity rule and the
+        record-set rule.
+      not_run: >-
+        No labels, no scoring and no condition-mismatch evaluation. The shape
+        remains unconfirmed.
