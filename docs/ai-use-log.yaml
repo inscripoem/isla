@@ -5419,3 +5419,44 @@ entries:
       not_run: >-
         No live provider run, no label join and no independent review. The shape
         remains unconfirmed.
+  - date: "2026-11-07"
+    task: "M6-02 / #100"
+    branch: m6-02-provenance
+    change: >-
+      Refit #100 onto main 58990bd after #138/#130/#67 merged, and apply M4's
+      review note. Conflict resolution is a union, not a choice: the AI-use log
+      keeps main's entries and this branch's (139), and package.json keeps both
+      main's test:m5 addition and this branch's two test:m6 entries. The module
+      header no longer claims the report command does not consume the companion;
+      it states the command consumes it and refuses a mismatch before writing.
+      The `null (unobserved)` footnote now covers "not captured, or not
+      observed". No behaviour, schema or test-logic change.
+    requirements: [NFR-01, NFR-04]
+    invariants: []
+    cases: []
+    commits: [4aba0ef]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
+      the Captain approved the refit plan. The companion shape remains
+      unconfirmed; the header now says so without claiming the command is
+      inactive.
+    human_review: >-
+      The fix answers M4's review on #140; the rebased head needs a fresh review
+      and no merge is claimed.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export was produced.
+    verification:
+      platform: macOS, Node 24, pnpm 12
+      base: 58990bd
+      role: "test:m6 212/212 in 16 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0: 1548/1548 in 74 files; typecheck clean; lint 0/0."
+      conflict_checks: >-
+        AI-use log 139 entries (136 main + 3 branch, none dropped); package.json
+        keeps m5-audio-deployment and both provenance test files; the diff against
+        main is the expected eight paths.
+      not_run: >-
+        No independent review of the rebased head, no live provider run and no
+        shape confirmation.
