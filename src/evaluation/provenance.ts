@@ -120,7 +120,9 @@ export function provenanceRunDigest(runBytes: string | Buffer): string {
  * 1-based occurrence of that `(caseId, variantId)` in the run file. Positional, so
  * the file order is part of the key.
  */
-function occurrenceKeys(records: readonly { caseId: string; variantId: string }[]): string[] {
+export function runOccurrenceKeys(
+  records: readonly { caseId: string; variantId: string }[],
+): string[] {
   const seen = new Map<string, number>()
   return records.map((record) => {
     const base = `${record.caseId}\u0000${record.variantId}`
@@ -130,7 +132,11 @@ function occurrenceKeys(records: readonly { caseId: string; variantId: string }[
   })
 }
 
-function occurrenceKey(ref: { caseId: string; variantId: string; attempt: number }): string {
+export function companionOccurrenceKey(ref: {
+  caseId: string
+  variantId: string
+  attempt: number
+}): string {
   return `${ref.caseId}\u0000${ref.variantId}\u0000${ref.attempt}`
 }
 
@@ -147,8 +153,8 @@ export function provenanceBindingViolations(
   const violations: string[] = []
   if (companion.runId !== run.runId) violations.push('runId does not match the run')
 
-  const runKeys = new Set(occurrenceKeys(run.records))
-  const companionKeys = new Set(companion.attempts.map(occurrenceKey))
+  const runKeys = new Set(runOccurrenceKeys(run.records))
+  const companionKeys = new Set(companion.attempts.map(companionOccurrenceKey))
   for (const key of runKeys) {
     if (!companionKeys.has(key)) {
       const [caseId, variantId, attempt] = key.split('\u0000')
