@@ -14,9 +14,9 @@ import type { AttemptRecord } from './metrics'
  *     attempts: [{ caseId, variantId, attempt, inputs, recordSetRevision, correlation }] }
  *
  * The flat field table therefore describes an entry, not the root. This reading
- * is pending explicit confirmation; the report command does not consume the
- * companion until the shape is confirmed, so a wrong reading cannot reach a
- * published table.
+ * is pending explicit confirmation. The report command consumes the companion
+ * through `--provenance` and refuses a mismatch before any table is written, so
+ * a wrong reading fails closed instead of publishing a partial join.
  *
  * The parser is pure and strict: unknown keys are refused, the digest is bound to
  * the exact run bytes, the occurrence-key set must equal the run's record set,

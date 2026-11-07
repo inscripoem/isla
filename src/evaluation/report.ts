@@ -392,10 +392,11 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
     }
     lines.push(
       '',
-      '> `null (unobserved)` means the admitted record set was not captured; `exact` correlation is',
-      '> refused in that case. `identity not-yet-observable` marks an input whose fixture identity M5',
-      '> has not exported (ADR-008 D5); a scored result would be `unscored` with `missing-input-identity`.',
-      '> Eligibility and scoring are not evaluated here — they require human labels (protocol §3).',
+      '> `null (unobserved)` means the admitted record set was not captured, or was not observed;',
+      '> `exact` correlation is refused in that case. `identity not-yet-observable` marks an input',
+      '> whose fixture identity M5 has not exported (ADR-008 D5); a scored result would be',
+      '> `unscored` with `missing-input-identity`. Eligibility and scoring are not evaluated here —',
+      '> they require human labels (protocol §3).',
     )
   }
 
