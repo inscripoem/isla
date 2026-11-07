@@ -4507,3 +4507,182 @@ entries:
       providers, acoustic verification, Windows behaviour and durable recovery
       are not claimed. No merge was performed and the local `package.json` edit
       remains uncommitted.
+  - date: "2026-11-06"
+    task: "M6-02 / #100"
+    branch: m6-02-provenance
+    change: >-
+      Add the ADR-008 prepared-input provenance companion as a pure, strict
+      parser (src/evaluation/provenance.ts): a versioned root binding (runId
+      plus runDigest over the exact run artifact bytes) and one entry per
+      attempt carrying the flat per-attempt fields, with inputs in submission
+      order. Refusals are data, not exceptions: unknown keys, a digest or runId
+      mismatch, a missing, extra or duplicate (caseId, variantId, attempt) key,
+      an input order that cannot be established, `correlation: exact` with a
+      null record-set revision, and more than five prepared inputs. Twelve
+      offline cases (two acceptances, ten refusals) and the test:m6
+      selection. The report command does not consume the companion yet, so no
+      published table can depend on it. No provider, runtime, schema or
+      dependency change.
+    requirements: [NFR-01, NFR-04]
+    invariants: []
+    cases: []
+    commits: [53ec4ef]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
+      the Captain approved the local slice on 2026-11-06. The shape reading
+      (root binding plus an `attempts` array) is stated in the module header
+      because the merged proposal lists the per-attempt fields flat while also
+      requiring one object per run; that reading is still unconfirmed, and the
+      report integration is deliberately excluded so a wrong reading cannot
+      reach a published table.
+    human_review: >-
+      Captain (M6) approved the local implementation slice; no independent
+      reviewer has read the parser and no merge is claimed.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export was produced.
+    verification:
+      platform: macOS, Node 24, pnpm 12
+      base: 7a6eec2
+      focused: "test/offline/m6-02-provenance.test.ts: 12 passed."
+      role: "test:m6 194/194 in 15 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0: 1437/1437 in 72 files; typecheck clean; lint 0/0; build ok."
+      mutation: >-
+        Eight rule mutations each turned one case red and were restored:
+        unknown root key, digest mismatch, duplicate occurrence key, input
+        order, exact-with-null revision, five-input cap, missing occurrence and
+        extra occurrence.
+      not_run: >-
+        No live provider run, no report-command integration, no reviewer
+        reading and no case allocation. The planning revision's 1538-test
+        figure was not reproducible from a published source in this session.
+  - date: "2026-11-06"
+    task: "M6-02 / #100"
+    branch: m6-02-provenance
+    change: >-
+      Consume the ADR-008 provenance companion in the evaluation report command.
+      `--provenance <path>` parses the file strictly against the exact run bytes,
+      so the digest binds to this artifact and not to a re-serialised object; a
+      refusal prints its violations and writes no table, malformed JSON is a
+      refusal, and an unreadable file is an I/O error. The rendered table gains a
+      "Prepared-input provenance" section (per attempt: correlation, record-set
+      revision or `null (unobserved)`, prepared inputs by status) and, without a
+      companion, states `no-provenance-record` and claims no join. Eligibility and
+      scoring are explicitly not evaluated: they need human labels. No provider,
+      scoring rule, schema or dependency change.
+    requirements: [NFR-01, NFR-04]
+    invariants: []
+    cases: []
+    commits: [d2c1c86]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
+      the Captain approved continuing the local #100 slice. The companion shape
+      (root binding plus `attempts`) remains unconfirmed, so the renderer repeats
+      the parser's reading and the command refuses rather than guessing; a shape
+      change touches the parser and this section, not the record schema.
+    human_review: >-
+      Captain (M6) approved the local implementation slice; no independent
+      reviewer has read the command or the section and no merge is claimed.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export was produced.
+    verification:
+      platform: macOS, Node 24, pnpm 12
+      base: 7a6eec2
+      role: "test:m6 202/202 in 16 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0: 1445/1445 in 73 files; typecheck clean; lint 0/0."
+      mutation: >-
+        Four mutations each turned one case red and were restored: the companion
+        not attached, the unreadable-file exit code, malformed JSON swallowed and
+        the renderer ignoring the companion.
+      not_run: >-
+        No live provider run, no quality scoring and no label join. The companion
+        shape is still unconfirmed and no reviewer has read the new section.
+  - date: "2026-11-06"
+    task: "M6-02 / #100"
+    branch: m6-02-provenance
+    change: >-
+      Apply the M6 CORE review fixes to the provenance companion. The renderer
+      re-applies the binding it can check (runId and occurrence-key set) through a
+      helper shared with the parser, so the exported API cannot publish another
+      run's evidence. An unexported input identity is a state: `inputId` is
+      `string | null`, the documented literal is normalised to null, and the table
+      renders `identity not-yet-observable` with the `missing-input-identity`
+      note. The artifact names its source (companion path, run id, full digest).
+      Digests are validated case-insensitively and normalised; hashing is over the
+      bytes read from disk; the status order is derived from `INPUT_STATUSES` and
+      a count mismatch is reported. Adds one trace-matrix row for ADR-008.
+    requirements: [NFR-01, NFR-04]
+    invariants: []
+    cases: []
+    commits: [c210260]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
+      the Captain approved the review fixes. The companion shape (root binding
+      plus `attempts`) remains unconfirmed and is recorded as such in the trace
+      row.
+    human_review: >-
+      The fixes respond to the M6 CORE self-review memo; no independent reviewer
+      has read them and no merge is claimed.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export was produced.
+    verification:
+      platform: macOS, Node 24, pnpm 12
+      base: 7a6eec2
+      role: "test:m6 212/212 in 16 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0: 1455/1455 in 73 files; typecheck clean; lint 0/0."
+      mutation: >-
+        Four mutations each turned a case red and were restored: the renderer
+        binding guard, the literal-identity handling, the source threading and the
+        uppercase digest normalisation.
+      not_run: >-
+        No live provider run, no label join and no independent review. The shape
+        remains unconfirmed.
+  - date: "2026-11-07"
+    task: "M6-02 / #100"
+    branch: m6-02-provenance
+    change: >-
+      Refit #100 onto main 58990bd after #138/#130/#67 merged, and apply M4's
+      review note. Conflict resolution is a union, not a choice: the AI-use log
+      keeps main's entries and this branch's (139), and package.json keeps both
+      main's test:m5 addition and this branch's two test:m6 entries. The module
+      header no longer claims the report command does not consume the companion;
+      it states the command consumes it and refuses a mismatch before writing.
+      The `null (unobserved)` footnote now covers "not captured, or not
+      observed". No behaviour, schema or test-logic change.
+    requirements: [NFR-01, NFR-04]
+    invariants: []
+    cases: []
+    commits: [4aba0ef]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
+      the Captain approved the refit plan. The companion shape remains
+      unconfirmed; the header now says so without claiming the command is
+      inactive.
+    human_review: >-
+      The fix answers M4's review on #140; the rebased head needs a fresh review
+      and no merge is claimed.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export was produced.
+    verification:
+      platform: macOS, Node 24, pnpm 12
+      base: 58990bd
+      role: "test:m6 212/212 in 16 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0: 1548/1548 in 74 files; typecheck clean; lint 0/0."
+      conflict_checks: >-
+        AI-use log 139 entries (136 main + 3 branch, none dropped); package.json
+        keeps m5-audio-deployment and both provenance test files; the diff against
+        main is the expected eight paths.
+      not_run: >-
+        No independent review of the rebased head, no live provider run and no
+        shape confirmation.
