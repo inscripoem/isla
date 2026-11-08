@@ -2105,13 +2105,20 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
       pending = pending.filter((candidate) => candidate.eventId !== chosen.eventId)
       activeTurnId = null
       performerStatus = 'idle'
+      // A completed dialogue whose cycle failed (dependency or playback fault)
+      // did not produce a completed turn. The terminal record reports that
+      // truthfully; a genuine dialogue `failed`/`cancelled` end is preserved.
+      const turnEndStatus = end.status === 'completed' && cycleFailed ? 'failed' : end.status
       if (!isDegraded()) {
-        await persist('turn.ended', { turnId, payload: { status: end.status } })
+        await persist('turn.ended', { turnId, payload: { status: turnEndStatus } })
       }
       if (isDegraded()) {
         return { status: 'degraded', turnId, plan, deliveries: turnDeliveries }
       }
       // A dependency or playback fault is never reported as a completed cycle.
+      // `CycleOutcome.status` keeps its legacy coarse `cancelled` value for a
+      // failed cycle; that value is not an operator-cancellation claim. Consumers
+      // that need cancellation evidence read the recorded `session.stopped`.
       const completed = end.status === 'completed' && !cycleFailed
       return { status: completed ? 'completed' : 'cancelled', turnId, plan, deliveries: turnDeliveries }
     } finally {
