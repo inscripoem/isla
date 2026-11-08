@@ -1,4 +1,5 @@
 import type { EventStorePort, RuntimeEvent } from '../../src/contracts'
+import { createRuleReactionPort } from '../../src/decision'
 import { createMonotonicClock } from '../../src/runtime/clock'
 import { createEventStore } from '../../src/storage/event-store'
 import { createLoopHarness } from './i1-harness'
@@ -13,9 +14,11 @@ import type { LoopHarness, LoopHarnessOptions } from './i1-harness'
  * to the harness and is never imported by production code.
  *
  * The runtime clock is created once here and handed to the harness, so the
- * harness's default M3 rule selection port and the runtime/coordinator share
- * one clock domain. An explicit `selection` or `clock` remains available for
- * controlled negative tests.
+ * default M3 rule selection and rule reaction ports share one clock domain with
+ * the runtime/coordinator and with every recovery successor. Only this explicit
+ * adoption entry substitutes the rule reaction; the generic harness default
+ * stays the fixture port. An explicit `selection`, `reaction` or `clock`
+ * remains available for controlled negative tests.
  */
 export interface AdoptionSession {
   readonly harness: LoopHarness
@@ -37,7 +40,14 @@ export async function openAdoptionSession(
   options: LoopHarnessOptions = {},
 ): Promise<AdoptionSession> {
   const clock = options.clock ?? createMonotonicClock()
-  const harness = await createLoopHarness({ ...options, clock })
+  // Bind the rule reaction to the same single clock instance the harness uses
+  // for selection and for every recovery successor. An explicit reaction port
+  // still wins for controlled fault, timeout and foreign-clock checks.
+  const harness = await createLoopHarness({
+    ...options,
+    clock,
+    reaction: options.reaction ?? createRuleReactionPort({ clock }),
+  })
   try {
     const token = await harness.bootstrapOperator()
     await harness.client.bootstrapOperator(token)

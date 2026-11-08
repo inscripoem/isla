@@ -230,6 +230,17 @@ live-provider claims. Existing production authority and interfaces are unchanged
 
 ## M5 I1 adoption checks
 
+The 2026-11-08 local candidate based on PR131 `38ccff7` adds the merged M3
+rule `ReactionPort` to the explicitly selected controlled formal-console
+deployment and M5 adoption entry, sharing their runtime clock with rule
+selection. The relevant checks are `test/offline/m5-deployment-selection.test.ts`
+and `test/offline/m5-i1-adoption.test.ts`: provenance and eligible actions,
+clock expiry, two turns, optional-reaction fallback, Stop with a delayed result,
+and an explicit recovery successor. This is scoped supporting evidence for
+FR-01/FR-03/FR-04/FR-05/FR-06, under review; it adds no case ID and does not
+close C-05, C-08, C-09 or C-16 or accept complete I1. The separate loop demo
+retains its reaction fixture.
+
 The local M5 I1 adoption increment on 2026-10-28 adds a test-only adoption entry,
 five loopback checks, and two helper checks (explicit store access and
 failed-setup cleanup) for selection timeout with a late result, unchanged

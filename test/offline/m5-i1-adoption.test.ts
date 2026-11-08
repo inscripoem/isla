@@ -5,15 +5,17 @@ import type {
   ConfirmedDelivery,
   ControlAck,
   EventStorePort,
+  ReactionPort,
   RuntimeEvent,
   SelectionPort,
   SelectionRequest,
   SelectionResult,
   SynthesisPort,
 } from '../../src/contracts'
-import { controlAckSchema } from '../../src/contracts'
-import { createRuleSelectionPort } from '../../src/decision'
+import { NO_OP_ACTION, controlAckSchema } from '../../src/contracts'
+import { createRuleReactionPort, createRuleSelectionPort } from '../../src/decision'
 import type { AssembledDialogueContext, DialogueTextSource } from '../../src/dialogue'
+import { createFixedSynthesis } from '../../src/performance/fixed-synthesis'
 import { createMonotonicClock } from '../../src/runtime/clock'
 import type { RuntimeCoordinator } from '../../src/runtime/coordinator'
 import type { RuntimeDeadlineGate } from '../../src/runtime/deadline'
@@ -27,8 +29,13 @@ import type { LoopHarness, LoopHarnessOptions } from '../support/i1-harness'
 import { createCatalogDialogueTextSource } from '../support/m4-kit'
 import {
   createControlledMediaDriver,
+  M1_ACTUAL_SEGMENT_0_DURATION_MS,
+  M1_ACTUAL_SEGMENT_0_REF,
+  M1_FIXTURE_FORMAT,
   M1_FIXTURE_SEGMENT_0_TEXT,
   M1_FIXTURE_SEGMENT_1_TEXT,
+  M1_FIXTURE_VOICE_ID,
+  M1_FIXTURE_VOICE_VERSION,
 } from '../support/m1-kit'
 import { createTestProductionPeers } from '../support/production-kit'
 
@@ -186,6 +193,18 @@ function performanceOffers(session: AdoptionSession): number {
   return session.harness.client
     .messages()
     .filter((message) => message.kind === 'performance.offer').length
+}
+
+function reactionCalls(events: readonly RuntimeEvent[]): RuntimeEvent[] {
+  return events.filter(
+    (event) => event.type === 'provider.call' && event.payload.call === 'reaction',
+  )
+}
+
+function offeredActionIds(messages: readonly Record<string, unknown>[]): unknown[] {
+  return messages
+    .filter((message) => message.kind === 'performance.offer')
+    .map((message) => (message.payload as { actionId?: unknown } | undefined)?.actionId)
 }
 
 function turnEndStatuses(events: readonly RuntimeEvent[]): unknown[] {
@@ -494,6 +513,275 @@ describe('M5 I1 adoption checks', () => {
       })
       expect(selectionCallDisposition(successorEvents)).toBe('accepted')
       expect(await session.harness.confirmedHistory(successor)).toHaveLength(1)
+    } finally {
+      await next.close().catch(() => {})
+    }
+  })
+
+  it('records accepted m3-rules reactions for two sequential turns and offers neutral', async () => {
+    const session = await adopt({ clock: createMonotonicClock() })
+
+    await session.harness.client.input('first reaction turn')
+    await session.until(() => session.events(), (events) => completedTurns(events).length >= 1)
+    await session.harness.client.input('second reaction turn')
+    const events = await session.until(
+      () => session.events(),
+      (all) => completedTurns(all).length >= 2,
+    )
+
+    const calls = reactionCalls(events)
+    expect(calls).toHaveLength(2)
+    for (const call of calls) {
+      expect(call.payload.disposition).toBe('accepted')
+      expect(call.payload.usage).toMatchObject({
+        provider: 'm3-rules',
+        requestedModel: 'm3-rules-v0.1',
+      })
+    }
+    // The offer alone does not distinguish the rule reaction from the generic
+    // fixture: the harness lists neutral first and the fixture also picks the
+    // first eligible action. The recorded `m3-rules` provenance above, and the
+    // separate positive-cue case that offers smile, are the distinguishing
+    // evidence.
+    expect(offeredActionIds(session.harness.client.messages())).toEqual(['neutral', 'neutral'])
+    expect(session.harness.composition.coordinator.metrics().reactionAttempts).toBe(2)
+    expect(session.harness.client.errors()).toEqual([])
+  })
+
+  it('selects smile through the rule reaction when the segment carries a positive cue', async () => {
+    const positiveLine = 'Thank you, that is great news!'
+    const clock = createMonotonicClock()
+    const createSynthesis: NonNullable<LoopHarnessOptions['createSynthesis']> = () =>
+      createFixedSynthesis({
+        entries: [
+          {
+            text: positiveLine,
+            voiceProfileId: M1_FIXTURE_VOICE_ID,
+            voiceProfileVersion: M1_FIXTURE_VOICE_VERSION,
+            audioRef: M1_ACTUAL_SEGMENT_0_REF,
+            format: M1_FIXTURE_FORMAT,
+            durationMs: M1_ACTUAL_SEGMENT_0_DURATION_MS,
+            timing: { startMs: 0, endMs: M1_ACTUAL_SEGMENT_0_DURATION_MS },
+          },
+        ],
+        clock,
+      })
+    const session = await adopt({
+      clock,
+      realM4: true,
+      dialogueTextSource: createCatalogDialogueTextSource([positiveLine]),
+      createSynthesis,
+    })
+
+    await session.harness.client.input('positive cue input')
+    const events = await session.until(
+      () => session.events(),
+      (all) => completedTurns(all).length >= 1,
+    )
+
+    const calls = reactionCalls(events)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.payload.disposition).toBe('accepted')
+    expect(offeredActionIds(session.harness.client.messages())).toEqual(['smile'])
+    expect(events.filter((event) => event.type === 'delivery.committed')).toHaveLength(1)
+  })
+
+  it('times out a held reaction to no-op while speech still completes', async () => {
+    const reaction: ReactionPort = {
+      async decide() {
+        return new Promise<never>(() => {})
+      },
+    }
+    const session = await adopt({
+      clock: createMonotonicClock(),
+      reaction,
+      timings: { reactionMs: 40 },
+    })
+
+    await session.harness.client.input('held reaction input')
+    const events = await session.until(
+      () => session.events(),
+      (all) => completedTurns(all).length >= 1,
+    )
+
+    const calls = reactionCalls(events)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.payload.disposition).toBe('timeout')
+    expect(offeredActionIds(session.harness.client.messages())).toEqual([NO_OP_ACTION])
+    expect(events.filter((event) => event.type === 'delivery.committed')).toHaveLength(1)
+    expect(turnEndStatuses(events)).toEqual(['completed'])
+  })
+
+  it('records a failed reaction and continues to no-op speech', async () => {
+    const reaction: ReactionPort = {
+      async decide() {
+        throw new Error('injected reaction failure')
+      },
+    }
+    const session = await adopt({ clock: createMonotonicClock(), reaction })
+
+    await session.harness.client.input('failed reaction input')
+    const events = await session.until(
+      () => session.events(),
+      (all) => completedTurns(all).length >= 1,
+    )
+
+    const calls = reactionCalls(events)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.payload.disposition).toBe('failed')
+    expect(offeredActionIds(session.harness.client.messages())).toEqual([NO_OP_ACTION])
+    expect(turnEndStatuses(events)).toEqual(['completed'])
+  })
+
+  it('records a foreign-clock rule reaction as failed and falls back to no-op', async () => {
+    const foreignClock: ClockPort = { nowMs: () => Number.MAX_SAFE_INTEGER }
+    const session = await adopt({
+      clock: createMonotonicClock(),
+      reaction: createRuleReactionPort({ clock: foreignClock }),
+    })
+
+    await session.harness.client.input('foreign reaction clock input')
+    const events = await session.until(
+      () => session.events(),
+      (all) => completedTurns(all).length >= 1,
+    )
+
+    const calls = reactionCalls(events)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.payload.disposition).toBe('failed')
+    expect(offeredActionIds(session.harness.client.messages())).toEqual([NO_OP_ACTION])
+  })
+
+  it('discards a rule reaction that succeeds before Stop but returns after it', async () => {
+    const clock = createMonotonicClock()
+    const base = createRuleReactionPort({ clock })
+    const gate = createGate()
+    let decided = false
+    let calls = 0
+    let settleUnderlying = (): void => {}
+    const underlyingSettled = new Promise<void>((resolve) => {
+      settleUnderlying = resolve
+    })
+    const reaction: ReactionPort = {
+      async decide(request, context) {
+        calls += 1
+        // The real rule computes a valid decision while the turn is still
+        // active; the gate then delays returning it until after Stop has
+        // revoked this call. A successful late result must be discarded.
+        const decision = await base.decide(request, context)
+        decided = true
+        await gate.promise
+        try {
+          return decision
+        } finally {
+          settleUnderlying()
+        }
+      },
+    }
+    const session = await adopt({ clock, reaction })
+
+    await session.harness.client.input('held rule reaction')
+    // The reaction is invoked only after the selection plan and turn start, so
+    // reaching this point proves Stop acts on a turn that already started, and
+    // the rule has already produced a valid decision for it.
+    await session.until(() => decided, (value) => value)
+    const stop = await session.harness.client.stop()
+    expect((stop.payload as { status: string }).status).toBe('applied')
+    gate.release()
+
+    await underlyingSettled
+    const events = await session.until(
+      () => session.events(),
+      (all) =>
+        all.some(
+          (event) => event.type === 'provider.call' && event.payload.call === 'reaction',
+        ) &&
+        all.some((event) => event.type === 'turn.ended' && event.payload.status === 'cancelled'),
+    )
+
+    expect(events.filter((event) => event.type === 'selection.plan')).toHaveLength(1)
+    expect(events.filter((event) => event.type === 'turn.started')).toHaveLength(1)
+    // A revoked call persists no accepted dialogue result: the coordinator only
+    // records `dialogue.result` for an accepted dialogue call, and this one was
+    // revoked while the reaction was held.
+    expect(events.some((event) => event.type === 'dialogue.result')).toBe(false)
+    expect(events.filter((event) => event.type === 'delivery.committed')).toHaveLength(0)
+    expect(session.harness.composition.coordinator.deliveries()).toHaveLength(0)
+    expect(
+      session.harness.client
+        .messages()
+        .some((message) => message.kind === 'performance.offer' || message.kind === 'performance.grant'),
+    ).toBe(false)
+    const callsForTurn = reactionCalls(events)
+    expect(callsForTurn).toHaveLength(1)
+    expect(callsForTurn[0]?.payload.disposition).toBe('aborted')
+    expect(turnEndStatuses(events)).toEqual(['cancelled'])
+    expect(calls).toBe(1)
+  })
+
+  it('keeps the clock-bound rule reaction in a recovery successor', async () => {
+    const liveSessionId = 'session-adoption-rule-reaction'
+    const successorIds: string[] = []
+    const session = await adopt({
+      clock: createMonotonicClock(),
+      // One catalogued line keeps each turn's confirmed-history count exact.
+      dialogueTextSource: createCatalogDialogueTextSource([M1_FIXTURE_SEGMENT_0_TEXT]),
+      reconstruction: {
+        liveSessionId,
+        liveProfile: { profileId: 'character-fixture', profileVersion: '1' },
+        selectedSources: [],
+        catalogue: new Map(),
+      },
+      recovery: {
+        nextSessionId: () => {
+          const id = `session-adoption-reaction-succ-${successorIds.length + 1}`
+          successorIds.push(id)
+          return id
+        },
+      },
+    })
+
+    await session.harness.client.input('initial reaction-selected input')
+    const liveEvents = await session.until(
+      () => session.events(liveSessionId),
+      (events) => completedTurns(events).length >= 1,
+    )
+    const liveCalls = reactionCalls(liveEvents)
+    expect(liveCalls).toHaveLength(1)
+    expect(liveCalls[0]?.payload.disposition).toBe('accepted')
+    expect(liveCalls[0]?.payload.usage).toMatchObject({ provider: 'm3-rules' })
+    expect(offeredActionIds(session.harness.client.messages())).toEqual(['neutral'])
+
+    const operator = session.harness.newClient()
+    try {
+      await operator.snapshot
+      await operator.bootstrapOperator(await session.harness.bootstrapOperator())
+      const ack = await operator.recover()
+      expect(ack.kind).toBe('session.recovery.ack')
+    } finally {
+      await operator.close().catch(() => {})
+    }
+
+    const successor = session.harness.currentSessionId()
+    expect(successor).toBe(successorIds[0])
+
+    const next = session.harness.newClient()
+    try {
+      await next.snapshot
+      await next.bootstrapOperator(await session.harness.bootstrapOperator())
+      expect((await next.attach()).kind).toBe('session.attach.ack')
+      expect(((await next.resume()).payload as { status: string }).status).toBe('applied')
+
+      await next.input('successor reaction-selected input')
+      const successorEvents = await session.until(
+        () => session.events(successor),
+        (events) => completedTurns(events).length >= 1,
+      )
+      const successorCalls = reactionCalls(successorEvents)
+      expect(successorCalls).toHaveLength(1)
+      expect(successorCalls[0]?.payload.disposition).toBe('accepted')
+      expect(successorCalls[0]?.payload.usage).toMatchObject({ provider: 'm3-rules' })
+      expect(offeredActionIds(next.messages())).toEqual(['neutral'])
     } finally {
       await next.close().catch(() => {})
     }

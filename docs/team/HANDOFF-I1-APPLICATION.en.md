@@ -2,6 +2,17 @@
 
 Status: under review · 2026-10-30 · Owner: M5 (runtime) · Consumer: M2 (console)
 
+**Controlled I1 candidate, 2026-11-08:** the candidate based on PR131
+`38ccff7cb746a839706d6bf68a0374e24bf89c1e` wires
+both merged M3 rule ports into the explicitly selected formal-console test
+deployment using the runtime clock. The M5 adoption test entry uses the same
+rule reaction; the separate `pnpm dev:loop` demo and generic fixture defaults
+still use their existing reaction substitute. Catalogue dialogue text, fixed
+audio and the renderer remain controlled peers. This local candidate is under
+review; it does not merge PR131 or PR141, close I1 checkpoint #73, or establish
+live-provider, physical-audio, avatar or Windows acceptance. The dated sections
+below preserve the scope and results of their respective earlier candidates.
+
 Explicit operator session recovery (`session.recover`) is implemented under review; see [Explicit session recovery](#explicit-session-recovery). The shared case registry is unchanged: the existing C-08 row stays pending and is not re-registered here.
 
 PR36 was merged as `2d0459fdc89b88992f383872c0674d7d1db1266f`, with the same tree as its reviewed head `979f88d81cc1d071f99a41112feb128658b5d561`. This follow-up is on `feat/i1-session-recovery`. [M1's baseline approval](https://github.com/inscripoem/isla/pull/36#pullrequestreview-5561759957) does not cover these changes; the new application messages require M2 consumer review.
@@ -312,9 +323,9 @@ shared wire definitions are already in `src/contracts/app/transport.ts`.
 
 ## Known gaps
 
-The merged M3 rule selection is now wired into the runnable loop and the
-adoption harness (see below); a live or model-backed selection adapter, an
-M3-owned reaction port beyond the explicit fixture substitute, live
+The merged M3 rule selection is wired into the runnable loop and the
+adoption harness (see below); a live or model-backed selection adapter, real
+rule reaction in the separate runnable loop, live
 dialogue/TTS/VTS, SQLite durability, full C-05/C-08/C-09/C-16 and physical
 audio/silence verification remain pending. Explicit operator session recovery is
 implemented for the in-memory I1 loop only; disk or process-crash restart
@@ -503,9 +514,9 @@ SQLite restart recovery, physical output and full
 I1/C-05/C-08/C-09/C-16 acceptance remain pending. No shared contract,
 M2/M3/M4 module implementation or case ID changed.
 
-### Controlled formal deployment selection entry (2026-10-31)
+### Historical controlled formal deployment selection entry (2026-10-31)
 
-A controlled test deployment can use real rule selection without editing either
+The October 31 controlled test deployment used real rule selection without editing either
 existing deployment module. `test/support/production-deployment-rule-selection.ts` is a separate,
 explicitly selected test-only entry: it calls `createTestProductionDeployment`
 and replaces only `peers.selection` with `createRuleSelectionPort` bound to
@@ -609,7 +620,7 @@ Owner adoption after a reviewable delivery is available:
 
 | Consumer | Replacement and checks |
 | --- | --- |
-| M3 / M5 | The merged M3 rule selection is now the harness and runnable-loop default, bound to the runtime monotonic clock; `LoopHarnessOptions.selection` remains for controlled negative tests. M3 still owns a live/model adapter and intent quality. The M3-owned reaction port remains an explicit fixture substitute, supplied through `LoopHarnessOptions.reaction` in the same clock domain. Recheck accepted-input identity, supported intent, defer, expiry and Stop; these tests do not grade intent quality. |
+| M3 / M5 | The merged M3 rule selection is the harness and runnable-loop default, bound to the runtime monotonic clock. The local controlled formal deployment and M5 adoption entry also use the merged rule reaction with that clock; the separate runnable loop retains its reaction fixture. `LoopHarnessOptions.selection` and `.reaction` remain available for controlled negative tests. M3 still owns live/model adapters and intent quality. Recheck accepted-input identity, supported intent, defer, expiry and Stop; these tests do not grade intent quality. |
 | M2 / M1 / M5 | M2 owns the browser-safe production client and console extraction. Adopt `/app` and `/operator/bootstrap`, snapshot-first binding, one performer, offer/ready/grant, status-before-receipt, and explicit recovery. Repeat the transport scenarios with that client; the existing test performer is not evidence of M2 adoption. Root routes already exist on the merged base. |
 | M5 | Record each adopted commit and replace one owner at a time. The current base includes merged PR57 and PR65. Keep PR64/130/131 consumer reviews tied to their actual heads and run the final module combination once it exists; this local selection increment does not accept full I1. |
 

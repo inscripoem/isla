@@ -1,8 +1,25 @@
 # First I1 joint inspection
 
-Status: preparation under review as of October 31; the joint inspection had not taken place. Prepared for delivery [#87](https://github.com/inscripoem/isla/issues/87) and checkpoint [#72](https://github.com/inscripoem/isla/issues/72). The team's target is **2026-11-01 21:00 UTC+8**. This document does not record an accepted inspection.
+Status: Captain accepted a controlled single-machine inspection in place of the
+original joint inspection and closed checkpoint [#72](https://github.com/inscripoem/isla/issues/72)
+on November 8; see the [acceptance decision](https://github.com/inscripoem/isla/issues/72#issuecomment-6719195922).
+The original November 1 joint inspection did not occur, and no other member's
+attendance or approval is implied. The October 31 preparation and its NOT RUN
+table below describe that original joint plan, not the accepted alternative.
+Complete I1 checkpoint [#73](https://github.com/inscripoem/isla/issues/73)
+remains open.
 
-## Source and participants
+The accepted inspection used PR131 `38ccff7cb746a839706d6bf68a0374e24bf89c1e`
+with real rule selection and a reaction fixture. A later controlled I1
+candidate adds the merged M3 rule reaction to the controlled formal-console
+deployment; it is under review and does not retroactively change the accepted
+inspection or establish I1 completion. The separate loop demo retains its
+reaction fixture.
+
+Historical preparation: October 31, for delivery [#87](https://github.com/inscripoem/isla/issues/87)
+and checkpoint #72; the original team target was **2026-11-01 21:00 UTC+8**.
+
+## Historical source and participants
 
 - M2 console checked during preparation: [PR67 / 35a077430f59b7a51487c22f41432fb7ad938ece](https://github.com/inscripoem/isla/commit/35a077430f59b7a51487c22f41432fb7ad938ece). M2's [formal browser results](https://github.com/inscripoem/isla/issues/85#issuecomment-6531631101) used the fixed-audio composition from PR130 temporarily; they are not a post-merge joint inspection.
 - Published M5 bases at preparation: [PR130 / a8bf6cb63af69b3e70313d7dc36e80cb05005bbe](https://github.com/inscripoem/isla/commit/a8bf6cb63af69b3e70313d7dc36e80cb05005bbe) and [PR131 / 9a6758734b5137f940f18f68df35e596e8227030](https://github.com/inscripoem/isla/commit/9a6758734b5137f940f18f68df35e596e8227030). At preparation, updated M5 candidates were local and had not been reviewed at a published head; record the actual versions used in the joint run.
@@ -10,7 +27,7 @@ Status: preparation under review as of October 31; the joint inspection had not 
 - Before the joint run, record the exact combined commit and any explicitly accepted working-tree patch hashes. Do not assemble observations from separate source versions into one claimed run.
 - Coordinator: M5. Obtain scoped consumer evidence from M1 playback, M2 console, M3 decisions, M4 dialogue and M6 recording; name the human who accepts the inspection record.
 
-## Known implementation boundary
+## Historical implementation boundary
 
 The local I1 candidate uses real M3 rule selection and exercises the real M4 dialogue/context in its adoption checks. ReactionPort, deterministic catalogue text, fixed WAV material and the test renderer remain substitutes where used. The formal-console browser run used the actual M2 console and M1 browser controller; M5's local combined run used SQLite. The isolated loop page is not the formal M2 console. Neither run establishes live-provider, physical avatar, acoustic sound/silence or Windows acceptance.
 
@@ -43,7 +60,7 @@ The joint-inspection column stays NOT RUN until the team performs it. Original c
 | Playback resource mapping (#69/#86) | WAV hash/duration and same-origin bytes match the offered reference and current session/epoch; stale resources are refused. | M1 has partial mapping evidence and reviewed PR130 `a8bf6cb`; updated audio candidate and final combined run need review. | NOT RUN |
 | Recording and shutdown (#92) | Browser, runtime and recording refer to the same source/turn IDs; shutdown does not replay or leave unowned output. | The local browser run has SQLite records; M6's scoped confirmation and the final combined trace are still required. | NOT RUN |
 
-## Decision and remaining deliveries
+## Historical decision and remaining deliveries
 
 Checkpoint 02 records that the inspection occurred, including failures and missing work. A named human must accept the inspection record before closure; it does not accept complete I1. Record owner, forecast, required consumer and retest evidence for each remaining gap; do not invent missing forecasts.
 

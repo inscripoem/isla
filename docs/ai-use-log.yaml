@@ -4720,3 +4720,48 @@ entries:
       add were not present in this worktree. No src, shared contract, dependency,
       lockfile, other-owner module or registered ID changed, and the merge
       conflict resolution from the earlier round is preserved.
+
+  - date: "2026-11-08"
+    task: M5-controlled-I1-rule-reaction
+    branch: local/i1-reaction-pr131-20261108
+    member: M5
+    change: >-
+      Compose the merged M3 rule reaction with rule selection in the explicitly
+      selected controlled formal-console deployment, using the deployment clock.
+      Exercise rule provenance and eligible actions, deadlines and fallback,
+      two turns, a successful reaction returned after Stop, and a recovery
+      successor in the M5 deployment and adoption tests. The separate loop demo
+      and generic harness retain their existing reaction fixture.
+    requirements: [FR-01, FR-03, FR-04, FR-05, FR-06]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/build
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    opencode_version: 2.2.6
+    launch_flags: [--agent, build, --format, json]
+    model_id: self-api/deepseek-v4-flash#xhigh
+    sessions: [ses_e459ac963ffegh0FnSyHxha27F]
+    supervision: >-
+      Captain approved the local plan before implementation. Codex supervised
+      OpenCode, interrupted two prolonged reading and review rounds, continued
+      the same session with the existing authorization, and independently ran
+      and reported the tests. OpenCode authored the test and composition code;
+      Codex maintained the English documentation and evidence. Task-level
+      permissions denied shell, external directories, subagents and edits
+      outside the permitted files. No global plugin configuration was changed.
+    human_review: >-
+      The local candidate is under review. Publication, review submission and
+      merging require separate approval; no other member's approval or complete
+      I1 acceptance is asserted.
+    transcript_record: >-
+      The official sanitized OpenCode session export and verification evidence
+      are retained outside this repository in evidence/i1-reaction-local-20261108.
+      The original session remains in the local OpenCode session store; the
+      terminal capture of its unsanitized export exceeded the output limit.
+    scope: >-
+      Controlled M5 test deployment and test code plus English documentation.
+      M3 implementation and shared contracts are unchanged. This does not
+      establish a live model, physical audio, avatar output or Windows result.

@@ -2,8 +2,8 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { ClockPort, ReactionPort, RuntimeEvent, SelectionPort } from '../../src/contracts'
-import { createRuleSelectionPort } from '../../src/decision'
+import type { ClockPort, DecisionRequest, ReactionPort, RuntimeEvent, SelectionPort } from '../../src/contracts'
+import { createRuleReactionPort, createRuleSelectionPort } from '../../src/decision'
 import { createMonotonicClock } from '../../src/runtime/clock'
 import { createProductionApplication } from '../../src/runtime/production'
 import type { ProductionApplication, ProductionDeployment } from '../../src/runtime/production'
@@ -32,19 +32,19 @@ import { createProductionDeployment } from '../support/production-deployment-rul
  * controlled application.
  *
  * `test/support/production-deployment-rule-selection.ts` composes the existing
- * controlled deployment and replaces only the selection peer with M3's real
- * deterministic rule port bound to the deployment's runtime clock. These tests
- * use the real application transport, real SQLite persistence and the real M1
- * fixed synthesis; reaction, dialogue text and the renderer remain the labeled
+ * controlled deployment and replaces only the selection and reaction peers with
+ * M3's real deterministic rule ports bound to the deployment's runtime clock.
+ * These tests use the real application transport, real SQLite persistence and
+ * the real M1 fixed synthesis; dialogue text and the renderer remain the labeled
  * substitutes supplied by the base deployment.
  *
  * They establish: plans are recorded as `m3-rules` with the rule's own reason
- * code for two sequential turns, no fixture or fallback decision is presented
- * as an M3 decision, the reaction port is still the explicit substitute, the
- * port is bound to the deployment clock (a second clock domain would fail the
- * deadline assertion), and the CLI can load the entry by path. They do not
- * establish live M3/M4 providers, acoustic output, formal-console acceptance or
- * full I1 completion.
+ * code for two sequential turns, reactions are recorded as accepted `m3-rules`
+ * calls and the offered action is the rule's choice, no fixture or fallback
+ * decision is presented as an M3 decision, both ports are bound to the
+ * deployment clock (a second clock domain would fail the deadline assertions),
+ * and the CLI can load the entry by path. They do not establish live M3/M4
+ * providers, acoustic output, formal-console acceptance or full I1 completion.
  */
 
 const LIVE = 'session-deployment-selection-live'
@@ -220,6 +220,18 @@ function selectionCallDispositions(events: readonly RuntimeEvent[]): unknown[] {
     .map((event) => event.payload.disposition)
 }
 
+function reactionCalls(events: readonly RuntimeEvent[]): RuntimeEvent[] {
+  return events.filter(
+    (event) => event.type === 'provider.call' && event.payload.call === 'reaction',
+  )
+}
+
+function offeredActionIds(messages: readonly Record<string, unknown>[]): unknown[] {
+  return messages
+    .filter((message) => message.kind === 'performance.offer')
+    .map((message) => (message.payload as { actionId?: unknown } | undefined)?.actionId)
+}
+
 function acceptedEventId(ack: Record<string, unknown> | unknown): string {
   const payload = (ack as { payload?: { eventId?: unknown } }).payload
   if (typeof payload?.eventId !== 'string') {
@@ -237,8 +249,8 @@ async function awaitCompletedTurns(fixture: Fixture, count: number): Promise<Run
   )
 }
 
-describe('controlled formal deployment with real rule selection', () => {
-  it('records m3-rules plans for two sequential turns and keeps reaction substituted', async () => {
+describe('controlled formal deployment with real rule selection and reaction', () => {
+  it('records m3-rules plans and reactions for two sequential turns', async () => {
     const fixture = await startFixture({ liveSessionId: LIVE })
     const client = await bootPerformer(fixture)
 
@@ -262,6 +274,31 @@ describe('controlled formal deployment with real rule selection', () => {
     expect(plans.some((plan) => plan.disposition !== 'respond')).toBe(false)
     expect(selectionCallDispositions(events)).toEqual(['accepted', 'accepted'])
 
+    // The base deployment's catalog text source emits both catalogued lines, so
+    // each turn dispatches two segments and therefore makes one reaction call,
+    // one offer and one delivery per segment.
+    const reactionCallsForTurns = reactionCalls(events)
+    expect(reactionCallsForTurns).toHaveLength(4)
+    for (const call of reactionCallsForTurns) {
+      expect(call.payload.disposition).toBe('accepted')
+      expect(call.payload.usage).toMatchObject({
+        provider: 'm3-rules',
+        requestedModel: 'm3-rules-v0.1',
+      })
+    }
+    // Neither catalogued line carries a positive cue, so the rule reaction
+    // chooses the default eligible neutral. The offer alone does not distinguish
+    // this from the base fixture, which also selects the first eligible action
+    // (neutral is first in the controlled snapshot). The recorded `m3-rules`
+    // provenance above and the direct rule reason-code check below are the
+    // distinguishing evidence.
+    expect(offeredActionIds(client.messages())).toEqual([
+      'neutral',
+      'neutral',
+      'neutral',
+      'neutral',
+    ])
+
     const startedTurnIds = events
       .filter((event) => event.type === 'turn.started')
       .map((event) => event.turnId)
@@ -272,9 +309,11 @@ describe('controlled formal deployment with real rule selection', () => {
     expect(new Set(deliveredTurnIds)).toEqual(new Set(startedTurnIds))
     expect(client.errors()).toEqual([])
 
-    // Reaction remains the base deployment's explicit substitute until M3
-    // delivers its rule reaction port.
-    const reactionRequest: Parameters<ReactionPort['decide']>[0] = {
+    // The deployed reaction port is M3's rule port, not the base fixture. A
+    // direct call proves the chosen action and reason code when only `smile` is
+    // eligible, so the rule's first-eligible branch is observable.
+    const reactionDeadline = { atMs: fixture.clock.nowMs() + 1000 }
+    const reactionRequest: DecisionRequest = {
       requestId: 'decision-deployment-selection',
       sessionId: fixture.sessionId,
       epoch: 1,
@@ -287,16 +326,20 @@ describe('controlled formal deployment with real rule selection', () => {
       personaSummary: 'controlled persona',
       interactionState: 'calm',
       eligibleActionIds: ['smile'],
-      deadline: { atMs: fixture.clock.nowMs() + 1000 },
+      deadline: reactionDeadline,
       policyVersion: 'policy-v1',
       providerVersion: 'provider-v1',
     }
     const reaction = await fixture.deployment.peers.reaction.decide(reactionRequest, {
       signal: new AbortController().signal,
-      deadline: { atMs: fixture.clock.nowMs() + 1000 },
+      deadline: reactionDeadline,
     })
-    expect(reaction.provider).toBe('fixture-rule')
-    expect(reaction.reasonCode).toBe('fixture-rule-selected')
+    expect(reaction).toMatchObject({
+      actionId: 'smile',
+      provider: 'm3-rules',
+      modelVersion: 'm3-rules-v0.1',
+      reasonCode: 'rule:first-eligible-action',
+    })
   })
 
   it('binds the deployed selection port to the exact deployment context clock', async () => {
@@ -356,6 +399,55 @@ describe('controlled formal deployment with real rule selection', () => {
     await expect(fresh.select(request, context)).resolves.toMatchObject({
       provider: 'm3-rules',
       reasonCode: 'oldest-offered',
+    })
+  })
+
+  it('binds the deployed reaction port to the exact deployment context clock', async () => {
+    const clock = createMutableClock(1_000_000_000)
+    const fixture = await startFixture({ liveSessionId: `${LIVE}-reaction-clock`, clock })
+    const port = fixture.deployment.peers.reaction
+    const deadline = { atMs: 1_000_005_000 }
+    const request: DecisionRequest = {
+      requestId: 'reaction-deployment-clock',
+      sessionId: fixture.sessionId,
+      epoch: 1,
+      turnId: 'turn-reaction-clock',
+      segmentId: 'segment-reaction-clock',
+      snapshotRevision: 1,
+      capabilityRevision: 1,
+      task: 'segment-reaction',
+      segmentText: 'thank you for the controlled reaction',
+      personaSummary: 'controlled persona',
+      interactionState: 'calm',
+      eligibleActionIds: ['neutral', 'smile'],
+      deadline,
+      policyVersion: 'policy-v1',
+      providerVersion: 'provider-v1',
+    }
+    const context: Parameters<ReactionPort['decide']>[1] = {
+      signal: new AbortController().signal,
+      deadline,
+    }
+
+    await expect(port.decide(request, context)).resolves.toMatchObject({
+      actionId: 'smile',
+      provider: 'm3-rules',
+      reasonCode: 'rule:positive-segment-cue',
+    })
+    clock.setNowMs(1_000_010_000)
+    await expect(port.decide(request, context)).rejects.toMatchObject({
+      name: 'ReactionCallError',
+      code: 'deadline-exceeded',
+    })
+
+    // Control: the same request and context through a fresh monotonic clock
+    // still resolves, so the rejection above is caused by the deployment's own
+    // clock advancing, not by an inherently invalid request.
+    const fresh = createRuleReactionPort({ clock: createMonotonicClock() })
+    await expect(fresh.decide(request, context)).resolves.toMatchObject({
+      actionId: 'smile',
+      provider: 'm3-rules',
+      reasonCode: 'rule:positive-segment-cue',
     })
   })
 
@@ -422,6 +514,16 @@ describe('controlled formal deployment with real rule selection', () => {
         selectedEventIds: [acceptedId],
       })
       expect(selectionCallDispositions(events)).toEqual(['accepted'])
+      const cliReactionCalls = reactionCalls(events)
+      expect(cliReactionCalls).toHaveLength(2)
+      for (const call of cliReactionCalls) {
+        expect(call.payload.disposition).toBe('accepted')
+        expect(call.payload.usage).toMatchObject({
+          provider: 'm3-rules',
+          requestedModel: 'm3-rules-v0.1',
+        })
+      }
+      expect(offeredActionIds(client.messages())).toEqual(['neutral', 'neutral'])
 
       // The persisted plan belongs to the turn that started after it; that
       // exact turn must have ended completed, not merely some event of that type.
