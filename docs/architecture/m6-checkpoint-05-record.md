@@ -11,12 +11,12 @@ requirement or case ID.
 
 | Delivery | Artifact | State |
 | --- | --- | --- |
-| #100 run provenance | PR **#140** | rebased onto `e9e7e7b` at `344161e`, **mergeable**, CI re-running; ADR-008 remains **proposed**; provenance 30/30 locally |
+| #100 run provenance | PR **#140** | rebased onto `e9e7e7b` at `344161e`, **mergeable**, CI pass; ADR-008 remains **proposed**; provenance 30/30 locally |
 | #103 method | PR **#142** | proposal at `d9d627b` (threshold register added); M4's three corrections and two answers applied; **not approved** |
 | #103 eligibility | PR **#143** | rules 1–4 implemented; stacked on `m6-02-provenance`; retarget after #140; rule 5 not evaluated |
 | #103 label interface | PR **#145** | proposal; five decisions pending with M3/M4/M5 |
 | #103 thresholds | `docs/architecture/evaluation-thresholds.md` (in #142 at `d9d627b`) | every value `pending`; no baseline |
-| #117 QA record | PR **#144** | docs-only, CP8 work delivered early; still draft |
+| #117 QA record | PR **#144** | docs-only records for CP5/CP6/CP8; ready for review |
 
 ## Acceptance condition → evidence
 
