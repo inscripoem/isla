@@ -31,7 +31,9 @@ requirement or case ID.
 ## Blockers and owners
 
 - **Corpus, held-out split** — M3, #98.
-- **Rubric, labels, condition eligibility** — M4, #99; five label decisions in #145.
+- **Rubric, labels, condition eligibility** — M4, #99: the rubric is a comment-first draft posted
+  2026-11-09, with no M3/M6 feedback yet and repository-file integration planned for the 2026-11-13
+  week; the five #145 decisions have not been answered publicly.
 - **Acknowledgement and timing export** — M5, #101.
 - **Physical input/playback/Stop observation** — M1/M2, #102.
 - **Provider access and credentials** — M5/operator.
@@ -42,7 +44,8 @@ requirement or case ID.
 
 **BLOCKED for checkpoint acceptance; method-ready.** The protocol, provenance parser, eligibility rules and
 threshold register are in place or in review. The pilot has not run and no threshold is fixed, so the pass
-condition cannot be met on 2026-11-10.
+condition cannot be met on 2026-11-10. **`Method-ready` refers to M6's method and tooling only; it does not
+mean M4's rubric/labels or M5's export are ready.**
 
 ## What this does not claim
 

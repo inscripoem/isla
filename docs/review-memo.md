@@ -201,5 +201,7 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
 - Spec alignment: ADR-008 D2/D3/D5/D7/D8 and protocol §3–§6 compared line by line; every changed file is inside `src/evaluation/` or `test/offline/`.
 - Findings and fixes: D1 renderer trusted its caller, D2 unexported identity implied an id, D3 artifact did not name its source, D4 lowercase-only digest, D5 digest over a decoded string, D6 duplicated status order (all fixed in `c210260`); T1 two-turn log not reopened (`5d89284`); T2 byte-exactness untested, T3 type refusals untested, T5 no trace row (same slice); T4 protocol stale (`1019bd5`).
 - Verification: provenance 30 tests, `test:m6` 212/16, full 1455/73; #92 full 1426/71; 16 mutations red then restored.
-- Limits: the companion shape is still unconfirmed; no independent reviewer has read any head; no merge or checkpoint acceptance is claimed.
+- Limits (as of 2026-11-06): the companion shape is still unconfirmed; no independent reviewer had read any
+  head on that date. Since then M4 reviewed #140 (`99df88b`, `dd4cebf`) and #142 (`1019bd5`), and M5
+  approved #141 (`5d89284`). No merge or checkpoint acceptance is claimed.
 
