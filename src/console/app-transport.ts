@@ -1,4 +1,6 @@
 import type {
+  ApplicationClientMessage,
+  ApplicationServerMessage,
   BootstrapSnapshot,
   ClientMessage,
   ConsoleTransportPort,
@@ -9,7 +11,11 @@ import type {
   InputSubmitMessage,
   ServerMessage,
 } from '../contracts'
-import { bootstrapSnapshotSchema, serverMessageSchema } from '../contracts'
+import {
+  applicationClientMessageSchema,
+  bootstrapSnapshotSchema,
+  parseApplicationServerMessage,
+} from '../contracts'
 import type { ConnectionStatus } from './console-state'
 
 /**
@@ -17,11 +23,19 @@ import type { ConnectionStatus } from './console-state'
  *
  * It speaks the v0.2 wire protocol over the platform `WebSocket` — never the
  * Node `ws` package, so the console import graph stays browser-only. Every
- * inbound frame is validated with the shared server schema before it reaches a
- * listener, acknowledgements are correlated by `messageId`, and the bootstrap
- * snapshot is awaited rather than assumed. A timeout and a disconnect are
- * reported as distinct failures so the console can render honest uncertainty
- * instead of inferring state.
+ * inbound frame is validated with the shared application server schema before
+ * it reaches a listener, acknowledgements are correlated by `messageId`, and
+ * the bootstrap snapshot is awaited rather than assumed. A timeout and a
+ * disconnect are reported as distinct failures so the console can render
+ * honest uncertainty instead of inferring state.
+ *
+ * The base `ConsoleTransportPort` (`bootstrap`, `sendInput`, `sendControl`,
+ * `onServerMessage`, `close`) remains frozen and unchanged. This module adds
+ * the application extension carried by `ConsoleApplicationTransport`: the
+ * extended protocol-0.2 server kinds are delivered only to
+ * `onApplicationMessage` listeners, while every base `ServerMessage` still
+ * reaches every `onServerMessage` listener exactly once. Receipt/message
+ * identity generation belongs to the performer machine, not to this transport.
  */
 
 /** Wait for the pushed bootstrap snapshot after the socket opens. */
@@ -33,6 +47,56 @@ export const ACK_TIMEOUT_MS = 15000
 const SOCKET_OPEN = 1
 
 export type TransportFailureReason = 'closed' | 'timeout' | 'invalid_message'
+
+/**
+ * The application transport extension (protocol 0.2).
+ *
+ * It extends a frozen `ConsoleTransportPort` without changing any base method.
+ * `sendApplication` validates and writes one JSON frame; `onApplicationMessage`
+ * subscribes to every valid application server message (base and extended).
+ */
+export interface ConsoleApplicationTransport extends ConsoleTransportPort {
+  sendApplication(message: ApplicationClientMessage): void
+  onApplicationMessage(listener: (message: ApplicationServerMessage) => void): () => void
+}
+
+/**
+ * Detect the application extension without invoking any method.
+ *
+ * A base-only `ConsoleTransportPort` (for example a fixture) fails the guard;
+ * the real `createAppTransport` result passes. Only the presence of the two
+ * added functions is checked.
+ */
+export function isApplicationTransport(
+  value: ConsoleTransportPort,
+): value is ConsoleApplicationTransport {
+  const candidate = value as Partial<ConsoleApplicationTransport>
+  return (
+    typeof candidate.sendApplication === 'function' &&
+    typeof candidate.onApplicationMessage === 'function'
+  )
+}
+
+/**
+ * Narrowed view of a validated application message for the base
+ * `onServerMessage` listeners: the base kinds only, or `null` for an extended
+ * kind. The application message is already schema-validated, so the extended
+ * kinds are those the base `ServerMessage` union does not name.
+ */
+function asBaseServerMessage(message: ApplicationServerMessage): ServerMessage | null {
+  switch (message.kind) {
+    case 'session.snapshot':
+    case 'session.event':
+    case 'input.ack':
+    case 'control.ack':
+    case 'request.error':
+    case 'performance.execute':
+    case 'performance.cancel':
+      return message
+    default:
+      return null
+  }
+}
 
 export class ConsoleTransportError extends Error {
   readonly reason: TransportFailureReason
@@ -106,11 +170,12 @@ interface BootstrapWaiter {
   timer: ReturnType<typeof setTimeout>
 }
 
-export function createAppTransport(options: AppTransportOptions): ConsoleTransportPort {
+export function createAppTransport(options: AppTransportOptions): ConsoleApplicationTransport {
   const bootstrapTimeoutMs = options.bootstrapTimeoutMs ?? BOOTSTRAP_TIMEOUT_MS
   const ackTimeoutMs = options.ackTimeoutMs ?? ACK_TIMEOUT_MS
   const createSocket = options.createSocket ?? ((url: string) => adaptWebSocket(new WebSocket(url)))
   const listeners = new Set<(message: ServerMessage) => void>()
+  const applicationListeners = new Set<(message: ApplicationServerMessage) => void>()
   const pendingInputs = new Map<string, PendingInput>()
   const pendingControls = new Map<string, PendingControl>()
   let socket: TransportSocket | null = null
@@ -203,17 +268,29 @@ export function createAppTransport(options: AppTransportOptions): ConsoleTranspo
       reportViolation('inbound frame is not valid JSON')
       return
     }
-    const result = serverMessageSchema.safeParse(decoded)
-    if (!result.success) {
+    const result = parseApplicationServerMessage(decoded)
+    if (!result.ok) {
       reportViolation('inbound frame is not a valid v0.2 server message')
       return
     }
-    const message = result.data
-    for (const listener of [...listeners]) {
+    const message = result.message
+    // Every valid application message reaches the application listeners once.
+    for (const listener of [...applicationListeners]) {
       try {
         listener(message)
       } catch {
         // One broken listener must not stop delivery to the others.
+      }
+    }
+    // Base kinds additionally reach the frozen base listeners, once each.
+    const base = asBaseServerMessage(message)
+    if (base !== null) {
+      for (const listener of [...listeners]) {
+        try {
+          listener(base)
+        } catch {
+          // One broken listener must not stop delivery to the others.
+        }
       }
     }
     if (message.kind === 'session.snapshot') settleSnapshot(message)
@@ -323,6 +400,19 @@ export function createAppTransport(options: AppTransportOptions): ConsoleTranspo
       }
     })
 
+  /**
+   * Validate and write one application frame.
+   *
+   * An invalid message throws a local `Error` and writes nothing. A closed or
+   * non-open socket throws `ConsoleTransportError` with reason `closed` before
+   * validation. Identity generation is the caller's responsibility.
+   */
+  const sendApplication = (message: ApplicationClientMessage): void => {
+    const target = requireOpen()
+    const parsed = applicationClientMessageSchema.parse(message)
+    target.send(JSON.stringify(parsed))
+  }
+
   const close = (): void => {
     closed = true
     failOutstanding(new ConsoleTransportError('closed', 'console closed the transport'))
@@ -336,10 +426,17 @@ export function createAppTransport(options: AppTransportOptions): ConsoleTranspo
     bootstrap,
     sendInput,
     sendControl,
+    sendApplication,
     onServerMessage(listener) {
       listeners.add(listener)
       return () => {
         listeners.delete(listener)
+      }
+    },
+    onApplicationMessage(listener) {
+      applicationListeners.add(listener)
+      return () => {
+        applicationListeners.delete(listener)
       }
     },
     close,

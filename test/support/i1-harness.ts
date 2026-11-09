@@ -9,6 +9,7 @@ import type {
   MemoryCommitPort,
   ReactionPort,
   SelectionPort,
+  SynthesisPort,
 } from '../../src/contracts'
 import type { CapabilitySnapshot, PerformanceCommand } from '../../src/contracts/app'
 import { createApplicationEndpoint } from '../../src/runtime/application'
@@ -21,6 +22,7 @@ import {
 import type { ReconstructedRuntimeComposition, RuntimeComposition } from '../../src/runtime/composition'
 import { createMonotonicClock } from '../../src/runtime/clock'
 import { createRuntimeAuthorizer } from '../../src/runtime/control-policy'
+import { createRuleSelectionPort } from '../../src/decision'
 import type { CycleTimings, RuntimeCoordinator, SessionProfileConfig } from '../../src/runtime/coordinator'
 import type { ArchiveSelectionConfig } from '../../src/runtime/session-archives'
 import { createSessionRecovery } from '../../src/runtime/session-recovery'
@@ -82,6 +84,11 @@ function createAcceptanceDriver(): RendererDriver {
 }
 
 export interface LoopHarnessOptions {
+  /**
+   * Selection peer. Defaults to the merged M3 rule port bound to this harness's
+   * own monotonic clock, including recovery successors. Supply a controlled
+   * owner substitute only for a negative or fault-injection check.
+   */
   selection?: SelectionPort
   reaction?: ReactionPort
   dialogue?: DialoguePort
@@ -106,6 +113,13 @@ export interface LoopHarnessOptions {
   realM4?: boolean
   /** Provider substitute for real M4; defaults to the deterministic catalog source. */
   dialogueTextSource?: DialogueTextSource
+  /**
+   * Replaces the M1 fixed synthesis with an injected port for every composition
+   * (initial, reconstructed and recovery successor), so an adoption check can
+   * observe or fail preparation through the real application path. When omitted
+   * the harness keeps the fixed synthesis over the fixture audio catalog.
+   */
+  createSynthesis?: (gate: RuntimeDeadlineGate) => SynthesisPort
   /** Records the assembled M4 context so a test can observe it. */
   captureView?: { view: AssembledDialogueContext | null }
   /** Cross-session reconstruction selection. Implies `realM4`. */
@@ -196,6 +210,12 @@ function createBaseHistory(backend: StorageBackend, failingSessions: Set<string>
 
 export async function createLoopHarness(options: LoopHarnessOptions = {}): Promise<LoopHarness> {
   const clock = options.clock ?? createMonotonicClock()
+  // One selection port for every composition the harness builds. The merged M3
+  // rule port asserts request/context deadlines against this exact clock, so a
+  // different clock origin would make a live selection look expired (or fail to
+  // expire) while the runtime still evaluates it. Recovery successors therefore
+  // receive the same port and clock domain, not a fresh substitute.
+  const selectionPort = options.selection ?? createRuleSelectionPort({ clock })
   const backend = options.backend ?? createInMemoryBackend()
   const store = options.store ?? createEventStore(backend)
   const gate = createDeadlineGate(clock)
@@ -243,6 +263,13 @@ export async function createLoopHarness(options: LoopHarnessOptions = {}): Promi
       ? createCapturingCatalogDialogueTextSource(options.captureView)
       : createCatalogDialogueTextSource())
 
+  // One synthesis choice for every composition the harness builds. The injected
+  // port receives that composition's gate, exactly like the production peer.
+  const synthesisDeps = (deadlineGate: RuntimeDeadlineGate) =>
+    options.createSynthesis !== undefined
+      ? { synthesis: options.createSynthesis(deadlineGate) }
+      : { audioEntries: createM1ActualAssetEntries() }
+
   if (usesRecovery) {
     // Explicit operator recovery: the controller owns the selection lineage and
     // builds each successor from confirmed history. The harness supplies the
@@ -266,13 +293,13 @@ export async function createLoopHarness(options: LoopHarnessOptions = {}): Promi
         const built = await createReconstructedRuntimeComposition({
           clock,
           authorizer: createRuntimeAuthorizer(),
-          selection: options.selection ?? correct.createFixtureSelectionPort(),
+          selection: selectionPort,
           reaction: options.reaction ?? correct.createFixtureReactionPort(),
           store,
           history: createBaseHistory(backend, failingHistorySessions),
           renderer: createRenderer(compositionGate),
           gate: compositionGate,
-          audioEntries: createM1ActualAssetEntries(),
+          ...synthesisDeps(compositionGate),
           reconstruction: selection,
           textSource: dialogueTextSource(),
           profile: {
@@ -320,13 +347,13 @@ export async function createLoopHarness(options: LoopHarnessOptions = {}): Promi
     const reconstructed = await createReconstructedRuntimeComposition({
       clock,
       authorizer: createRuntimeAuthorizer(),
-      selection: options.selection ?? correct.createFixtureSelectionPort(),
+      selection: selectionPort,
       reaction: options.reaction ?? correct.createFixtureReactionPort(),
       store,
       history: createBaseHistory(backend, failingHistorySessions),
       renderer,
       gate,
-      audioEntries: createM1ActualAssetEntries(),
+      ...synthesisDeps(gate),
       reconstruction,
       textSource,
       // Voice and any other non-character profile fields are supplied here; the
@@ -365,14 +392,14 @@ export async function createLoopHarness(options: LoopHarnessOptions = {}): Promi
     composition = createRuntimeComposition({
       clock,
       authorizer: createRuntimeAuthorizer(),
-      selection: options.selection ?? correct.createFixtureSelectionPort(),
+      selection: selectionPort,
       reaction: options.reaction ?? correct.createFixtureReactionPort(),
       dialogue: dialoguePort ?? correct.createFixtureDialoguePort(),
       commit: commitPort ?? correct.createFixtureMemoryCommit(),
       store,
       renderer,
       gate,
-      audioEntries: createM1ActualAssetEntries(),
+      ...synthesisDeps(gate),
       sessionId,
       profile: {
         characterProfileId: realM4 ? 'character-fixture' : 'character-i1',

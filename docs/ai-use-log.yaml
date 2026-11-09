@@ -3580,6 +3580,66 @@ entries:
       connection/pairing/live/model/hotkey action, physical animation/silence, acoustic timing, Windows
       production recovery or G4/S6 acceptance. Issues remain Open with existing checklists unchanged;
       earlier evidence and approvals remain version-bound.
+  - date: "2026-10-29"
+    task: M5-69-controlled-deployment-prepared-wav-audio
+    change: >-
+      Wire the default controlled test production deployment to the real M1
+      audio-resource registry and serve the prepared fixed WAV catalog through
+      the existing POST /audio route. The deployment presents the exact catalog
+      text/reference/duration tuple, maps each stable catalog reference to the
+      registration currently bound to the live session/epoch, and delegates
+      admission, resolution, lease release, epoch retirement and session
+      retirement to the one real registry. A repeated preparation for the same
+      session/epoch reuses the active registration; a reclaimed registration is
+      registered again; a binding owned by another session/epoch is refused and
+      the output fails as audio_resource_unavailable instead of serving
+      ambiguous bytes. New tests cover exact bytes and frame-derived duration,
+      both catalog segments, refusal order, stopped and retired-epoch refusals,
+      and lease reclamation. createTestProductionPeers defaults and all
+      production source are unchanged.
+    requirements: [FR-04, FR-05]
+    invariants: []
+    commits: [087c99cdf9e44400403a2c15556092835f618936]
+    agent: build
+    provider: self-api
+    model: deepseek-v4-flash
+    supervision: >-
+      Captain approved the narrow deployment-factory-only scope, the new test
+      file and local verification in this session. One registry is created per
+      deployment; no production protocol, API, dependency or lockfile changed.
+      No subagent, Git mutation or remote action was used.
+    human_review: >-
+      Captain approved this work and subsequently approved continued implementation
+      and publication. Implementation commit 087c99cdf9e44400403a2c15556092835f618936
+      was created by Codex after independent verification. Consumer and course
+      acceptance remain pending; no merge is claimed.
+    session: ses_e78f5a97cffeW0gUUzUMuustLq
+    transcript_record: >-
+      Native OpenCode 2.2.0 session export is preserved in the external project
+      evidence/m5-69-audio-deployment-20261029/opencode-session.raw.json.
+      Codex supervised the session, moved this new entry to the file end without
+      changing original entries, and independently ran verify, trace and G6.
+      Application and test implementation was authored by OpenCode.
+    verification:
+      base: 4e4f7cd
+      baseline: >-
+        pnpm test:m5 passed 207/207 in 9 files before the change.
+      focused: >-
+        test/offline/m5-audio-deployment.test.ts passed 3/3; pnpm test:m5 passed
+        210/210 in 10 files.
+      full_suite: >-
+        pnpm verify exited 0: typecheck, lint, 1342/1342 in 71 files and build
+        passed.
+      trace: >-
+        pnpm test:trace passed 41/41 with the actual tracked and untracked
+        changed-file list.
+      scope: >-
+        Controlled test deployment and its tests only. No live provider,
+        browser, acoustic, product-deployment or Windows behavior is claimed.
+        After a lease release the registry reclaims the entry, so a late fetch
+        is 404 until another preparation; the catalog bytes are immutable, so a
+        replacement registration for the same catalog reference serves the same
+        content.
 
   - date: "2026-10-26"
     task: "I1-01 / M5 VTS acquisition first stage"
@@ -4287,3 +4347,756 @@ entries:
       was re-measured for this documentation change, so the figures in the
       section are carried forward from 2026-11-03 rather than re-asserted. No
       case identifier added or reused; no acceptance claim.
+  - date: "2026-10-28"
+    task: M2-01-console-production-transport-selection-and-recovery
+    change: >-
+      Complete M2-01's console increment: extract the performer machine into
+      production console code and drive it through the application transport;
+      add the application transport extension, performer adapter, runtime audio
+      resolver and one-time operator bootstrap; project accepted inputs,
+      selection plans, reply intent, waiting stage, server-classified delivery
+      and explicit retirement/recovery; add a bounded batch-input fixture; and
+      correct both runtime event projections after a real browser smoke showed
+      that turn.started carries only {replyIntent} and delivery.committed only
+      {classification} on the application wire. The console now reports
+      unreported durable identity as "not reported" and never fabricates it.
+    requirements: [FR-01, FR-04, FR-05]
+    invariants: [INV-01, INV-03]
+    commits: [bbd35d6]
+    agent: opencode/deepseek-v4-flash
+    provider: custom-foundry/CS5351
+    model: DeepSeek-V4-Flash
+    opencode_version: 1.19.4
+    launch_flags: [--pure, --agent, build, --variant, xhigh]
+    sessions:
+      - ses_e7ec4154effeEml7xJb9T5vbCk
+      - ses_e7ebc188affeZKlvWQwugiNf5U
+      - ses_e7eb77e59ffeCdqOCUnluR9LkN
+      - ses_e7eaf5850ffe8BjBRnX2AzHl1Y
+      - ses_e7e9e717fffe3ARC3G9PIaeidz
+      - ses_e7e92c3f2ffeIxyh2nOWe9Te1T
+      - ses_e7e8291fcffeBdM1fZ1H7nYKGB
+    supervision: >-
+      OpenCode authored the console, fixture and test changes in seven
+      supervised sessions. The member reviewed callers and contracts, rejected
+      an early application-transport demo composition, reduced the operator
+      failure vocabulary after a boundary-test false positive, corrected the
+      acknowledgement-before-event sequence race, and ordered the final
+      event-shape repair after a real browser smoke exposed the mismatch. The
+      member ran every verification command and the browser startup check.
+    human_review: >-
+      Captain approved the M2-01 slice and all follow-up repairs in session,
+      then authorized the commit and push to the task branch. Work remains under
+      review; no pull request or merge was performed.
+    transcript_record: >-
+      Genuine OpenCode JSONL records, prompts and browser-smoke evidence are
+      retained privately outside the checkout; no raw records were added to the
+      repository.
+    verification:
+      base: 306bfcf; implementation bbd35d6
+      independent: >-
+        pnpm test:m2 85/85 (1 file); pnpm test 1393/1393 (70 files); pnpm
+        typecheck, pnpm lint (0 warnings, 0 errors) and pnpm build all clean;
+        pnpm verify passed.
+      startup: >-
+        The real production CLI loaded test/support/production-deployment.ts
+        and served /health, /diag, /app, /operator and /audio through the Vite
+        proxy; the console bootstrapped, attached a performer, bootstrapped an
+        operator, applied Stop 0->1 and Resume 1->2, and accepted one input in
+        a new epoch. After the final repair the browser reported waiting stage
+        delivered, turn reply intent answer, turn id not reported, delivery
+        classification partial-unknown and delivery identity not reported. No
+        uncaught exception occurred; the two /audio 404 responses are expected
+        because the fixture deployment supplies no M1 audio resources, so real
+        audio playback is not claimed. SIGTERM produced shutdown_complete.
+      gap: >-
+        The browser smoke cannot prove live providers, physical silence,
+        durable restart or real audio delivery; those remain unverified.
+    scope: >-
+      src/console, src/App.tsx, test/browser/console.tsx, test/browser/
+      performer-machine.ts and test/offline/m2-console.test.ts, with the
+      test-only fixture test/support/m2-batch-input.ts. No shared contract,
+      runtime, storage, evaluation or package change was authored. The
+      pre-existing local package.json edit remains outside this increment.
+
+  - date: "2026-10-31"
+    task: M2-01-console-recovery-eligibility-and-disposal
+    branch: feat/m2-01-console
+    change: >-
+      Resolve the three outstanding review findings on PR #67. Recovery is no
+      longer gated on retirement: a new pure `recoveryControlView` helper decides
+      availability from connection, session and live performer/operator state,
+      ConsoleApp re-checks it before calling `recover()`, and the first request
+      is allowed before any retirement while still requiring the local playback
+      acknowledgement. The performer machine now refuses every outgoing frame
+      after disposal, sends a valid `session.recover` frame before mutating
+      recovery state, and publishes the offer-expiry receipt through its local
+      observer as well as the wire. The M5 evaluation probe now expects that
+      local unknown receipt; it still asserts that no accepted terminal evidence
+      exists.
+    requirements: [FR-01, FR-04, FR-05]
+    invariants: [INV-01, INV-03]
+    commits: [53fa476, 1f8bd8b]
+    agent: trae-code
+    supervision: >-
+      The supervising assistant authored these repairs after M5 review
+      5696482319 and M1 review 5683748583 on PR #67. No OpenCode session was
+      used for this increment; no subagent, dependency or Git-history change was
+      made. The member ran the role suite, the full verify and the real-browser
+      recovery acceptance, and corrected the M5 probe expectation when the local
+      expiry observation changed. The wire shape, shared contracts and other
+      module code were not altered.
+    human_review: >-
+      The Captain directed completion of the remaining M2 work, which included
+      resolving the outstanding PR #67 review findings and replying to them.
+      Work remains under review; no merge, approval of another role's pull
+      request or self-approval is claimed.
+    transcript_record: >-
+      This increment has no new OpenCode JSONL export; the supervising
+      assistant's session is the only transcript and no raw record was copied
+      into the repository.
+    verification:
+      base: 09cee72 (origin/main 5e7abfb merged); code 53fa476, test 1f8bd8b
+      m2: "pnpm test:m2: 93 passed / 1 file."
+      full_suite: "pnpm verify: 1471 passed / 71 files; typecheck, lint and build passed."
+      browser: >-
+        Real Chromium acceptance of the production console through the Vite
+        proxy with the PR #130 fixed-audio fixture composition: the first
+        loading turn reached a started output with retiring=no; after reload and
+        reattach the checkbox was enabled and Request stayed disabled until the
+        acknowledgement was checked; one request retired
+        session-d308e968-5779-4e7a-8f88-833fe0036545 and produced successor
+        session-0c4b2fbf-c6b0-47a9-a850-aba2e528793e with recoveries 1, which
+        reloaded, reattached and resumed; SQLite showed the old session's
+        accepted started receipt, bridge unknown performer_disconnected,
+        aborted dialogue, cancelled turn and the successor's session.resumed,
+        with no deliveries rows.
+    scope: >-
+      M2 console gating, performer disposal and one M5 test expectation only.
+      Formal two-turn, Stop, Resume, duplicate, late and transport-loss
+      acceptance still depends on the PR #130 audio deployment; live providers,
+      physical silence, durable recovery and completed product behaviour are
+      not claimed. No merge or publication beyond the task branch was
+      performed. The local package.json edit remains uncommitted.
+
+  - date: "2026-10-31"
+    task: M2-01-console-formal-acceptance-harness
+    branch: feat/m2-01-console
+    change: >-
+      Add a test-only Playwright harness for the formal M2 console matrix and
+      document it. `test/browser/formal-console-acceptance.mjs` drives the real
+      root Vite entry, the real `ConsoleApp` and the actual M1 browser
+      controller through the application WebSocket; it never substitutes media,
+      receipts or runtime behaviour. The script asserts a fresh stopped, epoch-0,
+      non-retiring snapshot, complete two-segment turns, Stop before and during
+      playback, manual Resume, duplicate and late frame replay, transport loss,
+      reload without replay, the first acknowledged recovery before retirement,
+      successor adoption and a final complete turn. It writes screenshots plus
+      `report.json` and `summary.txt`, and exits non-zero on page errors or a
+      failed scenario. `test/browser/README.md` records the runtime audio
+      prerequisite, a fresh-database requirement and the evidence boundary.
+    requirements: [FR-01, FR-04, FR-05]
+    invariants: [INV-01, INV-03]
+    commits: [212ab97]
+    agent: trae-code
+    supervision: >-
+      The supervising assistant authored this test-only increment after the
+      formal matrix had only existed under `/tmp`. No production source, shared
+      contract, dependency, manifest or Git-history change was made. The member
+      ran the harness against a fresh runtime with the temporary test-only fixed
+      audio composition from PR #130 and restored those temporary files
+      afterwards; the checkout no longer contains them.
+    human_review: >-
+      The Captain directed completion of the remaining M2 work and a commit per
+      completed slice. Work remains under review; no self-approval, merge or
+      reviewer acceptance is claimed.
+    transcript_record: >-
+      No OpenCode session was used for this test-only increment; the supervising
+      assistant's session is the only transcript and no raw record was copied
+      into the checkout.
+    verification:
+      base: 1ae674c (origin/main 5e7abfb); harness commit 212ab97
+      m2: "pnpm test:m2: 93 passed / 1 file."
+      harness: >-
+        `node --check` clean and `git diff --check` clean. The harness ran
+        against a fresh runtime and the root Vite entry with the temporary PR
+        #130 test-only audio composition: report verdict passed, 0 page errors,
+        13 screenshots. The driven session was
+        session-49c49de5-fac2-4319-8eaa-96e8a26958f9 and the adopted successor
+        was session-b7570438-df8e-423e-964c-d4e6ed0f36ab. SQLite recorded 91
+        events and 7 deliveries: the original session's two completed turns
+        were fully delivered, the Stop-during-playback turn was
+        partial-unknown/cancelled, and the successor's turn was fully delivered.
+        These are local browser/media and server-reported facts, not acoustic or
+        live-provider evidence.
+      full_suite: >-
+        A standalone `pnpm test` run passed 1471 tests in 71 files. `pnpm build`
+        and `pnpm lint` passed separately. Repeated `pnpm verify` runs failed
+        only in `test/offline/cli.test.ts`: the SIGINT/SIGTERM cases observe
+        `"event":"listening"` before `src/runtime/cli.ts` installs its handlers
+        (line 42 logs, lines 63-64 subscribe) and occasionally receive the
+        default termination code 130/143. The file passes 3/3 in isolation, the
+        runtime CLI is M5-owned, and the harness is test-only, so no repair or
+        assertion change was made here. Full `pnpm verify` itself is therefore
+        not reported as green on this branch.
+      g6: >-
+        `pnpm gate:ai-use-log` passed with base 212ab97 and the changed-file
+        list for this documentation commit.
+    scope: >-
+      Test-only browser harness and its README only. This increment does not
+      change production contracts, the console implementation, deployment
+      manifests or dependencies, does not close issue #85 and does not claim
+      reviewer acceptance. Until PR #130 merges, the harness still requires a
+      runtime deployment that serves the registered fixed audio resources; the
+      temporary test-only composition used for this run was restored. Live
+      providers, acoustic verification, Windows behaviour and durable recovery
+      are not claimed. No merge was performed and the local `package.json` edit
+      remains uncommitted.
+  - date: "2026-11-04"
+    task: M3-01-rule-reaction-port
+    branch: feat/m3-rule-reaction-port
+    change: >-
+      Add the M3-01 deterministic rule ReactionPort in src/decision/reaction.ts
+      for Issue #89: m3-rules provider/model constants, ReactionCallError codes,
+      clock/deadline/abort validation, request deep-freeze and the
+      positive-cue/smile, neutral, first-eligible and no-op rules against the
+      frozen C3 DecisionRequest/DecisionResult contract. Re-export the module
+      from src/decision/index.ts, switch the decision conformance adapter to the
+      real port and add 19 unit tests in test/offline/m3-decision.test.ts, and
+      add the FR-03 trace-matrix row plus the runtime reaction fallback row in
+      the runtime policy catalog. No frozen path changed.
+    requirements: [FR-03]
+    invariants: []
+    cases: [C-06, C-11]
+    commits: [c1c8ec4]
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    launch_flags: [--pure, --agent, build, --variant, xhigh]
+    sessions: [ses_e57fb418dffegAQv7BTzclPKpi]
+    supervision: >-
+      Captain (M3) directed the Issue #89 slice and required the deterministic
+      rule port to mirror the established rule SelectionPort style without
+      changing the frozen C3 contracts. The OpenCode build agent authored the
+      production module, tests and trace/policy updates in the recorded session
+      under --pure --agent build --variant xhigh; no subagent was used and no
+      application provider call was made.
+    human_review: >-
+      Captain (M3) requested this entry after reviewing the rule port and the
+      adapted contract scope. No reviewer approval, merge or case closure is
+      claimed by this entry.
+    transcript_record: >-
+      The work is identified by OpenCode session
+      ses_e57fb418dffegAQv7BTzclPKpi. No separate transcript export was copied
+      into the checkout.
+    verification:
+      platform: macOS arm64, Node 22.23.4, pnpm 12.16.1
+      base: 606ccf5
+      commands: >-
+        pnpm test:m3; pnpm test:readiness; pnpm test:trace; pnpm verify;
+        gate:ai-use-log with AI_USE_LOG_BASE_FILE set to the main copy of
+        docs/ai-use-log.yaml
+      results: >-
+        test:m3 66/66 in 1 file; test:readiness 45/45 in 3 files; test:trace
+        41/41 in 1 file; pnpm verify 1444/1444 across 71 files with typecheck,
+        lint and build passing; the G6 AI-use log gate passed with this entry
+        added against the main base log.
+      not_run: >-
+        No live provider run and no runtime composition of the rule ReactionPort
+        with M5; no Linux CI run locally and no product or case-closure claim.
+    scope: >-
+      Module-level M3-01 rule ReactionPort and offline decision evidence only.
+      Full runtime composition, timeout/stop integration and the complete
+      C-06/C-11 acceptance remain M5/I1 scope. No frozen contract, storage,
+      provider, database or credential change is included.
+  - date: "2026-11-04"
+    task: M3-01-rule-reaction-port-review-fixes
+    branch: feat/m3-rule-reaction-port
+    change: >-
+      Add the M3-01 deterministic rule ReactionPort in src/decision/reaction.ts
+      for Issue #89 against the frozen C3 DecisionRequest/DecisionResult
+      contract: m3-rules provider/model constants, ReactionCallError codes
+      aligned with the rule SelectionPort, strict CallContext/DecisionRequest
+      and finite-deadline validation, no freezing or mutation of caller input, a
+      segmentText-only positive-cue baseline, and the
+      smile/neutral/first-eligible/no-op rules. Re-export the module from
+      src/decision/index.ts, retain fixture-adapter conformance and add
+      actual-port conformance plus 27 rule and coordinator-composition tests
+      (75 total in the file) in test/offline/m3-decision.test.ts, and add the
+      FR-03 trace row plus two accurate runtime reaction policy rows. No frozen
+      path changed.
+    requirements: [FR-03]
+    invariants: []
+    cases: [C-06, C-11]
+    commits: [6780977]
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    launch_flags: [--pure, --agent, build, --variant, xhigh]
+    sessions: [ses_e57fb418dffegAQv7BTzclPKpi]
+    supervision: >-
+      Captain (M3) directed the Issue #89 slice and its review-driven fixes: the
+      rule port mirrors the established rule SelectionPort error and validation
+      style without changing the frozen C3 contracts, never freezes caller
+      input, matches positive cues on segmentText only, and is exercised through
+      the production M5 coordinator in the M3 suite. The OpenCode build agent
+      authored the production module, tests and trace/policy updates in the
+      recorded session under --pure --agent build --variant xhigh; no subagent
+      was used and no application provider call was made.
+    human_review: >-
+      Captain (M3) requested this entry after reviewing the rule port, the
+      review findings and the adapted contract scope. No reviewer approval,
+      merge or case closure is claimed by this entry.
+    transcript_record: >-
+      The work is identified by OpenCode session
+      ses_e57fb418dffegAQv7BTzclPKpi. No separate transcript export was copied
+      into the checkout.
+    verification:
+      platform: macOS arm64, Node 22.23.4, pnpm 12.16.1
+      base: 606ccf5
+      commands: >-
+        pnpm test:m3; pnpm test:readiness; pnpm test:trace; pnpm verify;
+        gate:ai-use-log with AI_USE_LOG_BASE_FILE set to the main copy of
+        docs/ai-use-log.yaml
+      results: >-
+        test:m3 75/75 in 1 file; test:readiness 45/45 in 3 files; test:trace
+        41/41 in 1 file; pnpm verify 1453/1453 across 71 files with typecheck,
+        lint and build passing; the G6 AI-use log gate passed with this entry
+        added against the main base log.
+      not_run: >-
+        No live provider run and no full product composition; the coordinator
+        composition test covers eligible dispatch, deadline fallback and abort
+        revocation only. No Linux CI run locally and no product or case-closure
+        claim.
+    scope: >-
+      Module-level M3-01 rule ReactionPort and offline decision evidence,
+      including M5 coordinator composition in the M3 suite. Full product runtime
+      composition and the complete C-06/C-11 acceptance remain M5/I1 scope. No
+      frozen contract, storage, provider, database or credential change is
+      included.
+
+  - date: "2026-11-05"
+    task: M4-04-live-deadline-stop-cases
+    change: >-
+      Test-only increment to the live acceptance suite for issue #93
+      (02dceb8, +166/-0, one file): two cases appended inside the existing
+      describe.skipIf(!report.available) block of
+      test/live/m4-text-source.live.test.ts, extending to the real provider
+      path the deadline and Stop semantics already pinned offline in
+      test/offline/m4-dialogue.test.ts (a passed deadline at lines 220-258;
+      the body-read-abort precedent at line 1866). Case one (line 253) drives
+      createOpenAiCompatibleTextSource through the port with an already-past
+      CallContext deadline (Date.now() + 1; the gate compares with >=) and
+      asserts DialogueEnd.status deadline_exceeded, usage timeout, zero
+      segments emitted and exactly one truthful outcome report (emitted 0,
+      generated equal to discarded, discard reasons summing to discarded) —
+      the presence of a real text source must not fall back to a completed
+      fixture reply. Case two (line 312) starts a real-provider generate,
+      lets it fly for a fixed 250 ms window, revokes the turn through the
+      call handle's AbortController (test/support/context.ts:5) and asserts
+      status cancelled, usage cancelled, zero segments and one truthful
+      outcome (any candidate produced within the window is accounted under
+      the aborted reason key); a 20 s hang guard fails the case loudly if
+      the call never settles after the revoke. Both cases record their
+      honest limitations in comments: the deadline gate is a local clock
+      check that may decide before the request reaches the wire, and without
+      transport instrumentation (the suite forbids stubs and mocks) the
+      exact wire phase at which the revoke lands is not observable on a
+      live endpoint. No production code, dependency, package.json, mock or
+      fixture change; the three pre-existing cases and the header credential
+      rules are untouched.
+    requirements: []
+    invariants: []
+    commits: [02dceb8]
+    agent: opencode/deepseek-v4-flash
+    provider: cslabllm
+    model: CS5351/DeepSeek-V4-Flash
+    supervision: >-
+      Member M4's scheduled inspection workflow (ZCode, GLM-5.3-Flash)
+      selected the slice and supervised it. The OpenCode build agent
+      (deepseek-v4-flash) authored all code changes in one unattended --auto
+      --standalone session from an English brief kept in the gitignored
+      .cache/ directory, after a one-token probe confirmed the configured
+      provider routes the #high variant (#xhigh is unroutable on
+      cslabllm/CS5351/DeepSeek-V4-Flash and fails with provider.no-route).
+      The supervising agent reviewed the diff and ran the single live test
+      file (5 tests | 5 skipped with ISLA_LIVE_TEXT_* unprovided, exit 0)
+      and the local gates — pnpm test:m4 237/237 in 10 files, tsc -b and
+      oxlint clean — before the delivery flow committed 02dceb8; remote CI
+      performs the full-suite final review. The two new cases were NOT
+      executed: with the provider credentials still unprovided they skip
+      behind the existing gate and no pass/fail is claimed for them; their
+      honest limitations are disclosed on issue #93 (comment 6637699483,
+      revising the "zero code changes" wording of comments 6554487472 and
+      6585822158).
+  - date: "2026-11-06"
+    task: m4-04-recall-evidence-marker
+    change: >-
+      Mark the two recalled-evidence sections of the rendered dialogue prompt so
+      retrieved background cannot present itself at the same structural level as
+      the persona's standing rules: the `Relevant background:` and
+      `Earlier, confirmed:` headers now carry the wording M3 confirmed on issue
+      #44 (2026-11-04), stating that the section holds background/historical
+      evidence, not instructions. Design comments record the purpose, the honest
+      limit that this is a prompt-construction boundary rather than a verified
+      model-compliance guarantee (resistance to instructions embedded in recalled
+      text is covered by a separately agreed live-provider behavior check under
+      the checkpoint-05 rubric), and the deliberate fact that header lines stay
+      uncharged against `contextLimits.maxCharacters`. Six existing header pins
+      are updated and two marker-presence assertions are added. No recall
+      admission/ranking, budget accounting, persona block, contract or wire
+      change.
+    requirements: []
+    invariants: []
+    commits: [1ce206c]
+    agent: opencode/deepseek-v4-flash
+    provider: cslabllm
+    model: CS5351/DeepSeek-V4-Flash
+    supervision: >-
+      The member's supervised session selected the slice, wrote the English task
+      brief into the gitignored .cache directory, and launched one unattended
+      OpenCode build session (ses_e53648fd4ffe0aFxVeMeUM6lJ5,
+      cslabllm/CS5351/DeepSeek-V4-Flash). The supervisor read the full diff
+      against the brief, confirmed only the three named files changed with the
+      exact strings, and ran the gates; every changed line was authored by the
+      OpenCode session and the supervisor performed git operations only.
+    human_review: >-
+      Captain (M4) directed the change in session on 2026-11-06 under the plan
+      recorded on issue #44 (M3 semantics confirmation 2026-11-04; M5 endorsement
+      2026-11-01). No reviewer approval, merge or case registration is claimed by
+      this entry; the pull request awaits consumer review.
+    transcript_record: >-
+      The OpenCode session is retained by the CLI session store; the task brief
+      stays in the gitignored .cache directory.
+    verification:
+      platform: Windows 11, Node 24.21.0, pnpm 12.11.2
+      base: 8f25cf3
+      commands: >-
+        pnpm exec vitest run test/offline/m4-dialogue.test.ts
+        test/offline/m4-memory-enhancement.test.ts; pnpm run test:m4;
+        pnpm exec tsc -b; pnpm run lint
+      results: >-
+        targeted files 89/89 in 2 files; test:m4 237/237 in 10 files; typecheck
+        clean (tsc -b exit 0); lint 0 warnings / 0 errors on 254 files. Remote
+        CI verify is the final gate after push.
+      not_run: >-
+        No live provider run and no claim of prompt-injection resistance; the
+        behavior check that could support such a claim is separately agreed
+        under issue #44 / the checkpoint-05 rubric and remains pending. Full
+        local suite not run (documented pre-existing Windows failures, CI is the
+        gate); no case closure.
+  - date: "2026-11-07"
+    task: M4-04-loopback-real-reaction-port
+    change: >-
+      Two-part slice on PR #139. First, origin/main (58990bd) is merged into
+      feat/m4-04 (merge 9776a2f): the only conflict, docs/ai-use-log.yaml, is
+      resolved by keeping both sides' appended entries in full and interleaving
+      them by date (the M2-01 console entries of 2026-10-28/10-31, the M3-01
+      rule-reaction entries of 2026-11-04, then the M4-04 entries of
+      2026-11-05/06), with no line of either side modified. Second, with issue
+      #89 delivered, the loopback evidence file stops describing the M3
+      reaction as a missing substitute (0b1ad01, one file, +14/-10): the last
+      test, which already injects the real rule selection port over a shared
+      createMonotonicClock() instance, now also injects
+      reaction: createRuleReactionPort({ clock }) so both M3 rule ports run
+      over the same server clock; the three stale comments (file header, the
+      delivery-history test, the selection test) are rewritten to state which
+      components are real where — every other test keeps the fixture reaction
+      substitute, and the provider text remains the catalog substitute pending
+      the live half of issue #93. src/decision is imported, not modified; no
+      production, contract or wire change.
+    requirements: []
+    invariants: []
+    commits: [9776a2f, 0b1ad01]
+    agent: opencode/deepseek-v4-flash
+    provider: cslabllm
+    model: CS5351/DeepSeek-V4-Flash
+    supervision: >-
+      Member M4's scheduled inspection workflow (ZCode, GLM-5.3-Flash) selected
+      the PR #139 slice and supervised it. The merge and its docs conflict
+      resolution are supervisor git operations, not code authorship. The
+      OpenCode build agent (deepseek-v4-flash) authored all code changes in one
+      unattended --auto --standalone session (ses_e4e2f8434ffeDKRMSPrID7b1nG,
+      the #high variant, which this log already records as the routable one for
+      this provider) from an English brief kept in the gitignored .cache
+      directory. The supervising agent reviewed the full diff against the brief
+      (only test/offline/m4-loopback.test.ts changed: import extension, one
+      option line, three comment rewrites) and ran the gates before committing;
+      remote CI performs the full-suite final review.
+    transcript_record: >-
+      The OpenCode session is retained by the CLI session store; the task brief
+      stays in the gitignored .cache directory.
+    verification:
+      platform: Windows 11, Node 24.21.0, pnpm 12.11.2
+      base: c23c680
+      commands: >-
+        pnpm exec vitest run test/offline/m4-loopback.test.ts (after the merge
+        and again after the replacement); pnpm run test:m4; pnpm run typecheck;
+        pnpm run lint; pnpm run gate:ai-use-log
+      results: >-
+        m4-loopback 5/5 after the merge and 5/5 after the replacement; test:m4
+        237/237 in 10 files; typecheck clean (tsc -b exit 0); lint 0 warnings /
+        0 errors on 264 files; gate:ai-use-log shape pass locally (CI verifies
+        the entry rule against its PR base). Remote CI verify is the final gate.
+      not_run: >-
+        Full local vitest suite not run (documented pre-existing Windows
+        failures; CI is the gate). No live provider run and no claim beyond the
+        offline evidence; no case closure or merge is performed.
+  - date: "2026-10-28"
+    task: M5-I1-adoption-checks
+    branch: m5-i1-independent-20261028-detached-uncommitted
+    member: M5
+    change: >-
+      Add a small test-only I1 adoption entry and seven checks: a held
+      selection timeout with a late result, an unchanged deferred candidate set,
+      synthesis failure before any output followed by a successful fresh turn,
+      synthesis failure after a delivered prefix, reconnect during unconfirmed
+      playback, reading an explicitly supplied event store, and closing a
+      started harness when setup is refused. Correct the terminal `turn.ended`
+      status for a completed dialogue whose cycle failed, and classify a failed
+      dialogue in the evaluation adapter from the recorded dialogue end.
+    requirements: [FR-01, FR-04, FR-05, FR-06]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: 2.2.0
+    launch_flags: ["-m", "self-api/deepseek-v4-flash#xhigh", "--agent", "build", "--format", "json"]
+    sessions: [ses_e813b6114ffedTdxhlGftM8AF3]
+    supervision: >-
+      OpenCode authored the test-only adoption helper, the checks, the harness
+      synthesis seam, the coordinator terminal-status correction, the
+      evaluation-adapter classification change, the role-script update and the
+      English handoff, trace and README edits. Captain approved the local M5 I1
+      adoption scope; the implementation kept red-before-fix evidence and
+      inspected every `turn.ended` consumer. The Codex supervisor, not Captain
+      personally, requested this session's detailed failure semantics, the
+      bounded follow-up checks and the provenance correction. The supervisor
+      added the owner-replacement table to the handoff and independently ran
+      the role, composition, full, readiness, actual-range trace and G6 checks,
+      plus five consecutive repetitions of the seven adoption checks. No subagent,
+      live provider, Git mutation or remote write was used.
+    human_review: >-
+      Captain authorized the local M5 I1 adoption scope only; Captain did not
+      personally authorize the detailed failure semantics or code acceptance.
+      Those requests came from the Codex supervisor. Candidate human review
+      remains pending and the changes remain uncommitted.
+    verification:
+      base: 74e99953733eeb070f99d4b9c57554e22e928840
+      baseline: "pnpm test:m5: 177 passed / 8 files; worktree clean."
+      red_green: >-
+        Before the coordinator fix the new synthesis check failed because
+        `turn.ended` recorded `completed` while the cycle had failed; the same
+        check passed after the fix. Logs are kept under
+        `.cache/m5-i1-independent/`.
+      focused: >-
+        `pnpm test:m5`: 184 passed / 9 files; `m5-i1-adoption`: 7 passed;
+        focused evaluation, recovery and application suites: 57 passed /
+        3 files; typecheck and lint passed.
+      full_verify: >-
+        `pnpm verify` passed: 1214 tests / 64 files, typecheck, lint and build
+        (exit 0). Follow-up logs are `test-m5-followup.log` and
+        `verify-followup.log`; the original green logs are unchanged.
+    scope: >-
+      Fixed WAV catalog and controlled media events only; event reads are from
+      the in-memory test store, not restart-durable persistence. No acoustic,
+      live provider, SQLite restart/recovery or product console claim. C-05,
+      C-08, C-09 and C-16 remain pending; no register, owner or case change.
+
+  - date: "2026-10-29"
+    task: M5-I1-original-increment-main-adoption
+    member: M5
+    change: >-
+      Adopt the original OpenCode-authored M5 I1 increment on main 4e4f7cd,
+      preserving PR65's outcome and prepared-input changes. Source/test deltas
+      apply unchanged; new adoption files match the original candidate bytes.
+      Update the current handoff and extend the existing test:m5 command.
+    requirements: [FR-01, FR-04, FR-05, FR-06]
+    invariants: []
+    cases: []
+    commits: [5da4ffb1c279c8b9bc574fa8958c2634b4d01208]
+    agent: codex-supervisor
+    sessions: [ses_e813b6114ffedTdxhlGftM8AF3]
+    supervision: >-
+      Captain approved continued local implementation, publication and existing
+      task follow-up. Codex extracted already-authored code, coordinated the
+      package test command and documentation, and ran independent verification.
+      No new OpenCode code-authoring session or teammate implementation is claimed.
+    human_review: >-
+      Owner consumption and complete I1 acceptance remain pending. Original
+      supervision, failed checks and original verification records are preserved.
+    verification:
+      base: 4e4f7cd7cab751486cec21efbf613364ca7dc07d
+      full_verify: "1346/1346 tests in 71 files; typecheck, lint, build passed."
+      m5: "214/214 in 10 files."
+      trace: "41/41 with the actual ten-file tracked/untracked diff."
+      g6: "Passed against the unchanged main AI-use log."
+      evidence: "External evidence/m5-i1-adoption-20261029/verification.json"
+    scope: >-
+      Controlled loopback and test-only adoption support; no real M3 provider,
+      formal M2 console, live services, acoustic or full I1/case completion claim.
+  - date: "2026-10-30"
+    task: I1-01-real-rule-selection-adoption
+    change: >-
+      Adopt the merged M3 rule SelectionPort in the runnable I1 loop and the
+      reusable M5 adoption harness using the runtime clock, including recovery
+      successors. Add consuming regressions for two competing inputs through
+      real M4 and exact recorded outputs, recovery, foreign-clock fallback and
+      explicit cancellation settlement. Retain the reaction and catalogue-text
+      substitutes, original peer implementations and shared case statuses.
+    requirements: [FR-01, FR-04, FR-05, FR-06]
+    invariants: [INV-15]
+    commits: []
+    agent: opencode/build
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    opencode_version: 2.2.0
+    launch_flags: [--agent, build, --format, json]
+    sessions: [ses_e740bebbeffeMIymYrx6cKvG6o]
+    supervision: >-
+      Captain approved the local implementation and requires separate approval
+      before publication. OpenCode authored code and tests in two supervised
+      rounds. Codex traced consumers, requested the competing-input and settled
+      cancellation assertions, maintained paired documentation and independently
+      verified the final candidate. No other module was repaired on its owner's
+      behalf; no subagent was used.
+    human_review: >-
+      Under review. Captain authorized local implementation; code publication,
+      review submission and progress-board updates require separate confirmation.
+      Final merge and full product acceptance remain human-owned.
+    transcript_record: >-
+      Authentic session export is retained outside this repository in the course
+      project evidence/m5-selection-adoption-20261030 directory. Verification
+      commands, results and limits are recorded there against the final file hashes.
+    scope: >-
+      Test/demo composition wiring and consuming tests, plus English documentation.
+      This does not supply M3 ReactionPort, formal M2 console recovery, live
+      providers, acoustic measurements or complete I1 acceptance.
+
+  - date: "2026-10-31"
+    task: M5-I1-controlled-deployment-rule-selection
+    branch: m5-i1-refresh-20261031
+    member: M5
+    change: >-
+      Add an explicitly selected test-only deployment entry that composes the
+      existing controlled production deployment and replaces only the selection
+      peer with M3's real deterministic rule port bound to the deployment's
+      runtime clock. Leave reaction, dialogue text, renderer, synthesis, the
+      initial archive selection and the optional owned release as the base
+      deployment built them, so the separate audio candidate stays independent.
+      Add application-level behaviour tests over the real socket and real SQLite
+      for two sequential turns, plan provenance against fixture and fallback, the
+      substituted reaction port, the exact deployment context clock with a
+      deadline-exceeded probe, and the production CLI module seam with the
+      persisted completed turn. Follow-up from the M4 review of head 9a675873:
+      extend the existing failed-prefix adoption case so the real M4 in-memory
+      delivery store is compared with M6 confirmed history and the committed
+      delivery event; exactly the delivered first segment is present with
+      matching identity and content, and no record exists for the segment whose
+      synthesis failed. The delivery finalizer awaits that M4 commit before the
+      turn ends, so the test observes the actual store state rather than a later
+      reconstruction or a synthetic admission claim.
+    requirements: [FR-01, FR-04, FR-05, FR-06]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/build
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    opencode_version: 2.2.2
+    launch_flags: [--agent, build, --format, json]
+    model_id: self-api/deepseek-v4-flash#xhigh
+    sessions: [ses_e7232e5e5ffe8bQ7llyVawnK2M]
+    supervision: >-
+      Captain approved this local M5 work. The Codex supervisor scoped the
+      increment: a separate deployment entry, no edit to production-kit.ts or
+      production-deployment.ts, reaction kept substituted, and no claim beyond
+      the checks actually run. OpenCode authored the entry, the tests, the
+      manifest token and the English handoff text in this session. An initial
+      repository search exceeded the requested path boundary and was
+      interrupted; the session then resumed under restricted search permissions.
+      No credential value appeared in displayed output, and this record does not
+      claim that the interrupted search avoided secret-named paths. OpenCode
+      reported the first failing test results and their corrections instead of
+      presenting a green result early. No subagent, service or network tool call, other-owner
+      module, shared contract, dependency change, staging, commit or remote
+      write was used.
+    human_review: >-
+      M4 approved PR131 head 9a675873 for its dialogue-side scope and identified
+      this non-blocking coverage gap; the follow-up assertion remains under
+      Captain review. Publication, review submission and merging stay separate
+      human decisions. No product, formal-console or full-I1 acceptance is
+      claimed.
+    verification:
+      base: "9a67587 local PR131 candidate; current main 5e7abfb merged in this worktree"
+      focused: >-
+        pnpm test:m5: 246 passed / 12 files after the corrections, including the
+        three deployment cases and the M4 follow-up in the failed-prefix adoption
+        case. That case asserts m4Memory.records() and its spoken confirmedHistory
+        match the one M6 history row and the delivery.committed event (segment 0,
+        fully-delivered, completed), with no record for the failed segment 1.
+        The first run failed three deployment cases: the real selection
+        disposition is accepted rather than ok; a negative clock origin is
+        invalid because persisted event timestamps must be non-negative; and the
+        spawned CLI child needed IPC enabled for the shutdown message. Each was
+        fixed and the suite rerun. pnpm typecheck passed; oxlint reported no
+        diagnostics; pnpm test:readiness 42/42; pnpm test:trace 41/41.
+      limits: >-
+        Dependencies were installed offline. The full suite, combined PR130 audio
+        candidate, browser runs, live providers and acoustic output were not run.
+    scope: >-
+      Test-support and test code plus English documentation only. The real rule
+      port is deterministic and local; reaction remains the explicit fixture
+      substitute until M3 delivers #89, and the audio resources that PR130 may
+      add were not present in this worktree. No src, shared contract, dependency,
+      lockfile, other-owner module or registered ID changed, and the merge
+      conflict resolution from the earlier round is preserved.
+
+  - date: "2026-11-08"
+    task: M5-controlled-I1-rule-reaction
+    branch: local/i1-reaction-pr131-20261108
+    member: M5
+    change: >-
+      Compose the merged M3 rule reaction with rule selection in the explicitly
+      selected controlled formal-console deployment, using the deployment clock.
+      Exercise rule provenance and eligible actions, deadlines and fallback,
+      two turns, a successful reaction returned after Stop, and a recovery
+      successor in the M5 deployment and adoption tests. The separate loop demo
+      and generic harness retain their existing reaction fixture.
+    requirements: [FR-01, FR-03, FR-04, FR-05, FR-06]
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/build
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    opencode_version: 2.2.6
+    launch_flags: [--agent, build, --format, json]
+    model_id: self-api/deepseek-v4-flash#xhigh
+    sessions: [ses_e459ac963ffegh0FnSyHxha27F]
+    supervision: >-
+      Captain approved the local plan before implementation. Codex supervised
+      OpenCode, interrupted two prolonged reading and review rounds, continued
+      the same session with the existing authorization, and independently ran
+      and reported the tests. OpenCode authored the test and composition code;
+      Codex maintained the English documentation and evidence. Task-level
+      permissions denied shell, external directories, subagents and edits
+      outside the permitted files. No global plugin configuration was changed.
+    human_review: >-
+      The local candidate is under review. Publication, review submission and
+      merging require separate approval; no other member's approval or complete
+      I1 acceptance is asserted.
+    transcript_record: >-
+      The official sanitized OpenCode session export and verification evidence
+      are retained outside this repository in evidence/i1-reaction-local-20261108.
+      The original session remains in the local OpenCode session store; the
+      terminal capture of its unsanitized export exceeded the output limit.
+    scope: >-
+      Controlled M5 test deployment and test code plus English documentation.
+      M3 implementation and shared contracts are unchanged. This does not
+      establish a live model, physical audio, avatar output or Windows result.
