@@ -74,6 +74,9 @@ id, the companion also carries `runDigest`: the SHA-256 of the exact run artifac
 for one case and variant leaves the key set unchanged but changes the digest, so the companion is refused.
 Duplicate companion keys are refused; a digest mismatch is refused.
 
+The occurrence key is a **JSON-encoded tuple** (`[caseId, variantId, attempt]`), so an identifier that
+contains a delimiter cannot collide with a different `(caseId, variantId)` pair (M5 review, 2026-11-09).
+
 The digest is **producer-asserted**, not verified evidence about admission (M4 review, 2026-11-06). The
 parser can prove that the digest names the bytes on disk; it cannot prove that a non-null
 `recordSetRevision` is the set an attempt actually admitted, and an empty-set digest for a `none` or
@@ -87,12 +90,19 @@ parser can prove that the digest names the bytes on disk; it cannot prove that a
 recorded, never inferred. `requestMessageId` and `eventId` are `null` when the observation does not support
 them — a rejected submission has a request id and no event id.
 
+`rejected`, `no-acknowledgement` and `not-submitted` are **terminal**: no later entry may be a submission
+(M5 review, 2026-11-09). `correlation: exact` requires at least one `accepted` or `duplicate` input and both
+`requestMessageId` and `eventId` on every such input; otherwise the companion records `missing`.
+
 ### D4 — Observed and unobserved are different facts
 
 A `notRun` case still retains every input that was **actually submitted and observed**, including a rejected
 or unacknowledged submission. Only a failure **before any submission** leaves no observed inputs. A batch
 that never submitted an input supplies zero observed inputs; a not-run entry never receives an invented
 acknowledgement.
+
+The observations are carried in the companion's root **`notRun[]`** array (`caseId`, `variantId`, `reason`,
+`inputs`), bound to the run's not-run pairs; the frozen `RecordedRunV1` is unchanged (M5 review, 2026-11-09).
 
 ### D5 — Input identity is a tuple, and it is not observable yet
 
@@ -133,9 +143,10 @@ alone.
 ### D8 — Refusal, not a partial join
 
 The report command takes an explicit companion path. It refuses the companion when the `runId` differs, the
-digest differs, the `(caseId, variantId, attempt)` set differs from the run's, a duplicate key appears, or
-the input order cannot be established. A missing or extra entry is a refusal with a reason, never a partial
-join. Without a companion, every quality result for that run is `unscored` with reason
+digest differs, the `(caseId, variantId, attempt)` set differs from the run's, a duplicate key appears, the
+input order cannot be established, a `notRun` observation names a case the run executed, or an `exact`
+correlation lacks an observed acknowledgement. A missing or extra entry is a refusal with a reason, never a
+partial join. Without a companion, every quality result for that run is `unscored` with reason
 `no-provenance-record`.
 
 ### D9 — No schema or port change in this decision

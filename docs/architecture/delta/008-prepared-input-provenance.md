@@ -61,3 +61,19 @@ by content (`runDigest`) and a positional occurrence key, keeps unobserved value
 - **Requirement:** NFR-01 / NFR-04 (evaluation evidence), FR-06 (persistence boundary).
 - **Invariant:** INV-16 (missing evidence stays unknown; no scored result from an unbound attempt).
 - **Case:** pending allocation; the trace row records that rather than inventing one.
+
+## Review fixes (2026-11-09, M5)
+
+- **Exact acknowledgement** — `correlation: 'exact'` requires at least one `accepted`/`duplicate` input and
+  both `requestMessageId` and `eventId` on every such input; otherwise the companion records `missing`
+  (ADR-008 D3/D8). A report-boundary regression refuses the synthetic exact-with-null-ids companion.
+- **Terminal submission order** — `rejected`, `no-acknowledgement` and `not-submitted` end the batch; a
+  later submission is refused (ADR-008 D3).
+- **Not-run observations** — an optional root `notRun[]` (`caseId`, `variantId`, `reason`, `inputs`) carries
+  observed inputs for cases the run did not execute, bound to the run's not-run pairs and never scored;
+  `RecordedRunV1` is unchanged (ADR-008 D4/D8).
+- **Occurrence key** — JSON-encoded tuple, so an identifier containing a delimiter cannot collide with a
+  different pair (ADR-008 D2).
+
+Verification: provenance **29** tests and command **13**; `test:m6` 225/225 in 16 files; trace 41/41;
+readiness 45/45; `pnpm verify` exit 0. Four mutations each turned their own test red, then were restored.

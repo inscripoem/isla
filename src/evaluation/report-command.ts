@@ -138,7 +138,7 @@ export function runReportCommand(argv: readonly string[]): number {
     // this artifact — not to a re-serialised object and not to a lossy decode.
     const companion = parseProvenance(
       companionJson,
-      { runId: recorded.input.meta.runId, records: recorded.input.run.records },
+      { runId: recorded.input.meta.runId, records: recorded.input.run.records, notRun: recorded.input.run.notRun },
       runBytes,
     )
     if (!companion.ok) {

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { parseRecordedRun } from '../../src/evaluation/recorded-run'
 import {
+  buildOccurrenceKey,
+  parseOccurrenceKey,
   parseProvenance,
   provenanceRunDigest,
   type ProvenanceParse,
@@ -310,5 +312,188 @@ describe('provenance companion (ADR-008)', () => {
       ),
     )
     expect(violations.some((violation) => violation.includes('must be an object'))).toBe(true)
+  })
+})
+
+
+describe('M5 review rules (2026-11-09)', () => {
+  it('refuses exact when the accepted input has no observed acknowledgement', () => {
+    const violations = refused(
+      parseProvenance(
+        companion({
+          attempts: [
+            attempt({ inputs: [{ ...INPUT, requestMessageId: null, eventId: null }] }),
+            attempt({ attempt: 2 }),
+          ],
+        }),
+        RUN,
+        RUN_TEXT,
+      ),
+    )
+    expect(
+      violations.some((violation) => violation.includes('no observed acknowledgement')),
+    ).toBe(true)
+  })
+
+  it('accepts missing when the accepted input has no observed acknowledgement', () => {
+    const result = parseProvenance(
+      companion({
+        attempts: [
+          attempt({
+            correlation: 'missing',
+            inputs: [{ ...INPUT, requestMessageId: null, eventId: null }],
+          }),
+          attempt({ attempt: 2 }),
+        ],
+      }),
+      RUN,
+      RUN_TEXT,
+    )
+    expect(result.ok).toBe(true)
+  })
+
+  it('refuses a submission after a rejection', () => {
+    const violations = refused(
+      parseProvenance(
+        companion({
+          attempts: [
+            attempt({
+              inputs: [
+                INPUT,
+                { ...INPUT, status: 'rejected' },
+                { ...INPUT, status: 'accepted' },
+              ],
+            }),
+            attempt({ attempt: 2 }),
+          ],
+        }),
+        RUN,
+        RUN_TEXT,
+      ),
+    )
+    expect(
+      violations.some((violation) => violation.includes('follows a terminal input')),
+    ).toBe(true)
+  })
+
+  it('refuses a submission after no-acknowledgement', () => {
+    const violations = refused(
+      parseProvenance(
+        companion({
+          attempts: [
+            attempt({
+              inputs: [
+                INPUT,
+                { ...INPUT, status: 'no-acknowledgement' },
+                { ...INPUT, status: 'accepted' },
+              ],
+            }),
+            attempt({ attempt: 2 }),
+          ],
+        }),
+        RUN,
+        RUN_TEXT,
+      ),
+    )
+    expect(
+      violations.some((violation) => violation.includes('follows a terminal input')),
+    ).toBe(true)
+  })
+
+  it('allows not-submitted entries after a rejection', () => {
+    const result = parseProvenance(
+      companion({
+        attempts: [
+          attempt({
+            inputs: [
+              INPUT,
+              { ...INPUT, status: 'rejected' },
+              { ...INPUT, status: 'not-submitted' },
+            ],
+          }),
+          attempt({ attempt: 2 }),
+        ],
+      }),
+      RUN,
+      RUN_TEXT,
+    )
+    expect(result.ok).toBe(true)
+  })
+
+  it('does not collide when identifiers contain the old NUL delimiter', () => {
+    const left = buildOccurrenceKey('alpha\u0000beta', 'gamma', 1)
+    const right = buildOccurrenceKey('alpha', 'beta\u0000gamma', 1)
+    expect(left).not.toBe(right)
+    expect(parseOccurrenceKey(left)).toEqual({
+      caseId: 'alpha\u0000beta',
+      variantId: 'gamma',
+      attempt: 1,
+    })
+    expect(parseOccurrenceKey(right)).toEqual({
+      caseId: 'alpha',
+      variantId: 'beta\u0000gamma',
+      attempt: 1,
+    })
+  })
+
+  it('refuses a malformed occurrence key', () => {
+    expect(parseOccurrenceKey('case-1-v1-1')).toBeNull()
+    expect(parseOccurrenceKey('[]')).toBeNull()
+  })
+})
+
+
+describe('not-run observations (ADR-008 D4)', () => {
+  it('refuses a not-run observation for a case the run executed', () => {
+    const violations = refused(
+      parseProvenance(
+        companion({
+          notRun: [
+            { caseId: 'case-1', variantId: 'v1', reason: 'declined', inputs: [INPUT] },
+          ],
+        }),
+        RUN,
+        RUN_TEXT,
+      ),
+    )
+    expect(violations.some((violation) => violation.includes('not a not-run case'))).toBe(true)
+  })
+
+  it('refuses a duplicate not-run pair', () => {
+    const entry = {
+      caseId: 'case-9',
+      variantId: 'v1',
+      reason: 'declined',
+      inputs: [INPUT],
+    }
+    const violations = refused(
+      parseProvenance(companion({ notRun: [entry, entry] }), RUN, RUN_TEXT),
+    )
+    expect(
+      violations.some((violation) => violation.includes('repeats the case and variant')),
+    ).toBe(true)
+  })
+
+  it('refuses an unknown not-run field', () => {
+    const violations = refused(
+      parseProvenance(
+        companion({
+          notRun: [
+            {
+              caseId: 'case-9',
+              variantId: 'v1',
+              reason: 'declined',
+              inputs: [INPUT],
+              extra: 'x',
+            },
+          ],
+        }),
+        RUN,
+        RUN_TEXT,
+      ),
+    )
+    expect(violations.some((violation) => violation.includes('is not a recognised field'))).toBe(
+      true,
+    )
   })
 })

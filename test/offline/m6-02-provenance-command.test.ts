@@ -249,6 +249,7 @@ describe('evaluation:report --provenance', () => {
       runId: 'another-run',
       runDigest: DIGEST,
       attempts: [typedAttempt('case-1'), typedAttempt('case-2')],
+      notRun: [],
     }
     const result = renderEvaluationReport({ ...parsed.input, provenance: foreign })
     expect(result.ok).toBe(false)
@@ -265,10 +266,74 @@ describe('evaluation:report --provenance', () => {
       runId: 'run-1',
       runDigest: DIGEST,
       attempts: [typedAttempt('case-1')],
+      notRun: [],
     }
     const result = renderEvaluationReport({ ...parsed.input, provenance: partial })
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.violations.some((violation) => violation.includes('missing an entry'))).toBe(true)
+  })
+})
+
+
+describe('M5 review rules at the report boundary (2026-11-09)', () => {
+  it('refuses exact when an accepted input has no observed acknowledgement', () => {
+    const { input, output, provenance } = workspace()
+    writeFileSync(
+      provenance,
+      JSON.stringify(
+        companion({
+          attempts: [
+            attempt('case-1', { inputs: [{ ...INPUT, requestMessageId: null, eventId: null }] }),
+            attempt('case-2'),
+          ],
+        }),
+      ),
+      'utf8',
+    )
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
+    expect(
+      runReportCommand(['--input', input, '--output', output, '--provenance', provenance]),
+    ).toBe(1)
+    expect(existsSync(output)).toBe(false)
+    expect(stderr.mock.calls.flat().join('')).toContain('no observed acknowledgement')
+  })
+
+  it('renders observed inputs for a not-run case', () => {
+    const run = {
+      ...RUN,
+      notRun: [{ variantId: 'v1', caseId: 'case-3', reason: 'declined' }],
+    }
+    const runText = JSON.stringify(run)
+    const digest = provenanceRunDigest(runText)
+    const { input, output, provenance } = workspace()
+    writeFileSync(input, runText, 'utf8')
+    writeFileSync(
+      provenance,
+      JSON.stringify({
+        provenanceVersion: 1,
+        runId: 'run-1',
+        runDigest: digest,
+        attempts: [attempt('case-1'), attempt('case-2')],
+        notRun: [
+          {
+            caseId: 'case-3',
+            variantId: 'v1',
+            reason: 'declined',
+            inputs: [{ ...INPUT, status: 'rejected', eventId: null }],
+          },
+        ],
+      }),
+      'utf8',
+    )
+
+    expect(
+      runReportCommand(['--input', input, '--output', output, '--provenance', provenance]),
+    ).toBe(0)
+    const table = readFileSync(output, 'utf8')
+    expect(table).toContain('### Not-run observations')
+    expect(table).toContain('| case-3 | v1 | declined |')
+    expect(table).toContain('rejected 1')
   })
 })

@@ -61,23 +61,36 @@ export interface ProvenanceAttempt {
   readonly correlation: Correlation
 }
 
+export interface ProvenanceNotRunEntry {
+  readonly caseId: string
+  readonly variantId: string
+  readonly reason: string
+  readonly inputs: readonly ProvenanceInputEntry[]
+}
+
 export interface ProvenanceCompanionV1 {
   readonly provenanceVersion: typeof PROVENANCE_VERSION
   readonly runId: string
   readonly runDigest: string
   readonly attempts: readonly ProvenanceAttempt[]
+  /** Observed inputs for cases the run did not execute (ADR-008 D4). */
+  readonly notRun: readonly ProvenanceNotRunEntry[]
 }
 
 export interface ProvenanceRun {
   readonly runId: string
   readonly records: readonly AttemptRecord[]
+  /** The run's not-run cases, so observations can be bound to them. */
+  readonly notRun?: readonly { readonly caseId: string; readonly variantId: string }[]
 }
 
 export type ProvenanceParse =
   | { readonly ok: true; readonly companion: ProvenanceCompanionV1 }
   | { readonly ok: false; readonly violations: readonly string[] }
 
-const ROOT_KEYS = ['provenanceVersion', 'runId', 'runDigest', 'attempts'] as const
+const ROOT_KEYS = ['provenanceVersion', 'runId', 'runDigest', 'attempts', 'notRun'] as const
+const ROOT_REQUIRED_KEYS = ['provenanceVersion', 'runId', 'runDigest', 'attempts'] as const
+const NOT_RUN_KEYS = ['caseId', 'variantId', 'reason', 'inputs'] as const
 const ATTEMPT_KEYS = [
   'caseId',
   'variantId',
@@ -120,18 +133,55 @@ export function provenanceRunDigest(runBytes: string | Buffer): string {
  * 1-based occurrence of that `(caseId, variantId)` in the run file. Positional, so
  * the file order is part of the key.
  */
-function occurrenceKeys(records: readonly { caseId: string; variantId: string }[]): string[] {
+export interface OccurrenceKeyParts {
+  readonly caseId: string
+  readonly variantId: string
+  readonly attempt: number
+}
+
+/**
+ * Unambiguous tuple encoding. JSON escaping makes the `caseId`/`variantId`
+ * boundary explicit, so two different pairs can never share a key even if an
+ * identifier contains the old NUL delimiter (M5 review, 2026-11-09).
+ */
+export function buildOccurrenceKey(caseId: string, variantId: string, attempt: number): string {
+  return JSON.stringify([caseId, variantId, attempt])
+}
+
+/** The single parser for those keys; `null` for a malformed key. */
+export function parseOccurrenceKey(key: string): OccurrenceKeyParts | null {
+  let value: unknown
+  try {
+    value = JSON.parse(key)
+  } catch {
+    return null
+  }
+  if (!Array.isArray(value) || value.length !== 3) return null
+  const [caseId, variantId, attempt] = value
+  if (typeof caseId !== 'string' || caseId.length === 0) return null
+  if (typeof variantId !== 'string' || variantId.length === 0) return null
+  if (typeof attempt !== 'number' || !Number.isInteger(attempt) || attempt < 1) return null
+  return { caseId, variantId, attempt }
+}
+
+export function runOccurrenceKeys(
+  records: readonly { caseId: string; variantId: string }[],
+): string[] {
   const seen = new Map<string, number>()
   return records.map((record) => {
-    const base = `${record.caseId}\u0000${record.variantId}`
+    const base = JSON.stringify([record.caseId, record.variantId])
     const attempt = (seen.get(base) ?? 0) + 1
     seen.set(base, attempt)
-    return `${base}\u0000${attempt}`
+    return buildOccurrenceKey(record.caseId, record.variantId, attempt)
   })
 }
 
-function occurrenceKey(ref: { caseId: string; variantId: string; attempt: number }): string {
-  return `${ref.caseId}\u0000${ref.variantId}\u0000${ref.attempt}`
+export function companionOccurrenceKey(ref: {
+  caseId: string
+  variantId: string
+  attempt: number
+}): string {
+  return buildOccurrenceKey(ref.caseId, ref.variantId, ref.attempt)
 }
 
 /**
@@ -141,24 +191,46 @@ function occurrenceKey(ref: { caseId: string; variantId: string; attempt: number
  * would refuse for binding reasons.
  */
 export function provenanceBindingViolations(
-  companion: Pick<ProvenanceCompanionV1, 'runId' | 'attempts'>,
+  companion: Pick<ProvenanceCompanionV1, 'runId' | 'attempts' | 'notRun'>,
   run: ProvenanceRun,
 ): string[] {
   const violations: string[] = []
   if (companion.runId !== run.runId) violations.push('runId does not match the run')
 
-  const runKeys = new Set(occurrenceKeys(run.records))
-  const companionKeys = new Set(companion.attempts.map(occurrenceKey))
+  const runKeys = new Set(runOccurrenceKeys(run.records))
+  const companionKeys = new Set(companion.attempts.map(companionOccurrenceKey))
   for (const key of runKeys) {
     if (!companionKeys.has(key)) {
-      const [caseId, variantId, attempt] = key.split('\u0000')
-      violations.push(`the companion is missing an entry for ${caseId}/${variantId} attempt ${attempt}`)
+      const parsed = parseOccurrenceKey(key)
+      violations.push(
+        parsed === null
+          ? `the companion is missing an entry for an unparseable occurrence key: ${key}`
+          : `the companion is missing an entry for ${parsed.caseId}/${parsed.variantId} attempt ${parsed.attempt}`,
+      )
     }
   }
   for (const key of companionKeys) {
     if (!runKeys.has(key)) {
-      const [caseId, variantId, attempt] = key.split('\u0000')
-      violations.push(`the companion has an entry with no run record: ${caseId}/${variantId} attempt ${attempt}`)
+      const parsed = parseOccurrenceKey(key)
+      violations.push(
+        parsed === null
+          ? `the companion has an entry with an unparseable occurrence key: ${key}`
+          : `the companion has an entry with no run record: ${parsed.caseId}/${parsed.variantId} attempt ${parsed.attempt}`,
+      )
+    }
+  }
+
+  // ADR-008 D4: observations for a not-run case must name a case the run did not
+  // execute. A pair the run executed is an attempt, not a not-run observation.
+  const runNotRun = new Set(
+    (run.notRun ?? []).map((entry) => JSON.stringify([entry.caseId, entry.variantId])),
+  )
+  for (const entry of companion.notRun) {
+    const pair = JSON.stringify([entry.caseId, entry.variantId])
+    if (!runNotRun.has(pair)) {
+      violations.push(
+        `the companion records a not-run observation for ${entry.caseId}/${entry.variantId}, which is not a not-run case in the run`,
+      )
     }
   }
   return violations
@@ -215,20 +287,71 @@ function parseInputs(
     if (!(INPUT_STATUSES as readonly string[]).includes(entry.status as string)) {
       violations.push(`${at}.status must be one of ${INPUT_STATUSES.join(', ')}`)
     }
-    // Submission order (ADR-008 D3): once the batch stops, every later entry stays
-    // `not-submitted`. A submitted status after that point would claim an
-    // observation the order cannot support, so it is refused.
-    if (entry.status === 'not-submitted') {
-      stopped = true
-    } else if (stopped) {
-      violations.push(`${at}.status follows a not-submitted entry, so the order cannot be established`)
+    // Submission order (ADR-008 D3): `rejected`, `no-acknowledgement` and
+    // `not-submitted` are terminal. A later *submitted* status would claim an
+    // observation the order cannot support, so it is refused; later entries may
+    // only be `not-submitted`.
+    const status = entry.status as InputStatus
+    const terminal =
+      status === 'rejected' || status === 'no-acknowledgement' || status === 'not-submitted'
+    if (stopped && status !== 'not-submitted') {
+      violations.push(`${at}.status follows a terminal input, so the order cannot be established`)
     }
+    if (terminal) stopped = true
     parsed.push({
       inputId,
       sourceId: entry.sourceId as string,
       requestMessageId: (entry.requestMessageId ?? null) as string | null,
       eventId: (entry.eventId ?? null) as string | null,
       status: entry.status as InputStatus,
+    })
+  })
+  return parsed
+}
+
+/**
+ * ADR-008 D4: a not-run case still retains the inputs that were actually
+ * submitted and observed. The observations live in the companion, keyed by the
+ * run's `(caseId, variantId)` not-run pairs; the run's `RecordedRunV1` shape is
+ * unchanged.
+ */
+function parseNotRun(
+  value: unknown,
+  violations: string[],
+): readonly ProvenanceNotRunEntry[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) {
+    violations.push('notRun must be an array')
+    return []
+  }
+  const parsed: ProvenanceNotRunEntry[] = []
+  const seen = new Set<string>()
+  value.forEach((entry, index) => {
+    const at = `notRun[${index}]`
+    if (!isObject(entry)) {
+      violations.push(`${at} must be an object`)
+      return
+    }
+    for (const key of Object.keys(entry)) {
+      if (!(NOT_RUN_KEYS as readonly string[]).includes(key)) {
+        violations.push(`${at}.${key} is not a recognised field`)
+      }
+    }
+    for (const key of NOT_RUN_KEYS) {
+      if (!(key in entry)) violations.push(`${at}.${key} is required`)
+    }
+    if (!nonBlank(entry.caseId)) violations.push(`${at}.caseId must be a non-empty string`)
+    if (!nonBlank(entry.variantId)) violations.push(`${at}.variantId must be a non-empty string`)
+    if (!nonBlank(entry.reason)) violations.push(`${at}.reason must be a non-empty string`)
+    const inputs = parseInputs(entry.inputs, `${at}.inputs`, violations)
+    const pair = JSON.stringify([entry.caseId, entry.variantId])
+    if (seen.has(pair)) violations.push(`${at} repeats the case and variant`)
+    seen.add(pair)
+    parsed.push({
+      caseId: entry.caseId as string,
+      variantId: entry.variantId as string,
+      reason: entry.reason as string,
+      inputs,
     })
   })
   return parsed
@@ -247,7 +370,7 @@ export function parseProvenance(
       violations.push(`${key} is not a recognised field`)
     }
   }
-  for (const key of ROOT_KEYS) {
+  for (const key of ROOT_REQUIRED_KEYS) {
     if (!(key in input)) violations.push(`${key} is required`)
   }
 
@@ -305,7 +428,27 @@ export function parseProvenance(
       violations.push(`${at}.recordSetRevision cannot be null when correlation is exact`)
     }
 
-    const key = `${entry.caseId}\u0000${entry.variantId}\u0000${entry.attempt}`
+    const inputs = parseInputs(entry.inputs, `${at}.inputs`, violations)
+    if (entry.correlation === 'exact') {
+      const submitted = inputs.filter(
+        (input) => input.status === 'accepted' || input.status === 'duplicate',
+      )
+      if (submitted.length === 0) {
+        violations.push(`${at}.correlation is exact but no accepted or duplicate input is recorded`)
+      } else if (
+        submitted.some((input) => input.requestMessageId === null || input.eventId === null)
+      ) {
+        violations.push(
+          `${at}.correlation is exact but an accepted input has no observed acknowledgement; record "missing" instead`,
+        )
+      }
+    }
+
+    const key = buildOccurrenceKey(
+      entry.caseId as string,
+      entry.variantId as string,
+      entry.attempt as number,
+    )
     if (seenKeys.has(key)) violations.push(`${at} repeats the occurrence key`)
     seenKeys.add(key)
 
@@ -313,17 +456,19 @@ export function parseProvenance(
       caseId: entry.caseId as string,
       variantId: entry.variantId as string,
       attempt: entry.attempt as number,
-      inputs: parseInputs(entry.inputs, `${at}.inputs`, violations),
+      inputs,
       recordSetRevision: (revision ?? null) as string | null,
       correlation: entry.correlation as Correlation,
     })
   })
 
+  const parsedNotRun = parseNotRun(input.notRun, violations)
+
   // The binding rules live in one place so the renderer applies the same ones.
   if (nonBlank(input.runId)) {
     violations.push(
       ...provenanceBindingViolations(
-        { runId: input.runId, attempts: parsedAttempts },
+        { runId: input.runId, attempts: parsedAttempts, notRun: parsedNotRun },
         run,
       ),
     )
@@ -337,6 +482,7 @@ export function parseProvenance(
       runId: input.runId as string,
       runDigest: claimedDigest as string,
       attempts: parsedAttempts,
+      notRun: parsedNotRun,
     },
   }
 }

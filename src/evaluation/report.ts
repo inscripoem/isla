@@ -363,6 +363,7 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
     const binding = provenanceBindingViolations(provenance, {
       runId: meta.runId,
       records: run.records,
+      notRun: run.notRun,
     })
     if (binding.length > 0) return { ok: false, violations: binding }
   }
@@ -398,6 +399,25 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
       '> `unscored` with `missing-input-identity`. Eligibility and scoring are not evaluated here —',
       '> they require human labels (protocol §3).',
     )
+    if (provenance.notRun.length > 0) {
+      lines.push(
+        '',
+        '### Not-run observations',
+        '',
+        '| Case | Variant | Reason | Prepared inputs |',
+        '| --- | --- | --- | --- |',
+      )
+      for (const entry of provenance.notRun) {
+        lines.push(
+          `| ${cell(entry.caseId)} | ${cell(entry.variantId)} | ${cell(entry.reason)} | ${preparedInputs(entry.inputs)} |`,
+        )
+      }
+      lines.push(
+        '',
+        '> These inputs were submitted or observed for a case the run did not execute. They are not',
+        '> attempts and are never scored (ADR-008 D4).',
+      )
+    }
   }
 
   lines.push(
