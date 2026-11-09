@@ -115,6 +115,35 @@ export function provenanceRunDigest(runBytes: string | Buffer): string {
   return createHash('sha256').update(runBytes).digest('hex')
 }
 
+/** NUL never appears in a validated case or variant id, so it cannot collide. */
+const OCCURRENCE_DELIMITER = '\u0000'
+
+export interface OccurrenceKeyParts {
+  readonly caseId: string
+  readonly variantId: string
+  readonly attempt: number
+}
+
+/** The single builder for `(caseId, variantId, attempt)` occurrence keys. */
+export function buildOccurrenceKey(caseId: string, variantId: string, attempt: number): string {
+  return `${caseId}${OCCURRENCE_DELIMITER}${variantId}${OCCURRENCE_DELIMITER}${attempt}`
+}
+
+/**
+ * The single parser for those keys. Returns `null` for a malformed key (wrong part
+ * count, empty id, non-integer or non-positive attempt), so a delimiter change
+ * cannot silently yield `NaN` in a field typed `number`.
+ */
+export function parseOccurrenceKey(key: string): OccurrenceKeyParts | null {
+  const parts = key.split(OCCURRENCE_DELIMITER)
+  if (parts.length !== 3) return null
+  const [caseId, variantId, raw] = parts
+  const attempt = Number(raw)
+  if (caseId.length === 0 || variantId.length === 0) return null
+  if (!Number.isInteger(attempt) || attempt < 1) return null
+  return { caseId, variantId, attempt }
+}
+
 /**
  * Occurrence key per record: `(caseId, variantId, attempt)` where `attempt` is the
  * 1-based occurrence of that `(caseId, variantId)` in the run file. Positional, so
@@ -125,10 +154,10 @@ export function runOccurrenceKeys(
 ): string[] {
   const seen = new Map<string, number>()
   return records.map((record) => {
-    const base = `${record.caseId}\u0000${record.variantId}`
+    const base = `${record.caseId}${OCCURRENCE_DELIMITER}${record.variantId}`
     const attempt = (seen.get(base) ?? 0) + 1
     seen.set(base, attempt)
-    return `${base}\u0000${attempt}`
+    return buildOccurrenceKey(record.caseId, record.variantId, attempt)
   })
 }
 
@@ -137,7 +166,7 @@ export function companionOccurrenceKey(ref: {
   variantId: string
   attempt: number
 }): string {
-  return `${ref.caseId}\u0000${ref.variantId}\u0000${ref.attempt}`
+  return buildOccurrenceKey(ref.caseId, ref.variantId, ref.attempt)
 }
 
 /**
@@ -157,14 +186,22 @@ export function provenanceBindingViolations(
   const companionKeys = new Set(companion.attempts.map(companionOccurrenceKey))
   for (const key of runKeys) {
     if (!companionKeys.has(key)) {
-      const [caseId, variantId, attempt] = key.split('\u0000')
-      violations.push(`the companion is missing an entry for ${caseId}/${variantId} attempt ${attempt}`)
+      const parsed = parseOccurrenceKey(key)
+      violations.push(
+        parsed === null
+          ? `the companion is missing an entry for an unparseable occurrence key: ${key}`
+          : `the companion is missing an entry for ${parsed.caseId}/${parsed.variantId} attempt ${parsed.attempt}`,
+      )
     }
   }
   for (const key of companionKeys) {
     if (!runKeys.has(key)) {
-      const [caseId, variantId, attempt] = key.split('\u0000')
-      violations.push(`the companion has an entry with no run record: ${caseId}/${variantId} attempt ${attempt}`)
+      const parsed = parseOccurrenceKey(key)
+      violations.push(
+        parsed === null
+          ? `the companion has an entry with an unparseable occurrence key: ${key}`
+          : `the companion has an entry with no run record: ${parsed.caseId}/${parsed.variantId} attempt ${parsed.attempt}`,
+      )
     }
   }
   return violations

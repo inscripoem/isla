@@ -294,9 +294,11 @@ function revision(revisionDigest: string | null): string {
   return revisionDigest === null ? 'null (unobserved)' : `\`${revisionDigest.slice(0, 12)}…\``
 }
 
-/** `eligible`, or the named reason it cannot be scored (protocol §3). */
+/** `provenance-eligible`, or the named reason it cannot be scored (protocol §3). */
 function eligibilityCell(eligibility: AttemptEligibility['eligibility']): string {
-  return eligibility.state === 'eligible' ? 'eligible' : `unscored (${eligibility.reason})`
+  return eligibility.state === 'provenance-eligible'
+    ? 'provenance-eligible'
+    : `unscored (${eligibility.reason})`
 }
 
 const STAGE_LABEL: Record<(typeof TIMING_STAGES)[number], string> = {
@@ -388,7 +390,7 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
       '> artifact. The command validates the digest, the occurrence-key set and the input order before',
       '> this table is written; this section repeats the accepted observations.',
       '',
-      '| Case | Variant | Attempt | Correlation | Record-set revision | Prepared inputs | Eligibility |',
+      '| Case | Variant | Attempt | Correlation | Record-set revision | Prepared inputs | Provenance eligibility |',
       '| --- | --- | --- | --- | --- | --- | --- |',
     )
     const eligibility = new Map(
@@ -411,9 +413,10 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
       '> `null (unobserved)` means the admitted record set was not captured, or was not observed;',
       '> `exact` correlation is refused in that case. `identity not-yet-observable` marks an input',
       '> whose fixture identity M5 has not exported (ADR-008 D5), so the attempt is',
-      '> `unscored (missing-input-identity)`. **No attempt is scored:** scoring needs human labels,',
-      '> which this report does not have. Condition eligibility (`condition-mismatch`) is not evaluated',
-      '> because the run records conditions per run, not per attempt (protocol §3 rule 5).',
+      '> `unscored (missing-input-identity)`. **`provenance-eligible` does not mean scored:** a scored',
+      '> attempt also needs a human-reviewed label, which this report does not have. Condition',
+      '> eligibility (`condition-mismatch`) is not evaluated because the run records conditions per',
+      '> run, not per attempt (protocol §3 rule 5).',
     )
   }
 

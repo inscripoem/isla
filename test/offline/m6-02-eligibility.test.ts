@@ -12,7 +12,7 @@ import { renderEvaluationReport } from '../../src/evaluation/report'
  * M6-02 — eligibility per attempt (protocol §3).
  *
  * The fixture is structural: it proves which named reason is chosen and in what
- * order, not that a real run is eligible.
+ * order, not that a real run is provenance-eligible.
  */
 
 const TIMING = {
@@ -91,7 +91,7 @@ describe('scoring eligibility (protocol §3)', () => {
       state: 'unscored',
       reason: 'missing-acknowledgement-link',
     })
-    expect(result[1]?.eligibility).toEqual({ state: 'eligible' })
+    expect(result[1]?.eligibility).toEqual({ state: 'provenance-eligible' })
   })
 
   it('marks an ambiguous link ambiguous-acknowledgement-link', () => {
@@ -161,7 +161,7 @@ describe('scoring eligibility (protocol §3)', () => {
     })
   })
 
-  it('accepts a duplicate submission with an identity as eligible', () => {
+  it('accepts a duplicate submission with an identity as provenance-eligible', () => {
     const result = evaluateEligibility(
       companion([
         attempt('case-1', { inputs: [{ ...INPUT, status: 'duplicate' }] }),
@@ -169,7 +169,7 @@ describe('scoring eligibility (protocol §3)', () => {
       ]),
       RECORDS,
     )
-    expect(result[0]?.eligibility).toEqual({ state: 'eligible' })
+    expect(result[0]?.eligibility).toEqual({ state: 'provenance-eligible' })
   })
 })
 
@@ -220,7 +220,7 @@ describe('eligibility in the rendered table', () => {
     notRun: [],
   })
 
-  it('renders the eligibility column and states that nothing is scored', () => {
+  it('renders the provenance-eligibility column and states that a scored attempt needs a label', () => {
     const parsed = parseRecordedRun(RUN_TEXT)
     expect(parsed.ok).toBe(true)
     if (!parsed.ok) return
@@ -233,9 +233,10 @@ describe('eligibility in the rendered table', () => {
     })
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.markdown).toContain('| Eligibility |')
+    expect(result.markdown).toContain('| Provenance eligibility |')
+    expect(result.markdown).toContain('provenance-eligible')
     expect(result.markdown).toContain('unscored (missing-input-identity)')
-    expect(result.markdown).toContain('**No attempt is scored:**')
+    expect(result.markdown).toContain('**`provenance-eligible` does not mean scored:**')
     expect(result.markdown).toContain('condition-mismatch')
   })
 

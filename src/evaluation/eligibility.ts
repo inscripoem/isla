@@ -1,6 +1,7 @@
 import type { AttemptRecord } from './metrics'
 import {
   companionOccurrenceKey,
+  parseOccurrenceKey,
   runOccurrenceKeys,
   type ProvenanceCompanionV1,
 } from './provenance'
@@ -17,6 +18,11 @@ import {
  * carries `FixedConditions` per run, not per attempt, so there is nothing to
  * compare an attempt against. The report states that limitation rather than
  * pretending the condition check passed.
+ *
+ * **`provenance-eligible` is not "may be scored".** It means rules 1–4 passed. A
+ * scored attempt also needs a human-reviewed label (protocol §1), which is a
+ * separate interface (#145) and is not an input to this module; the label gate sits
+ * outside it.
  */
 
 export const UNSCORED_REASONS = [
@@ -29,7 +35,7 @@ export const UNSCORED_REASONS = [
 export type UnscoredReason = (typeof UNSCORED_REASONS)[number]
 
 export type Eligibility =
-  | { readonly state: 'eligible' }
+  | { readonly state: 'provenance-eligible' }
   | { readonly state: 'unscored'; readonly reason: UnscoredReason }
 
 export interface AttemptEligibility {
@@ -39,7 +45,7 @@ export interface AttemptEligibility {
   readonly eligibility: Eligibility
 }
 
-const ELIGIBLE: Eligibility = { state: 'eligible' }
+const PROVENANCE_ELIGIBLE: Eligibility = { state: 'provenance-eligible' }
 const unscored = (reason: UnscoredReason): Eligibility => ({ state: 'unscored', reason })
 
 /**
@@ -83,7 +89,10 @@ export function evaluateEligibility(
 
 function attemptOf(key: string | undefined): number {
   if (key === undefined) return 1
-  return Number(key.split('\u0000')[2])
+  const parsed = parseOccurrenceKey(key)
+  // The key is built by `runOccurrenceKeys`; a malformed key is a programming error.
+  if (parsed === null) throw new Error(`unexpected occurrence key: ${key}`)
+  return parsed.attempt
 }
 
 function eligibilityOf(entry: {
@@ -97,6 +106,8 @@ function eligibilityOf(entry: {
   if (entry.correlation === 'missing') return unscored('missing-acknowledgement-link')
   if (entry.correlation === 'ambiguous') return unscored('ambiguous-acknowledgement-link')
 
+  // `correlation: 'exact'` with a null `recordSetRevision` is already refused by
+  // `parseProvenance` (`provenance.ts`), so the combination is unreachable here.
   // The dialogue ran on an accepted (or duplicate) submission; without an
   // observable identity for that input there is no fixture to score against.
   const submitted = entry.inputs.filter(
@@ -108,5 +119,5 @@ function eligibilityOf(entry: {
 
   if (entry.recordSetRevision === null) return unscored('missing-history-observation')
 
-  return ELIGIBLE
+  return PROVENANCE_ELIGIBLE
 }

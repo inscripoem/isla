@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { parseRecordedRun } from '../../src/evaluation/recorded-run'
 import {
+  buildOccurrenceKey,
+  parseOccurrenceKey,
   parseProvenance,
   provenanceRunDigest,
   type ProvenanceParse,
@@ -310,5 +312,34 @@ describe('provenance companion (ADR-008)', () => {
       ),
     )
     expect(violations.some((violation) => violation.includes('must be an object'))).toBe(true)
+  })
+})
+
+
+describe('occurrence key helpers', () => {
+  it('round-trips the built key', () => {
+    expect(parseOccurrenceKey(buildOccurrenceKey('case-1', 'v1', 2))).toEqual({
+      caseId: 'case-1',
+      variantId: 'v1',
+      attempt: 2,
+    })
+  })
+
+  it('refuses a malformed key instead of yielding NaN', () => {
+    for (const key of [
+      '',
+      'case-1',
+      'case-1\u0000v1',
+      'case-1\u0000v1\u0000x',
+      'case-1\u0000v1\u00000',
+      'case-1\u0000v1\u0000-1',
+      '\u0000v1\u00001',
+    ]) {
+      expect(parseOccurrenceKey(key)).toBeNull()
+    }
+  })
+
+  it('refuses a key built with a different delimiter', () => {
+    expect(parseOccurrenceKey('case-1-v1-1')).toBeNull()
   })
 })
