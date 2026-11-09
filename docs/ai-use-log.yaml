@@ -4726,3 +4726,45 @@ entries:
       not_run: >-
         No labels, no scoring and no condition-mismatch evaluation. The shape
         remains unconfirmed.
+
+  - date: "2026-11-09"
+    task: "M6-02 / #103"
+    branch: m6-eligibility
+    change: >-
+      Address M4's review at `a4b0595`: rename the `eligible` state to
+      `provenance-eligible` and state that a scored attempt also needs a
+      human-reviewed label, whose gate stays outside this module; add one exported
+      occurrence-key builder/parser in `provenance.ts` used by `runOccurrenceKeys`,
+      `companionOccurrenceKey`, `attemptOf` and the binding checks, refusing a
+      malformed key instead of yielding `NaN`; record that `exact` with a null
+      `recordSetRevision` is refused at parse time. The report column becomes
+      "Provenance eligibility" and its footnote says provenance-eligible is not
+      scored. No scoring rule, label join, provider call or threshold.
+    requirements: [NFR-01, NFR-04]
+    invariants: []
+    cases: []
+    commits: [5e5a8b1]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
+      the Captain approved the review-fix slice (D1=A, D2, D3, D4). M4's review is
+      the specification; no approval is claimed and the label gate remains with
+      #145.
+    human_review: >-
+      Captain (M6) approved the fix plan; M4 re-review requested at `5e5a8b1`.
+      No merge, scoring or checkpoint acceptance is claimed.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export was produced.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: a4b0595 (PR #143 branch, stacked on m6-02-provenance)
+      role: "test:m6 225/225 in 17 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0: 1561/1561 in 75 files; typecheck clean; lint clean."
+      mutation: >-
+        Reverting the state name turned two eligibility tests red; changing the
+        occurrence-key delimiter turned the key tests red; both restored.
+      not_run: >-
+        No labels, scoring or condition-mismatch evaluation. Remote CI had not run
+        at the time of this entry; the PR's verify run is the gate.
