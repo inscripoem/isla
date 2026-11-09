@@ -74,6 +74,11 @@ id, the companion also carries `runDigest`: the SHA-256 of the exact run artifac
 for one case and variant leaves the key set unchanged but changes the digest, so the companion is refused.
 Duplicate companion keys are refused; a digest mismatch is refused.
 
+The digest is **producer-asserted**, not verified evidence about admission (M4 review, 2026-11-06). The
+parser can prove that the digest names the bytes on disk; it cannot prove that a non-null
+`recordSetRevision` is the set an attempt actually admitted, and an empty-set digest for a `none` or
+`local` run is indistinguishable from an invented one. The report does not claim that verification.
+
 ### D3 — Every input carries an explicit status
 
 `inputs[]` holds one entry per prepared input in submission order, each with
@@ -170,9 +175,10 @@ own triggers; this ADR deliberately does not take it.
 | --- | --- | --- | --- |
 | 1 | ~~Is `(corpusVersion, casesSha256, caseId, candidate.eventId)` the stable corpus identity?~~ | M3 | **Closed 2026-10-29** — confirmed for v1; `inputId` still needs M5's export |
 | 2 | ~~Does `history.source: 'none'` carry the empty-set digest or `null`?~~ | M4 | **Closed 2026-10-28** — empty-set digest for `none`; `null` means unobserved |
-| 3 | Who exports the per-input acknowledgement, and in what shape? | M5 | `requestMessageId`/`eventId` may stay `null`; correlation is `missing` |
+| 3 | Who exports the per-input acknowledgement — `sourceId`, `requestMessageId`, `eventId` — and in what shape? | M5 | `requestMessageId`/`eventId` may stay `null`; correlation is `missing`. The producing export of all three must be pinned before any CP05 scoring that joins an attempt to dialogue-side records (M4, 2026-11-08); eligibility must cite names, not conventions. |
 
-Rows 1 and 2 are closed by M3's and M4's answers; row 3 is the only blocking decision left.
+Rows 1 and 2 are closed by M3's and M4's answers; row 3 is the only blocking decision left. It blocks
+CP05 scoring, not the companion's merge.
 
 ## Re-open triggers
 
