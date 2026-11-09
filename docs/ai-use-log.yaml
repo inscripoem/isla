@@ -5460,3 +5460,42 @@ entries:
       not_run: >-
         No independent review of the rebased head, no live provider run and no
         shape confirmation.
+
+  - date: "2026-11-09"
+    task: "M6-02 / #100"
+    branch: m6-02-provenance
+    change: >-
+      Address M5's four review findings on the provenance companion. `exact`
+      now requires an accepted/duplicate input with both `requestMessageId` and
+      `eventId`; `rejected`, `no-acknowledgement` and `not-submitted` are
+      terminal for submission order; the companion gains an optional `notRun[]`
+      carrying observed inputs for cases the run did not execute; the occurrence
+      key is a JSON tuple so a delimiter inside an identifier cannot collide.
+      ADR-008 D2/D3/D4/D8 and Delta-008 record the changes. No threshold, label,
+      score or acceptance is added.
+    requirements: [NFR-01, NFR-04]
+    invariants: []
+    cases: []
+    commits: [5c19e69]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
+      the Captain approved F1+F2 with the recommended exact-acknowledgement,
+      notRun[] and JSON-tuple options. M5's review is the specification.
+    human_review: >-
+      Captain (M6) approved the fix plan; M5/M4 re-review requested. No merge or
+      checkpoint acceptance is claimed.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export was produced.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: 344161e (PR #140 head)
+      role: "provenance 29 tests; command 13; test:m6 225/225 in 16 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0: 1583/1583 in 76 files; typecheck clean; lint clean."
+      mutation: >-
+        Disabling the exact rule, the terminal rule, the notRun binding or the
+        JSON key each turned its own test red; all restored.
+      not_run: >-
+        No live provider, labels or scoring. Remote CI is the gate after push.
