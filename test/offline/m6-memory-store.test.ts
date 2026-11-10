@@ -35,6 +35,21 @@ function episode(id: string, audienceId: string | null, createdAtMs = 0) {
   }
 }
 
+function topic(id: string, audienceId: string, updatedAtMs = 0) {
+  return {
+    id,
+    audienceId,
+    topic: 'topic',
+    summary: 'summary',
+    importance: 0.5,
+    lastSeenMs: 0,
+    sourceEpisodeIds: ['e1'],
+    validFromMs: 0,
+    validToMs: null,
+    updatedAtMs,
+  }
+}
+
 afterEach(() => {
   for (const database of open.splice(0)) database.close()
   for (const dir of directories.splice(0)) rmSync(dir, { recursive: true, force: true })
@@ -77,7 +92,8 @@ describe('M6 memory store — schema and derived memory', () => {
 
   it('persists the projection cursor across reopen', () => {
     const store = storeAt()
-    store.writeProjection('s1', 5, 1000)
+    expect(store.writeProjection('s1', 5, 1000)).toBe('written')
+    expect(store.writeProjection('s1', 3, 2000)).toBe('stale')
     expect(store.readProjection('s1')).toBe(5)
     open[0]!.close()
     open.pop()
@@ -94,18 +110,52 @@ describe('M6 memory store — schema and derived memory', () => {
       fixtureRuntimeEvent({ eventId: 'e2', seq: 2, sessionId: 's1', timestampMs: 20 }),
     ]
     store.upsertEpisode(episode('stale', null))
-    const result = store.rebuildDerived(events, (sessionEvents) => [
-      episode(`derived-${sessionEvents[0]?.sessionId}`, null, 20),
-    ])
-    expect(result).toEqual({ sessions: 1, episodes: 1 })
+    store.upsertTopic(topic('stale-topic', 'aud-1'))
+    const result = store.rebuildDerived(
+      events,
+      (sessionEvents) => [episode(`derived-${sessionEvents[0]?.sessionId}`, null, 20)],
+      () => [topic('derived-topic', 'aud-1')],
+    )
+    expect(result).toEqual({ sessions: 1, episodes: 1, topics: 1 })
     expect(store.readEpisodes({ sessionId: 's1', limit: 10 }).map((row) => row.id)).toEqual([
       'derived-s1',
     ])
+    expect(store.readTopics({ audienceId: 'aud-1', limit: 10 }).map((row) => row.id)).toEqual([
+      'derived-topic',
+    ])
     expect(store.readProjection('s1')).toBe(2)
+  })
+
+  it('upserts topics idempotently and clears derived rows', () => {
+    const store = storeAt()
+    store.upsertTopic(topic('t1', 'aud-1'))
+    store.upsertTopic({ ...topic('t1', 'aud-1'), summary: 'updated' })
+    expect(store.readTopics({ audienceId: 'aud-1', limit: 10 })).toHaveLength(1)
+    expect(store.readTopics({ audienceId: 'aud-1', limit: 10 })[0]?.summary).toBe('updated')
+    store.clearDerived()
+    expect(store.readTopics({ audienceId: 'aud-1', limit: 10 })).toHaveLength(0)
   })
 })
 
 describe('M6 memory store — audience, owner and state', () => {
+  it('records a session audience once and refuses a different binding', () => {
+    const store = storeAt()
+    expect(
+      store.recordSessionAudience('s1', { audienceId: 'aud-1', durable: true, consent: true }, 1),
+    ).toBe('recorded')
+    expect(
+      store.recordSessionAudience('s1', { audienceId: 'aud-1', durable: true, consent: true }, 2),
+    ).toBe('recorded')
+    expect(
+      store.recordSessionAudience('s1', { audienceId: 'aud-2', durable: true, consent: true }, 3),
+    ).toBe('conflict')
+    const row = open[0]!
+      .prepare('SELECT audience_id, created_at_ms FROM session_audience WHERE session_id = ?')
+      .get('s1') as { audience_id: string; created_at_ms: number }
+    expect(row.audience_id).toBe('aud-1')
+    expect(row.created_at_ms).toBe(1)
+  })
+
   it('records an owner once and refuses a different owner', () => {
     const store = storeAt()
     const key = { sessionId: 's1', turnId: 't1', segmentId: 'seg1' }
@@ -122,12 +172,16 @@ describe('M6 memory store — audience, owner and state', () => {
       { ok: true, version: 1 },
     )
     expect(
-      store.writeState({ sessionId: 's1', audienceId: 'aud-1', state, expectedVersion: 1, nowMs: 2 }),
+      store.writeState({ sessionId: 's1', audienceId: 'aud-2', state, expectedVersion: 1, nowMs: 2 }),
     ).toEqual({ ok: true, version: 2 })
     expect(
       store.writeState({ sessionId: 's1', audienceId: 'aud-1', state, expectedVersion: 1, nowMs: 3 }),
     ).toEqual({ ok: false, reason: 'conflict' })
     expect(store.readState('s1')).toEqual({ state, version: 2 })
+    const row = open[0]!
+      .prepare('SELECT audience_id FROM session_state WHERE session_id = ?')
+      .get('s1') as { audience_id: string | null }
+    expect(row.audience_id).toBe('aud-1')
   })
 
   it('deletes one audience and leaves the other intact', () => {
@@ -152,8 +206,16 @@ describe('M6 memory store — audience, owner and state', () => {
     const day = 24 * 60 * 60 * 1000
     store.upsertEpisode(episode('old', 'aud-1', 0))
     store.upsertEpisode(episode('new', 'aud-1', 10 * day))
+    store.recordSessionAudience('old-s', { audienceId: 'aud-1', durable: true, consent: true }, 0)
+    store.recordSessionAudience('new-s', { audienceId: 'aud-1', durable: true, consent: true }, 10 * day)
+    store.recordDeliveryOwner({ sessionId: 'old-s', turnId: 't', segmentId: 's' }, 'aud-1')
+    store.recordDeliveryOwner({ sessionId: 'new-s', turnId: 't', segmentId: 's' }, 'aud-1')
     const counts = store.deleteOlderThan(1, 10 * day)
     expect(counts.derived_episode).toBe(1)
+    expect(counts.session_audience).toBe(1)
+    expect(counts.delivery_owner).toBe(1)
+    expect(store.ownerOf({ sessionId: 'old-s', turnId: 't', segmentId: 's' })).toBeNull()
+    expect(store.ownerOf({ sessionId: 'new-s', turnId: 't', segmentId: 's' })).toBe('aud-1')
     expect(store.readEpisodes({ audienceId: 'aud-1', limit: 10 }).map((row) => row.id)).toEqual([
       'new',
     ])
@@ -163,6 +225,14 @@ describe('M6 memory store — audience, owner and state', () => {
     const store = storeAt()
     store.upsertEpisode(episode('e1', 'aud-1'))
     store.upsertEpisode(episode('e2', 'aud-2'))
+    store.upsertTopic(topic('t1', 'aud-1'))
+    store.writeState({
+      sessionId: 's1',
+      audienceId: 'aud-1',
+      state: { mood: 0, stress: 0, energy: 0, attachment: 0, confidence: 0 },
+      expectedVersion: 0,
+      nowMs: 1,
+    })
     store.recordDeliveryOwner({ sessionId: 's1', turnId: 't1', segmentId: 'seg1' }, 'aud-1')
     open[0]!
       .prepare(`
@@ -175,6 +245,12 @@ describe('M6 memory store — audience, owner and state', () => {
     const lines = store.exportAudience('aud-1').trim().split('\n').map((line) => JSON.parse(line))
     expect(lines.some((line) => line.kind === 'episode' && line.id === 'e1')).toBe(true)
     expect(lines.some((line) => line.kind === 'event' && line.eventId === 'ev1')).toBe(true)
+    expect(lines.some((line) => line.kind === 'topic' && line.id === 't1')).toBe(true)
+    expect(
+      lines.filter((line) => line.kind === 'event' || line.kind === 'state').every(
+        (line) => line.audienceId === 'aud-1',
+      ),
+    ).toBe(true)
     expect(lines.some((line) => line.id === 'e2')).toBe(false)
   })
 })

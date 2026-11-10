@@ -117,7 +117,8 @@ function score(
   const top = run.retrieved.slice(0, k)
   const hits = top.filter((id) => expected.has(id)).length
   const recallAtK = probe.expected.length === 0 ? null : hits / probe.expected.length
-  const precisionAtK = hits / k
+  // No expected ids means no precision to report; an empty set is not a zero score.
+  const precisionAtK = probe.expected.length === 0 ? null : hits / k
   const answerAccuracy =
     probe.expectedAnswer === undefined ? null : run.answer === probe.expectedAnswer ? 1 : 0
   const status: ProbeStatus =

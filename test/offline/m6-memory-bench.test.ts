@@ -64,11 +64,14 @@ describe('M6 memory benchmark', () => {
   it('aggregates tokens per turn, p95 latency and the excluded count', async () => {
     const report = await runMemoryBench(CASES, runGood, { generatedAt: '2026-11-10' })
     expect(report.aggregates.recallAtK).toBeCloseTo(0.75)
-    expect(report.aggregates.precisionAtK).toBeCloseTo(0.2778, 3)
+    expect(report.aggregates.precisionAtK).toBeCloseTo(0.4167, 3)
     expect(report.aggregates.answerAccuracy).toBe(1)
     expect(report.aggregates.tokensPerTurn).toBe(20)
     expect(report.aggregates.p95LatencyMs).toBe(100)
     expect(report.aggregates.excludedCount).toBe(1)
+    expect(report.byKind.recall.recallAtK).toBe(0.5)
+    expect(report.byKind.persona.recallAtK).toBe(1)
+    expect(report.byKind.contradiction.scored).toBe(0)
   })
 
   it('is deterministic for the same input and generatedAt', async () => {

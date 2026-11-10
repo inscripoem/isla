@@ -71,17 +71,21 @@ export interface MemoryStore {
   readEpisodes(query: { sessionId?: string; audienceId?: string; limit: number }): DerivedEpisode[]
   readTopics(query: { audienceId: string; limit: number }): DerivedTopic[]
   readProjection(sessionId: string): number
-  writeProjection(sessionId: string, appliedSeq: number, nowMs: number): void
+  writeProjection(sessionId: string, appliedSeq: number, nowMs: number): 'written' | 'stale'
   clearDerived(): void
   rebuildDerived(
     events: readonly RuntimeEvent[],
-    derive: (events: readonly RuntimeEvent[]) => readonly DerivedEpisode[],
-  ): { sessions: number; episodes: number }
+    deriveEpisodes: (events: readonly RuntimeEvent[]) => readonly DerivedEpisode[],
+    deriveTopics?: (
+      episodes: readonly DerivedEpisode[],
+      events: readonly RuntimeEvent[],
+    ) => readonly DerivedTopic[],
+  ): { sessions: number; episodes: number; topics: number }
   recordSessionAudience(
     sessionId: string,
     binding: { audienceId: string | null; durable: boolean; consent: boolean },
     nowMs: number,
-  ): void
+  ): 'recorded' | 'conflict'
   recordDeliveryOwner(key: OwnerKey, audienceId: string): OwnerWrite
   ownerOf(key: OwnerKey): string | null
   readState(sessionId: string): StoredCharacterState | null
@@ -138,6 +142,14 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
     ON CONFLICT(session_id) DO UPDATE SET
       applied_seq = excluded.applied_seq, updated_at_ms = excluded.updated_at_ms
   `)
+  const readAudience = database.prepare(
+    'SELECT audience_id, durable, consent FROM session_audience WHERE session_id = ?',
+  )
+  const insertAudience = database.prepare(`
+    INSERT INTO session_audience (session_id, audience_id, durable, consent, created_at_ms)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(session_id) DO NOTHING
+  `)
   const readOwner = database.prepare(
     'SELECT audience_id FROM delivery_owner WHERE session_id = ? AND turn_id = ? AND segment_id = ?',
   )
@@ -157,7 +169,7 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
   `)
   const updateState = database.prepare(`
     UPDATE session_state SET
-      audience_id = ?, mood = ?, stress = ?, energy = ?, attachment = ?, confidence = ?,
+      audience_id = COALESCE(audience_id, ?), mood = ?, stress = ?, energy = ?, attachment = ?, confidence = ?,
       version = version + 1, updated_at_ms = ?
     WHERE session_id = ? AND version = ?
   `)
@@ -266,7 +278,11 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
     },
 
     writeProjection(sessionId, appliedSeq, nowMs) {
+      const current = (readProjection.get(sessionId) as { applied_seq: number } | undefined)
+        ?.applied_seq ?? 0
+      if (appliedSeq <= current) return 'stale'
       writeProjection.run(sessionId, appliedSeq, nowMs)
+      return 'written'
     },
 
     clearDerived() {
@@ -274,7 +290,7 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
       database.exec('DELETE FROM derived_topic')
     },
 
-    rebuildDerived(events, derive) {
+    rebuildDerived(events, deriveEpisodes, deriveTopics) {
       const sessions = new Map<string, RuntimeEvent[]>()
       for (const event of events) {
         const list = sessions.get(event.sessionId) ?? []
@@ -284,9 +300,12 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
       database.exec('BEGIN')
       try {
         database.exec('DELETE FROM derived_episode')
+        database.exec('DELETE FROM derived_topic')
         let episodes = 0
+        let topics = 0
         for (const [sessionId, sessionEvents] of sessions) {
-          for (const episode of derive(sessionEvents)) {
+          const derivedEpisodes = deriveEpisodes(sessionEvents)
+          for (const episode of derivedEpisodes) {
             insertEpisode.run(
               episode.id,
               episode.sessionId,
@@ -302,11 +321,33 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
             )
             episodes += 1
           }
-          const last = Math.max(...sessionEvents.map((event) => event.seq))
-          writeProjection.run(sessionId, last, sessionEvents[0]?.timestampMs ?? 0)
+          for (const topic of deriveTopics?.(derivedEpisodes, sessionEvents) ?? []) {
+            insertTopic.run(
+              topic.id,
+              topic.audienceId,
+              topic.topic,
+              topic.summary,
+              topic.importance,
+              topic.lastSeenMs,
+              JSON.stringify(topic.sourceEpisodeIds),
+              topic.validFromMs,
+              topic.validToMs,
+              topic.updatedAtMs,
+            )
+            topics += 1
+          }
+          let lastSeq = -1
+          let lastTimestamp = 0
+          for (const event of sessionEvents) {
+            if (event.seq > lastSeq) {
+              lastSeq = event.seq
+              lastTimestamp = event.timestampMs
+            }
+          }
+          writeProjection.run(sessionId, lastSeq, lastTimestamp)
         }
         database.exec('COMMIT')
-        return { sessions: sessions.size, episodes }
+        return { sessions: sessions.size, episodes, topics }
       } catch (error) {
         database.exec('ROLLBACK')
         throw error
@@ -314,15 +355,22 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
     },
 
     recordSessionAudience(sessionId, binding, nowMs) {
-      database
-        .prepare(`
-          INSERT INTO session_audience (session_id, audience_id, durable, consent, created_at_ms)
-          VALUES (?, ?, ?, ?, ?)
-          ON CONFLICT(session_id) DO UPDATE SET
-            audience_id = excluded.audience_id, durable = excluded.durable,
-            consent = excluded.consent, created_at_ms = excluded.created_at_ms
-        `)
-        .run(sessionId, binding.audienceId, binding.durable ? 1 : 0, binding.consent ? 1 : 0, nowMs)
+      insertAudience.run(
+        sessionId,
+        binding.audienceId,
+        binding.durable ? 1 : 0,
+        binding.consent ? 1 : 0,
+        nowMs,
+      )
+      const row = readAudience.get(sessionId) as
+        | { audience_id: string | null; durable: number; consent: number }
+        | undefined
+      const same =
+        row !== undefined &&
+        row.audience_id === binding.audienceId &&
+        row.durable === (binding.durable ? 1 : 0) &&
+        row.consent === (binding.consent ? 1 : 0)
+      return same ? 'recorded' : 'conflict'
     },
 
     recordDeliveryOwner: ownerWrite,
@@ -434,6 +482,10 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
             )
             .run(cutoff).changes,
         )
+        counts.session_audience = Number(
+          database.prepare('DELETE FROM session_audience WHERE created_at_ms < ?').run(cutoff)
+            .changes,
+        )
         database.exec('COMMIT')
         return counts
       } catch (error) {
@@ -459,6 +511,7 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
         lines.push(
           JSON.stringify({
             kind: 'state',
+            audienceId,
             sessionId: row.session_id,
             version: row.version,
             mood: row.mood,
@@ -482,6 +535,7 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
         lines.push(
           JSON.stringify({
             kind: 'event',
+            audienceId,
             sessionId: row.session_id,
             eventId: row.event_id,
             seq: row.seq,
