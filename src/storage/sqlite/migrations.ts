@@ -26,7 +26,7 @@ import type { DatabaseSync } from 'node:sqlite'
  */
 
 /** Highest schema version this build knows how to produce. */
-export const LATEST_SCHEMA_VERSION = 2
+export const LATEST_SCHEMA_VERSION = 3
 
 export interface Migration {
   readonly version: number
@@ -126,6 +126,86 @@ export const BUILT_IN_MIGRATIONS: readonly Migration[] = [
         }
         database.exec('ALTER TABLE deliveries DROP COLUMN persona_version')
       }
+    },
+  },
+  {
+    version: 3,
+    up(database) {
+      // M6 memory foundation (ADR pending reservation in #25): derived memory, the
+      // durable projection cursor, audience/owner attribution and character state.
+      // Ids only in the derived tables; no copied text, no vector columns.
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS derived_episode (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          audience_id TEXT,
+          start_ms REAL NOT NULL,
+          end_ms REAL NOT NULL,
+          topic TEXT NOT NULL,
+          summary TEXT NOT NULL,
+          importance REAL NOT NULL,
+          source_turn_ids TEXT NOT NULL,
+          extractor_version TEXT NOT NULL,
+          created_at_ms REAL NOT NULL
+        )
+      `)
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS derived_topic (
+          id TEXT PRIMARY KEY,
+          audience_id TEXT NOT NULL,
+          topic TEXT NOT NULL,
+          summary TEXT NOT NULL,
+          importance REAL NOT NULL,
+          last_seen_ms REAL NOT NULL,
+          source_episode_ids TEXT NOT NULL,
+          valid_from_ms REAL NOT NULL,
+          valid_to_ms REAL,
+          updated_at_ms REAL NOT NULL
+        )
+      `)
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS projection_state (
+          session_id TEXT PRIMARY KEY,
+          applied_seq INTEGER NOT NULL,
+          updated_at_ms REAL NOT NULL
+        )
+      `)
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS session_audience (
+          session_id TEXT PRIMARY KEY,
+          audience_id TEXT,
+          durable INTEGER NOT NULL,
+          consent INTEGER NOT NULL,
+          created_at_ms REAL NOT NULL
+        )
+      `)
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS delivery_owner (
+          session_id TEXT NOT NULL,
+          turn_id TEXT NOT NULL,
+          segment_id TEXT NOT NULL,
+          audience_id TEXT NOT NULL,
+          PRIMARY KEY (session_id, turn_id, segment_id)
+        )
+      `)
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS session_state (
+          session_id TEXT PRIMARY KEY,
+          audience_id TEXT,
+          mood REAL NOT NULL,
+          stress REAL NOT NULL,
+          energy REAL NOT NULL,
+          attachment REAL NOT NULL,
+          confidence REAL NOT NULL,
+          version INTEGER NOT NULL,
+          updated_at_ms REAL NOT NULL
+        )
+      `)
+      database.exec('CREATE INDEX IF NOT EXISTS derived_episode_session ON derived_episode (session_id)')
+      database.exec('CREATE INDEX IF NOT EXISTS derived_episode_audience ON derived_episode (audience_id)')
+      database.exec('CREATE INDEX IF NOT EXISTS derived_topic_audience ON derived_topic (audience_id)')
+      database.exec('CREATE INDEX IF NOT EXISTS delivery_owner_audience ON delivery_owner (audience_id)')
+      database.exec('CREATE INDEX IF NOT EXISTS session_state_audience ON session_state (audience_id)')
     },
   },
 ]
