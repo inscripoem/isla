@@ -37,7 +37,7 @@ requirement or case ID.
 - **Acknowledgement and timing export** — M5, #101.
 - **Physical input/playback/Stop observation** — M1/M2, #102.
 - **CP05 provider access and credentials** — M5/operator; pilot readiness is unconfirmed.
-- **ADR-008 coordination** — M3/M4/M5 are affected reviewers for #100. M3 and M4 approved their respective ADR scopes on #66 at `9bd5bcf`; M5 coordinates the still-unpinned acknowledgement export. ADR-008 decision 3 blocks CP05 scoring, not the companion merge by itself. Separate team design decisions, outstanding #140 code review and GitHub branch rules remain distinct.
+- **ADR-008 coordination** — M3/M4/M5 are affected reviewers for #100. M3 answered the identity scope and M4 answered D7 on #66 at `9bd5bcf`; neither is an approval of ADR-008 as a whole. M5 coordinates the still-unpinned acknowledgement export. ADR-008 decision 3 blocks CP05 scoring, not the companion merge by itself. Separate team design decisions, outstanding #140 code review and GitHub branch rules remain distinct.
 - **Threshold baseline** — M6, only after a measured pilot.
 
 ## Verdict
