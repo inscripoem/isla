@@ -351,7 +351,7 @@ function parseNotRun(
     }
     if (!nonBlank(entry.caseId)) violations.push(`${at}.caseId must be a non-empty string`)
     if (!nonBlank(entry.variantId)) violations.push(`${at}.variantId must be a non-empty string`)
-    const occurrence = entry.occurrence ?? 1
+    const occurrence = entry.occurrence === undefined ? 1 : entry.occurrence
     if (typeof occurrence !== 'number' || !Number.isInteger(occurrence) || occurrence < 1) {
       violations.push(`${at}.occurrence must be an integer ≥ 1`)
     }

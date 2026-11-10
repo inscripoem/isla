@@ -444,6 +444,23 @@ describe('M5 review rules (2026-11-09)', () => {
 
 
 describe('not-run observations (ADR-008 D4)', () => {
+  it('refuses a null occurrence', () => {
+    const violations = refused(
+      parseProvenance(
+        companion({
+          notRun: [
+            { caseId: 'case-9', variantId: 'v1', occurrence: null, inputs: [INPUT] },
+          ],
+        }),
+        RUN,
+        RUN_TEXT,
+      ),
+    )
+    expect(
+      violations.some((violation) => violation.includes('occurrence must be an integer')),
+    ).toBe(true)
+  })
+
   it('refuses the removed companion reason field', () => {
     const violations = refused(
       parseProvenance(
