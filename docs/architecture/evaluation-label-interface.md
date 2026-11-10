@@ -38,6 +38,14 @@ held-out set. The v1 hash covers canonical corpus content (requests, labels, rev
 semantics), **not the raw manifest bytes**, so an adapter must preserve that identity rather than re-hash
 the file as stored.
 
+## Input identity and acknowledgements
+
+`sourceId` names the corpus source. Its exact identifier and the component that supplies it are pending
+M5's mapping in #101; the runtime input-channel `source` is not automatically that id. For an `accepted`
+or `duplicate` submission, M5's adapter carries `requestMessageId` and `eventId`; a `rejected` submission
+carries the request id and no event id. The label join never infers either from text, array position or a
+runtime id.
+
 ## File and key
 
 - One label file per corpus version, identified by `(corpusVersion, casesSha256)`.
