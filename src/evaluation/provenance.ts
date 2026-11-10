@@ -116,17 +116,18 @@ export function provenanceRunDigest(runBytes: string | Buffer): string {
 }
 
 /** NUL never appears in a validated case or variant id, so it cannot collide. */
-const OCCURRENCE_DELIMITER = '\u0000'
-
 export interface OccurrenceKeyParts {
   readonly caseId: string
   readonly variantId: string
   readonly attempt: number
 }
 
-/** The single builder for `(caseId, variantId, attempt)` occurrence keys. */
+/**
+ * The single builder for `(caseId, variantId, attempt)` occurrence keys. JSON encoding
+ * makes the boundary explicit, so a delimiter inside an identifier cannot collide.
+ */
 export function buildOccurrenceKey(caseId: string, variantId: string, attempt: number): string {
-  return `${caseId}${OCCURRENCE_DELIMITER}${variantId}${OCCURRENCE_DELIMITER}${attempt}`
+  return JSON.stringify([caseId, variantId, attempt])
 }
 
 /**
@@ -135,12 +136,17 @@ export function buildOccurrenceKey(caseId: string, variantId: string, attempt: n
  * cannot silently yield `NaN` in a field typed `number`.
  */
 export function parseOccurrenceKey(key: string): OccurrenceKeyParts | null {
-  const parts = key.split(OCCURRENCE_DELIMITER)
-  if (parts.length !== 3) return null
-  const [caseId, variantId, raw] = parts
-  const attempt = Number(raw)
-  if (caseId.length === 0 || variantId.length === 0) return null
-  if (!Number.isInteger(attempt) || attempt < 1) return null
+  let value: unknown
+  try {
+    value = JSON.parse(key)
+  } catch {
+    return null
+  }
+  if (!Array.isArray(value) || value.length !== 3) return null
+  const [caseId, variantId, attempt] = value
+  if (typeof caseId !== 'string' || caseId.length === 0) return null
+  if (typeof variantId !== 'string' || variantId.length === 0) return null
+  if (typeof attempt !== 'number' || !Number.isInteger(attempt) || attempt < 1) return null
   return { caseId, variantId, attempt }
 }
 
@@ -154,7 +160,7 @@ export function runOccurrenceKeys(
 ): string[] {
   const seen = new Map<string, number>()
   return records.map((record) => {
-    const base = `${record.caseId}${OCCURRENCE_DELIMITER}${record.variantId}`
+    const base = JSON.stringify([record.caseId, record.variantId])
     const attempt = (seen.get(base) ?? 0) + 1
     seen.set(base, attempt)
     return buildOccurrenceKey(record.caseId, record.variantId, attempt)
