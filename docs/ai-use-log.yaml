@@ -6325,3 +6325,219 @@ entries:
       not_run: >-
         No M4 adapter, no M5 runtime wiring, no push before the local run, no
         CP08 acceptance.
+  - date: "2026-11-10"
+    task: M4-146-A01-listener-transcript
+    change: >-
+      Add an optional, default-off listener-history port and a merged
+      listener/character transcript for the dialogue context: ListenerTurn and
+      ListenerHistoryPort (listener-history.ts), the pure mergeTranscript
+      (transcript.ts), an optional listenerTurns input plus transcript and
+      listenerExclusions on the assembled context, the transcript prompt path
+      replacing the Already said block only when a listener turn survives, a
+      stable (receivedAtMs, eventId) sort before any cap or budget decision
+      (permutation invariant for out-of-order sources), listener lines charged
+      as rendered and yielded oldest-first before any character trim (the loop
+      also bounds listener-only overflow against the hard cap), the
+      heard-prefix formula extended by exactly one subtraction, the history
+      diagnostics row reporting used = history + rollup + listeners against
+      limit = available, and 16 offline tests. No shared contract change;
+      the prompt and every budget number are byte-identical when no listener
+      turns exist.
+    requirements: [NFR-04]
+    invariants: []
+    commits: [557c9fc]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: 2.0.20
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    sessions: [ses_e3bf07f1dffe0JBkCaYXcae1IW, ses_e3bdd24d6ffe572WskHNZdKERw]
+    supervision: >-
+      The member (M4) approved the plan and pre-authorized local application.
+      A supervised workflow produced the blueprint (five rounds of independent
+      reflection, then a fresh-eyes reviewer finding an additional hard-cap
+      overflow and a floor-check interaction the author had missed), OpenCode
+      authored the implementation, and orchestrator gates decided every round.
+      The authoring session id was not recoverable from the captured tail;
+      m4-impl/A01/opencode-sessions.md records the partial evidence. A repair
+      session (M4-test-list-repair) restored two test:m4 entries a later
+      session had dropped.
+    human_review: >-
+      The member directed the batch and authorized local publication; this PR
+      is published for their review. Final merge and semantic acceptance
+      remain human-owned; no other member's approval is asserted.
+    transcript_record: >-
+      The OpenCode session store retains both sessions; their tails and the
+      working-tree evidence are recorded outside this repository in
+      m4-impl/A01/opencode-sessions.md. No sanitized export was created.
+    verification:
+      base: e9e7e7b
+      reproduction: >-
+        pnpm typecheck exit 0; pnpm lint 0 warnings and 0 errors;
+        vitest run test/offline/m4-transcript.test.ts 16/16; pnpm test:m4
+        13 files / 281 tests; pnpm build exit 0; full pnpm test shows 18
+        failures in the seven Windows-only baseline files, identical on a
+        clean HEAD baseline, so none is attributed to this change.
+    scope: >-
+      M4 dialogue context and its offline tests; shared contracts, storage,
+      runtime scheduling and M5 manifests unchanged. Does not establish
+      live-provider behaviour or quality.
+  - date: "2026-11-10"
+    task: M4-146-A02-heard-prefix-bucket
+    change: >-
+      Admit a partial-unknown delivery record that carries a receipt as a new
+      heard-prefix memory bucket: classifyMemoryBucket gains 'heard-prefix'
+      with reason 'partial-with-receipt', renderHistoryLine marks it with the
+      single [cut off after start] marker (fixed priority against the
+      mid-sentence marker), the bucket renders in its own Started but cut off
+      section and joins the truncated trim class, charged to the character
+      budget; a partial delivery without a receipt stays refused exactly as
+      before. Default behaviour is unchanged when no partial+receipt record
+      exists.
+    requirements: [FR-02, NFR-04]
+    invariants: []
+    commits: [557c9fc]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: 2.0.20
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    sessions: [ses_e3e347536ffeHHb9LI60LDLJ8y]
+    supervision: >-
+      Blueprint produced and reviewed by independent subagents in a supervised
+      workflow, implementation authored by OpenCode, deterministic gates and a
+      code-reflection review with rework rounds applied by the orchestrator.
+      The member pre-authorized local application and directed publication.
+    human_review: >-
+      Published for the member's review; final merge and semantic acceptance
+      remain human-owned. No claim that the receipt policy was relaxed.
+    transcript_record: >-
+      The OpenCode session store retains the session; its tail is recorded
+      outside this repository in m4-impl/A02/opencode-sessions.md.
+    verification:
+      base: e9e7e7b
+      reproduction: >-
+        pnpm test:m4 13 files / 281 tests pass (m4-heard-prefix included);
+        typecheck and lint pass; full-suite failures stay within the
+        Windows-only baseline.
+    scope: >-
+      M4 memory semantics and tests; the FR-02 evidence admission rule is
+      preserved, not widened.
+  - date: "2026-11-10"
+    task: M4-146-A05-persona-recall
+    change: >-
+      Enable persona recall: implement the keyword persona-recall selector
+      over the expanded persona bible pool, expose it as an optional
+      personaRecall port (absent = feature off, prompt unchanged), and add the
+      m4-persona-recall offline suite. No shared contract change.
+    requirements: [NFR-04]
+    invariants: []
+    commits: [557c9fc]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: 2.0.20
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    sessions: [ses_e3dba34b6ffe0dWwr2YBaaAjJC, ses_e3dfe4af4ffeT9ELambQRbpIoS]
+    supervision: >-
+      Supervised workflow: independent blueprint review with rework, OpenCode
+      authoring, deterministic gates and a code-reflection rework loop,
+      including a fresh reviewer round. The member pre-authorized local
+      application and directed publication.
+    human_review: >-
+      Published for the member's review; final merge and semantic acceptance
+      remain human-owned.
+    transcript_record: >-
+      The OpenCode session store retains both sessions; their tails are
+      recorded outside this repository in m4-impl/A05/opencode-sessions.md.
+    verification:
+      base: e9e7e7b
+      reproduction: >-
+        pnpm test:m4 13 files / 281 tests pass (m4-persona-recall included);
+        typecheck and lint pass; full-suite failures stay within the
+        Windows-only baseline.
+    scope: >-
+      M4 persona recall and tests; persona content and dialogue port only.
+  - date: "2026-11-10"
+    task: M4-146-A08-state-block
+    change: >-
+      Add the M4-side emotional/relationship state block: the pure state model
+      (state.ts) with its projection invariants, deterministic rendering
+      (state-render.ts), an optional state input on the dialogue context with
+      stateBlockCharacters charged before the shared budget, and the
+      m4-state offline suite. Persistence and runtime wiring remain the
+      separate M4-X04 collaboration item; default-off when no state is
+      supplied.
+    requirements: [NFR-04]
+    invariants: []
+    commits: [557c9fc]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: 2.0.20
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    sessions: [ses_e3da52d7bffe11OJDHCMld4J1t, ses_e3df27282ffeRcOtAVJvt7p4KD]
+    supervision: >-
+      Supervised workflow: independent blueprint review with rework, OpenCode
+      authoring, deterministic gates and a code-reflection rework loop. The
+      member pre-authorized local application and directed publication.
+    human_review: >-
+      Published for the member's review; final merge and semantic acceptance
+      remain human-owned.
+    transcript_record: >-
+      The OpenCode session store retains both sessions; their tails are
+      recorded outside this repository in m4-impl/A08/opencode-sessions.md.
+    verification:
+      base: e9e7e7b
+      reproduction: >-
+        pnpm test:m4 13 files / 281 tests pass (m4-state included); typecheck
+        and lint pass; full-suite failures stay within the Windows-only
+        baseline.
+    scope: >-
+      M4 state block and tests; no storage, runtime scheduling or shared
+      contract change.
+  - date: "2026-11-10"
+    task: M4-146-A09-layered-budget
+    change: >-
+      Add layered budget planning and token estimation: BudgetPlan with
+      per-section limits (budget.ts), deterministic estimatedTokens computed
+      over exactly the charged lines, budgetBreakdown diagnostics that keep
+      the used <= limit invariant (the history row's limit is the
+      pre-subtraction available bound; a plan combined with a state block is
+      refused), wiring through the optional budgetPlan port, and the
+      m4-budget offline suite. Default-off when no plan is supplied.
+    requirements: [NFR-04]
+    invariants: []
+    commits: [557c9fc]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: 2.0.20
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    sessions: [ses_e3e1e461affegkcgh5henPsKxc]
+    supervision: >-
+      Supervised workflow: independent blueprint review with rework, OpenCode
+      authoring, deterministic gates and a five-round code-reflection loop
+      (fresh reviewer from round four) that caught inconsistent audit
+      statements and a missing guard; the audit record was corrected. The
+      member pre-authorized local application and directed publication.
+    human_review: >-
+      Published for the member's review; final merge and semantic acceptance
+      remain human-owned.
+    transcript_record: >-
+      The OpenCode session store retains the session; its tail is recorded
+      outside this repository in m4-impl/A09/opencode-sessions.md.
+    verification:
+      base: e9e7e7b
+      reproduction: >-
+        pnpm test:m4 13 files / 281 tests pass (m4-budget included); typecheck
+        and lint pass; full-suite failures stay within the Windows-only
+        baseline.
+    scope: >-
+      M4 layered budget, diagnostics and tests; budget.ts is an M4-owned new
+      module, and the closed BudgetSection union was not extended.
