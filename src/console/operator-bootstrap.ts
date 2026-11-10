@@ -10,15 +10,8 @@ import { OPERATOR_BOOTSTRAP_HEADER, OPERATOR_BOOTSTRAP_PATH } from '../contracts
  * the token, response body, headers or credentials in an error message.
  */
 
-/**
- * Structured failure reason. The runtime reasons are unchanged. The tuple is
- * non-exported and appears before any export only because the import-graph
- * boundary checker scans the first quoted token after an exported declaration
- * as a module specifier, so a bare transport reason would read as a Node
- * builtin import edge.
- */
-const OPERATOR_BOOTSTRAP_FAILURE_REASONS = ['http', 'invalid_response', 'timeout', 'network'] as const
-export type OperatorBootstrapFailureReason = (typeof OPERATOR_BOOTSTRAP_FAILURE_REASONS)[number]
+/** Structured failure reason. The runtime reasons are unchanged. */
+export type OperatorBootstrapFailureReason = 'http' | 'invalid_response' | 'timeout' | 'network'
 
 /** Documented bootstrap path (re-exported for callers). */
 export const OPERATOR_BOOTSTRAP_ENDPOINT = OPERATOR_BOOTSTRAP_PATH
