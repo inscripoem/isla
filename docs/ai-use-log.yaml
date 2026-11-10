@@ -4933,3 +4933,57 @@ entries:
       Controlled M5 test deployment and test code plus English documentation.
       M3 implementation and shared contracts are unchanged. This does not
       establish a live model, physical audio, avatar output or Windows result.
+
+  - date: "2026-11-10"
+    task: M5-console-strictmode-bootstrap-followup
+    member: M5
+    change: >-
+      Defer the console effect's initial bootstrap by one event-loop turn and
+      cancel the pending start during cleanup. Add a controlled browser
+      regression for StrictMode startup, reload, early unmount, disconnect and
+      an unavailable endpoint. Existing teardown and connection-error
+      reporting remain in place.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/build
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    opencode_version: 2.2.6
+    sessions: [ses_e3c429349ffebBz9NcI4oREI7o]
+    supervision: >-
+      Captain requested the repair in a separate worktree. A Luna sub-agent
+      drove the initial OpenCode work; Codex reviewed the scope, required CPU
+      browser flags and a bounded source comment, and continued the same
+      OpenCode session to correct the test harness and its TypeScript typing.
+      The initial interrupted work and failed checks are retained in evidence.
+    human_review: >-
+      Captain authorized the local work. The candidate remains uncommitted and
+      has not received a new review from the console owner; publication and
+      merge decisions remain separate.
+    transcript_record: >-
+      The complete native session.get response, 119 ascending
+      session.message.list pages and the terminal empty page are
+      retained outside the repository in evidence/issue92-proxy-worker-20261110.
+      This is an API projection, not a byte-identical oversized CLI export.
+    verification:
+      base: e9e7e7be0138b90df1190ce4fc674d33607a461e
+      independent: >-
+        pnpm test:m2 passed 93/93; pnpm verify passed 1,541/1,541 tests in
+        74 files plus typecheck, lint and build. The CPU-only browser startup
+        regression passed six observed scenarios; the same final regression
+        failed against the unmodified source with two bootstrap attempts.
+        The separate controlled M5 playback/Stop/replay/recovery diagnostic
+        passed 13 steps, with a read-only SQLite quick_check of ok.
+      failures: >-
+        An initial browser run used the wrong disconnect-detail selector; a
+        subsequent run asserted a server delta on the wrong object. The first
+        full verify then failed on a test-only TypeScript narrowing error.
+        Each was corrected and rerun; the original failure records remain.
+    scope: >-
+      src/console/ConsoleApp.tsx and three test/browser startup regression
+      files, plus this log entry. No shared transport interface, Vite proxy
+      configuration, dependency or registered identifier was changed. The
+      browser checks are controlled, headless and muted; they do not establish
+      live-provider, physical-audio, avatar or Windows behaviour.
