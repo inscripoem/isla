@@ -7,6 +7,12 @@ provenance); the evaluation protocol proposal (PR #142) §1/§3; DEBT-10.
 This document fixes the **shape of the label file and its join to a recorded run**. It does not define the
 rubric, a score, a threshold or an acceptance result. Until M3/M4 approve the shape, no label is consumed.
 
+**Scope.** This proposal covers the numeric `scores` object for the dialogue subset. Categorical
+observations in M3's rubric draft are separate follow-up work; they are not converted to numbers.
+
+This revision records the positions M4 and M5 gave on 2026-11-09. They are **proposed positions, not
+approval**: the rubric (#99), corpus (#98) and export (#101) remain open.
+
 ## Why
 
 The protocol requires human-reviewed labels before an attempt can be scored, and DEBT-10 records that no
@@ -22,6 +28,15 @@ outcome; quality stays `unscored` for every attempt.
 | Corpus version, hash and held-out marking | M3 | yes |
 | File shape, validation, join to an attempt, appendix rendering | **M6** | — |
 | Thresholds and any pass/fail claim | M3/M4/M5 after a measured pilot | yes |
+
+## Corpus manifest
+
+M3 owns and maintains the manifest with the versioned corpus and held-out split (#98). M6 consumes and
+validates it; M6 does not create corpus data or a second authority. The v1 example manifest records the
+corpus version, hash and per-case held-out marking; its two cases are development examples, not a formal
+held-out set. The v1 hash covers canonical corpus content (requests, labels, review records and manifest
+semantics), **not the raw manifest bytes**, so an adapter must preserve that identity rather than re-hash
+the file as stored.
 
 ## File and key
 
@@ -81,10 +96,11 @@ scores into a pass/fail; those are the rubric owner's decisions. The failure-rat
 unchanged. Every label must be for a case the corpus manifest marks held-out; a label for a development
 case is refused before rendering.
 
-A missing label file or a `draft` label leaves the attempt unscored. The reason `no-label-record` is
-proposed, not implemented, and would add one reason to the eligibility module (#143). A failed or cancelled
-attempt may carry a label, but eligibility excludes it once M4's completed-only decision is recorded; until
-then no attempt is scored, so the question does not change today's output.
+A missing label file or a `draft` label leaves the attempt unscored. `provenance-eligible` (#143) means
+rules 1–4 passed; it does **not** mean the attempt is label-reviewed. The reason `no-label-record` is
+proposed, not implemented, and would add one reason to the eligibility module. A failed or cancelled attempt
+may carry a label as a human observation, but that does not make it scoreable; eligibility excludes it
+**when** M4's completed-only decision is recorded. A `notRun` entry is never scored.
 
 ## What this does not do
 
@@ -94,23 +110,26 @@ then no attempt is scored, so the question does not change today's output.
 - It does not define the corpus manifest shape; M3 owns it.
 - It does not make labels private or anonymous: the reviewer name is evidence.
 
-## Open questions for the reviewers
+## Proposed positions (not approval)
 
-1. **Per attempt or per case?** A label is attached to one attempt's output. If M3/M4 intend one label per
-   case applied to every variant, the key should drop `variantId` and `attempt` — decide before
-   implementation.
-2. **Who may set `status: reviewed`?** One named reviewer, or any of M3/M4? A `reviewer` field is required
-   either way.
-3. **Revision policy.** If a label is corrected, should the file keep the previous label (a
-   `supersedes` field) or is the file replaced? The provenance rule is append-only evidence.
-4. **Scale.** The interface accepts any finite number; if the rubric fixes a range, the validator could
-   enforce it. That is M4's call.
-5. **Failed/cancelled labels.** May a failed or cancelled attempt carry a label at all? The file can allow
-   it and let eligibility exclude it, or refuse it at write time. M4's completed-only proposal decides the
-   eligibility half.
+1. **Per attempt.** Keep `(caseId, variantId, attempt)`. A label describes one output of one variant, and
+   the two dialogue dimensions are scored against that output; it is also ADR-008 D2's key. M3 owns the
+   corpus-side confirmation.
+2. **Reviewer and rubric version.** A single required `reviewer` field; `rubricVersion` must name the
+   version recorded in #99 before any label is consumed. One signature is not both M3 and M4 approval; if
+   joint sign-off is required, M3 states it.
+3. **Revision.** Append-only with `supersedes`, consistent with ADR-008. Because duplicate keys are
+   refused, an effective-row rule is required. **Proposal:** a `revision` integer per key; a later row
+   names the revision it supersedes; the highest revision is effective; a later row without `supersedes`
+   or a duplicate revision is refused. Pending M3/M4.
+4. **Scale.** The validator keeps "finite number" for now; the example is illustrative. Once #99 records a
+   rubric version, its range is enforced in the rubric layer, not in the file shape.
+5. **Failed/cancelled.** The interface may allow a label as a human observation, but it does not make the
+   attempt scoreable. Eligibility excludes failed/cancelled when the completed-only decision is recorded;
+   a `notRun` entry is never scored.
 
 ## Verification of this document
 
-Documentation only. `pnpm test:trace` 41 and `pnpm test:readiness` 45 pass at `main 58990bd`; no code,
+Documentation only. `pnpm test:trace` 41 and `pnpm test:readiness` 45 pass at `main e9e7e7b`; no code,
 test, threshold or result is added. No label file exists yet, so no claim is made that any attempt is
 scored.
