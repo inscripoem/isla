@@ -1,7 +1,7 @@
 # Evaluation thresholds — register
 
 Status: **proposal; every value is `pending`.** Date: 2026-11-09. Owner: M6.
-Rule source: the evaluation protocol, **PR #142** (unmerged at `484d9ed`), §5.
+Rule source: the evaluation protocol, **PR #142** (this proposal), §5.
 No threshold is approved, no baseline exists, no pilot has run, and no CP5 or G4 result is claimed.
 
 ## Rule
@@ -19,9 +19,8 @@ fixed only after a pilot that produced a recorded result on a named head with de
 | NFR-01 | Stop → silence | p95 | pending | M1/M2 observation method (#102); report `stopToSilenceMs` | pending | pending | M1/M2/M5 | pending |
 | NFR-02 | safe-outcome proportion under injected faults | proportion | pending | fault-injection suites; C-74 process restart | pending | pending | M5 | pending |
 | NFR-02 | recovery duration | duration | pending | same suites; the declared recovery boundary | pending | pending | M5 | pending |
-| NFR-03 | selection appropriateness, intent adherence, persona consistency, unacceptable-response rate | pending | pending | M3/M4 rubric and reviewed labels (#99) | pending | pending | M3/M4 | pending |
+| NFR-03 | selection appropriateness, intent adherence, persona consistency, unacceptable-response rate | pending | pending | M3/M4 rubric and reviewed labels (#99) | pending | pending | M3/M4 (pending #99 review) | pending |
 | NFR-04 | token / cost / session caps | totals | pending | usage and price export (#101); report usage rule | pending | pending | M3/M5 | pending |
-| NFR-05 | unauthorized privileged transitions in the reviewed suite | count | pending | adversarial suite; storage deletion test | pending | pending | M5 | pending |
 | NFR-05 | retention / deletion period | duration | pending | retention decision (#107); memory/state design | pending | pending | M5 | pending |
 
 ## Deterministic obligations — not measured thresholds
@@ -29,6 +28,9 @@ fixed only after a pilot that produced a recorded result on a named head with de
 These are acceptance rules verified by tests, not values awaiting a baseline, so they do not appear above:
 
 - **NFR-04** — at most one provider attempt per decision opportunity (case C-15).
+- **NFR-05** — zero unauthorized privileged transitions in the reviewed adversarial suite (proposed
+  obligation). This is separate from the suite's not-yet-observed result and from the pending
+  retention/deletion period; a pilot may record the observed result but does not set a nonzero allowance.
 - **NFR-06** — zero business-logic changes for a provider substitution; the substitute passes the shared
   contract suite.
 

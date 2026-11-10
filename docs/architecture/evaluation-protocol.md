@@ -62,8 +62,10 @@ named reasons, and the attempt keeps its completed/failed/cancelled classificati
 
 Rules 1–5 follow ADR-008 (`docs/architecture/adr/008-prepared-input-provenance.md`) and the merged companion
 proposal (`docs/architecture/evaluation-provenance.md`, PR #63); this section cites the decision, not a
-result. Rule 5 is not implemented: the run records conditions per run, not per attempt, so the report
-states that it is not evaluated.
+result. Rule 5 is a **target rule, not evaluated at this revision**: the run records conditions per run,
+not per attempt, so the report states that it is not evaluated (DEBT-13). `provenance-eligible` in #143
+means rules 1–4 passed; a scored attempt also needs a human-reviewed label. The `no-label-record` reason
+is proposed, not implemented.
 
 **Open decision (proposed by M4, not implemented).** Only a `completed` attempt would be quality-eligible;
 `failed` and `cancelled` would be excluded with a named reason and remain counted in §2's outcome counts,
@@ -116,10 +118,18 @@ Pilot pass conditions:
 - every executed attempt appears once; a not-run entry is explicit;
 - unobserved metrics are `null`, not `0`;
 - no case is scored from an unreviewed or condition-mismatched label;
-- the report is written and cites model, prompt, threshold and conditions.
+- the report is written and cites model, prompt and conditions; any threshold is referenced from
+  `evaluation-thresholds.md` and is `pending` — the current report has no threshold field, so this is a
+  documented reference, not a report feature.
 
-A pilot on fixtures is **not** the formal evaluation: it validates the pipeline and produces the baseline
-needed for §5. Formal live runs require checkpoint 4.
+A pilot on **fixture-generated answers** is an internal plumbing check: the test output (command, head,
+pass/fail) records it. It is not live-provider performance, usage or a real-provider baseline; the report
+refuses `textSource: fixture`, and fixture text is never relabelled as provider output. No new report
+feature is added for this wording.
+
+Prepared fixture **inputs** sent to an **actual provider** are a different case. A real-provider baseline
+needs the actual responses plus the recorded head, model and measurement conditions; no such run is
+claimed here. Formal live runs require checkpoint 4.
 
 ## 7. Checkpoint-05 acceptance checklist (M6 side)
 
