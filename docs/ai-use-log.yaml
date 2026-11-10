@@ -5321,3 +5321,44 @@ entries:
       not_run: >-
         ADR/Delta and design/trace updates pending the #25 reservation. No runtime
         wiring, labels, live data or checkpoint claim.
+
+  - date: "2026-11-10"
+    task: "M6 memory foundation review fixes / #147, #148"
+    branch: m6-memory-foundation
+    change: >-
+      Closes the self-review findings: the projection cursor refuses a
+      non-increasing seq; `rebuildDerived` clears and rebuilds topics through an
+      optional M4 callback and uses the last event time; `session_state` never
+      re-attributes a known audience; `session_audience` is insert-once and
+      returns conflict for a different binding; `deleteOlderThan` also expires
+      session bindings; `exportAudience` names the audience on state/event lines;
+      the memory bench reports precision as unknown for an empty expected set.
+      Tests cover topics, clearDerived, audience binding, projection rewind,
+      state attribution, retention bindings and export scope.
+    requirements: [FR-06, NFR-03, NFR-05]
+    invariants: [INV-06, INV-10, INV-11, INV-16]
+    cases: []
+    commits: [18ea5be]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
+      the Captain approved the self-review findings. The ADR/Delta and design/trace
+      updates remain pending the number reservation in #25.
+    human_review: >-
+      Captain (M6) approved the fix plan; M4/M5 review pending. No checkpoint
+      acceptance or merge is claimed.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export was produced.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: e9e7e7b (main)
+      role: "memory store 11; memory bench 6; test:m6 200/200 in 16 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0: 1558/1558 in 76 files; typecheck clean; lint clean."
+      mutation: >-
+        Projection guard, topic clear, state attribution, audience binding and
+        precision math each turned their own test red; all restored.
+      not_run: >-
+        ADR/Delta and design/trace updates pending the #25 reservation. No push,
+        runtime wiring or checkpoint claim.
