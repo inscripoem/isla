@@ -24,16 +24,21 @@ import { isSubstantiveSpeech } from './text'
 
 /**
  * `spoken` - may enter confirmed history and be recalled in later context.
+ * `heard-prefix` - a partial delivery that carries a receipt (issue #146 A02):
+ *                  playback started, so the audience may have heard the prefix,
+ *                  but delivery never completed. Rendered in its own section
+ *                  with an explicit marker; never enters confirmed history.
  * `audit-only` - retained for traceability only; never recalled, never folded
  *                into context. "The audience might have heard it" is not memory.
  */
-export type MemoryBucket = 'spoken' | 'audit-only'
+export type MemoryBucket = 'spoken' | 'heard-prefix' | 'audit-only'
 
 export type MemoryBucketReason =
   | 'delivered-with-receipt'
   | 'delivered-without-receipt'
   | 'not-fully-delivered'
   | 'empty-text'
+  | 'partial-with-receipt'
 
 export interface MemoryBucketDecision {
   bucket: MemoryBucket
@@ -82,25 +87,59 @@ function hasReceipt(record: ConfirmedDelivery): boolean {
  * Decide whether a record is admitted.
  *
  * The order is deliberately conservative:
- *   1. everything other than `fully-delivered` is excluded - partially delivered
- *      or never delivered text is not memory;
- *   2. text with no letter or digit is excluded - there is nothing audible;
- *   3. audio without a receipt is excluded - a claim, not proof.
+ *   1. a fully-delivered record is judged by the receipt rules below; every
+ *      other classification is judged by the partial rule;
+ *   2. `partial-unknown` WITH a receipt and substantive text becomes
+ *      `heard-prefix` (issue #146 A02): playback started, so a prefix may have
+ *      been heard, but the delivery never completed. Everything else that is not
+ *      fully delivered stays `audit-only`, so a record without playback evidence
+ *      is never remembered as speech;
+ *   3. text with no letter or digit is excluded - there is nothing audible. An
+ *      empty partial record stays `audit-only`: nothing was said, so there is no
+ *      prefix to keep;
+ *   4. audio without a receipt is excluded - a claim, not proof.
+ *
+ * `not-delivered` stays `audit-only` even when it carries a receipt id: the
+ * receipt says playback was attempted, not that a prefix reached the audience.
+ * `partial-with-receipt` is observable on the decision only. A record rendered
+ * into the heard-prefix section was not excluded, so that reason never appears
+ * in an exclusion list today.
  */
 export function classifyMemoryBucket(record: ConfirmedDelivery): MemoryBucketDecision {
-  if (record.classification !== 'fully-delivered') {
-    return { bucket: 'audit-only', reason: 'not-fully-delivered' }
-  }
-  if (!isSubstantiveSpeech(record.text)) {
-    return { bucket: 'audit-only', reason: 'empty-text' }
-  }
-  if (SPOKEN_RECEIPT_POLICY !== 'preferred') {
-    const needsReceipt = SPOKEN_RECEIPT_POLICY === 'required' || record.modality === 'audio'
-    if (needsReceipt && !hasReceipt(record)) {
-      return { bucket: 'audit-only', reason: 'delivered-without-receipt' }
+  if (record.classification === 'fully-delivered') {
+    if (!isSubstantiveSpeech(record.text)) {
+      return { bucket: 'audit-only', reason: 'empty-text' }
     }
+    if (SPOKEN_RECEIPT_POLICY !== 'preferred') {
+      const needsReceipt = SPOKEN_RECEIPT_POLICY === 'required' || record.modality === 'audio'
+      if (needsReceipt && !hasReceipt(record)) {
+        return { bucket: 'audit-only', reason: 'delivered-without-receipt' }
+      }
+    }
+    return { bucket: 'spoken', reason: 'delivered-with-receipt' }
   }
-  return { bucket: 'spoken', reason: 'delivered-with-receipt' }
+  /*
+   * Issue #146 A02: a partial delivery whose playback produced a receipt is the
+   * one honest case of "the audience heard a prefix".
+   *
+   * IMPORTANT BOUNDARY (same shape as the receipt policy above): a receipt id is
+   * NOT proof of WHAT was heard. This module never reads the receipt stage; the
+   * guarantee that a receipt exists only once playback actually started belongs
+   * to the producer/persistence chain (M5). This batch is a conservative
+   * approximation - the record's FULL text is rendered with an explicit marker -
+   * and extracting the exact heard prefix from playback frames remains future
+   * work. pipecat's rule that only the played part may enter context is the
+   * reference; this is deliberately weaker and must not be described as
+   * equivalent.
+   */
+  if (
+    record.classification === 'partial-unknown' &&
+    hasReceipt(record) &&
+    isSubstantiveSpeech(record.text)
+  ) {
+    return { bucket: 'heard-prefix', reason: 'partial-with-receipt' }
+  }
+  return { bucket: 'audit-only', reason: 'not-fully-delivered' }
 }
 
 /**
@@ -114,6 +153,11 @@ export function classifyMemoryBucket(record: ConfirmedDelivery): MemoryBucketDec
  *
  * A conflict freezes a record: it is neither admitted nor overwritten. A frozen
  * record is visible only in the audit view.
+ *
+ * The `heard-prefix` bucket is decided by `classifyMemoryBucket`, not by this
+ * table: this table answers "may it enter spoken history", and a heard-prefix
+ * record may not - it is remembered as a cut-off fragment, not as confirmed
+ * speech.
  */
 export const SPOKEN_ADMISSION: Readonly<
   Record<DeliveryClassification, 'admitted' | 'audit-only'>

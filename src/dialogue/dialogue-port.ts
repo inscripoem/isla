@@ -21,6 +21,9 @@ import { buildDialogueUsage } from './usage'
 import { FIXTURE_DIALOGUE_MODEL, FIXTURE_DIALOGUE_MODEL_VERSION } from './usage'
 import { resolveCharacterProfile } from './persona'
 import type { MemoryEntrySource } from './context'
+import type { BudgetPlan } from './budget'
+import type { CharacterState, StateBaseline, StateProfile } from './state'
+import type { ListenerHistoryPort } from './listener-history'
 
 /**
  * Dialogue generation.
@@ -148,9 +151,10 @@ export interface DialoguePortOptions {
    */
   memory?: MemoryEntrySource
   /**
-   * Persona fact recall. Omitted means no recall, equivalent to
-   * `PERSONA_RECALL_POLICY = 'off'`. The recall block shares one character budget
-   * with confirmed history, see ./persona-recall.
+   * Persona fact recall. Omitted means recall is disabled; that is the production
+   * default, and `PERSONA_RECALL_POLICY` declares the strategy rather than
+   * switching it. The recall block shares one character budget with confirmed
+   * history, see ./persona-recall.
    */
   personaRecall?: PersonaRecallPort
   /**
@@ -210,6 +214,46 @@ export interface DialoguePortOptions {
    * added, so the character budget and the rendered block are unchanged.
    */
   markConflictingTurns?: boolean
+  /**
+   * Inner state of the character for this call (./state), passed through to
+   * context assembly. A future state worker's `read` result fills this; this
+   * batch only carries it, it never computes it.
+   *
+   * Omitted means the state block is not rendered and the prompt is unchanged
+   * byte for byte. Supplying it adds no provider call: rendering is a
+   * deterministic string join that is charged to the character budget.
+   */
+  state?: CharacterState
+  /**
+   * Resting point of the state, carried for the state seam. Assembly does not
+   * read it yet, so passing it alone changes nothing.
+   */
+  stateBaseline?: StateBaseline
+  /** State rendering profile; assembly reads only `renderMode` today. */
+  stateProfile?: StateProfile
+  /**
+   * Layered section budget passed through to `assembleDialogueContext`
+   * (./budget). Omitted means context assembly follows the existing single-pool
+   * rule and the assembled context is unchanged. Pure data: it adds no provider
+   * call to the reply path.
+   *
+   * Cannot be combined with `state` while the state block is charged to the
+   * shared pool: assembly throws for that combination instead of charging state
+   * against the wrong section.
+   */
+  budgetPlan?: BudgetPlan
+  /**
+   * Listener history source (issue #146 A01). Omitted means the feature is off:
+   * `recent()` is never called, the assembled context carries no transcript and
+   * the rendered prompt and every budget number are byte-identical to the
+   * previous behaviour.
+   *
+   * When supplied, `recent(request.sessionId, request.contextLimits.maxTurns)`
+   * is called at most once per `generate`, inside context assembly, so a port
+   * rejection follows the same failed-outcome path as a history-port failure.
+   * It is a local read: no provider attempt and no retry (NFR-04).
+   */
+  listenerHistory?: ListenerHistoryPort
 }
 
 /**
@@ -430,6 +474,13 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
 
       const assemble = async (): Promise<AssembledDialogueContext> => {
         try {
+          const listenerTurns =
+            options.listenerHistory === undefined
+              ? undefined
+              : await options.listenerHistory.recent(
+                  request.sessionId,
+                  request.contextLimits.maxTurns,
+                )
           return await assembleDialogueContext({
             request,
             profile,
@@ -447,6 +498,15 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
             ...(options.markConflictingTurns === undefined
               ? {}
               : { markConflictingTurns: options.markConflictingTurns }),
+            ...(options.budgetPlan === undefined ? {} : { budgetPlan: options.budgetPlan }),
+            ...(options.state === undefined ? {} : { state: options.state }),
+            ...(options.stateBaseline === undefined
+              ? {}
+              : { stateBaseline: options.stateBaseline }),
+            ...(options.stateProfile === undefined
+              ? {}
+              : { stateProfile: options.stateProfile }),
+            ...(listenerTurns === undefined ? {} : { listenerTurns }),
           })
         } catch (error) {
           // Preserve the original error; the observer still gets one report.
