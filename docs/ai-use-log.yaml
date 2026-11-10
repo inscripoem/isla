@@ -5282,3 +5282,42 @@ entries:
       Git-metadata test. The delivery candidate uses the same source and test
       files but excludes the temporary probe workflow and its extra records.
       See https://github.com/inscripoem/isla/actions/runs/42970448971.
+    task: "M6 memory foundation / #147, #148"
+    branch: m6-memory-foundation
+    change: >-
+      Schema v3 adds six M6-owned tables (derived_episode, derived_topic,
+      projection_state, session_audience, delivery_owner, session_state) and
+      `createMemoryStore`: idempotent upserts, filtered reads, durable projection
+      cursor, rebuild through M4's derive callback, audience/owner attribution,
+      optimistic state writes, explicit audience deletion, opt-in retention and
+      audience-scoped export. `runMemoryBench` adds a separate memory report with
+      recall@k, precision@k, labelled answer accuracy, tokens per turn, p95
+      latency and excluded count; unassessed and not-run stay distinct. No runtime
+      wiring, scheduler, dependency or contract change.
+    requirements: [FR-06, NFR-03, NFR-05]
+    invariants: [INV-10, INV-11, INV-16]
+    cases: []
+    commits: [a9ea79b]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
+      the Captain approved the memory-foundation plan for #147/#148. The ADR/Delta
+      and design/trace updates await the number reservation in #25.
+    human_review: >-
+      Captain (M6) approved the slice; M4/M5 review pending. No checkpoint
+      acceptance or merge is claimed.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export was produced.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: e9e7e7b (main)
+      role: "memory store 9; memory bench 6; test:m6 198/198 in 16 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0: 1556/1556 in 76 files; typecheck clean; lint clean."
+      mutation: >-
+        Owner conflict, stale state, precision math and rebuild clearing each
+        turned their own test red; all restored.
+      not_run: >-
+        ADR/Delta and design/trace updates pending the #25 reservation. No runtime
+        wiring, labels, live data or checkpoint claim.
