@@ -24,6 +24,7 @@ import type { MemoryEntrySource } from './context'
 import type { BudgetPlan } from './budget'
 import type { CharacterState, StateBaseline, StateProfile } from './state'
 import type { ListenerHistoryPort } from './listener-history'
+import type { WorkingMemoryStore } from './working-memory'
 
 /**
  * Dialogue generation.
@@ -254,6 +255,26 @@ export interface DialoguePortOptions {
    * It is a local read: no provider attempt and no retry (NFR-04).
    */
   listenerHistory?: ListenerHistoryPort
+  /**
+   * In-memory working memory (issue #146 A07). Omitted means the feature is
+   * off: the store is never consulted, and the assembled context, the rendered
+   * prompt and every budget number are byte-identical to the previous
+   * behaviour.
+   *
+   * When supplied, each `generate` call first closes the loop:
+   * `observe(listenerTurns)` fulfils 'awaiting-reply' entries whose actor has
+   * since spoken — this only ever fires when a `listenerHistory` port is also
+   * supplied — and then `pending(clock.nowMs())` supplies the live entries to
+   * context assembly. The store is written by its owner after a successful
+   * delivery commit, never by this port; nothing here persists it, so a fresh
+   * process starts with an empty store.
+   *
+   * Production injects neither option yet: `listenerHistory` is issue
+   * #151/A01 (shape only, no production caller) and its data source is issue
+   * #147 X01. Until that wiring lands the closed loop cannot fire in
+   * production and 'awaiting-reply' entries age out by TTL alone.
+   */
+  workingMemory?: WorkingMemoryStore
 }
 
 /**
@@ -481,6 +502,20 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
                   request.sessionId,
                   request.contextLimits.maxTurns,
                 )
+          /*
+           * Working memory (issue #146 A07), closed-loop read. `observe` first
+           * fulfils 'awaiting-reply' entries the audience has since answered
+           * (it only fires when listener turns are supplied), then `pending`
+           * supplies the live entries. Both are local, in-memory calls: no
+           * provider attempt, no extra I/O beyond the listener read above.
+           */
+          if (options.workingMemory !== undefined) {
+            options.workingMemory.observe(listenerTurns ?? [])
+          }
+          const workingMemoryEntries =
+            options.workingMemory === undefined
+              ? undefined
+              : options.workingMemory.pending(clock.nowMs())
           return await assembleDialogueContext({
             request,
             profile,
@@ -507,6 +542,7 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
               ? {}
               : { stateProfile: options.stateProfile }),
             ...(listenerTurns === undefined ? {} : { listenerTurns }),
+            ...(workingMemoryEntries === undefined ? {} : { workingMemory: workingMemoryEntries }),
           })
         } catch (error) {
           // Preserve the original error; the observer still gets one report.

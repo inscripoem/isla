@@ -28,6 +28,8 @@ import type { CharacterState, StateBaseline, StateProfile } from './state'
 import type { ListenerTurn } from './listener-history'
 import { mergeTranscript, compareListenerTurns } from './transcript'
 import type { TranscriptEntry } from './transcript'
+import { renderWorkingMemoryBlock } from './working-memory'
+import type { WorkingMemoryEntry } from './working-memory'
 
 /**
  * Dialogue context assembly.
@@ -62,6 +64,15 @@ import type { TranscriptEntry } from './transcript'
  * When a `budgetPlan` is supplied, the recall block is additionally bounded by
  * its own section cap and whatever the other sections leave unused flows back to
  * history (./budget). Without a plan the single-pool rule above is unchanged.
+ *
+ * Working-memory block (issue #146 A07). When the caller supplies
+ * `workingMemory` entries, the assembled context renders a `workingMemoryBlock`
+ * of the pending items the character still owes and charges it to the character
+ * budget: to the shared pool before recall fitting when no plan is supplied, or
+ * to the plan's own `workingMemory` section when one is. A block that does not
+ * fit is dropped whole with a warning, never rendered past its cap. Omitted or
+ * empty means the feature is off: `workingMemoryBlock` is null and the prompt
+ * and every budget number are exactly what they were without this option.
  *
  * Retention extras. Two deterministic mechanisms fight the loss of important
  * old turns without widening the budget: salience pinning (./salience) makes
@@ -412,6 +423,12 @@ export interface AssembledDialogueContext {
    * blocks are charged to `maxCharacters`.
    */
   stateBlock: string | null
+  /**
+   * Rendered working-memory block (issue #146 A07), or null when no entries
+   * were supplied, when only 'suppressed' entries remained, or when the block
+   * did not fit the budget (whole-block drop, see the charging notes below).
+   */
+  workingMemoryBlock: string | null
   personaSummary: string
   styleNotes: readonly string[]
   /** Reply templates resolved for this intent, in speaking order. */
@@ -484,7 +501,9 @@ export interface AssembledDialogueContext {
    *   - each kept listener turn, as `renderTranscriptLine` produces it (item
    *     prefix, listener prefix and verbatim text);
    *   - the rollup line, as `renderRollupLine` produces it;
-   *   - the state block, as `renderStateBlock` produces it, when one was kept.
+   *   - the state block, as `renderStateBlock` produces it, when one was kept;
+   *   - the working-memory block, as `renderWorkingMemoryBlock` produces it, when
+   *     one was kept.
    * Section headings, the persona block and the rest of the prompt are not
    * counted, because they are not part of this budget. On the transcript path
    * the `CHARACTER_LINE_PREFIX` decoration of character rows is likewise not
@@ -499,9 +518,11 @@ export interface AssembledDialogueContext {
    * Computed over exactly the lines `estimatedCharacters` counts - the kept
    * turns, recalled facts, recalled older turns, kept heard-prefix turns, kept
    * listener rows and the rollup line - never over the persona block, section
-   * headings or the rest of the prompt. The kept state block is the one charged class it does not
-   * cover, and a plan cannot be combined with a state block, so it is absent
-   * whenever this field is present. M4 has no tokenizer, so this stays a
+   * headings or the rest of the prompt. The kept state block and the kept
+   * working-memory block are the charged classes it does not cover: each has its
+   * own section row, and the state block cannot be combined with a plan at all
+   * (see the state block notes), so the state block is absent whenever this
+   * field is present. M4 has no tokenizer, so this stays a
    * character-based approximation with the same not-tokens standing as
    * `estimatedCharacters`: it is an assembly-time diagnostic and must never feed
    * a quality or cost conclusion.
@@ -638,6 +659,14 @@ export interface AssembleDialogueContextInput {
    * returns turns newest-first cannot change which turns survive.
    */
   listenerTurns?: readonly ListenerTurn[]
+  /**
+   * Live working-memory entries to render (issue #146 A07), oldest first. The
+   * caller obtained them from a WorkingMemoryStore; this module renders and
+   * charges them but never mutates them. Omitted or empty means the feature is
+   * off: `workingMemoryBlock` is null and the assembled context, the rendered
+   * prompt and every budget number are byte-identical to an assembly without it.
+   */
+  workingMemory?: readonly WorkingMemoryEntry[]
 }
 
 /**
@@ -1060,7 +1089,8 @@ export async function assembleDialogueContext(
    * Keep the block only when it fits the cap on its own. A block that cannot fit
    * even alone would otherwise push estimatedCharacters past maxCharacters and
    * break the module header's "nothing assembled here may exceed it" rule.
-   */  const stateBlock =
+   */
+  const stateBlock =
     renderedStateBlock !== null && renderedStateCharacters <= maxCharacters
       ? renderedStateBlock
       : null
@@ -1080,8 +1110,55 @@ export async function assembleDialogueContext(
       'context: a budgetPlan cannot be combined with a state block while the block is charged to the shared pool',
     )
   }
-  const sharedBudget = maxCharacters - stateBlockCharacters
 
+  /*
+   * Working-memory block (issue #146 A07). Rendered from the entries the caller
+   * supplied - already pending, already ordered oldest first, already filtered
+   * for expiry by the store. Rendering is pure: `renderWorkingMemoryBlock` drops
+   * 'suppressed' entries and returns null when nothing remains renderable.
+   *
+   * The DROP decision differs by mode:
+   *   - WITHOUT a plan the block must fit `maxCharacters` on its own, at the
+   *     same precedence position as the state block.
+   *   - WITH a plan the block must fit `limits.workingMemory`, its own section.
+   * Either way an oversized block is dropped WHOLE (null) with the warning: the
+   * cap is hard, so the block is never rendered past its cap. Same rule as the
+   * state block.
+   *
+   * The CHARGING is the same in both modes: a kept block's characters are
+   * subtracted from the shared pool once (`sharedBudget`), because that pool's
+   * remainder - not `limits.history` - is what actually bounds recall and
+   * history here. Without the subtraction the total charged characters could
+   * exceed `maxCharacters` by the block length and break the module header's
+   * hard cap. The breakdown row then reports the block against its own section
+   * cap (`workingMemory.used`), which is where the drop decision was made.
+   * Without working-memory input both terms are zero and every number is
+   * unchanged.
+   *
+   * A plan combined with state input still throws above, unchanged: that
+   * combination is refused for the state block's charging point, not this one.
+   * Without working-memory input nothing is rendered, nothing is charged and
+   * every number below is what it was before this block existed.
+   */
+  const renderedWorkingMemoryBlock =
+    input.workingMemory === undefined ? null : renderWorkingMemoryBlock(input.workingMemory)
+  const renderedWorkingMemoryCharacters =
+    renderedWorkingMemoryBlock === null ? 0 : renderedWorkingMemoryBlock.length
+  const workingMemorySectionCap = limits === null ? maxCharacters : limits.workingMemory
+  const workingMemoryBlock =
+    renderedWorkingMemoryBlock !== null && renderedWorkingMemoryCharacters <= workingMemorySectionCap
+      ? renderedWorkingMemoryBlock
+      : null
+  const workingMemoryBlockCharacters =
+    workingMemoryBlock === null ? 0 : renderedWorkingMemoryCharacters
+  const workingMemoryDropped =
+    input.workingMemory !== undefined &&
+    renderedWorkingMemoryBlock !== null &&
+    workingMemoryBlock === null
+      ? 1
+      : 0
+
+  const sharedBudget = maxCharacters - stateBlockCharacters - workingMemoryBlockCharacters
   /*
    * Innermost of the two recall bounds. The plan's own section cap applies when
    * a plan is supplied; the shared pool (the cap minus a kept state block)
@@ -1393,6 +1470,16 @@ export async function assembleDialogueContext(
     )
   }
   /*
+   * A dropped working-memory block is reported for the same reason, and only
+   * when entries were actually supplied: a caller that never supplied any did
+   * not lose anything. One message covers both charging paths.
+   */
+  if (workingMemoryDropped > 0) {
+    warnings.push(
+      'the working memory block did not fit the character budget and was dropped from context',
+    )
+  }
+  /*
    * Keyed on the confirmation, not on recall: `recent.length > 0` is true
    * whenever the caller allowed any turn, including one displaced by recall and
    * one trimmed by characters. The message only names recall as the reason when
@@ -1513,10 +1600,12 @@ export async function assembleDialogueContext(
    * Parity with `estimatedCharacters`. `estimatedCharacters` charges the
    * confirmed kept turns, the recalls, the kept started-but-cut-off
    * (heard-prefix) turns and the charged rollup line, so those are exactly the
-   * lines `estimatedTokens` is computed over. The one charged class that is not
-   * a line here is the kept state block: it has its own `state` row, and a plan
-   * cannot be combined with one (see the state block notes above), so it can
-   * never be charged while a plan is active.
+   * lines `estimatedTokens` is computed over. The charged classes that are not
+   * lines here are the kept state block and the kept working-memory block: each
+   * has its own section row. The state block cannot be combined with a plan at
+   * all (see the state block notes above), so it can never be charged while a
+   * plan is active; the working-memory block is charged to `workingMemory.used`
+   * below and is never added to `chargedLines` either, for the same reason.
    *
    * The started-but-cut-off turns have no row of their own either. They are
    * charged to the same pool as the history row, after the confirmed history,
@@ -1537,7 +1626,9 @@ export async function assembleDialogueContext(
    * Unused capacity is reported, not re-spent: `history.limit` is the effective
    * bound after every other section returned its remainder, so `used <= limit`
    * already proves the layered bound held. Sections with no content source in
-   * this batch (persona, state, workingMemory) report limit with used 0.
+   * this batch (persona, state) report limit with used 0; `workingMemory` now has
+   * one - a kept block charges `used` and a whole-block drop counts as
+   * `dropped` - while persona and state still have none.
    *
    * The plan's state section is a cap with no charging point; refusing that
    * combination is what keeps this row honest AND keeps the history floor
@@ -1572,7 +1663,17 @@ export async function assembleDialogueContext(
         // limit. `used` stays 0 and is never counted twice.
         dropped: 0,
       },
-      { section: 'workingMemory', limit: limits.workingMemory, used: 0, dropped: 0 },
+      /*
+       * A kept block is charged to its own section, so the shared pool did not
+       * pay for it; a whole-block drop is one refused candidate. With no
+       * working-memory input both values stay 0, as before.
+       */
+      {
+        section: 'workingMemory',
+        limit: limits.workingMemory,
+        used: workingMemoryBlockCharacters,
+        dropped: workingMemoryDropped,
+      },
       {
         section: 'recall',
         limit: limits.recall,
@@ -1597,6 +1698,7 @@ export async function assembleDialogueContext(
   return {
     personaBlock: renderPersonaBlock(profile),
     stateBlock,
+    workingMemoryBlock,
     personaSummary: profile.personaSummary,
     styleNotes: profile.styleNotes,
     replyTemplates: intentTemplatesFor(profile, request.responsePlan.replyIntent),
@@ -1621,6 +1723,7 @@ export async function assembleDialogueContext(
       heardPrefixCharacters +
       listenerCharacters +
       stateBlockCharacters +
+      workingMemoryBlockCharacters +
       (rollup?.characters ?? 0),
     ...budgetDiagnostics,
     truncatedByTurnLimit,
@@ -1767,6 +1870,19 @@ export function renderDialoguePrompt(view: AssembledDialogueContext): string {
    * itself is.
    */
   if (view.stateBlock !== null) lines.push(view.stateBlock)
+
+  /*
+   * The working-memory block sits after the state and before the recall
+   * sections, matching the budget section order persona -> state ->
+   * workingMemory -> recall in ./budget. It carries the pending items the
+   * character still owes - replies, commitments and open threads - which are
+   * about her own standing obligations rather than retrieved background. A null
+   * block pushes nothing, so a prompt assembled without the feature is
+   * byte-identical to one written before the block existed. The header is not
+   * charged to `contextLimits.maxCharacters` (same rule as the other section
+   * headers); the entry lines are.
+   */
+  if (view.workingMemoryBlock !== null) lines.push(view.workingMemoryBlock)
 
   /*
    * The recall block sits after the standing persona and before history: it is
