@@ -444,33 +444,49 @@ describe('M5 review rules (2026-11-09)', () => {
 
 
 describe('not-run observations (ADR-008 D4)', () => {
-  it('refuses a not-run observation for a case the run executed', () => {
+  it('refuses the removed companion reason field', () => {
     const violations = refused(
       parseProvenance(
         companion({
           notRun: [
-            { caseId: 'case-1', variantId: 'v1', reason: 'declined', inputs: [INPUT] },
+            { caseId: 'case-9', variantId: 'v1', reason: 'declined', inputs: [INPUT] },
           ],
         }),
         RUN,
         RUN_TEXT,
       ),
     )
-    expect(violations.some((violation) => violation.includes('not a not-run case'))).toBe(true)
+    expect(violations.some((violation) => violation.includes('reason is not a recognised field'))).toBe(
+      true,
+    )
+  })
+
+  it('refuses a not-run observation for a case the run executed', () => {
+    const violations = refused(
+      parseProvenance(
+        companion({
+          notRun: [
+            { caseId: 'case-1', variantId: 'v1', inputs: [INPUT] },
+          ],
+        }),
+        RUN,
+        RUN_TEXT,
+      ),
+    )
+    expect(violations.some((violation) => violation.includes('not a not-run occurrence'))).toBe(true)
   })
 
   it('refuses a duplicate not-run pair', () => {
     const entry = {
       caseId: 'case-9',
       variantId: 'v1',
-      reason: 'declined',
       inputs: [INPUT],
     }
     const violations = refused(
       parseProvenance(companion({ notRun: [entry, entry] }), RUN, RUN_TEXT),
     )
     expect(
-      violations.some((violation) => violation.includes('repeats the case and variant')),
+      violations.some((violation) => violation.includes('repeats the case, variant and occurrence')),
     ).toBe(true)
   })
 
@@ -482,7 +498,6 @@ describe('not-run observations (ADR-008 D4)', () => {
             {
               caseId: 'case-9',
               variantId: 'v1',
-              reason: 'declined',
               inputs: [INPUT],
               extra: 'x',
             },

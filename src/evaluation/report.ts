@@ -407,9 +407,21 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
         '| Case | Variant | Reason | Prepared inputs |',
         '| --- | --- | --- | --- |',
       )
+      const notRunReasons = new Map<string, string>()
+      const seenNotRun = new Map<string, number>()
+      for (const entry of run.notRun) {
+        const pair = JSON.stringify([entry.caseId, entry.variantId])
+        const occurrence = (seenNotRun.get(pair) ?? 0) + 1
+        seenNotRun.set(pair, occurrence)
+        notRunReasons.set(JSON.stringify([entry.caseId, entry.variantId, occurrence]), entry.reason)
+      }
       for (const entry of provenance.notRun) {
+        const reason =
+          notRunReasons.get(
+            JSON.stringify([entry.caseId, entry.variantId, entry.occurrence]),
+          ) ?? '—'
         lines.push(
-          `| ${cell(entry.caseId)} | ${cell(entry.variantId)} | ${cell(entry.reason)} | ${preparedInputs(entry.inputs)} |`,
+          `| ${cell(entry.caseId)} | ${cell(entry.variantId)} | ${cell(reason)} | ${preparedInputs(entry.inputs)} |`,
         )
       }
       lines.push(

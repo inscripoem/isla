@@ -64,7 +64,8 @@ export interface ProvenanceAttempt {
 export interface ProvenanceNotRunEntry {
   readonly caseId: string
   readonly variantId: string
-  readonly reason: string
+  /** 1-based occurrence among the run's not-run entries for this pair. */
+  readonly occurrence: number
   readonly inputs: readonly ProvenanceInputEntry[]
 }
 
@@ -81,7 +82,7 @@ export interface ProvenanceRun {
   readonly runId: string
   readonly records: readonly AttemptRecord[]
   /** The run's not-run cases, so observations can be bound to them. */
-  readonly notRun?: readonly { readonly caseId: string; readonly variantId: string }[]
+  readonly notRun?: readonly { readonly caseId: string; readonly variantId: string; readonly reason: string }[]
 }
 
 export type ProvenanceParse =
@@ -90,7 +91,8 @@ export type ProvenanceParse =
 
 const ROOT_KEYS = ['provenanceVersion', 'runId', 'runDigest', 'attempts', 'notRun'] as const
 const ROOT_REQUIRED_KEYS = ['provenanceVersion', 'runId', 'runDigest', 'attempts'] as const
-const NOT_RUN_KEYS = ['caseId', 'variantId', 'reason', 'inputs'] as const
+const NOT_RUN_KEYS = ['caseId', 'variantId', 'occurrence', 'inputs'] as const
+const NOT_RUN_REQUIRED_KEYS = ['caseId', 'variantId', 'inputs'] as const
 const ATTEMPT_KEYS = [
   'caseId',
   'variantId',
@@ -222,14 +224,21 @@ export function provenanceBindingViolations(
 
   // ADR-008 D4: observations for a not-run case must name a case the run did not
   // execute. A pair the run executed is an attempt, not a not-run observation.
-  const runNotRun = new Set(
-    (run.notRun ?? []).map((entry) => JSON.stringify([entry.caseId, entry.variantId])),
-  )
-  for (const entry of companion.notRun) {
+  // The run's `notRun[].reason` is the single authority; the companion carries
+  // observations only. Occurrences make repeated pairs explicit (M5, 2026-11-09).
+  const runNotRun = new Map<string, string>()
+  const runOccurrences = new Map<string, number>()
+  for (const entry of run.notRun ?? []) {
     const pair = JSON.stringify([entry.caseId, entry.variantId])
-    if (!runNotRun.has(pair)) {
+    const occurrence = (runOccurrences.get(pair) ?? 0) + 1
+    runOccurrences.set(pair, occurrence)
+    runNotRun.set(JSON.stringify([entry.caseId, entry.variantId, occurrence]), entry.reason)
+  }
+  for (const entry of companion.notRun) {
+    const key = JSON.stringify([entry.caseId, entry.variantId, entry.occurrence])
+    if (!runNotRun.has(key)) {
       violations.push(
-        `the companion records a not-run observation for ${entry.caseId}/${entry.variantId}, which is not a not-run case in the run`,
+        `the companion records a not-run observation for ${entry.caseId}/${entry.variantId} occurrence ${entry.occurrence}, which is not a not-run occurrence in the run`,
       )
     }
   }
@@ -337,20 +346,23 @@ function parseNotRun(
         violations.push(`${at}.${key} is not a recognised field`)
       }
     }
-    for (const key of NOT_RUN_KEYS) {
+    for (const key of NOT_RUN_REQUIRED_KEYS) {
       if (!(key in entry)) violations.push(`${at}.${key} is required`)
     }
     if (!nonBlank(entry.caseId)) violations.push(`${at}.caseId must be a non-empty string`)
     if (!nonBlank(entry.variantId)) violations.push(`${at}.variantId must be a non-empty string`)
-    if (!nonBlank(entry.reason)) violations.push(`${at}.reason must be a non-empty string`)
+    const occurrence = entry.occurrence ?? 1
+    if (typeof occurrence !== 'number' || !Number.isInteger(occurrence) || occurrence < 1) {
+      violations.push(`${at}.occurrence must be an integer ≥ 1`)
+    }
     const inputs = parseInputs(entry.inputs, `${at}.inputs`, violations)
-    const pair = JSON.stringify([entry.caseId, entry.variantId])
-    if (seen.has(pair)) violations.push(`${at} repeats the case and variant`)
+    const pair = JSON.stringify([entry.caseId, entry.variantId, occurrence])
+    if (seen.has(pair)) violations.push(`${at} repeats the case, variant and occurrence`)
     seen.add(pair)
     parsed.push({
       caseId: entry.caseId as string,
       variantId: entry.variantId as string,
-      reason: entry.reason as string,
+      occurrence: occurrence as number,
       inputs,
     })
   })

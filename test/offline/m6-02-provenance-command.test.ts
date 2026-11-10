@@ -320,7 +320,6 @@ describe('M5 review rules at the report boundary (2026-11-09)', () => {
           {
             caseId: 'case-3',
             variantId: 'v1',
-            reason: 'declined',
             inputs: [{ ...INPUT, status: 'rejected', eventId: null }],
           },
         ],
@@ -335,5 +334,87 @@ describe('M5 review rules at the report boundary (2026-11-09)', () => {
     expect(table).toContain('### Not-run observations')
     expect(table).toContain('| case-3 | v1 | declined |')
     expect(table).toContain('rejected 1')
+  })
+})
+
+
+describe('repeated not-run pairs (M5 contract, 2026-11-09)', () => {
+  it('binds each occurrence and renders the run reason', () => {
+    const run = {
+      ...RUN,
+      notRun: [
+        { variantId: 'v1', caseId: 'case-3', reason: 'rejected' },
+        { variantId: 'v1', caseId: 'case-3', reason: 'held' },
+      ],
+    }
+    const runText = JSON.stringify(run)
+    const digest = provenanceRunDigest(runText)
+    const { input, output, provenance } = workspace()
+    writeFileSync(input, runText, 'utf8')
+    writeFileSync(
+      provenance,
+      JSON.stringify({
+        provenanceVersion: 1,
+        runId: 'run-1',
+        runDigest: digest,
+        attempts: [attempt('case-1'), attempt('case-2')],
+        notRun: [
+          {
+            caseId: 'case-3',
+            variantId: 'v1',
+            occurrence: 1,
+            inputs: [{ ...INPUT, status: 'rejected', eventId: null }],
+          },
+          {
+            caseId: 'case-3',
+            variantId: 'v1',
+            occurrence: 2,
+            inputs: [{ ...INPUT, status: 'not-submitted' }],
+          },
+        ],
+      }),
+      'utf8',
+    )
+    expect(
+      runReportCommand(['--input', input, '--output', output, '--provenance', provenance]),
+    ).toBe(0)
+    const table = readFileSync(output, 'utf8')
+    expect(table).toContain('| case-3 | v1 | rejected |')
+    expect(table).toContain('| case-3 | v1 | held |')
+  })
+
+  it('refuses an occurrence the run does not have', () => {
+    const run = {
+      ...RUN,
+      notRun: [{ variantId: 'v1', caseId: 'case-3', reason: 'rejected' }],
+    }
+    const runText = JSON.stringify(run)
+    const digest = provenanceRunDigest(runText)
+    const { input, output, provenance } = workspace()
+    writeFileSync(input, runText, 'utf8')
+    writeFileSync(
+      provenance,
+      JSON.stringify({
+        provenanceVersion: 1,
+        runId: 'run-1',
+        runDigest: digest,
+        attempts: [attempt('case-1'), attempt('case-2')],
+        notRun: [
+          {
+            caseId: 'case-3',
+            variantId: 'v1',
+            occurrence: 2,
+            inputs: [{ ...INPUT, status: 'rejected', eventId: null }],
+          },
+        ],
+      }),
+      'utf8',
+    )
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    expect(
+      runReportCommand(['--input', input, '--output', output, '--provenance', provenance]),
+    ).toBe(1)
+    expect(existsSync(output)).toBe(false)
+    expect(stderr.mock.calls.flat().join('')).toContain('not a not-run occurrence')
   })
 })
