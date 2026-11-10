@@ -1,6 +1,6 @@
 # Evaluation thresholds — register
 
-Status: **proposal; every value is `pending`.** Date: 2026-11-09. Owner: M6.
+Status: **proposal; every threshold value is `pending`; deterministic obligations are listed separately.** Date: 2026-11-09. Owner: M6.
 Rule source: the evaluation protocol, **PR #142** (this proposal), §5.
 No threshold is approved, no baseline exists, no pilot has run, and no CP5 or G4 result is claimed.
 
