@@ -5536,3 +5536,30 @@ entries:
         and the removed reason field each fail.
       not_run: >-
         No push; remote CI, M5/M4 review and merge remain.
+
+  - date: "2026-11-10"
+    task: "M6-02 / #100 null occurrence fix"
+    branch: m6-02-provenance
+    change: >-
+      Refuses a JSON `null` not-run occurrence: the default now applies only to
+      an omitted field, so the integer validation rejects null. Regression added.
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: []
+    commits: [ec7d372]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode under M6 supervision after the local self-review.
+    human_review: >-
+      Captain (M6) approved the fix; review pending. No merge claimed.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: e9e7e7b (main)
+      role: "provenance 46; test:m6 229/229 in 16 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0; typecheck clean; lint clean."
+      mutation: "The null-occurrence regression fails when the undefined check is reverted."
+      not_run: "No push; remote CI and review pending."
