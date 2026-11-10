@@ -101,8 +101,10 @@ or unacknowledged submission. Only a failure **before any submission** leaves no
 that never submitted an input supplies zero observed inputs; a not-run entry never receives an invented
 acknowledgement.
 
-The observations are carried in the companion's root **`notRun[]`** array (`caseId`, `variantId`, `reason`,
-`inputs`), bound to the run's not-run pairs; the frozen `RecordedRunV1` is unchanged (M5 review, 2026-11-09).
+The observations are carried in the companion's root **`notRun[]`** array (`caseId`, `variantId`,
+`occurrence`, `inputs`), bound to the run's not-run pairs and occurrence order. The run's
+`notRun[].reason` is the single authority; the companion carries observations only, so the two cannot
+disagree. The frozen `RecordedRunV1` is unchanged (M5 review, 2026-11-09).
 
 ### D5 — Input identity is a tuple, and it is not observable yet
 
@@ -144,7 +146,8 @@ alone.
 
 The report command takes an explicit companion path. It refuses the companion when the `runId` differs, the
 digest differs, the `(caseId, variantId, attempt)` set differs from the run's, a duplicate key appears, the
-input order cannot be established, a `notRun` observation names a case the run executed, or an `exact`
+input order cannot be established, a `notRun` observation names a pair or occurrence the run did not
+record, or an `exact`
 correlation lacks an observed acknowledgement. A missing or extra entry is a refusal with a reason, never a
 partial join. Without a companion, every quality result for that run is `unscored` with reason
 `no-provenance-record`.

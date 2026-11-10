@@ -1,12 +1,13 @@
 # Delta-008 — Prepared-input provenance companion
 
-Change record for **ADR-008**. Date: 2026-11-09. Branch `m6-02-provenance` (PR #140), measured at
-`dd4cebf` before the planned rebase onto `main` `78fe3f1`. Scope: a **separate** companion artifact;
-`RecordedRunV1` and every public port are unchanged.
+Change record for **ADR-008**. Date: 2026-11-09 (review fixes 2026-11-09/10). Branch
+`m6-02-provenance` (PR #140), measured at `44b5d98` on `main` `e9e7e7b`. The `dd4cebf`/`78fe3f1`
+paragraphs below are **historical**; the current verification block names its own head. Scope: a
+**separate** companion artifact; `RecordedRunV1` and every public port are unchanged.
 
 ## Change
 
-Against `main` `78fe3f1`, the slice changes eight files:
+Against `main` `e9e7e7b`, the slice changes ten files:
 
 - **ADDED** `src/evaluation/provenance.ts` — `ProvenanceCompanionV1`, `ProvenanceAttempt`,
   `ProvenanceInputEntry`, `parseProvenance`. A strict parser: unknown keys, a run-id or digest mismatch,
@@ -37,7 +38,7 @@ array position and runtime ids are all unsafe identities. The companion binds ea
 by content (`runDigest`) and a positional occurrence key, keeps unobserved values `null`
 (`not-yet-observable`), and refuses a partial join rather than printing one.
 
-## Verification at `dd4cebf`
+## Verification at `dd4cebf` (historical)
 
 - Focused: `pnpm exec vitest run test/offline/m6-02-provenance.test.ts
   test/offline/m6-02-provenance-command.test.ts` → **30 passed / 2 files**.
@@ -47,7 +48,8 @@ by content (`runDigest`) and a positional occurrence key, keeps unobserved value
 
 ## Open items (recorded, not resolved here)
 
-- **ADR-008 remains `proposed`.** This Delta records an implementation that awaits M3/M4/M5 approval; it
+- **ADR-008 remains `proposed`.** M3 answered the identity scope and M4 answered D7; the remaining
+  affected-owner items are M5's acknowledgement export and the unadopted interface direction. This Delta
   does not approve the ADR and does not authorise a merge.
 - **Export shape.** M5 must pin the producing export of `sourceId`, `requestMessageId` and `eventId` before
   any CP05 scoring that joins an attempt to dialogue-side records (ADR-008 open decision 3).
@@ -77,3 +79,15 @@ by content (`runDigest`) and a positional occurrence key, keeps unobserved value
 
 Verification: provenance **29** tests and command **13**; `test:m6` 225/225 in 16 files; trace 41/41;
 readiness 45/45; `pnpm verify` exit 0. Four mutations each turned their own test red, then were restored.
+
+## Not-run contract (M5 follow-up, 2026-11-09)
+
+- **One reason authority.** The companion's `notRun[]` no longer carries `reason`; the run's
+  `notRun[].reason` is rendered. The two could previously disagree on a synthetic case.
+- **Occurrence.** A companion entry names `occurrence` (1-based, default 1) among the run's not-run pairs.
+  Repeated pairs are explicit; an occurrence the run does not have is refused.
+- Regressions: the removed `reason` field, an unknown occurrence, and two repeated pairs rendering both
+  run reasons.
+
+Verification at `44b5d98`: provenance **45** tests; `test:m6` **228/228** in 16 files; trace 41/41;
+readiness 45/45; full **1586/1586** in 76 files; `pnpm verify` exit 0.
