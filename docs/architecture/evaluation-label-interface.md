@@ -1,8 +1,10 @@
 # Evaluation label interface — proposal
 
 Status: **proposal, not approved.** Owner: M6. Reviewers: M3 (corpus and labels), M4 (rubric and
-condition eligibility), M5 (export and aggregation). Anchors: NFR-01, NFR-04; ADR-008 (prepared-input
-provenance); the evaluation protocol proposal (PR #142) §1/§3; DEBT-10.
+condition eligibility), M5 (export and aggregation). Anchors: **NFR-03** (response quality: selection
+appropriateness, intent adherence, persona consistency, unacceptable-response rate, evaluated against human
+reference labels — `docs/team/REQUIREMENTS.en.md:36`); ADR-008 (prepared-input provenance); the evaluation
+protocol proposal (PR #142) §1/§3; DEBT-10.
 
 This document fixes the **shape of the label file and its join to a recorded run**. It does not define the
 rubric, a score, a threshold or an acceptance result. Until M3/M4 approve the shape, no label is consumed.
@@ -58,6 +60,14 @@ runtime id.
   the provenance companion uses (ADR-008 D2). The effective label for a key is its highest `revision`. A
   label that names an attempt the run does not contain is refused; an attempt without a label stays
   unscored and is not an error.
+- **The run artifact is part of the binding.** `runDigest` hashes the exact bytes on disk, so the run must be
+  preserved verbatim: a re-serialised or re-formatted copy of the same run is a different run for this
+  interface, and its labels are refused rather than silently re-attached.
+- **Known limitation — the run carries no corpus identity.** `corpusVersion`/`casesSha256` are checked
+  against the supplied manifest, and `RecordedRunV1.FixedConditions` has no corpus field, so nothing in the
+  run proves its cases came from that corpus. Adding a corpus field is a versioned run-schema decision, not
+  this proposal; until then the join trusts the operator to supply the run and the manifest together.
+  Recorded as DEBT-14.
 
 ## Shape (schema version 1)
 
@@ -110,8 +120,9 @@ non-finite score, a blank reviewer or a malformed date is refused. A refusal wri
 
 ## How the report uses it
 
-The report adds a **Human labels (appendix)** table keyed by the join key: case, variant, attempt, status,
-reviewer, rubric version, and the opaque score object. It does not aggregate, rank, compare or convert the
+The report adds a **Human labels (appendix)** table keyed by the join key: case, variant, attempt,
+**revision**, status, reviewer, rubric version, and the opaque score object. Only the **effective row** —
+the highest revision for that key — is rendered, so the revision column says which row produced the score. It does not aggregate, rank, compare or convert the
 scores into a pass/fail; those are the rubric owner's decisions. The failure-rate and latency tables are
 unchanged. Every label must be for a case the corpus manifest marks held-out; a label for a development
 case is refused before rendering.
