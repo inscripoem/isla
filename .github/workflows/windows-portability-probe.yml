@@ -44,7 +44,19 @@ jobs:
           pnpm install --frozen-lockfile
           if ($LASTEXITCODE -ne 0) { throw "pnpm install failed with exit code $LASTEXITCODE" }
           pnpm verify
-          if ($LASTEXITCODE -ne 0) { throw "pnpm verify failed with exit code $LASTEXITCODE" }
+          $verifyExit = $LASTEXITCODE
+          if ($verifyExit -ne 0) {
+            # Diagnostic only, never a substitute for the primary check: M4
+            # observed pnpm verify failing at the Windows launcher before
+            # Vitest starts. Run the suite directly so the failure can be
+            # attributed, print its exit code, then fail on the original
+            # pnpm verify result. The diagnostic failure is not masked: its
+            # exit code is reported even when it is non-zero.
+            node ./node_modules/vitest/vitest.mjs run
+            $diagnosticExit = $LASTEXITCODE
+            Write-Host "diagnostic vitest run exited $diagnosticExit (pnpm verify exited $verifyExit)"
+            throw "pnpm verify failed with exit code $verifyExit"
+          }
 
   snapshot:
     name: test a git archive snapshot outside Git
