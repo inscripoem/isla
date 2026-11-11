@@ -11,7 +11,12 @@ import {
   type WindowSummary,
 } from './metrics'
 import type { ProvenanceCompanionV1, ProvenanceInputEntry } from './provenance'
-import { INPUT_STATUSES, provenanceBindingViolations } from './provenance'
+import {
+  INPUT_STATUSES,
+  buildOccurrenceKey,
+  notRunReasonIndex,
+  provenanceBindingViolations,
+} from './provenance'
 
 /**
  * M6-02 — the evaluation report.
@@ -407,18 +412,14 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
         '| Case | Variant | Reason | Prepared inputs |',
         '| --- | --- | --- | --- |',
       )
-      const notRunReasons = new Map<string, string>()
-      const seenNotRun = new Map<string, number>()
-      for (const entry of run.notRun) {
-        const pair = JSON.stringify([entry.caseId, entry.variantId])
-        const occurrence = (seenNotRun.get(pair) ?? 0) + 1
-        seenNotRun.set(pair, occurrence)
-        notRunReasons.set(JSON.stringify([entry.caseId, entry.variantId, occurrence]), entry.reason)
-      }
+      // The run's reason is the single authority (ADR-008 D4); the index is built by
+      // the same helper the parser uses, so a repeated pair cannot pick up the
+      // wrong occurrence's reason.
+      const notRunReasons = notRunReasonIndex(run)
       for (const entry of provenance.notRun) {
         const reason =
           notRunReasons.get(
-            JSON.stringify([entry.caseId, entry.variantId, entry.occurrence]),
+            buildOccurrenceKey(entry.caseId, entry.variantId, entry.occurrence),
           ) ?? '—'
         lines.push(
           `| ${cell(entry.caseId)} | ${cell(entry.variantId)} | ${cell(reason)} | ${preparedInputs(entry.inputs)} |`,

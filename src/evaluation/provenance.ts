@@ -166,16 +166,45 @@ export function parseOccurrenceKey(key: string): OccurrenceKeyParts | null {
   return { caseId, variantId, attempt }
 }
 
+/**
+ * Unambiguous pair encoding, the prefix of an occurrence key. One helper so the
+ * record set, the not-run reason index and the executed-pair check cannot drift.
+ */
+function pairKey(caseId: string, variantId: string): string {
+  return JSON.stringify([caseId, variantId])
+}
+
 export function runOccurrenceKeys(
   records: readonly { caseId: string; variantId: string }[],
 ): string[] {
   const seen = new Map<string, number>()
   return records.map((record) => {
-    const base = JSON.stringify([record.caseId, record.variantId])
+    const base = pairKey(record.caseId, record.variantId)
     const attempt = (seen.get(base) ?? 0) + 1
     seen.set(base, attempt)
     return buildOccurrenceKey(record.caseId, record.variantId, attempt)
   })
+}
+
+/**
+ * The run's `notRun[].reason`, keyed by occurrence key (ADR-008 D4).
+ *
+ * The run owns the reason and the companion carries observations only, so the
+ * parser and the report renderer must build this index the same way: one helper,
+ * or a repeated pair can pick up the wrong occurrence's reason.
+ */
+export function notRunReasonIndex(
+  run: Pick<ProvenanceRun, 'notRun'>,
+): ReadonlyMap<string, string> {
+  const occurrences = new Map<string, number>()
+  const index = new Map<string, string>()
+  for (const entry of run.notRun ?? []) {
+    const pair = pairKey(entry.caseId, entry.variantId)
+    const occurrence = (occurrences.get(pair) ?? 0) + 1
+    occurrences.set(pair, occurrence)
+    index.set(buildOccurrenceKey(entry.caseId, entry.variantId, occurrence), entry.reason)
+  }
+  return index
 }
 
 export function companionOccurrenceKey(ref: {
@@ -226,16 +255,22 @@ export function provenanceBindingViolations(
   // execute. A pair the run executed is an attempt, not a not-run observation.
   // The run's `notRun[].reason` is the single authority; the companion carries
   // observations only. Occurrences make repeated pairs explicit (M5, 2026-11-09).
-  const runNotRun = new Map<string, string>()
-  const runOccurrences = new Map<string, number>()
-  for (const entry of run.notRun ?? []) {
-    const pair = JSON.stringify([entry.caseId, entry.variantId])
-    const occurrence = (runOccurrences.get(pair) ?? 0) + 1
-    runOccurrences.set(pair, occurrence)
-    runNotRun.set(JSON.stringify([entry.caseId, entry.variantId, occurrence]), entry.reason)
-  }
+  const runNotRun = notRunReasonIndex(run)
+  // A pair the run executed is an attempt. A run that lists the same pair in both
+  // `records` and `notRun` is already inconsistent; the companion must not be able
+  // to turn that into a not-run observation that contradicts the attempt table.
+  const executedPairs = new Set(
+    run.records.map((record) => pairKey(record.caseId, record.variantId)),
+  )
   for (const entry of companion.notRun) {
-    const key = JSON.stringify([entry.caseId, entry.variantId, entry.occurrence])
+    const pair = pairKey(entry.caseId, entry.variantId)
+    if (executedPairs.has(pair)) {
+      violations.push(
+        `the companion records a not-run observation for ${entry.caseId}/${entry.variantId}, but the run executed that pair`,
+      )
+      continue
+    }
+    const key = buildOccurrenceKey(entry.caseId, entry.variantId, entry.occurrence)
     if (!runNotRun.has(key)) {
       violations.push(
         `the companion records a not-run observation for ${entry.caseId}/${entry.variantId} occurrence ${entry.occurrence}, which is not a not-run occurrence in the run`,

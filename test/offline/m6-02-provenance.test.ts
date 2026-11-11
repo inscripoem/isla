@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { MAX_SELECTION_CANDIDATES } from '../../src/contracts/app/pipeline'
 import { parseRecordedRun } from '../../src/evaluation/recorded-run'
 import {
   buildOccurrenceKey,
@@ -67,6 +68,20 @@ if (!parsedRun.ok) throw new Error('fixture run must parse')
 const RUN = { runId: 'run-1', records: parsedRun.input.run.records }
 const DIGEST = provenanceRunDigest(RUN_TEXT)
 const REVISION = 'a'.repeat(64)
+
+// A run that lists one executed pair in `notRun` too: the producer should not do
+// this, and the companion must not be able to turn it into a not-run observation.
+const OVERLAP_TEXT = JSON.stringify({
+  ...JSON.parse(RUN_TEXT),
+  notRun: [{ caseId: 'case-1', variantId: 'v1', reason: 'declined' }],
+})
+const parsedOverlap = parseRecordedRun(OVERLAP_TEXT)
+if (!parsedOverlap.ok) throw new Error('overlap fixture run must parse')
+const OVERLAP_RUN = {
+  runId: 'run-1',
+  records: parsedOverlap.input.run.records,
+  notRun: parsedOverlap.input.run.notRun,
+}
 
 const INPUT = {
   inputId: 'corpus-v1/case-1/event-1',
@@ -211,20 +226,23 @@ describe('provenance companion (ADR-008)', () => {
     ).toBe(true)
   })
 
-  it('refuses more than five prepared inputs for one attempt', () => {
+  it('refuses more prepared inputs than the frozen C1 candidate bound allows', () => {
+    const tooMany = Array.from({ length: MAX_SELECTION_CANDIDATES + 1 }, () => INPUT)
     const violations = refused(
       parseProvenance(
         companion({
-          attempts: [
-            attempt({ inputs: [INPUT, INPUT, INPUT, INPUT, INPUT, INPUT] }),
-            attempt({ attempt: 2 }),
-          ],
+          attempts: [attempt({ inputs: tooMany }), attempt({ attempt: 2 })],
         }),
         RUN,
         RUN_TEXT,
       ),
     )
-    expect(violations.some((violation) => violation.includes('at most 5 entries'))).toBe(true)
+    // Agreement test: the companion cap must equal C1's bound, not a second copy of 5.
+    expect(
+      violations.some((violation) =>
+        violation.includes(`at most ${MAX_SELECTION_CANDIDATES} entries`),
+      ),
+    ).toBe(true)
   })
 
   it('refuses an undocumented input status', () => {
@@ -490,7 +508,27 @@ describe('not-run observations (ADR-008 D4)', () => {
         RUN_TEXT,
       ),
     )
-    expect(violations.some((violation) => violation.includes('not a not-run occurrence'))).toBe(true)
+    expect(
+      violations.some((violation) => violation.includes('but the run executed that pair')),
+    ).toBe(true)
+  })
+
+  it('refuses a not-run observation for a pair the run both executed and did not run', () => {
+    const violations = refused(
+      parseProvenance(
+        companion({
+          runDigest: provenanceRunDigest(OVERLAP_TEXT),
+          notRun: [{ caseId: 'case-1', variantId: 'v1', inputs: [INPUT] }],
+        }),
+        OVERLAP_RUN,
+        OVERLAP_TEXT,
+      ),
+    )
+    expect(
+      violations.some((violation) =>
+        violation.includes('but the run executed that pair'),
+      ),
+    ).toBe(true)
   })
 
   it('refuses a duplicate not-run pair', () => {

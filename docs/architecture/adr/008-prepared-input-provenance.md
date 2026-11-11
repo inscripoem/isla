@@ -148,8 +148,10 @@ The report command takes an explicit companion path. It refuses the companion wh
 digest differs, the `(caseId, variantId, attempt)` set differs from the run's, a duplicate key appears, the
 input order cannot be established, a `notRun` observation names a pair or occurrence the run did not
 record, or an `exact`
-correlation lacks an observed acknowledgement. A missing or extra entry is a refusal with a reason, never a
-partial join. Without a companion, every quality result for that run is `unscored` with reason
+correlation lacks an observed acknowledgement. Strict shape validation belongs to the same refusal set:
+an unknown or extra field, a missing required field, a `status` or `correlation` outside the declared set,
+more than five prepared inputs, and a `recordSetRevision` that is `null` under `exact` all refuse the
+companion. A missing or extra entry is a refusal with a reason, never a partial join. Without a companion, every quality result for that run is `unscored` with reason
 `no-provenance-record`.
 
 ### D9 — No schema or port change in this decision

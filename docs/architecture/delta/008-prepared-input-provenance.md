@@ -1,7 +1,8 @@
 # Delta-008 — Prepared-input provenance companion
 
 Change record for **ADR-008**. Date: 2026-11-09 (review fixes 2026-11-09/10). Branch
-`m6-02-provenance` (PR #140), measured at `44b5d98` on `main` `e9e7e7b`. The `dd4cebf`/`78fe3f1`
+`m6-02-provenance` (PR #140), measured at `44b5d98` on `main` `e9e7e7b`; the null-occurrence
+refusal `ec7d372` and the docs-only `341303a` follow that measurement. The `dd4cebf`/`78fe3f1`
 paragraphs below are **historical**; the current verification block names its own head. Scope: a
 **separate** companion artifact; `RecordedRunV1` and every public port are unchanged.
 
@@ -71,8 +72,9 @@ by content (`runDigest`) and a positional occurrence key, keeps unobserved value
   (ADR-008 D3/D8). A report-boundary regression refuses the synthetic exact-with-null-ids companion.
 - **Terminal submission order** — `rejected`, `no-acknowledgement` and `not-submitted` end the batch; a
   later submission is refused (ADR-008 D3).
-- **Not-run observations** — an optional root `notRun[]` (`caseId`, `variantId`, `reason`, `inputs`) carries
-  observed inputs for cases the run did not execute, bound to the run's not-run pairs and never scored;
+- **Not-run observations** — an optional root `notRun[]` (`caseId`, `variantId`, `occurrence`, `inputs`)
+  carries observed inputs for cases the run did not execute, bound to the run's not-run pairs and never
+  scored; the run's `notRun[].reason` stays the single authority and the companion carries no reason.
   `RecordedRunV1` is unchanged (ADR-008 D4/D8).
 - **Occurrence key** — JSON-encoded tuple, so an identifier containing a delimiter cannot collide with a
   different pair (ADR-008 D2).
@@ -91,3 +93,16 @@ readiness 45/45; `pnpm verify` exit 0. Four mutations each turned their own test
 
 Verification at `44b5d98`: provenance **45** tests; `test:m6` **228/228** in 16 files; trace 41/41;
 readiness 45/45; full **1586/1586** in 76 files; `pnpm verify` exit 0.
+
+### Null occurrence and review-fix pass (`ec7d372`, `341303a`)
+
+- `ec7d372` refuses a JSON `null` occurrence — the default of 1 applies only to an omitted field — with its
+  own regression.
+- `341303a` is the docs/ai-use record for that fix and for the Delta refresh below; it changes no code.
+- The review-fix pass at the current head also: builds the run's not-run reason index in **one** helper
+  (`notRunReasonIndex`) used by both the parser and the renderer, refuses a companion not-run observation for
+  a pair the run executed, and binds the five-input cap to C1's `MAX_SELECTION_CANDIDATES` with an agreement
+  test.
+
+Verification at the current head: provenance **47** tests across the two files; `test:m6` **230/230** in 16
+files; trace 41/41; readiness 45/45; full **1588/1588** in 76 files; `pnpm verify` exit 0.
