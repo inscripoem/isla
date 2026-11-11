@@ -33,7 +33,8 @@ requirement or case ID.
 - **Corpus, held-out split** — M3, #98.
 - **Rubric, labels, condition eligibility** — M4, #99: the rubric remains a comment-first draft posted 2026-11-09, still without M3/M6 feedback, with repository-file integration planned for the 2026-11-13 week. M4
   [answered the five #145 questions](https://github.com/inscripoem/isla/pull/145#pullrequestreview-5822403599)
-  as proposed positions, not an interface approval; the M3/M5 answers remain to be coordinated.
+  as proposed positions, not an interface approval. At this snapshot the M3/M5 answers were not yet
+  recorded; M5 answered on 2026-11-09 and M3 on 2026-11-10, after it.
 - **Acknowledgement and timing export** — M5, #101.
 - **Physical input/playback/Stop observation** — M1/M2, #102.
 - **CP05 provider access and credentials** — M5/operator; pilot readiness is unconfirmed.

@@ -27,13 +27,14 @@ pnpm exec vitest run \
   test/offline/production-cli.test.ts
 ```
 
-Result: **27 passed / 27, 5 files** at `e9e7e7b`. On a branch that predates #141 the same command yields
-**26**, because the two-turn Stop case is the #141 addition; the counts above belong to `e9e7e7b`.
+Result: **26 passed / 26, 5 files** at `e9e7e7b`. Measured on 2026-11-11 against a tree whose test files
+are byte-identical to `e9e7e7b` (`e9e7e7b..7995f51` touches no test file); the earlier draft of this record
+said 27, which did not reproduce.
 
 | Suite | Cases | What it asserts |
 | --- | --- | --- |
 | `m6-recovery` (4) | C-32, C-33 | recovery view separates confirmed from unresolved; reopen restores confirmed only and keeps the rest unknown with no replay; the projection is re-derived from committed events; an unsupported schema version refuses to start |
-| `m6-i1-storage-recovery` (4) | C-32/C-33, C-68 | the real coordinator writes SQLite and a reopen restores only confirmed history; an earlier completed segment stays eligible and the interrupted one is excluded; empty confirmed history when nothing completed; two turns with Stop, a late result and a duplicate leave one confirmed turn and no false record |
+| `m6-i1-storage-recovery` (3) | C-32/C-33, C-68 | the real coordinator writes SQLite and a reopen restores only confirmed history; an earlier completed segment stays eligible and the interrupted one is excluded; empty confirmed history when nothing completed |
 | `m6-durability` (2) | INV-12, FR-06 | a crash-state copy (`isla.db` + non-empty `-wal`) recovers every committed row and keeps the schema version; a committed row is visible to a second handle without a clean close |
 | `m5-process-restart` (2) | C-74 | two spawned production CLI processes over one real SQLite database; the second uses a fresh live id and the explicitly selected archive, receives only confirmed history, and neither replays old audio nor promotes the partial-unknown tail; a second case SIGKILLs the first process between commits, preserves the committed prefix and never promotes the unfinished tail |
 | `production-cli` (15) | C-73 | shutdown waits for a genuinely pending owned release before reporting completion; a failed release reports an incomplete shutdown; startup failure still awaits the owned release; output is drained until both streams end |

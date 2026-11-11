@@ -44,4 +44,4 @@ their component rows here remain pending owner contributions.
 the INV-16 row and, once #140 merges, by the ADR-008 provenance row. Still open:
 case allocation for the provenance and eligibility slices (M5), per-attempt
 condition rows for `condition-mismatch` (M4/M6, DEBT-13), and the remaining monitor columns
-where no runtime signal exists (recorded as DEBT-13).
+where no runtime signal exists (no debt row yet; not DEBT-13).
