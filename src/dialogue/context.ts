@@ -109,15 +109,28 @@ export const ITEM_PREFIX = '- '
 export const INTERRUPTED_SPEECH_MARKER = ' [cut off mid-sentence]'
 
 /**
- * Appended to a turn whose playback started but whose delivery never
- * completed, when the record carries a receipt (issue #146 A02). Counted in
- * the budget. Mutually exclusive with INTERRUPTED_SPEECH_MARKER: a
- * heard-prefix turn renders exactly this marker and never the mid-sentence
- * one, because "fully delivered but stopped mid-sentence" and "playback
- * started and was cut off" are different evidence. Priority is fixed:
- * `heardPrefix === true` wins over `interrupted`.
+ * Appended to a turn that is incomplete and whose start is unconfirmed, when
+ * the record carries a receipt (issue #146 A02). Counted in the budget.
+ *
+ * Why "start unconfirmed" and not "cut off after start": a receipt id is NOT
+ * start evidence. M1 creates an `accepted` receipt before media resolves, and a
+ * `partial-unknown` record can carry the id of a receipt for a delivery whose
+ * playback never began (for example `accepted -> cancelled` with zero media
+ * handles). `ConfirmedDelivery` carries `receiptId`, `classification` and
+ * `modality` but no receipt stage, so M4 cannot tell "started and was cut off"
+ * from "cancelled before any media handle existed". The bucket therefore means
+ * "incomplete, start unconfirmed": the segment was not delivered in full, and
+ * nothing here claims the audience heard any part of it. Asserting a start on
+ * the listener's side needs M5's `started` evidence (tracked as X05, not this
+ * batch).
+ *
+ * Mutually exclusive with INTERRUPTED_SPEECH_MARKER: a heard-prefix turn
+ * renders exactly this marker and never the mid-sentence one, because "fully
+ * delivered but stopped mid-sentence" and "incomplete with an unconfirmed
+ * start" are different evidence. Priority is fixed: `heardPrefix === true`
+ * wins over `interrupted`.
  */
-export const HEARD_PREFIX_MARKER = ' [cut off after start]'
+export const HEARD_PREFIX_MARKER = ' [interrupted; start unconfirmed]'
 
 /**
  * Appended to a turn the consistency scan (./consistency) flagged as
@@ -187,7 +200,7 @@ export const CHARACTER_LINE_PREFIX = '[character] '
  *
  * Boundary. This function only renders rows the assembler hands it. The
  * transcript's character side is fed from `turns` (fully delivered, chargeable
- * turns), never from `heardPrefixTurns`: started-but-cut-off rows stay in their
+ * turns), never from `heardPrefixTurns`: incomplete heard-prefix rows stay in their
  * own section.
  *
  * Listener rows never enter the persona block, the state block, the recall
@@ -359,9 +372,11 @@ export interface AssembledTurn {
   conflicting?: boolean
   /**
    * True when the turn came from a `partial-unknown` record that carries a
-   * receipt (issue #146 A02): playback started, the audience may have heard
-   * the prefix, but delivery never completed. Such turns render in their own
-   * section with HEARD_PREFIX_MARKER and never enter `turns`/`history`.
+   * receipt (issue #146 A02): the delivery is incomplete and its start is
+   * unconfirmed. A receipt id is not start evidence, and `ConfirmedDelivery`
+   * carries no receipt stage, so this flag never claims that playback began or
+   * that the audience heard any part of the text. Such turns render in their
+   * own section with HEARD_PREFIX_MARKER and never enter `turns`/`history`.
    * Absent (undefined) on every fully-delivered turn. `interrupted` stays
    * false on such turns: that flag is reserved for fully delivered text that
    * still ends mid-sentence (see its doc above).
@@ -381,8 +396,9 @@ export type ContextExclusionReason =
   /** A candidate was dropped for crossing a session boundary without the
    *  durable audience identity that crossing requires. See ./audience. */
   | 'cross-session-scope'
-  /** A started-but-cut-off turn (issue #146 A02) was dropped to stay within
-   *  the character budget; heard-prefix turns drop before confirmed history. */
+  /** An incomplete heard-prefix turn with an unconfirmed start (issue #146
+   *  A02) was dropped to stay within the character budget; heard-prefix turns
+   *  drop before confirmed history. */
   | 'heard-prefix-budget'
 
 export interface ContextExclusion {
@@ -455,12 +471,14 @@ export interface AssembledDialogueContext {
   /** Rollup line for turns dropped under budget pressure; see ContextRollup. */
   rollup: ContextRollup | null
   /**
-   * Started-but-cut-off turns (issue #146 A02): partial deliveries that carry
-   * a receipt. Rendered in their own section, charged to the same character
-   * budget, and dropped FIRST under budget pressure with exclusion reason
-   * 'heard-prefix-budget'. Never in `turns` or `history`: those carry only
-   * fully delivered speech. Not pinned, not part of the recency window, and
-   * never recall candidates.
+   * Incomplete heard-prefix turns with an unconfirmed start (issue #146 A02):
+   * partial deliveries that carry a receipt. The bucket means "incomplete,
+   * start unconfirmed" - it never asserts that playback began (see
+   * HEARD_PREFIX_MARKER). Rendered in their own section, charged to the same
+   * character budget, and dropped FIRST under budget pressure with exclusion
+   * reason 'heard-prefix-budget'. Never in `turns` or `history`: those carry
+   * only fully delivered speech. Not pinned, not part of the recency window,
+   * and never recall candidates.
    */
   heardPrefixTurns: readonly AssembledTurn[]
   /**
@@ -534,7 +552,7 @@ export interface AssembledDialogueContext {
    * `budgetPlan` was supplied; absent otherwise. Carries counts only, never
    * memory text, and is not part of the memory inspection payload.
    *
-   * Kept started-but-cut-off (heard-prefix) turns have no row of their own.
+   * Kept incomplete heard-prefix turns have no row of their own.
    * They are charged to the same pool as the history row, after the confirmed
    * history, so their characters appear as unused capacity inside
    * `history.limit` and the sum of `used` is smaller than
@@ -809,7 +827,7 @@ export async function assembleDialogueContext(
      * `fully-delivered` + `completed` and a `partial-unknown` + `cancelled`
      * pair are both legal commit pairs). Such a duplicate is not a modality
      * duplicate, yet rendering it in both the confirmed history and the
-     * started-but-cut-off section would state the same sentence twice. Complete
+     * incomplete heard-prefix section would state the same sentence twice. Complete
      * speech wins: the heard-prefix copy is dropped with the same auditable
      * `'duplicate-modality'` exclusion (the segment was duplicated, not the
      * modality). Only the confirmed side can win, so a heard-prefix record
@@ -1598,7 +1616,7 @@ export async function assembleDialogueContext(
    * Budget diagnostics, built only for a caller that asked for a plan.
    *
    * Parity with `estimatedCharacters`. `estimatedCharacters` charges the
-   * confirmed kept turns, the recalls, the kept started-but-cut-off
+   * confirmed kept turns, the recalls, the kept incomplete heard-prefix
    * (heard-prefix) turns and the charged rollup line, so those are exactly the
    * lines `estimatedTokens` is computed over. The charged classes that are not
    * lines here are the kept state block and the kept working-memory block: each
@@ -1607,7 +1625,7 @@ export async function assembleDialogueContext(
    * plan is active; the working-memory block is charged to `workingMemory.used`
    * below and is never added to `chargedLines` either, for the same reason.
    *
-   * The started-but-cut-off turns have no row of their own either. They are
+   * The incomplete heard-prefix turns have no row of their own either. They are
    * charged to the same pool as the history row, after the confirmed history,
    * out of what the history row reports as unused, so `history.used` stays the
    * confirmed history plus the rollup line and is never overstated by them.
@@ -1933,13 +1951,14 @@ export function renderDialoguePrompt(view: AssembledDialogueContext): string {
   }
 
   /*
-   * Started-but-cut-off turns sit directly before confirmed history: they are
-   * evidence the listener may have half-heard, and the explicit header keeps
-   * them from reading as finished statements. The header is not charged to
-   * `maxCharacters` (same rule as the other section headers); the lines are.
+   * Heard-prefix turns sit directly before confirmed history: they are
+   * incomplete records whose start is unconfirmed, and the explicit header
+   * keeps them from reading as finished statements - or as started ones. The
+   * header is not charged to `maxCharacters` (same rule as the other section
+   * headers); the lines are.
    */
   if (view.heardPrefixTurns.length > 0) {
-    lines.push('Started but cut off:')
+    lines.push('Interrupted before completion:')
     for (const turn of view.heardPrefixTurns) lines.push(renderHistoryLine(turn))
   }
 

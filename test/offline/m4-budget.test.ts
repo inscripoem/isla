@@ -471,8 +471,9 @@ describe('M4 layered budget: assembly', () => {
 
   it('counts heard-prefix lines in estimatedTokens exactly as estimatedCharacters charges them', async () => {
     const memory = createDeliveryMemoryStore()
-    // A partial delivery that carries a receipt (A02): the listener may have
-    // heard a prefix, so it renders as '- <text> [cut off after start]'.
+    // A partial delivery that carries a receipt (A02): incomplete with an
+    // unconfirmed start, so it renders as
+    // '- <text> [interrupted; start unconfirmed]'.
     await memory.commit(
       fixtureCommitDelivery({
         sessionId: FIXTURE_SESSION_ID,
@@ -495,23 +496,26 @@ describe('M4 layered budget: assembly', () => {
       budgetPlan: DEFAULT_BUDGET_PLAN,
     })
 
-    // '- I was thinking maybe we could [cut off after start]' is 2 + 31 + 20 = 53.
+    // '- I was thinking maybe we could [interrupted; start unconfirmed]' is
+    // 2 + 29 + 33 = 64.
     expect(view.turns).toEqual([])
     expect(view.heardPrefixTurns).toHaveLength(1)
-    expect(view.estimatedCharacters).toBe(53)
+    expect(view.estimatedCharacters).toBe(64)
     // The heard-prefix line is charged to the same pool as the history row, so
-    // the token
-    // approximation must cover it too: 53 latin code points -> ceil(53 / 4) = 14.
-    // Dropping the line made this 0 while estimatedCharacters stayed 53.
-    expect(view.estimatedTokens).toBe(14)
-    expect(view.estimatedTokens).toBe(estimateTokensFromLines(['- I was thinking maybe we could [cut off after start]']))
+    // the token approximation must cover it too: 64 latin code points ->
+    // ceil(64 / 4) = 16. Dropping the line made this 0 while
+    // estimatedCharacters stayed 64.
+    expect(view.estimatedTokens).toBe(16)
+    expect(view.estimatedTokens).toBe(
+      estimateTokensFromLines(['- I was thinking maybe we could [interrupted; start unconfirmed]']),
+    )
 
     // It has no row of its own: the pool it took appears as unused history, so
     // the used total is short of estimatedCharacters by exactly that line.
     const historyRow = view.budgetBreakdown?.find((row) => row.section === 'history')
     expect(historyRow).toEqual({ section: 'history', limit: 200, used: 0, dropped: 0 })
     const usedTotal = (view.budgetBreakdown ?? []).reduce((sum, row) => sum + row.used, 0)
-    expect(view.estimatedCharacters - usedTotal).toBe(53)
+    expect(view.estimatedCharacters - usedTotal).toBe(64)
   })
 
   it('keeps the empty-history warning tied to the default turn window, not to recall', async () => {

@@ -24,10 +24,14 @@ import { isSubstantiveSpeech } from './text'
 
 /**
  * `spoken` - may enter confirmed history and be recalled in later context.
- * `heard-prefix` - a partial delivery that carries a receipt (issue #146 A02):
- *                  playback started, so the audience may have heard the prefix,
- *                  but delivery never completed. Rendered in its own section
- *                  with an explicit marker; never enters confirmed history.
+ * `heard-prefix` - an incomplete partial delivery that carries a receipt
+ *                  (issue #146 A02), whose start is UNCONFIRMED. A receipt id
+ *                  is not start evidence and `ConfirmedDelivery` carries no
+ *                  receipt stage, so the bucket says only "delivery did not
+ *                  complete, and nothing here proves playback began".
+ *                  Rendered in its own section with an explicit marker; never
+ *                  enters confirmed history. Asserting a start needs M5's
+ *                  `started` evidence (tracked as X05, not A02).
  * `audit-only` - retained for traceability only; never recalled, never folded
  *                into context. "The audience might have heard it" is not memory.
  */
@@ -90,10 +94,11 @@ function hasReceipt(record: ConfirmedDelivery): boolean {
  *   1. a fully-delivered record is judged by the receipt rules below; every
  *      other classification is judged by the partial rule;
  *   2. `partial-unknown` WITH a receipt and substantive text becomes
- *      `heard-prefix` (issue #146 A02): playback started, so a prefix may have
- *      been heard, but the delivery never completed. Everything else that is not
- *      fully delivered stays `audit-only`, so a record without playback evidence
- *      is never remembered as speech;
+ *      `heard-prefix` (issue #146 A02): delivery never completed and the start
+ *      is unconfirmed, so the record is kept as an incomplete fragment and is
+ *      never remembered as speech. Everything else that is not fully
+ *      delivered stays `audit-only`, so a record without playback evidence is
+ *      never remembered as speech;
  *   3. text with no letter or digit is excluded - there is nothing audible. An
  *      empty partial record stays `audit-only`: nothing was said, so there is no
  *      prefix to keep;
@@ -119,18 +124,23 @@ export function classifyMemoryBucket(record: ConfirmedDelivery): MemoryBucketDec
     return { bucket: 'spoken', reason: 'delivered-with-receipt' }
   }
   /*
-   * Issue #146 A02: a partial delivery whose playback produced a receipt is the
-   * one honest case of "the audience heard a prefix".
+   * Issue #146 A02: an incomplete partial delivery that carries a receipt is
+   * kept as a separate, explicitly marked fragment rather than as speech.
    *
-   * IMPORTANT BOUNDARY (same shape as the receipt policy above): a receipt id is
-   * NOT proof of WHAT was heard. This module never reads the receipt stage; the
-   * guarantee that a receipt exists only once playback actually started belongs
-   * to the producer/persistence chain (M5). This batch is a conservative
-   * approximation - the record's FULL text is rendered with an explicit marker -
-   * and extracting the exact heard prefix from playback frames remains future
-   * work. pipecat's rule that only the played part may enter context is the
-   * reference; this is deliberately weaker and must not be described as
-   * equivalent.
+   * IMPORTANT BOUNDARY (same shape as the receipt policy above, and why the
+   * bucket is called "incomplete, start unconfirmed" rather than "started"):
+   * a receipt id is NOT proof that playback started, and not proof of WHAT was
+   * heard. M1 creates an `accepted` receipt before media resolves, and a
+   * `partial-unknown` record can carry the id of a receipt for a delivery whose
+   * playback never began (for example `accepted -> cancelled` with zero media
+   * handles). `ConfirmedDelivery` carries no receipt stage, so M4 cannot tell
+   * "started and was cut off" from "cancelled before any media handle
+   * existed"; asserting a start needs M5's `started` evidence (tracked as X05,
+   * not A02). This batch is a conservative approximation of pipecat's rule that
+   * only the played part may enter context: the record's FULL text is rendered
+   * with an explicit marker, and extracting the exact heard prefix from
+   * playback frames remains future work. This is deliberately weaker than
+   * pipecat and must not be described as equivalent.
    */
   if (
     record.classification === 'partial-unknown' &&

@@ -6592,3 +6592,55 @@ entries:
     scope: >-
       M4 working memory, context/port wiring and tests; no storage, runtime
       scheduling or shared contract change.
+  - date: "2026-11-11"
+    task: M4-146-A02-label-correction
+    change: >-
+      Make the A02 heard-prefix label neutral about whether playback started,
+      after a consumer review on PR #151 found that it asserted a start it
+      cannot prove: HEARD_PREFIX_MARKER becomes
+      " [interrupted; start unconfirmed]" and the rendered section header
+      becomes "Interrupted before completion:". The bucket name
+      (heard-prefix), the admission rule (partial-unknown + non-empty receiptId
+      + substantive text), the budget accounting and the "never enters
+      confirmed history" semantics are unchanged. Doc comments in context.ts
+      and memory-semantics.ts now state that a receipt id is not start
+      evidence, that ConfirmedDelivery carries no receipt stage, that the
+      bucket means "incomplete, start unconfirmed", and that asserting a start
+      needs M5's started evidence (tracked as X05, not A02). The m4-heard-prefix
+      and m4-budget suites carry the new literals, a regression assertion that
+      the prompt contains neither "started but cut off" (case-insensitive) nor
+      "cut off after start", and the recalculated character counts (the
+      heard-prefix line is 64 characters; the cheaper-candidate case uses a
+      budget of 38 and expects 36).
+    requirements: [FR-02]
+    invariants: []
+    commits: []
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: 2.0.20
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    supervision: >-
+      Authored in this OpenCode session from the attached A02-label-correction
+      brief, which fixed the target literals and the expected character
+      counts; each count was recomputed from the rendered strings before the
+      edits. Verification was run in the same session: the two targeted vitest
+      suites, the full test:m4 file list from package.json, tsc -b and oxlint.
+    transcript_record: >-
+      The OpenCode session retains the conversation; no separate export was
+      created in the repository.
+    verification:
+      base: 96361fa
+      reproduction: >-
+        vitest run test/offline/m4-heard-prefix.test.ts
+        test/offline/m4-budget.test.ts: 2 files / 25 tests pass. Full test:m4
+        file list: 13 files / 281 tests pass. tsc -b exit 0; oxlint exit 0 with
+        no reported findings. No Git command was run; changes are left in the
+        working tree.
+    scope: >-
+      src/dialogue/context.ts, src/dialogue/memory-semantics.ts,
+      test/offline/m4-heard-prefix.test.ts, test/offline/m4-budget.test.ts and
+      this log entry. No port, receipt-stage read, admission change, provider
+      call, contract, runtime, storage, manifest or AGENTS.md change; the
+      rendering default without a heard-prefix record is byte-identical.

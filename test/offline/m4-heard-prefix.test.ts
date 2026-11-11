@@ -26,17 +26,23 @@ import type {
 import type { CallContext, ClockPort, DialogueSegment } from '../../src/contracts'
 
 /**
- * M4 heard-prefix memory (issue #146 A02).
+ * M4 heard-prefix memory (issue #146 A02; label corrected in A02-label-correction).
  *
  * Why this file exists
  * --------------------
- * A partial delivery that carries a receipt is not spoken memory: playback
- * started, so the listener may have heard a prefix, but the sentence was never
- * finished. Before this batch such a record was audit-only and the model could
- * not see that a sentence had been started and cut off. The new `heard-prefix`
- * bucket renders it in its own section, with its own marker, under the same
- * character budget, and never lets it into confirmed history, pinning, the
- * recency window, displacement, the consistency scan or delivery recall.
+ * A partial delivery that carries a receipt is not spoken memory: the sentence
+ * was never finished, and - because a receipt id is not start evidence and
+ * `ConfirmedDelivery` carries no receipt stage - its start is unconfirmed.
+ * Before this batch such a record was audit-only and the model could not see
+ * that a sentence was incomplete. The `heard-prefix` bucket renders it in its
+ * own section, with its own marker, under the same character budget, and never
+ * lets it into confirmed history, pinning, the recency window, displacement,
+ * the consistency scan or delivery recall.
+ *
+ * The label is deliberately neutral about playback: the marker reads
+ * "[interrupted; start unconfirmed]" under the header "Interrupted before
+ * completion:". The bucket means "incomplete, start unconfirmed". Asserting a
+ * start needs M5's `started` evidence, tracked as X05 and not part of A02.
  *
  * Falsifiability follows the C-58 method: every assertion names the change that
  * would turn it red, so a future edit that widens admission, duplicates a
@@ -46,7 +52,8 @@ import type { CallContext, ClockPort, DialogueSegment } from '../../src/contract
  * Registered conditions (offline, M4's own dialogue conditions - no new C-xx or
  * INV-xx identifier is minted by this batch; issue #25 owns the numbering):
  *   1. given a partial record with a receipt, the prompt contains exactly one
- *      "cut off after start" line;
+ *      "interrupted; start unconfirmed" line under "Interrupted before
+ *      completion:", and never claims a start;
  *   2. given a partial record without a receipt, the prompt is byte-identical
  *      to the baseline;
  *   3. under budget pressure the heard-prefix line drops before complete
@@ -70,7 +77,8 @@ const PARTIAL_WITH_RECEIPT = {
 const COMPLETE_LINE = `- We talked about the concert.`
 const COMPLETE_LINE_CHARACTERS = 30
 const HEARD_PREFIX_TEXT = 'I was thinking maybe we could'
-const HEARD_PREFIX_LINE_CHARACTERS = 53
+// '- ' (2) + the 29-character text + the 33-character marker = 64.
+const HEARD_PREFIX_LINE_CHARACTERS = 64
 const ROLLUP_LINE_CHARACTERS = 26
 
 function captureView(): { view: AssembledDialogueContext | null } {
@@ -274,11 +282,17 @@ describe('M4 heard-prefix rendering', () => {
     expect(view.history).toEqual([])
 
     const prompt = renderDialoguePrompt(view)
-    expect(prompt).toContain('Started but cut off:')
+    expect(prompt).toContain('Interrupted before completion:')
     expect(countOccurrences(prompt, HEARD_PREFIX_MARKER)).toBe(1)
     expect(countOccurrences(prompt, INTERRUPTED_SPEECH_MARKER)).toBe(0)
     // Rendered byte for byte: exactly one marker, at the end of the line.
-    expect(prompt).toContain('- I was thinking maybe we could [cut off after start]')
+    expect(prompt).toContain('- I was thinking maybe we could [interrupted; start unconfirmed]')
+    // Label regression (A02-label-correction): a receipt id is not start
+    // evidence, so the rendered prompt must not claim playback began. The
+    // assertions are case-insensitive on purpose: restoring either old literal
+    // reddens them.
+    expect(prompt.toLowerCase()).not.toContain('started but cut off')
+    expect(prompt).not.toContain('cut off after start')
     // Counterfactual: merging the line into the confirmed-history block, or
     // rendering a second marker, reddens the assertions above and below.
     expect(prompt).not.toContain('Already said (confirmed spoken):')
@@ -310,7 +324,7 @@ describe('M4 heard-prefix rendering', () => {
     const combinedPrompt = renderDialoguePrompt(combined)
     expect(countOccurrences(combinedPrompt, INTERRUPTED_SPEECH_MARKER)).toBe(1)
     expect(countOccurrences(combinedPrompt, HEARD_PREFIX_MARKER)).toBe(1)
-    const cutOffAt = combinedPrompt.indexOf('Started but cut off:')
+    const cutOffAt = combinedPrompt.indexOf('Interrupted before completion:')
     const spokenAt = combinedPrompt.indexOf('Already said (confirmed spoken):')
     expect(cutOffAt).toBeGreaterThanOrEqual(0)
     expect(spokenAt).toBeGreaterThanOrEqual(0)
@@ -351,7 +365,7 @@ describe('M4 heard-prefix budget', () => {
     await commitRecord(memory, { turnId: 'turn-complete', text: 'We talked about the concert.' })
     await commitHeardPrefix(memory, { turnId: 'turn-partial', text: HEARD_PREFIX_TEXT })
 
-    // The complete turn (30) fits; the remaining 10 cannot hold 53 characters.
+    // The complete turn (30) fits; the remaining 10 cannot hold 64 characters.
     const view = await assembleWithLocalSource(memory, 40)
     expect(view.turns).toHaveLength(1)
     expect(view.turns[0]?.turnId).toBe('turn-complete')
@@ -366,7 +380,7 @@ describe('M4 heard-prefix budget', () => {
     ).toBe(true)
 
     const prompt = renderDialoguePrompt(view)
-    expect(prompt).not.toContain('Started but cut off:')
+    expect(prompt).not.toContain('Interrupted before completion:')
     expect(prompt).not.toContain(HEARD_PREFIX_MARKER)
     // Counterfactual: letting heard-prefix claim budget before history would
     // push the complete statement out and redden these two lines.
@@ -398,9 +412,9 @@ describe('M4 heard-prefix budget', () => {
 
     const prompt = renderDialoguePrompt(view)
     expect(prompt).toContain('Already said (confirmed spoken):')
-    expect(prompt).toContain('Started but cut off:')
+    expect(prompt).toContain('Interrupted before completion:')
     expect(prompt).toContain(COMPLETE_LINE)
-    expect(prompt).toContain('- I was thinking maybe we could [cut off after start]')
+    expect(prompt).toContain('- I was thinking maybe we could [interrupted; start unconfirmed]')
   })
 
   it('aggregates the new exclusion reason for diagnostics without a wire change', async () => {
@@ -435,9 +449,10 @@ describe('M4 heard-prefix budget', () => {
     expect(view.turns).toHaveLength(1)
     expect(view.rollup).toEqual({ omittedTurns: 1, characters: ROLLUP_LINE_CHARACTERS })
     expect(renderRollupLine(1)).toHaveLength(ROLLUP_LINE_CHARACTERS)
-    // 59 - 30 (kept) - 26 (rollup) = 3, less than the 25-character cut-off line.
+    // 59 - 30 (kept) - 26 (rollup) = 3, less than the 36-character cut-off line
+    // ('- ' + 'A' + the 33-character marker).
     // Counterfactual: forgetting to charge the rollup leaves 29, the cut-off
-    // line survives, and the total becomes 81 > 59 - both assertions red.
+    // line survives, and the total becomes 92 > 59 - both assertions red.
     expect(view.heardPrefixTurns).toEqual([])
     expect(
       view.exclusions.some(
@@ -453,20 +468,22 @@ describe('M4 heard-prefix budget', () => {
   it('keeps a cheaper heard-prefix candidate after rejecting a more expensive one', async () => {
     const memory = createDeliveryMemoryStore()
     // Current persona (same version as the active one) ranks highest and is
-    // tried first: 2 + 6 + 22 = 30 characters.
+    // tried first: 2 + 6 + 33 = 41 characters.
     await commitHeardPrefix(memory, {
       turnId: 'turn-expensive',
       text: 'Hello!',
       personaProfileVersion: '1',
     })
-    // Stale persona ranks lower and is tried second: 2 + 1 + 22 = 25 characters.
+    // Stale persona ranks lower and is tried second: 2 + 1 + 33 = 36 characters.
     await commitHeardPrefix(memory, {
       turnId: 'turn-cheap',
       text: 'A',
       personaProfileVersion: '0',
     })
 
-    const view = await assembleWithLocalSource(memory, 26)
+    // The 41-character candidate cannot fit a 38-character budget, so the
+    // 36-character one is still considered and kept.
+    const view = await assembleWithLocalSource(memory, 38)
 
     // Counterfactual: upgrading a rejected candidate into "reject the rest"
     // would drop the cheaper turn too and redden both lines below.
@@ -476,7 +493,7 @@ describe('M4 heard-prefix budget', () => {
         (entry) => entry.turnId === 'turn-expensive' && entry.reason === 'heard-prefix-budget',
       ),
     ).toBe(true)
-    expect(view.estimatedCharacters).toBe(25)
+    expect(view.estimatedCharacters).toBe(36)
   })
 
   it('deduplicates a dual-modality confirmed heard-prefix utterance', async () => {
@@ -553,7 +570,7 @@ describe('M4 heard-prefix budget', () => {
     // the rendered history line together with its section placement.
     expect(countOccurrences(prompt, COMPLETE_LINE)).toBe(2)
     expect(countOccurrences(prompt, HEARD_PREFIX_MARKER)).toBe(0)
-    expect(prompt).not.toContain('Started but cut off:')
+    expect(prompt).not.toContain('Interrupted before completion:')
     expect(prompt).toContain(`Already said (confirmed spoken):\n${COMPLETE_LINE}`)
   })
 })
