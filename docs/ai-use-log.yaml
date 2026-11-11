@@ -6541,3 +6541,54 @@ entries:
     scope: >-
       M4 layered budget, diagnostics and tests; budget.ts is an M4-owned new
       module, and the closed BudgetSection union was not extended.
+  - date: "2026-11-11"
+    task: M4-146-A07-working-memory
+    change: >-
+      Add in-memory working memory for unresolved intent (#146 A07): the pure
+      store (working-memory.ts) with awaiting-reply, commitment, open-thread
+      and suppressed kinds, TTL-based expiry and a bounded recall projection
+      (WORKING_MEMORY_MAX_ENTRIES), rendered as a prompt block through the
+      optional workingMemory context input (context.ts) with the dialogue-port
+      surface, plus the m4-working-memory offline suite. Default off: no
+      production caller consults it and the block is null when no entries are
+      supplied; nothing persists and no storage, runtime scheduling or shared
+      contract changes.
+    requirements: [NFR-04]
+    invariants: []
+    commits: [5a8fabe]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: 2.0.20
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    sessions: [ses_e393954a5ffenWny5uQzX8g87k, ses_e3936d3b5ffeuROZHhFTHleETr, ses_e3931923effeR7lIrfKsDVBuGW, ses_e392858d1ffe7X337t28OvA7e2, ses_e39398c2fffeaIIOEdE0VMvqsu, ses_e3939bbe6ffeqktWeFVP9Iuoac]
+    supervision: >-
+      Daily inspection workflow: the planner selected the A07 slice (pure M4,
+      ready now) and the OpenCode supervisor decomposed it into four focused
+      briefs (.cache/m4-146-a07-step1..4.md), ran one build session per brief
+      plus two smoke sessions, reviewed each diff, and ran the deterministic
+      gates (single-file vitest, then the full m4 suite, typecheck and lint).
+      The member pre-authorized local application and directed publication.
+    human_review: >-
+      Published for the member's review on PR #151; final merge and semantic
+      acceptance remain human-owned. Registration note: the supervisor's
+      authorized self-push carried the code commit without this entry, so the
+      entry is recorded in a follow-up docs commit against the same session
+      record.
+    transcript_record: >-
+      The OpenCode session store (session_v2) retains all six sessions under
+      the m4-146-a07 titles; their tails are recorded outside this repository
+      in m4-impl/A07/opencode-sessions.md.
+    verification:
+      base: e10cb2f
+      reproduction: >-
+        pnpm test:m4 13 files / 281 tests pass (re-run on 14b92ee; the
+        package.json manifest line is under M5 coordination per #151 and does
+        not yet list the new suite); the new suite passes standalone via
+        pnpm exec vitest run test/offline/m4-working-memory.test.ts (24 tests);
+        the full vitest run (include test/offline/**) covers it, typecheck and
+        lint pass.
+    scope: >-
+      M4 working memory, context/port wiring and tests; no storage, runtime
+      scheduling or shared contract change.
