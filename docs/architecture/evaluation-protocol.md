@@ -51,8 +51,8 @@ named reasons, and the attempt keeps its completed/failed/cancelled classificati
    `not-yet-observable` (rendered from `null`), and the case is `missing-input-identity`.
 4. The admitted record set was captured; otherwise `missing-history-observation`. A `history.source:
    'none'` run that was observed carries the empty-set digest and is eligible — a known-empty set is not
-   an unobserved one. The encoding is `recordSetRevision: null` together with `correlation: missing`, and
-   `exact` is refused when the revision is null (`src/evaluation/provenance.ts`, D7 refusal in PR #140).
+   an unobserved one. The null rule is D7's table; the refusal is D8's
+   (`src/evaluation/provenance.ts`, ADR-008 D7/D8 in PR #140).
 5. The attempt's conditions match the run's `FixedConditions`; a mismatch gives `condition-mismatch`. An
    exact link does **not** bypass this check. The two conditions M4 owns are explicit: the persona pair
    `persona {profileId, version}` (a half-known or empty pair is `unknown`, never back-filled from the
@@ -63,7 +63,8 @@ named reasons, and the attempt keeps its completed/failed/cancelled classificati
 Rules 1–5 follow ADR-008 (`docs/architecture/adr/008-prepared-input-provenance.md`) and the merged companion
 proposal (`docs/architecture/evaluation-provenance.md`, PR #63); this section cites the decision, not a
 result. Rule 5 is a **target rule, not evaluated at this revision**: the run records conditions per run,
-not per attempt, so the report states that it is not evaluated (DEBT-13). `provenance-eligible` in #143
+not per attempt. The report states that it is not evaluated (DEBT-13) **once #143 lands** — the report
+sentence and the eligibility module are that slice, which merges after this method. `provenance-eligible` in #143
 means rules 1–4 passed; a scored attempt also needs a human-reviewed label. The `no-label-record` reason
 is proposed, not implemented.
 
@@ -106,7 +107,7 @@ Preparation (may run before checkpoint 4):
 1. Declare `FixedConditions`: hardware, providers, workload, sample size, cold/warm, persona, model and
    prompt versions, text budget, history source, text source, clock.
 2. Produce the recorded run with the bench harness (`runBench` in `src/evaluation/bench.ts`), using the
-   eligible set and the declared conditions.
+   **provenance-eligible** set (rules 1–4) and the declared conditions; no label gate exists yet (§1).
 3. Render the table: `pnpm evaluation:report --input <recorded-run.json> --output <evaluation-table.md>`.
 4. Record the companion and validate it against the run digest with
    `--provenance <path>` (parser and command: the #100 slice). The command's refusal set is owned
