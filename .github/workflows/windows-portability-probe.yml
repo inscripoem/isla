@@ -1,0 +1,123 @@
+name: Windows portability probe
+
+# One-off diagnostic for the Windows portability investigation, scoped to the
+# exact future push branch `verify/windows-portability-20261111`. This is not a
+# normal PR workflow and does not belong to the final fix pull request: it runs
+# the suite once inside a real Git checkout and once from a `git archive`
+# snapshot with no repository, so Git-dependent failures stay visible instead of
+# being hidden. No secrets, no model/provider calls, no GPU. The workflow-scoped
+# `contents: read` permission grants both independent jobs the same read access.
+#
+# Delete this file once the investigation is recorded; do not carry it into
+# normal branch protection or the fix pull request.
+
+on:
+  push:
+    branches:
+      - 'verify/windows-portability-20261111'
+
+permissions:
+  contents: read
+
+jobs:
+  checkout:
+    name: verify in the Git checkout
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: install (frozen) and verify
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { throw "pnpm install failed with exit code $LASTEXITCODE" }
+          pnpm verify
+          if ($LASTEXITCODE -ne 0) { throw "pnpm verify failed with exit code $LASTEXITCODE" }
+
+  snapshot:
+    name: test a git archive snapshot outside Git
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: export HEAD, assert no worktree, install (frozen) and test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $false
+
+          $snapshot = Join-Path $env:RUNNER_TEMP 'windows-portability-snapshot'
+          $archive = Join-Path $env:RUNNER_TEMP 'windows-portability-head.zip'
+
+          # Never delete a pre-existing path, even on the ephemeral hosted
+          # runner. A collision means the assumption of a fresh RUNNER_TEMP is
+          # wrong, so fail clearly instead of performing destructive cleanup.
+          if (Test-Path -LiteralPath $archive) {
+            throw "refusing to overwrite an existing archive: $archive"
+          }
+          if (Test-Path -LiteralPath $snapshot) {
+            throw "refusing to reuse an existing snapshot directory: $snapshot"
+          }
+          New-Item -ItemType Directory -Path $snapshot | Out-Null
+
+          $head = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { throw "git rev-parse HEAD failed with exit code $LASTEXITCODE" }
+          Write-Host "archiving $head"
+
+          # Archive the exact checked-out HEAD; a failure here must fail the job.
+          git archive --format=zip --output="$archive" HEAD
+          if ($LASTEXITCODE -ne 0) { throw "git archive failed with exit code $LASTEXITCODE" }
+
+          Expand-Archive -LiteralPath $archive -DestinationPath $snapshot -Force
+
+          Push-Location -LiteralPath $snapshot
+          try {
+            if (Test-Path -LiteralPath (Join-Path $snapshot '.git')) {
+              throw "snapshot unexpectedly contains a .git entry"
+            }
+
+            # Deliberate probe: Git must not discover a repository above the
+            # snapshot, which lives under RUNNER_TEMP outside the checkout. A
+            # non-zero exit is the expected result here, so capture it and reset
+            # LASTEXITCODE before the real commands run.
+            git rev-parse --is-inside-work-tree 2>$null | Out-Null
+            $probeExit = $LASTEXITCODE
+            $LASTEXITCODE = 0
+            if ($probeExit -eq 0) {
+              throw "Git discovered a worktree at the snapshot root; the snapshot is not isolated"
+            }
+            Write-Host "isolated snapshot confirmed (git rev-parse exited $probeExit)"
+
+            pnpm install --frozen-lockfile
+            if ($LASTEXITCODE -ne 0) { throw "pnpm install failed with exit code $LASTEXITCODE" }
+
+            # Full suite, unmodified. The Git-dependent trace test may fail here
+            # by design; that failure is reported as-is, never skipped or passed
+            # artificially, so the portability gap is visible.
+            pnpm test
+            if ($LASTEXITCODE -ne 0) { throw "pnpm test failed with exit code $LASTEXITCODE" }
+          } finally {
+            Pop-Location
+          }

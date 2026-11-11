@@ -4998,3 +4998,116 @@ entries:
       The published implementation had focused CLI 6/6 and Linux full verify
       1412/1412 in 71 files. macOS retest remains pending; the three direct-signal
       tests are skipped on Windows.
+
+  - date: "2026-11-11"
+    task: windows-portability-test-hardening
+    change: >-
+      Hardened offline tests for a Windows checkout, and appended this record to
+      docs/ai-use-log.yaml (the only non-test change). Edited seven test files:
+      boundaries.test.ts, m6-02-boundary.test.ts, m6-sqlite.test.ts,
+      requirements.test.ts, cli.test.ts, production-cli.test.ts and
+      m5-process-restart.test.ts. Graph resolution in boundaries.test.ts and
+      containment in m6-02-boundary.test.ts take an explicit path API, so
+      node:path.win32 semantics are simulated on Linux for real traversal, a
+      forbidden transitive import, a sibling module, case differences, sibling
+      prefixes and cross-drive targets. m6-sqlite.test.ts uses native temporary
+      roots and independently written expected paths, with no win32 injection.
+      requirements.test.ts normalizes CRLF only for the two schema-content
+      comparisons and still rejects other differences and a lone carriage
+      return. cli.test.ts launches the diagnostic CLI via the Node executable and
+      tsx loader and skips only its POSIX SIGINT/SIGTERM cases on Windows.
+      production-cli.test.ts skips only its four SIGTERM cases, checks health on
+      the IPC shutdown path and keeps the IPC pending-release and failure cases.
+      m5-process-restart.test.ts requires a successful forced kill and, on
+      Windows, an abnormal termination (non-zero code or non-null signal)
+      without inventing a value, keeps every database and no-replay assertion,
+      and uses IPC shutdown for the second process on Windows while keeping
+      SIGTERM on POSIX.
+    requirements: []
+    invariants: []
+    cases: []
+    commits: []
+    agent: build
+    opencode_version: 2.2.6
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    model: deepseek-v4-flash
+    provider: self-api
+    variant: xhigh
+    launch_flags: ["-m", "self-api/deepseek-v4-flash#xhigh", "--agent", "build", "--format", "json"]
+    sessions: [ses_e398f7510ffeDasJmKzoNfvFOQ]
+    supervision: >-
+      Captain approved local implementation of the test changes; this record was
+      appended in the same session. The model id, provider ID and variant above
+      are observed from native session message metadata; the upstream service
+      behind self-api is not inferred. No subagent was used, and no
+      credential values were intentionally read into the supervising
+      conversation.
+    human_review: >-
+      Local implementation approved; publication not reviewed or approved. A
+      detached Git worktree was created, with no branch, staging, commit, push,
+      merge, review or GitHub write.
+    transcript_record: >-
+      The session remains in the local OpenCode store; evidence will be saved
+      outside the checkout in the project evidence directory.
+    verification:
+      platform: Linux x86_64
+      base: e9e7e7be0138b90df1190ce4fc674d33607a461e
+      results: >-
+        pnpm verify stopped at test with 1545 passed and 1 failed (diagnostic
+        CLI SIGTERM); typecheck and lint passed, and a separate build passed.
+        test:m5 257/257, test:m6 186/186, test:readiness 47/47, test:trace 41/41.
+      limits: >-
+        Only the graph and containment tests simulate win32 semantics; this is
+        not a Windows run. Six POSIX-only cases are skipped on Windows. In a
+        temporary comparison, current main failed three forced readiness cases
+        and the existing PR #135 source passed all six; PR #135 is not merged. A
+        non-Git snapshot cannot satisfy the Git-metadata trace test, and these
+        changes do not fix that. The 18 Windows full-suite failure identities are
+        not established.
+    scope: >-
+      Test-only portability work plus this AI-use record and an ignored
+      temporary per-worktree OpenCode configuration. No production source,
+      shared helper, dependency or repository configuration changed, and no real
+      Windows execution or full-suite result is claimed.
+
+  - date: "2026-11-11"
+    task: windows-hosted-runner-temporary-probe
+    change: >-
+      Prepare a one-off GitHub Actions workflow restricted to the temporary
+      Windows verification branch. Two independent Windows jobs run the full
+      checks in a Git checkout and the full test suite in an archived source
+      snapshot without Git metadata. Both jobs report their actual outcomes;
+      the snapshot's known Git-dependent failure is not hidden.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: build
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    opencode_version: 2.2.6
+    launch_flags: ["-m", "self-api/deepseek-v4-flash#xhigh", "--agent", "build", "--format", "json"]
+    sessions: [ses_e36f11dc7ffeYtKPmwGvUV3Mjc]
+    supervision: >-
+      OpenCode authored the temporary workflow in a supervised session.
+      The supervisor reviewed its branch filter, permissions, commands and
+      failure handling, and added this temporary-branch record.
+    human_review: >-
+      Captain selected the GitHub Windows runner and directed local preparation.
+      This local preparation does not authorize a remote push or a PR merge.
+    transcript_record: >-
+      The native OpenCode session export and API pages are retained privately
+      in the course project's evidence directory.
+    verification:
+      base: 30f404d9da6b1ec24241c70b1c47de0570c60654
+      linux: >-
+        The combined Git worktree passed pnpm verify 1549/1549, test:m5
+        257/257, test:m6 186/186, test:readiness 47/47 and test:trace 41/41.
+      workflow: >-
+        actionlint v1.7.12 and static YAML checks passed. No PowerShell step,
+        GitHub Windows job or real Windows test had run at preparation time.
+    scope: >-
+      Temporary verification branch only. The workflow is not intended for the
+      final Windows-fix PR. Actual Windows failures and the expected snapshot
+      Git-metadata failure must be reported without being masked.

@@ -1,6 +1,6 @@
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   BUILT_IN_MIGRATIONS,
@@ -28,25 +28,30 @@ function configIn(dir: string) {
 
 describe('M6 SQLite config (C-26)', () => {
   it('defaults to .cache/isla/isla.db with a sibling backups dir', () => {
-    const cwd = '/tmp/project'
+    const cwd = tempDir()
     const config = resolveStorageConfig({}, cwd)
-    expect(config.dbPath).toBe(join(cwd, '.cache/isla/isla.db'))
-    expect(config.backupDir).toBe(join(cwd, '.cache/isla/backups'))
+    expect(isAbsolute(config.dbPath)).toBe(true)
+    expect(config.dbPath).toBe(join(cwd, '.cache', 'isla', 'isla.db'))
+    expect(config.backupDir).toBe(join(cwd, '.cache', 'isla', 'backups'))
   })
 
   it('honours an absolute override', () => {
-    const config = resolveStorageConfig({ ISLA_STORAGE_DB_PATH: '/var/data/isla.db' }, '/tmp/project')
-    expect(config.dbPath).toBe('/var/data/isla.db')
-    expect(config.backupDir).toBe('/var/data/backups')
+    const dataDir = tempDir()
+    const absolute = join(dataDir, 'isla.db')
+    const config = resolveStorageConfig({ ISLA_STORAGE_DB_PATH: absolute }, tempDir())
+    expect(config.dbPath).toBe(absolute)
+    expect(config.backupDir).toBe(join(dataDir, 'backups'))
   })
 
   it('resolves a relative override against cwd', () => {
-    const config = resolveStorageConfig({ ISLA_STORAGE_DB_PATH: 'data/isla.db' }, '/tmp/project')
-    expect(config.dbPath).toBe('/tmp/project/data/isla.db')
+    const cwd = tempDir()
+    const config = resolveStorageConfig({ ISLA_STORAGE_DB_PATH: 'data/isla.db' }, cwd)
+    expect(isAbsolute(config.dbPath)).toBe(true)
+    expect(config.dbPath).toBe(join(cwd, 'data', 'isla.db'))
   })
 
   it('rejects an empty override (fail-fast, never a silent default)', () => {
-    expect(() => resolveStorageConfig({ ISLA_STORAGE_DB_PATH: '   ' }, '/tmp/project')).toThrow()
+    expect(() => resolveStorageConfig({ ISLA_STORAGE_DB_PATH: '   ' }, tempDir())).toThrow()
   })
 })
 
