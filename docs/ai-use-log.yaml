@@ -4180,6 +4180,173 @@ entries:
         No live provider run and no M2 consumer validation yet; the boundaries
         suite was not run on this Windows host (documented pre-existing Windows
         class); no product or case-closure claim.
+  - date: "2026-10-31"
+    task: issue-116-align-m4-handoff-with-accepted-implementation
+    change: >-
+      Align M4's own handoff with the accepted implementation, which is the part
+      of issue #116 that M4 can settle without waiting on another owner. Added a
+      dated current-state record beside the 2026-10-15/16 table rather than
+      rewriting it, since that table is a historical record of two earlier
+      revisions: test:m4 237/237 in 10 files, typecheck clean, lint 0/0 on 254
+      files, full suite 1407/1425 in 71 files with 18 failures broken down by
+      file and attributed to the documented Windows classes, and the measured
+      fact that pnpm verify does execute here and stops at its test step. Added
+      a retention, privacy and recovery section stating what M4 does and does
+      not do: receipt-required admission, no retraction or deletion entry point
+      in src/dialogue, no persisted owner identity so automatic cross-session
+      recall refuses by design, and no recovery of its own, with the
+      process-restart acceptance left to M6 on #106. Also stated that the
+      role command test:m4 does not include the loopback evidence file, which
+      is a manifest decision owned by M5.
+    requirements: []
+    invariants: []
+    commits: [53fe0f7]
+    agent: opencode/deepseek-v4-flash
+    model: deepseek-v4-flash
+    supervision: >-
+      Three scoped OpenCode sessions against a local HTTP server: the two
+      insertions, a one-sentence reconciliation of the boundaries case count
+      against the older table, and a paragraph reflow. The supervisor wrote the
+      briefs with the measured figures, confirmed no figure was re-measured or
+      invented, and rejected the intermediate state where the reconciling
+      sentence had been run into the middle of the preceding paragraph. One
+      session disclosed that a scripted attempt truncated the file before it
+      repaired it; the supervisor verified the final tree independently
+      (git diff --stat shows +57/-0 in one file, the file ends on its intended
+      closing line, and the historical table is byte-identical) rather than
+      accepting the session's own claim.
+    human_review: >-
+      Captain (M4) authorised the branch, the commit and the issue #116 work in
+      session on 2026-10-31. No reviewer approval, merge or case closure is
+      claimed; the accepter named by #116 is M2 and has not seen this yet.
+    transcript_record: >-
+      The conversation is retained in the WorkBuddy session; briefs and run logs
+      stay in the gitignored .cache directory.
+    verification:
+      platform: Windows 11, Node 22.22.2, pnpm 12.11.2
+      base: edb406f
+      commands: >-
+        pnpm test:m4; pnpm typecheck; pnpm lint; pnpm test; pnpm verify; the
+        AI-use log gate over the changed file
+      results: >-
+        test:m4 237/237 in 10 files; typecheck clean; lint 0 warnings / 0 errors
+        on 254 files; pnpm test 1407/1425 in 71 files with 18 failures, all of
+        the documented Windows class and none in src/dialogue; pnpm verify
+        executes and stops at its test step on those same failures, so its build
+        step is unexercised on this host; the G6 gate passes over the changed
+        file.
+      not_run: >-
+        No test was re-run on the documentation branch itself, since the change
+        is prose only. No claim that the documentation change is product
+        acceptance; no case identifier added or reused.
+  - date: "2026-11-03"
+    task: issue-116-handoff-current-state-refresh
+    change: >-
+      Refresh the handoff's dated current-state record on the docs/m4-116
+      carrier branch for issue #116 and PR #136: the heading now names
+      docs/m4-116 over the code tree of 606ccf5, which carries the merged
+      PR #134 and PR #137, and the record's figures were re-measured on that
+      branch today. The Implemented behaviour narrative gains one pointer
+      sentence each for PR #134 (createOpenAiCompatibleTextSource, the silent
+      fixture fallback abolished, every provider fault reported as failed) and
+      PR #137 (memory.inspect wire declarations moved to
+      src/contracts/diagnostics.ts), and the single options-table row PR #134
+      made stale (the textSource default) is corrected in place. The
+      2026-10-15/16 revision table, the failure-class breakdown and the
+      retention section are untouched, and no case identifier is added or
+      reused.
+    requirements: []
+    invariants: []
+    commits: [17f42d8]
+    agent: opencode/deepseek-v4-flash
+    model: deepseek-v4-flash
+    supervision: >-
+      Two scoped OpenCode sessions (DeepSeek-V4-Flash, build agent): one for the
+      handoff edits and one for this entry plus a one-phrase correction the
+      supervisor caught in review. Each brief was written by the supervisor with
+      the measured figures copied verbatim, so no session re-measured or
+      invented a figure; the supervisor reviewed the diffs, confirmed the
+      historical tables are byte-identical, and re-ran the M4 suite and the
+      static gates over the edited tree.
+    human_review: >-
+      Authorised for this round by the M4-04 slice plan: the docs/m4-116 branch
+      work, its commit and push, and the PR #136 body update. No reviewer
+      approval, merge or case closure is claimed; the accepter named by #116 is
+      M2 and has not seen this yet.
+    transcript_record: >-
+      The OpenCode conversations are retained in the runner's session store;
+      briefs and run logs stay in the gitignored .cache directory.
+    verification:
+      platform: Windows 11, Node 24.21.0, pnpm 12.11.2
+      base: 606ccf5
+      commands: >-
+        pnpm test:m4; pnpm typecheck; pnpm lint; pnpm test; pnpm verify; each
+        re-run on the documentation branch itself
+      results: >-
+        test:m4 237/237 in 10 files; typecheck clean; lint 0 warnings / 0 errors
+        on 254 files; pnpm test 1407/1425 in 71 files with the same 18 failures
+        as the previous record (boundaries x4, cli x3, production-cli x4,
+        m6-sqlite x3, m6-02-boundary x2, requirements x1, m5-process-restart x1),
+        all of the documented Windows classes and none in src/dialogue; pnpm
+        verify no longer starts on this host because its nested pnpm invocation
+        resolves to an extensionless shim the Windows shell cannot execute after
+        the host moved to Node 24.21.0, so its chain was measured step by step
+        instead (typecheck clean, lint 0/0, test as above) and its build step
+        remains unexercised here.
+      not_run: >-
+        pnpm build was not run, because the verify chain does not reach it on
+        this host and the record claims only that it is unexercised. No claim
+        that the documentation change is product acceptance; no case identifier
+        added or reused.
+  - date: "2026-11-06"
+    task: issue-116-pnpm-verify-entry-point-correction
+    change: >-
+      Correct the pnpm verify record in docs/team/HANDOFF-M4-01.en.md, which
+      gave two answers to one question and attributed the difference to a
+      cause that measurement does not support. The section now states that the
+      script chains typecheck, lint, test and build, and that whether the chain
+      starts depends on which pnpm entry point the nested invocation resolves
+      to: through the npm-global Windows wrapper it does not reach its first
+      step, because the wrapper's last line invokes
+      "%dp0%\node_modules\pnpm\pnpm", an extensionless POSIX shell shim
+      inside the package, which cmd.exe refuses; through a POSIX shell with a
+      working shim first on PATH the chain starts and stops at test on the
+      known failures. The 2026-11-03 attribution to this host moving to Node
+      24.21.0 is retracted in place, not deleted. The two AI-use entries that
+      recorded commits: [] while naming work with commits now name 53fe0f7 and
+      17f42d8.
+    requirements: []
+    invariants: []
+    commits: [f313181]
+    agent: workbuddy/deepseek-v4.1-flash
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Written directly by the supervising session, not by an OpenCode session:
+      the change is documentation, and AGENTS.md reserves the OpenCode
+      requirement for src/. The supervisor ran the two decisive experiments
+      itself rather than reasoning from the existing records — pnpm verify
+      under Node 22.22.2 (started, stopped at test) and under Node 24.21.0
+      (identical), then read %APPDATA%\npm\pnpm.cmd and confirmed its last
+      line targets an extensionless file while the real entry point is
+      bin/pnpm.mjs. The earlier Node-24 attribution was therefore rejected on
+      evidence, not adjusted to match the PR description.
+    human_review: >-
+      Captain (M4) authorised fixing PR #136 in session on 2026-11-06, after a
+      review of the open threads. No reviewer approval, merge or case closure is
+      claimed here; M5's scoped approval covered 17f42d8 and this commit
+      supersedes that head, so M5 and M6 must decide whether to re-approve.
+    verified: >-
+      pnpm verify under Node 22.22.2 and pnpm 12.11.2: tsc -b clean, oxlint 0
+      warnings / 0 errors over 254 files, vitest reaching the 18 documented
+      Windows failures. The same command under Node 24.21.0 with the same pnpm:
+      identical. Read %APPDATA%\npm\pnpm.cmd (its last line calls
+      "%dp0%\node_modules\pnpm\pnpm"), confirmed node_modules\pnpm\pnpm
+      exists and is extensionless, and that the package ships bin/pnpm.mjs.
+    not_run: >-
+      pnpm build was not run and remains unexercised on this host. No test count
+      was re-measured for this documentation change, so the figures in the
+      section are carried forward from 2026-11-03 rather than re-asserted. No
+      case identifier added or reused; no acceptance claim.
   - date: "2026-10-28"
     task: M2-01-console-production-transport-selection-and-recovery
     change: >-
