@@ -5563,3 +5563,39 @@ entries:
       full_suite: "pnpm verify exit 0; typecheck clean; lint clean."
       mutation: "The null-occurrence regression fails when the undefined check is reverted."
       not_run: "No push; remote CI and review pending."
+
+  - date: "2026-11-11"
+    task: "M6-02 / #100 review fixes — one not-run reason index and executed-pair refusal"
+    branch: m6-02-provenance
+    change: >-
+      Builds the run's not-run reason index once (`notRunReasonIndex`, using
+      `buildOccurrenceKey`) and uses it in both the parser binding and the report
+      renderer, so a repeated pair cannot pick up the wrong occurrence's reason;
+      refuses a companion not-run observation for a pair the run executed; binds
+      the five-input cap to C1's `MAX_SELECTION_CANDIDATES` with an agreement test.
+      Delta-008 removes the removed `reason` field from the review-fix list and
+      records `ec7d372`/`341303a`; ADR-008 D8 names the strict shape refusals.
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: []
+    commits: [fffe826]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode under M6 supervision after the advisory review memo.
+    human_review: >-
+      The Captain approved the defect list; M5/M4 review and merge remain human actions.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: e9e7e7b (main)
+      role: "provenance 47/47 across 2 files; test:m6 230/230 in 16 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0: 1588/1588 in 76 files; typecheck clean; lint clean."
+      mutation: >-
+        Three mutations each turned their own test red, then were restored:
+        the executed-pair check removed (2 red), the cap raised to 6 (1 red),
+        the reason index keyed without the occurrence (2 command tests red).
+      not_run: >-
+        No Windows host; no provider run; M5/M4 review and merge remain.
