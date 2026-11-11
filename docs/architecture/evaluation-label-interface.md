@@ -10,8 +10,9 @@ rubric, a score, a threshold or an acceptance result. Until M3/M4 approve the sh
 **Scope.** This proposal covers the numeric `scores` object for the dialogue subset. Categorical
 observations in M3's rubric draft are separate follow-up work; they are not converted to numbers.
 
-This revision records the positions M4 and M5 gave on 2026-11-09. They are **proposed positions, not
-approval**: the rubric (#99), corpus (#98) and export (#101) remain open.
+This revision records the positions M4 and M5 gave on 2026-11-09 and M3's agreement on 2026-11-10. They
+remain **proposed positions, not interface approval**: the rubric (#99), corpus (#98) and export (#101)
+remain open.
 
 ## Why
 
@@ -48,25 +49,31 @@ runtime id.
 
 ## File and key
 
-- One label file per corpus version, identified by `(corpusVersion, casesSha256)`.
-- The report command takes two explicit inputs: `--labels <path>` and `--corpus-manifest <path>`. The
-  producer chooses the label directory; the label file names the corpus it belongs to, and the manifest is
-  the authority for that corpus version, hash and held-out marking.
-- The **join key** is `(caseId, variantId, attempt)` — the same positional occurrence key the provenance
-  companion uses (ADR-008 D2). A label that names an attempt the run does not contain is refused, and an
-  attempt without a label is **not an error**; it stays unscored.
+- One label file per **run**, identified by `(corpusVersion, casesSha256, runId, runDigest)`. A label is a
+  judgement on a concrete recorded output, so the file carries the run identity; the report refuses a file
+  whose `runId` or `runDigest` does not match the input run.
+- The report command takes the run as its input plus `--labels <path>` and `--corpus-manifest <path>`. The
+  manifest is the authority for that corpus version, hash and held-out marking.
+- The **join key** is `(caseId, variantId, attempt)` within that run — the same positional occurrence key
+  the provenance companion uses (ADR-008 D2). The effective label for a key is its highest `revision`. A
+  label that names an attempt the run does not contain is refused; an attempt without a label stays
+  unscored and is not an error.
 
 ## Shape (schema version 1)
 
 ```json
 {
   "schemaVersion": 1,
+  "runId": "run-1",
+  "runDigest": "sha256-hex…",
   "corpus": { "corpusVersion": "m3-selection-v1", "casesSha256": "0123…" },
   "labels": [
     {
       "caseId": "case-1",
       "variantId": "rules-baseline",
       "attempt": 1,
+      "revision": 1,
+      "supersedes": null,
       "status": "reviewed",
       "reviewer": "M4",
       "reviewedAt": "2026-11-18",
@@ -80,11 +87,15 @@ runtime id.
 | Field | Type | Rule |
 | --- | --- | --- |
 | `schemaVersion` | `1` | independent of the run schema |
+| `runId` | string | must match the input run |
+| `runDigest` | hex SHA-256 | SHA-256 of the exact run artifact bytes |
 | `corpus.corpusVersion` | string | must match the version in the supplied corpus manifest |
 | `corpus.casesSha256` | hex SHA-256 | must match the hash in the supplied corpus manifest |
 | `labels[].caseId` | string | non-blank |
 | `labels[].variantId` | string | non-blank |
 | `labels[].attempt` | integer ≥ 1 | positional occurrence index |
+| `labels[].revision` | integer ≥ 1 | 1 for the first row of a key; higher for a correction |
+| `labels[].supersedes` | integer ≥ 1 or null | null iff revision 1; otherwise the immediately previous revision |
 | `labels[].status` | `reviewed` \| `draft` | only `reviewed` is eligible |
 | `labels[].reviewer` | string | the human who reviewed |
 | `labels[].reviewedAt` | `YYYY-MM-DD` | real calendar date |
@@ -92,9 +103,10 @@ runtime id.
 | `labels[].scores` | object | dimension → **finite number**; the scale and meaning belong to the rubric, not to M6 |
 
 Validation is strict, in the same style as the provenance companion: unknown keys are refused; duplicate
-`(caseId, variantId, attempt)` keys are refused; a label for an attempt the run does not contain is refused;
-a label for a case the corpus manifest does not mark held-out is refused; a non-finite score, a blank
-reviewer or a malformed date is refused. A refusal writes no table.
+`(caseId, variantId, attempt, revision)` keys are refused; for each key the revisions form a contiguous
+chain from 1 (revision 1 has `supersedes: null`, revision n > 1 names n−1); the highest revision is
+effective; a label for an attempt the run does not contain, a case the manifest does not mark held-out, a
+non-finite score, a blank reviewer or a malformed date is refused. A refusal writes no table.
 
 ## How the report uses it
 
@@ -125,11 +137,14 @@ may carry a label as a human observation, but that does not make it scoreable; e
    corpus-side confirmation.
 2. **Reviewer and rubric version.** A single required `reviewer` field; `rubricVersion` must name the
    version recorded in #99 before any label is consumed. One signature is not both M3 and M4 approval; if
-   joint sign-off is required, M3 states it.
-3. **Revision.** Append-only with `supersedes`, consistent with ADR-008. Because duplicate keys are
-   refused, an effective-row rule is required. **Proposal:** a `revision` integer per key; a later row
-   names the revision it supersedes; the highest revision is effective; a later row without `supersedes`
-   or a duplicate revision is refused. Pending M3/M4.
+   joint sign-off is required, M3 states it. The proposed default "a reviewer may not mark their own
+   variant's output" is **not a validator rule**: `reviewer` and `variantId` are free strings with no
+   ownership relation to check. The independent two-reviewer check and disagreement adjudication are
+   recorded in #110's external cross-review record.
+3. **Revision.** Append-only with `supersedes` and an integer `revision`, as agreed by M3 on 2026-11-10.
+   The file records every row; a later row names the revision it supersedes; the highest revision is
+   effective. The validator enforces the contiguous chain and refuses a duplicate revision or an unlinked
+   duplicate key (see Validation).
 4. **Scale.** The validator keeps "finite number" for now; the example is illustrative. Once #99 records a
    rubric version, its range is enforced in the rubric layer, not in the file shape.
 5. **Failed/cancelled.** The interface may allow a label as a human observation, but it does not make the
@@ -138,6 +153,6 @@ may carry a label as a human observation, but that does not make it scoreable; e
 
 ## Verification of this document
 
-Documentation only. `pnpm test:trace` 41 and `pnpm test:readiness` 45 pass at `main e9e7e7b`; no code,
+Documentation only. `pnpm test:trace` 41 and `pnpm test:readiness` 45 pass on this head (main `7995f51`); no code,
 test, threshold or result is added. No label file exists yet, so no claim is made that any attempt is
 scored.
