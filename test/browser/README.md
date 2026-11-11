@@ -82,3 +82,31 @@ What it demonstrates:
 
 The fixture is an approved substitute for an unfinished runtime boundary. Passing
 this demo is not evidence of live runtime integration.
+
+## M2 formal product-console acceptance
+
+`formal-console-acceptance.mjs` is a separate manual harness for the real root
+entry, not the fixture demo. It drives `ConsoleApp` through the actual
+application WebSocket and the actual M1 browser controller, and requires a
+runtime deployment that serves the registered fixed audio resources through
+`POST /audio`. Without that deployment a turn can be accepted but cannot reach
+playback; the harness fails visibly instead of substituting playback.
+
+Use a fresh runtime session database so the script can assert the initial
+stopped, epoch-0, non-retiring snapshot. Start the runtime and root Vite entry,
+then supply the Playwright module:
+
+```sh
+node test/browser/formal-console-acceptance.mjs \
+  --playwright /path/to/playwright \
+  --session <expected-session-id> \
+  --output /tmp/isla-m2-formal-console
+```
+
+The harness covers two complete turns, Stop before and during playback, manual
+Resume, duplicate and late frame replay, transport loss, reload without replay,
+the first acknowledged recovery before retirement, successor adoption and a
+final complete turn. It records screenshots plus `report.json` and
+`summary.txt`. The observations are local browser/media and server-reported
+facts; they are not acoustic, live-provider or Windows evidence, and they do not
+replace a reviewer's acceptance decision.

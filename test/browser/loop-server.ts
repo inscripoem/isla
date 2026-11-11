@@ -8,6 +8,7 @@ import type {
 } from '../../src/runtime/composition'
 import { createMonotonicClock } from '../../src/runtime/clock'
 import { createRuntimeAuthorizer } from '../../src/runtime/control-policy'
+import { createRuleSelectionPort } from '../../src/decision'
 import { AUDIO_PATH } from '../../src/runtime/config'
 import { createDeadlineGate } from '../../src/runtime/deadline'
 import type { RuntimeDeadlineGate } from '../../src/runtime/deadline'
@@ -37,14 +38,17 @@ import type { ArchiveSelectionConfig } from '../../src/runtime/session-archives'
  * I1 interactive-loop demo runtime.
  *
  * This is a demo/test entry point, not the product console (M2) or the standard
- * diagnostic CLI. M3 is not implemented yet, so this script injects the explicit
- * fixture selection/reaction substitutes from `test/support`; production source
- * never imports them. M4 is real: the production reconstructed runtime runs the
- * production dialogue context/generation/memory against the shared M6 in-memory
- * history and M4's memory commit port, with a deterministic catalog text source
- * substituting only the provider. It also wires the real M5 coordinator, the
- * merged M1 fixed synthesis and mapped renderer, the server-side audio bridge,
- * the browser-facing application endpoint and explicit operator recovery.
+ * diagnostic CLI. Selection uses the merged M3 rule port bound to this loop's
+ * monotonic clock, so the runnable path exercises a real decision port rather
+ * than a fixture. Reaction remains an explicit fixture substitute from
+ * `test/support`; production source never imports it. M4 is real: the production
+ * reconstructed runtime runs the production dialogue context/generation/memory
+ * against the shared M6 in-memory history and M4's memory commit port, with a
+ * deterministic catalog text source substituting only the provider. It also
+ * wires the real M5 coordinator, the merged M1 fixed synthesis and mapped
+ * renderer, the server-side audio bridge, the browser-facing application endpoint
+ * and explicit operator recovery. Recovery successors are rebuilt by the same
+ * builder and therefore use the same clock-bound rule selection port.
  */
 
 const PORT = Number(process.env.ISLA_LOOP_PORT ?? 4317)
@@ -141,7 +145,7 @@ export function createLoopCompositionBuilder(deps: LoopCompositionDeps): LoopCom
     return createReconstructedRuntimeComposition({
       clock: deps.clock,
       authorizer: createRuntimeAuthorizer(),
-      selection: correct.createFixtureSelectionPort(),
+      selection: createRuleSelectionPort({ clock: deps.clock }),
       reaction: correct.createFixtureReactionPort(),
       store: deps.store,
       history: createHistoryQuery(deps.backend),
