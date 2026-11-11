@@ -9,7 +9,6 @@ import { DiagnosticsServer } from '../../src/runtime/server'
 
 type CliProcess = ChildProcessByStdio<null, Readable, Readable>
 
-const TSX_BIN = 'node_modules/.bin/tsx'
 const CLI_ENTRY = 'src/runtime/cli.ts'
 const SIGNAL_HARNESS_ENTRY = 'test/support/cli-signal-harness.ts'
 const READINESS_GATE_ENV = 'ISLA_TEST_READINESS_GATE'
@@ -24,7 +23,11 @@ afterEach(() => {
 })
 
 function startCli(env: Record<string, string>): CliProcess {
-  const child = spawn(TSX_BIN, [CLI_ENTRY], {
+  // Launch through the Node executable and the tsx loader, not the
+  // `node_modules/.bin/tsx` shim: on Windows that shim is a `.cmd` script that
+  // `spawn` cannot execute without a shell, and the wrapper would also
+  // re-execute the entry and leave the real runtime in a child process.
+  const child = spawn(process.execPath, ['--import', 'tsx', CLI_ENTRY], {
     env: { ...process.env, ...env },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -137,8 +140,11 @@ describe('runtime CLI', () => {
     }
   })
 
+  // `child.kill('SIGINT'/'SIGTERM')` is only a cooperative request on POSIX.
+  // On Windows it terminates the child forcefully, so a clean shutdown cannot
+  // be asserted there; this diagnostic CLI has no portable control channel.
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-    it(`shuts down cleanly on ${signal}`, async () => {
+    it.skipIf(process.platform === 'win32')(`shuts down cleanly on ${signal}`, async () => {
       const child = startCli({ ISLA_RUNTIME_PORT: '0' })
       await waitForOutput(child, '"event":"listening"')
       const exit = collectUntilExit(child)

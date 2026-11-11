@@ -115,7 +115,11 @@ describe('production CLI', () => {
     // so the process exits on its own with the raw code preserved.
   })
 
-  it('starts over a durable database, serves health, and shuts down on SIGTERM', async () => {
+  // `child.kill('SIGTERM')` requests a cooperative shutdown only on POSIX. On
+  // Windows it terminates the process forcefully, so this signal case is
+  // unavailable there; the IPC tests below cover shutdown, pending release and
+  // release failure through the portable control message.
+  it.skipIf(process.platform === 'win32')('starts over a durable database, serves health, and shuts down on SIGTERM', async () => {
     const dbPath = harness.tempDatabasePath()
     await seedDatabase(dbPath, (store) => seedProductionEvidence(store, CLI_ARCHIVE))
     const child = harness.start({
@@ -160,6 +164,10 @@ describe('production CLI', () => {
 
     const listening = await waitForListening(child)
     expect(listening.sessionId).toBe(CLI_LIVE)
+    // The portable path must still serve health before it shuts down.
+    const health = await getHealth(listening.port)
+    expect(health.status).toBe(200)
+    expect(health.body).toMatchObject({ ok: true, loopbackOnly: true })
     const exit = collectUntilExit(child)
     // The portable trigger does not depend on a POSIX signal; the record names
     // `ipc` as the trigger, never a signal that was not received.
@@ -316,7 +324,7 @@ describe('production CLI', () => {
     expect(releaseCalls(marker)).toBe(1)
   })
 
-  it('awaits the owned release once on SIGTERM shutdown', async () => {
+  it.skipIf(process.platform === 'win32')('awaits the owned release once on SIGTERM shutdown', async () => {
     const dbPath = harness.tempDatabasePath()
     await seedDatabase(dbPath, (store) => seedProductionEvidence(store, CLI_ARCHIVE))
     const marker = join(harness.tempDir(), 'release.log')
@@ -339,7 +347,7 @@ describe('production CLI', () => {
     expect(releaseCalls(marker)).toBe(1)
   })
 
-  it('awaits a genuinely pending owned release before reporting shutdown completion', async () => {
+  it.skipIf(process.platform === 'win32')('awaits a genuinely pending owned release before reporting shutdown completion', async () => {
     const dbPath = harness.tempDatabasePath()
     await seedDatabase(dbPath, (store) => seedProductionEvidence(store, CLI_ARCHIVE))
     const marker = join(harness.tempDir(), 'release.log')
@@ -377,7 +385,7 @@ describe('production CLI', () => {
     expect(releaseCalls(marker)).toBe(1)
   })
 
-  it('reports an incomplete shutdown when the owned release fails', async () => {
+  it.skipIf(process.platform === 'win32')('reports an incomplete shutdown when the owned release fails', async () => {
     const dbPath = harness.tempDatabasePath()
     await seedDatabase(dbPath, (store) => seedProductionEvidence(store, CLI_ARCHIVE))
     const marker = join(harness.tempDir(), 'release.log')

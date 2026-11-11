@@ -372,11 +372,21 @@ describe('production process restart acceptance', () => {
       expect(sessionEvents(firstClient, 'delivery.committed')).toHaveLength(1)
 
       const firstExit = collectUntilExit(first)
-      first.kill('SIGKILL')
+      const forced = first.kill('SIGKILL')
+      expect(forced).toBe(true)
       const killed = await firstExit
-      // Raw reporting: a forceful kill has no exit code and names the signal.
-      expect(killed.code).toBeNull()
-      expect(killed.signal).toBe('SIGKILL')
+      // POSIX reports the signal and no exit code. Windows TerminateProcess
+      // reports an abnormal exit code (or a signal) instead; require an
+      // abnormal termination without inventing the platform's exact value.
+      if (process.platform === 'win32') {
+        // A forced termination is abnormal: either a non-null signal or a
+        // non-zero exit code. A bare exit value is not enough.
+        const abnormal = killed.code === null ? killed.signal !== null : killed.code !== 0
+        expect(abnormal).toBe(true)
+      } else {
+        expect(killed.code).toBeNull()
+        expect(killed.signal).toBe('SIGKILL')
+      }
       expect(killed.output).not.toContain('"event":"shutdown_complete"')
 
       // ---- recovered state: the committed prefix only ----
@@ -388,14 +398,17 @@ describe('production process restart acceptance', () => {
       })
 
       // ---- second process: fresh live id continues over the crashed database ----
-      const second = harness.start({
-        ISLA_DEPLOYMENT_MODULE: DEPLOYMENT_MODULE,
-        ISLA_STORAGE_DB_PATH: dbPath,
-        ISLA_RUNTIME_PORT: '0',
-        ISLA_TEST_LIVE_SESSION_ID: LIVE_B,
-        ISLA_TEST_ARCHIVE_SESSIONS: LIVE_A,
-        ISLA_TEST_DIALOGUE_CAPTURE_FILE: captureFile,
-      })
+      const second = harness.start(
+        {
+          ISLA_DEPLOYMENT_MODULE: DEPLOYMENT_MODULE,
+          ISLA_STORAGE_DB_PATH: dbPath,
+          ISLA_RUNTIME_PORT: '0',
+          ISLA_TEST_LIVE_SESSION_ID: LIVE_B,
+          ISLA_TEST_ARCHIVE_SESSIONS: LIVE_A,
+          ISLA_TEST_DIALOGUE_CAPTURE_FILE: captureFile,
+        },
+        { ipc: true },
+      )
       const secondListening = await waitForListening(second)
       expect(secondListening.sessionId).toBe(LIVE_B)
       const secondClient = await connectPerformer(harness, secondListening.port, LIVE_B)
@@ -418,7 +431,13 @@ describe('production process restart acceptance', () => {
       expect(sessionEvents(secondClient, 'delivery.committed')).toHaveLength(SEGMENTS.length)
       await secondClient.close()
       const secondExit = collectUntilExit(second)
-      second.kill('SIGTERM')
+      if (process.platform === 'win32') {
+        // Windows cannot deliver a catchable SIGTERM; use the same portable
+        // control message the continuation case already uses.
+        expect(second.send({ type: CLI_IPC_SHUTDOWN_MESSAGE })).toBe(true)
+      } else {
+        second.kill('SIGTERM')
+      }
       const secondResult = await secondExit
       expect(secondResult.code).toBe(0)
       expect(secondResult.signal).toBeNull()
