@@ -109,8 +109,10 @@ Preparation (may run before checkpoint 4):
    eligible set and the declared conditions.
 3. Render the table: `pnpm evaluation:report --input <recorded-run.json> --output <evaluation-table.md>`.
 4. Record the companion and validate it against the run digest with
-   `--provenance <path>` (parser and command: the #100 slice). The command refuses a run-id,
-   digest, key-set or input-order mismatch and writes no table.
+   `--provenance <path>` (parser and command: the #100 slice). The command's refusal set is owned
+   by ADR-008 D8: run id, digest, key set, input order, a duplicate key, a not-run pair or
+   occurrence the run did not record, and `exact` without an observed acknowledgement. This method
+   does not restate that list.
 
 Pilot pass conditions:
 
