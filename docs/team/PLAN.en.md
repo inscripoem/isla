@@ -1,8 +1,8 @@
 # Isla — Team Work Plan v0.2
 
-Status: local coordination draft, under review · 2026-11-06.2 · [Project overview](../../README.md)
+Status: coordination draft, under review · 2026-11-12.1 · [Project overview](../../README.md)
 
-Current scheduling and review carry-forward are recorded in the [delivery plan](DELIVERY-PLAN.en.md). PR63 is merged; M5 approvals on PR138 and PR136 are published. The November 6 inspection is recorded locally, while CP02/CP03 acceptance is not recorded and their original dates remain visible. Module responsibilities and product criteria below are unchanged.
+Current scheduling and review carry-forward are recorded in the [delivery plan](DELIVERY-PLAN.en.md). CP02 is closed under its recorded single-machine inspection decision; CP03 remains open. Original target dates remain visible. Module responsibilities and product criteria below are unchanged except for the recorded CP02 inspection decision.
 
 ## Requirements and course-deliverable work
 
@@ -93,7 +93,7 @@ M6-02 prepares measurement tooling alongside the offline work and compares imple
 
 ### Submission checkpoint responsibilities
 
-Captain adopted the target schedule on October 29. Record delivery estimates when supplied; no separate weekly capacity return is required under this proposed process. Each cell points to existing work rather than a new module assignment. Members update the actual task or PR once; M5 maintains the Project summary. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md) for product acceptance and reviewer dependencies.
+Captain adopted the target schedule on October 29. Record delivery estimates when supplied; no separate weekly capacity return is required under the adopted coordination process. Each cell points to existing work rather than a new module assignment. Members update the actual task or PR once; M5 maintains the Project summary. See [DELIVERY-PLAN](DELIVERY-PLAN.en.md) for current product acceptance and reviewer dependencies.
 
 | Member / role issue | I1 checks: Nov 1 / Nov 5 | I2: Nov 8 | Evaluation / faults: Nov 10-15 | Course closure: Nov 18-22 |
 | --- | --- | --- | --- | --- |
@@ -103,6 +103,8 @@ Captain adopted the target schedule on October 29. Record delivery estimates whe
 | M4 / #5 / L01nki1 | Intent and delivery-history consumption | Real text provider | Persona/history rubric, privacy and recovery semantics | Memory/context architecture and own process/reflection |
 | M5 / #6 / inscripoem | Issue69 resource assembly, combined I1 candidate | Product deployment over merged PR64 acquisition | Capture, control, composition and requirement verdicts | Plan/architecture/report consolidation and package |
 | M6 / #7 / MichaelLsh | PR70 checker and storage support | Measurement tooling in parallel | PR63/66, runner/provenance, formal results | Gates, trace/QA and independent recovery check |
+
+These cells describe responsibilities, not current completion status. PR67 and PR70 are merged; #69 is closed. [#85](https://github.com/inscripoem/isla/issues/85) is closed after M5 accepted the controlled merged-source console run; M2 has not reported a personal merged-source browser rerun. PR152 merged the checker workaround removal and [#68](https://github.com/inscripoem/isla/issues/68) is closed within that scope; the separate Windows follow-up remains open in PR135. Current delivery decisions and source-bound results are linked from the [delivery plan](DELIVERY-PLAN.en.md#schedule).
 
 Every member supplies authentic process records, contribution evidence and a verified personal reflection. Review and QA roles rotate without changing module owners. The initial I1 loop does not depend on complete cross-session recovery; checkpoint 6 covers committed product recovery obligations. Existing preparation and merged implementations are reused with their actual verification scope.
 

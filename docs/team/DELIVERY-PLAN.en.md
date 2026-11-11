@@ -1,6 +1,6 @@
 # Submission checkpoint plan
 
-Revision: 2026-11-06.2. Status: local coordination draft, under review. Original target dates remain; individual estimates are recorded when supplied. All times are UTC+8; each target is 21:00. This revision accepts no checkpoint and changes no product test or module allocation.
+Revision: 2026-11-12.1. Status: coordination draft, under review. Original target dates remain; individual estimates are recorded when supplied. All times are UTC+8; each target is 21:00. This revision records earlier decisions but accepts no additional checkpoint and changes no product test or module allocation.
 
 Scope: CS5351 submission and the agreed Isla requirements only. Preserve M1-M6 ownership, workload ratings, existing task/requirement/case IDs and genuine evidence. Checkpoint numbers are schedule positions, not new requirement/case IDs. I1-01, I2-01 and S1-01 remain the original task references. Any scope reduction needs an explicit recorded decision.
 
@@ -10,19 +10,21 @@ The team agreed November 22 as the complete-candidate date (reported by Captain 
 
 Start from your [role entry](README.md), then its actual task or PR. Update that work once when ready, blocked or rescheduled: give the result/evidence link, next action and requested help. Record consequential technical decisions there or in the repository.
 
-M5 maintains [Team progress](https://github.com/users/inscripoem/projects/4/views/2) and the [next product check](https://github.com/users/inscripoem/projects/4/views/4); PR pages carry current commits, CI and reviews. Members do not copy reports or maintain weekly capacity forms. Keep the full [schedule](https://github.com/users/inscripoem/projects/4/views/3) for planning. The daily view may show checkpoint 02 while setup remains open; that display accepts no checkpoint.
+M5 maintains [Team progress](https://github.com/users/inscripoem/projects/4/views/2) and the [next product check](https://github.com/users/inscripoem/projects/4/views/4); PR pages carry current commits, CI and reviews. Members do not copy reports or maintain weekly capacity forms. Keep the full [schedule](https://github.com/users/inscripoem/projects/4/views/3) for planning. A Project view does not itself accept a checkpoint.
 
 ## Published tracking structure
 
-The original ten checkpoint issues (#71-#80) and 50 delivery issues retain their history. [#82](https://github.com/inscripoem/isla/issues/82) and [#83](https://github.com/inscripoem/isla/issues/83) were retired as not planned and their two Project cards archived on October 31. Retirement is not product progress. [#84](https://github.com/inscripoem/isla/issues/84) is accepted; #81/#71 still need the adopted-plan and named setup decisions.
+The original ten checkpoint issues (#71-#80) and 50 delivery issues retain their history. [#82](https://github.com/inscripoem/isla/issues/82) and [#83](https://github.com/inscripoem/isla/issues/83) were retired as not planned and their two Project cards archived on October 31. Retirement is not product progress. [#84](https://github.com/inscripoem/isla/issues/84) is accepted. M5's [checkpoint-01 decision](https://github.com/inscripoem/isla/issues/71#issuecomment-6718559141) identifies the working plan, and #71 is closed; [#81](https://github.com/inscripoem/isla/issues/81) still tracks the plan PR's integration.
 
-[Checkpoint 01](https://github.com/inscripoem/isla/issues/71) becomes M5's setup check for [plan #81](https://github.com/inscripoem/isla/issues/81) and [required-check record #84](https://github.com/inscripoem/isla/issues/84). The next product check is [#72](https://github.com/inscripoem/isla/issues/72); preparation follows technical dependencies, without waiting for capacity returns. Current status stays on the actual PR/Project; historical handoffs retain their source versions.
+[Checkpoint 01](https://github.com/inscripoem/isla/issues/71) records M5's setup decision for [plan #81](https://github.com/inscripoem/isla/issues/81) and the [required-check record #84](https://github.com/inscripoem/isla/issues/84). [Checkpoint 02](https://github.com/inscripoem/isla/issues/72) is closed under its recorded controlled-inspection decision. [Checkpoint 03](https://github.com/inscripoem/isla/issues/73) remains open. Preparation follows technical dependencies, without waiting for capacity returns; current status stays on the actual PR or Project item.
 
 ## Schedule
 
-Published status checked on November 6: PR63 is merged in [main 7a6eec2340fb99589ebe1b7f8cd15840ea26bbdb](https://github.com/inscripoem/isla/commit/7a6eec2340fb99589ebe1b7f8cd15840ea26bbdb); ADR-008 was already merged through PR66. M5's [PR138 approval](https://github.com/inscripoem/isla/pull/138#pullrequestreview-5790732041) and [PR136 approval](https://github.com/inscripoem/isla/pull/136#pullrequestreview-5796392608) are published at their recorded heads. Both PRs remain open. M2's #116 delivery acceptance and the same-source product-consumer obligations remain separate. These updates accept no checkpoint.
+Status checked on November 12: the November 1 joint session did not take place. The [checkpoint-02 decision](https://github.com/inscripoem/isla/issues/72#issuecomment-6719195922) accepted M5's November 8 controlled single-machine inspection in its place, with the recorded gaps; it did not claim other members attended. CP02 and its inspection record [#87](https://github.com/inscripoem/isla/issues/87) are closed within that alternative. PRs #67, #70, #130, #131, #136, #138, #141 and #152 are merged; their individual scope and evidence remain version-bound.
 
-Position on November 6: CP02 did not run at its November 1 slot. M5's actual November 6 controlled inspection at local source `31ba86c876c6bc508c04f3381f7a1eaacfbe9ff9` passed 1538 tests and a 13-step muted-browser check; that source and the dated gap record await publication and named human acceptance. No accepted CP02 or CP03 result is recorded; the CP03 November 5 target has elapsed. Publish the reproducible source before requesting same-revision consumer observations; these may be asynchronous. Captain may accept the completed CP02 inspection with its explicit gaps. CP03 remains open until its product criteria are met. No replacement joint slot is asserted without actual availability, and later targets are not shifted automatically.
+CP03's five tracked deliveries #88–#92 are closed, while CP03 itself remains open. M1's [#86](https://github.com/inscripoem/isla/issues/86) was accepted and closed for its stated controlled playback scope. M2's [#85](https://github.com/inscripoem/isla/issues/85) was accepted and closed using M5's [controlled merged-source run](https://github.com/inscripoem/isla/issues/85#issuecomment-6801134561); M2 has not reported a personal merged-source formal browser rerun. The original CP03 and CP04 targets have passed. Subsequent targets are not automatically shifted, and member forecasts are not inferred from this status.
+
+For CP04, M4 [reported](https://github.com/inscripoem/isla/issues/93#issuecomment-6776009679) five live-suite cases and six configuration tests passing on feature commit `e10cb2f`. The provider source and live tests matched then-main `e9e7e7b`, but other exercised dialogue files differed; this is not a pure-main run or #93 acceptance. M1 separately reported [CPU Kokoro inference](https://github.com/inscripoem/isla/issues/94#issuecomment-6786934194) and a [VTube Studio API probe](https://github.com/inscripoem/isla/issues/94#issuecomment-6795173375) on the target. Actual audible output and selected product-avatar integration remain open.
 
 | Order | Original task | Acceptance target (UTC+8) | Checkpoint |
 | --- | --- | --- | --- |
@@ -72,7 +74,7 @@ Acceptance dependencies: preparation may start now; follow the prerequisites in 
 
 Pass condition: M5 identifies the adopted plan revision and effective required-check record; a named human records the setup decision. Unresolved product scope or interface decisions remain linked to their actual owners and tasks. This is an internal setup check; it needs no all-member capacity return, repeated queue acknowledgement or six-person meeting. The original reviewer responsibilities for substantive plan changes remain.
 
-After this revised process is adopted, #82/#83 are retired as administrative tasks, with their history retained. #81 and #84 close when their actual work is accepted. Retiring a task does not declare its old conditions fulfilled.
+Under the adopted process, #82/#83 were retired as administrative tasks, with their history retained. #84 is accepted and closed; #81 remains open for plan integration. Retiring a task does not declare its old conditions fulfilled.
 
 <a id="checkpoint-02"></a>
 
@@ -87,12 +89,14 @@ Acceptance dependencies: preparation may start now; follow the prerequisites in 
 | Owner | Delivery | Reviewer / accepter | Existing work |
 | --- | --- | --- | --- |
 | M5 | Audio-deployment PR: supply the existing controlled audio resource peer and verify the same-origin resource route. | M1/M2 | Issue #69; existing ProductionAudioResources seam |
-| M2 | Complete the PR67 consumer review follow-up and run two turns, Stop/Resume, duplicate/late frames and transport-loss checks in the product console. | M1/M5 | PR #67; Issue #37 |
+| M2 | Complete the PR67 consumer review follow-up and run two turns, Stop/Resume, duplicate/late frames and transport-loss checks in the product console. <br> Status: PR67 is merged; #85 is closed after M5's controlled merged-source run was accepted. M2 has not reported a personal merged-source browser rerun. | M1/M5 | PR #67; Issue #37 |
 | M1 | Verify WAV mapping/duration and browser playback/receipt behaviour; link actual observations and remaining gaps. | M2/M5 | Issues #2/#69; scoped review on PR67 |
-| M6 | Complete boundary-parser repair review; M2 removes its workaround only after adoption. This does not block the joint check while the workaround works. | M2 | PR #70; Issue #68 |
+| M6 | Complete boundary-parser repair review; M2 removes its workaround only after adoption. This was not intended to block the original joint check while the workaround worked. <br> Status: PR70 and PR152 are merged and #68 is closed; the separate Windows follow-up remains in PR135. | M2 | PR #70; Issue #68 |
 | M5 | Run the complete I1 acceptance checklist and record pass/fail/not-run, owner and forecast for every remaining item. | M1-M6 | Existing I1 application handoff and original case IDs |
 
-Pass condition: The first joint inspection is completed and all observed results or missing deliveries are recorded. Checkpoint 2 means the inspection happened; only checkpoint 3 can accept complete I1. Fixture decision/text peers must be identified.
+Original pass condition: The first joint inspection is completed and all observed results or missing deliveries are recorded. Checkpoint 2 means the inspection happened; only checkpoint 3 can accept complete I1. Fixture decision/text peers must be identified. The recorded decision below accepted a controlled alternative to that original joint inspection.
+
+Recorded decision: the [November 8 controlled single-machine inspection](https://github.com/inscripoem/isla/issues/72#issuecomment-6719195922) was accepted in place of the original joint inspection, which did not happen. This accepts the inspection with its recorded gaps, not complete I1. PR67 and PR70 are merged; M2's workaround removal in PR152 is merged and #68 is closed. The controlled scopes of #85 and #86 are accepted and closed, and #87 records the accepted CP02 alternative. Windows follow-up PR135 and console proxy follow-up PR153 remain open.
 
 <a id="checkpoint-03"></a>
 
@@ -263,7 +267,7 @@ Source basis checked October 29, 2026: `CS5351-2026-2027-project.pdf`, project P
 
 ## Transition and change control
 
-The checkpoint issues (#71-#80) retain their identifiers and target dates. This proposed management revision changes checkpoint 01's administrative conditions; publish the matching #71 update before retiring #82/#83, and remove retired tasks from active acceptance counts. Product criteria for checkpoints 02-10 are unchanged. Keep role issues #2-#7 as stable entry points, use the actual task or PR for work updates, and retain decisions in #25/#37/#41/#44/#58 or the relevant repository document. Historical handoffs remain version-bound evidence.
+The checkpoint issues (#71-#80) retain their identifiers and original target dates. The revised checkpoint-01 administrative process is recorded in #71; #82/#83 were retired and remain outside active acceptance counts. Product criteria for checkpoints 02-10 are unchanged except for the recorded checkpoint-02 inspection decision. Keep role issues #2-#7 as stable entry points, use the actual task or PR for work updates, and retain decisions in #25/#37/#41/#44/#58 or the relevant repository document. Historical handoffs remain version-bound evidence.
 
 Existing PRs continue on their original branches. PR64 is merged; retain its VTS handoff and original evidence while separately reviewing product adoption. An unrelated review cannot clear another author's requested changes. Module fixes remain with their owners unless separately delegated. No agent merges, enables auto-merge or submits coursework.
 
