@@ -5638,3 +5638,43 @@ entries:
         rejected-event-id refusal (1 red), removing the occurrence column (3 red).
       not_run: >-
         No Windows host; no provider run; M5/M4 re-review and merge remain.
+
+  - date: "2026-11-12"
+    task: "M6-02 / #100 not-submitted event-id refusal"
+    branch: m6-02-provenance
+    change: >-
+      Extends the rejected-event-id refusal to `not-submitted`: the event id is
+      created on admission, so a never-submitted input cannot carry one; the
+      request message id may already be allocated and stays unconstrained.
+      Positive fixtures now use `eventId: null`, and negative coverage exists for
+      the executed-attempt path and the not-run observation path, including the
+      report command. ADR-008 D3/D8 and Delta-008 record the rule.
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: []
+    commits: [be95320]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode under M6 supervision after M5's changes-requested
+      review at 0b891d8; the fix follows M5's reproducer.
+    human_review: >-
+      The Captain approved the plan; M5 re-review and merge remain human actions.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: a855701 (main)
+      role: "provenance 52/52 across 2 files; test:m6 235/235 in 16 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0: 1593/1593 in 76 files; typecheck clean; lint clean."
+      program: >-
+        The report command was run end to end on synthetic run/companion files:
+        an invalid executed attempt and an invalid not-run observation each exited
+        1 and wrote no output; the control with eventId null exited 0 and wrote the
+        provenance table.
+      mutation: >-
+        Removing the not-submitted clause turned the three new negatives red, then
+        the clause was restored.
+      not_run: >-
+        No Windows host; no live provider; M5 re-review and merge remain.
