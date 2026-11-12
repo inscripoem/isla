@@ -6611,10 +6611,10 @@ entries:
       the prompt contains neither "started but cut off" (case-insensitive) nor
       "cut off after start", and the recalculated character counts (the
       heard-prefix line is 64 characters; the cheaper-candidate case uses a
-      budget of 38 and expects 36).
+      budget of 38 and expects 36). Commit tie: this label correction is carried by d4317f3, while the A02 bucket it rewords was introduced in af3c8e3.
     requirements: [FR-02]
     invariants: []
-    commits: []
+    commits: [d4317f3]
     agent: opencode/build
     provider: cslabllm
     model: DeepSeek-V4-Flash
@@ -6644,3 +6644,94 @@ entries:
       this log entry. No port, receipt-stage read, admission change, provider
       call, contract, runtime, storage, manifest or AGENTS.md change; the
       rendering default without a heard-prefix record is byte-identical.
+  - date: "2026-11-12"
+    task: M4-151-fix-round
+    change: >-
+      Address the two review verdicts on PR #151 (M6 advisory, M5 human review)
+      without widening any contract and without changing FR-02 admission
+      semantics; commit c47c51f changes 12 files (1331 insertions, 254
+      deletions). Context assembly (context.ts): the former state-plus-plan
+      refusal is removed - a plan combined with state input is now assembled,
+      and a kept state block is charged to the plan's own `state` section so
+      `state.used` reports its characters instead of 0; a supplied state block
+      and working-memory block without a plan are additionally held to one
+      combined character bound, because each fitting the cap alone is not enough
+      when both are charged to the same pool; the state block keeps precedence
+      (allocation order persona -> state -> workingMemory), so the
+      working-memory block is the one dropped whole; a state dimension that is
+      not a finite number drops the block as a validation loss with its own
+      warning, kept distinct from the budget-drop warning and never counted as
+      a budget drop. State renderer (state-render.ts): `renderStateBlock`
+      returns null instead of clamping a non-finite value into range. Working
+      memory (working-memory.ts): admission now requires the full
+      acknowledgement and an effective classification of `fully-delivered`,
+      keeps its existing empty-text refusal and adds the `text-not-single-line`
+      refusal (a single-line note requirement), the store binds to one
+      `sessionId`, fulfilment stops strictly before `expiresAtMs`, and the
+      audit view keeps the newest 32 non-pending entries. Dialogue port
+      (dialogue-port.ts): the selected input's own event is filtered out of the
+      list handed to `observe`, and both closed-loop calls pass
+      `request.sessionId`. Tests: the budget, state and working-memory suites
+      carry the new cases; the transcript suite gains only the
+      `renderStateBlock` null guard forced by its new `string | null` return
+      and keeps its 16 cases, so it adds no new case this round; `pnpm test:m4`
+      now also lists the transcript, state and working-memory suites under
+      M5's written consent on the PR. Docs in this commit: the trace-matrix FR-02 row, three
+      runtime-policy catalog rows and the memory-design working memory
+      subsection record the new failure paths. No src/contracts change, no new
+      stable id, no storage, runtime or provider-call change, and the
+      absent-input paths stay byte-identical.
+    requirements: [NFR-04]
+    invariants: []
+    commits: [be9520a]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: 2.0.20
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    sessions: [ses_e32482ed6ffe2PurXuGc0FmrSN, ses_e322b7d16ffekNbKfRSAk8S9zA, ses_e32263a6bffevx1zrkc29BOloa, ses_e322168abffevdFX5AtoPqO9Ha, ses_e3211735bffefTJ7CEo5bnnw31, ses_e320e02deffeicc0WHj7xLj48C, ses_e320287c7ffeyG0kkrnR30h3KM]
+    supervision: >-
+      The M4 fix workflow ran in a ZCode session (its model is whatever the run
+      record shows; this entry does not restate it). That workflow session
+      formulated the fix plan, wrote a reference implementation outside the
+      repository, opened the read-only first-inquiry OpenCode session
+      ses_e32482ed6ffe2PurXuGc0FmrSN, compared the proposal with the reference
+      and the review findings, and then ran the implementation with difference
+      feedback. Three OpenCode `build` sessions wrote all code and test
+      changes, one per slice: ses_e322b7d16ffekNbKfRSAk8S9zA (working-memory
+      store and dialogue port), ses_e32263a6bffevx1zrkc29BOloa (context
+      assembly, layered budget and state block) and
+      ses_e322168abffevdFX5AtoPqO9Ha (manifest and the three architecture
+      documents). The supervisor reviewed the resulting diff; after
+      `pnpm test:m4` and the `tsc -b` / `oxlint` gates passed, the code was
+      committed as c47c51f, and remote CI on the pull request is the final
+      review. The comparison and negotiation rounds ran in OpenCode sessions
+      ses_e3211735bffefTJ7CEo5bnnw31, ses_e320e02deffeicc0WHj7xLj48C and
+      ses_e320287c7ffeyG0kkrnR30h3KM. The local `AGENTS.md` edit in the working
+      tree is the owner's uncommitted edit: this round did not modify, correct,
+      revert or commit it, it is not in c47c51f, and it remains in the working
+      tree. This registration entry is written after the code commit by the
+      documentation step of the same workflow; it is not part of c47c51f, so
+      `commits` names the code commit this entry describes, not a commit that
+      contains the entry.
+    transcript_record: >-
+      The seven sessions listed in `sessions` retain their conversations. Their
+      per-session record (id, title, time and role) is written outside this
+      repository in `m4-impl/151-fix/opencode-sessions.md`; no export is stored
+      in the repository.
+    verification:
+      base: d4317f3
+      reproduction: >-
+        Run from the repository root in this session on the working tree that
+        contains c47c51f plus the documentation edits. pnpm test:m4 -> 16 files
+        / 370 tests passed. pnpm exec tsc -b -> exit 0. pnpm exec oxlint ->
+        exit 0; the default reporter prints "Found 0 warnings and 0 errors." on
+        280 files with 116 rules. Gate G6 (pnpm gate:ai-use-log with
+        AI_USE_LOG_BASE_FILE set to a copy of the log at d4317f3 and the
+        changed-file list) prints "G6: AI-use log gate passed" and exits 0,
+        with 152 head entries against 151 at the base. The code under test is
+        unchanged from c47c51f; no Git command wrote history.
+    scope: >-
+      M4 working-memory/state/budget/label fixes plus test:m4 additions
+      consented by M5; no contract change.

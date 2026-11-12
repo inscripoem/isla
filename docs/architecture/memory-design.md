@@ -199,6 +199,8 @@ owes, commitments she made, open threads and operator-suppressed items
 - **Default off.** With no store supplied to `assembleDialogueContext`, no block is rendered and the
   prompt and every budget number are byte-identical to an assembly without the feature.
 
+**Trace reference.** This design note carries no FR-02/FR-04 table row of its own: the enforcing-module and test cells for the six new dialogue modules (`src/dialogue/budget.ts`, `listener-history.ts`, `state-render.ts`, `state.ts`, `transcript.ts`, `working-memory.ts`) live in the FR-02 row of `docs/architecture/trace-matrix.md`, and their failure behaviour is in the runtime-policy catalog. The state block (A08) is also rendered from caller-supplied state in process; it adds no persistent state and no row to the survival table above.
+
 ## Retention and privacy
 
 - **Retention:** there is no automatic expiry and no default period.
