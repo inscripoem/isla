@@ -200,6 +200,14 @@ own triggers; this ADR deliberately does not take it.
 Rows 1 and 2 are closed by M3's and M4's answers. Row 3 blocks CP05 scoring, not the companion's merge.
 Row 4 must be agreed before the eligibility path fixes the `exact` distinction.
 
+**Row 4 — M4 position recorded 2026-11-12.** `correlation: exact` asserts the observed
+input/acknowledgement link, not completeness of the submitted batch. A partially admitted
+batch may therefore carry `exact` for the link that was observed, provided the parser preserves the
+unadmitted tail as it does now. `exact` must not by itself make an attempt quality-eligible; before
+CP05 scoring, eligibility needs a separate, named batch-completeness condition, aligned with M4's
+completed-only decision recorded in #142 §3 and absent from #143's `UNSCORED_REASONS`. No parser
+change is requested in #140. ADR-008 remains `proposed`; M5 confirmation on row 4 is still pending.
+
 ## Re-open triggers
 
 - A future corpus version changes the identity tuple → update D5 and the proposal (M3 confirmed the v1 tuple

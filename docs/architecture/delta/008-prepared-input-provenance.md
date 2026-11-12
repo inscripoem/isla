@@ -3,8 +3,9 @@
 Change record for **ADR-008**. Date: 2026-11-09 (review fixes 2026-11-09/10). Branch
 `m6-02-provenance` (PR #140), measured at `44b5d98` on `main` `e9e7e7b`; the null-occurrence
 refusal `ec7d372` and the docs-only `341303a` follow that measurement. The `dd4cebf`/`78fe3f1`
-paragraphs below are **historical**; the current verification block names its own head. Scope: a
-**separate** companion artifact; `RecordedRunV1` and every public port are unchanged.
+paragraphs below are **historical**; the verification block below is for the head named in the PR
+body, and the historical figures above are not a current measurement. Scope: a **separate**
+companion artifact; `RecordedRunV1` and every public port are unchanged.
 
 ## Change
 
@@ -116,8 +117,8 @@ readiness 45/45; full **1586/1586** in 76 files; `pnpm verify` exit 0.
   admission; a request id may already exist). The positive stopped-batch fixture uses `eventId: null`
   for those inputs, and negative coverage exists for both the executed-attempt and not-run paths.
 
-Verification at the current head: provenance **52** tests across the two files; `test:m6` **235/235** in 16
-files; trace 41/41; readiness 45/45; full **1593/1593** in 76 files; `pnpm verify` exit 0. Four mutations
+Verification at the head named in the PR body: provenance **52** tests across the two files; `test:m6` **238/238** in 16
+files; trace 41/41; readiness 47/47; full **1601/1601** in 76 files; `pnpm verify` exit 0. Four mutations
 turned their own tests red and were restored: reinstating the executed-pair refusal, removing the
 rejected-event-id refusal, removing the occurrence column, and removing the `not-submitted`
 event-id clause.
