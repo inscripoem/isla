@@ -1,0 +1,49 @@
+{
+  "requestId": "selection-request-005",
+  "task": "response-plan",
+  "sessionId": "session-eval-005",
+  "epoch": 0,
+  "snapshotRevision": 3,
+  "candidates": [
+    {
+      "eventId": "message-005-a",
+      "sessionId": "session-eval-005",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-m",
+      "text": "Should I upgrade that one first or save my ingots?",
+      "receivedAtMs": 2100,
+      "expiresAtMs": 7500,
+      "trust": "untrusted-content"
+    },
+    {
+      "eventId": "message-005-b",
+      "sessionId": "session-eval-005",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-n",
+      "text": "nice run so far",
+      "receivedAtMs": 2250,
+      "expiresAtMs": 7500,
+      "trust": "untrusted-content"
+    },
+    {
+      "eventId": "message-005-c",
+      "sessionId": "session-eval-005",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-o",
+      "text": "...",
+      "receivedAtMs": 2400,
+      "expiresAtMs": 7500,
+      "trust": "untrusted-content"
+    }
+  ],
+  "personaSummary": "Isla asks brief clarifying questions when a viewer question is ambiguous. Do not guess.",
+  "currentTopic": "Comparing the frost bow and the iron grappling hook",
+  "recentHistory": ["Isla: Both the frost bow and the grappling hook cost three alloy ingots."],
+  "allowedIntents": ["answer", "clarify", "acknowledge", "support"],
+  "deadline": { "atMs": 5000 },
+  "policyVersion": "m3-policy-v1",
+  "providerVersion": "m3-corpus-v1.1"
+}

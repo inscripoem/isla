@@ -1,0 +1,35 @@
+{
+  "caseId": "selection-004",
+  "selectionScores": [
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-004-a"],
+      "score": 0
+    },
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-004-b"],
+      "score": 0
+    },
+    {
+      "disposition": "defer",
+      "selectedEventIds": [],
+      "score": 2
+    }
+  ],
+  "intentLabels": [
+    {
+      "selectedEventId": "message-004-a",
+      "acceptableIntents": ["clarify"],
+      "coverage": "partial",
+      "coverageRationale": null
+    },
+    {
+      "selectedEventId": "message-004-b",
+      "acceptableIntents": ["acknowledge"],
+      "coverage": "partial",
+      "coverageRationale": null
+    }
+  ],
+  "rationale": "Waiting (defer) is the preferred outcome because both candidates are viewer-to-viewer side chat not addressed to Isla, so responding scores zero; 'clarify' and 'acknowledge' would only apply to their respective candidates if a response were forced. Intent coverage is partial while this record remains a draft pending human review by shallight."
+}
