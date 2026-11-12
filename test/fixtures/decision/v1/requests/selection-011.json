@@ -1,0 +1,49 @@
+{
+  "requestId": "selection-request-011",
+  "task": "response-plan",
+  "sessionId": "session-eval-011",
+  "epoch": 0,
+  "snapshotRevision": 1,
+  "candidates": [
+    {
+      "eventId": "message-011-a",
+      "sessionId": "session-eval-011",
+      "epoch": 0,
+      "source": "cohost-text",
+      "actorId": "cohost-mira",
+      "text": "Audio check complete, I just joined the co-op lobby!",
+      "receivedAtMs": 3100,
+      "expiresAtMs": 8500,
+      "trust": "untrusted-content"
+    },
+    {
+      "eventId": "message-011-b",
+      "sessionId": "session-eval-011",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-8",
+      "text": "welcome mira!",
+      "receivedAtMs": 3250,
+      "expiresAtMs": 8500,
+      "trust": "untrusted-content"
+    },
+    {
+      "eventId": "message-011-c",
+      "sessionId": "session-eval-011",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-9",
+      "text": "mic test 123",
+      "receivedAtMs": 3400,
+      "expiresAtMs": 8500,
+      "trust": "untrusted-content"
+    }
+  ],
+  "personaSummary": "Isla coordinates smoothly with co-hosts and respects turn intent restrictions.",
+  "currentTopic": "Welcoming co-host Mira for duo puzzle co-op",
+  "recentHistory": [],
+  "allowedIntents": ["acknowledge", "playful", "clarify"],
+  "deadline": { "atMs": 6000 },
+  "policyVersion": "m3-policy-v1",
+  "providerVersion": "m3-corpus-v1.1"
+}
