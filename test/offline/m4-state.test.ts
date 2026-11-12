@@ -23,6 +23,8 @@ import type {
   DialogueTextSource,
   StateProfile,
 } from '../../src/dialogue'
+import { DEFAULT_BUDGET_PLAN } from '../../src/dialogue/budget'
+import type { BudgetPlan } from '../../src/dialogue/budget'
 
 /**
  * State block and state dynamics (A08).
@@ -109,6 +111,7 @@ async function assemble(
     stateBaseline?: CharacterState
     stateProfile?: StateProfile
     maxCharacters?: number
+    budgetPlan?: BudgetPlan
   } = {},
 ): Promise<AssembledDialogueContext> {
   const capture: { view: AssembledDialogueContext | null } = { view: null }
@@ -119,6 +122,7 @@ async function assemble(
     ...(options.state === undefined ? {} : { state: options.state }),
     ...(options.stateBaseline === undefined ? {} : { stateBaseline: options.stateBaseline }),
     ...(options.stateProfile === undefined ? {} : { stateProfile: options.stateProfile }),
+    ...(options.budgetPlan === undefined ? {} : { budgetPlan: options.budgetPlan }),
   })
   await port.generate(
     fixtureDialogueRequest({
@@ -358,6 +362,7 @@ describe('M4 state block rendering: renderStateBlock', () => {
 
   it('renders the verbal block without any digit', () => {
     const block = renderStateBlock(SAMPLE_STATE, { ...DEFAULT_STATE_PROFILE, renderMode: 'verbal' })
+    if (block === null) throw new Error('fixture block was not renderable')
     expect(block).toContain('Current inner state (qualitative, do not quote numbers):')
     expect(/\d/.test(block)).toBe(false)
 
@@ -387,6 +392,33 @@ describe('M4 state block rendering: renderStateBlock', () => {
     )
     expect(verbal).toContain('mood: high')
     expect(verbal).toContain('stress: low')
+  })
+
+  it('refuses the whole block when a dimension is not a finite number', () => {
+    const numeric = { ...DEFAULT_STATE_PROFILE, renderMode: 'numeric' as const }
+    const verbal = { ...DEFAULT_STATE_PROFILE, renderMode: 'verbal' as const }
+
+    // Counterfactual: clamping first rendered NaN inside the range and a null
+    // at the low end, which presents an unknown value as a reading.
+    expect(renderStateBlock({ ...SAMPLE_STATE, mood: Number.NaN }, numeric)).toBeNull()
+    expect(renderStateBlock({ ...SAMPLE_STATE, energy: Number.POSITIVE_INFINITY }, verbal)).toBeNull()
+    expect(
+      renderStateBlock(
+        { ...SAMPLE_STATE, confidence: Number.NEGATIVE_INFINITY },
+        numeric,
+      ),
+    ).toBeNull()
+    // A null from an untyped caller is not finite either (`Number.isFinite(null)`
+    // is false), even though the type says number.
+    expect(
+      renderStateBlock({ ...SAMPLE_STATE, stress: null as unknown as number }, verbal),
+    ).toBeNull()
+
+    // The whole block is refused, never the offending dimension alone: a
+    // four-dimension block would silently misstate the state.
+    expect(renderStateBlock({ ...SAMPLE_STATE, mood: Number.NaN }, verbal)).toBeNull()
+    // Control: every finite dimension still renders exactly as before.
+    expect(renderStateBlock(SAMPLE_STATE, numeric)).not.toBeNull()
   })
 
   it('is deterministic', () => {
@@ -476,6 +508,128 @@ describe('M4 state block budget', () => {
     expect(dropped.warnings.some((warning) => warning.includes('state block'))).toBe(true)
     expect(renderDialoguePrompt(dropped)).not.toContain('Current inner state')
     expect(dropped.turns).toHaveLength(noStateAtTinyCap.turns.length)
+  })
+
+  it('charges a kept state block to the plan state section', async () => {
+    const memory = await seededMemory()
+    // DEFAULT_BUDGET_PLAN reserves floor(0.1 x 2000) = 200 for the state section;
+    // the numeric SAMPLE_STATE block renders at 109, so it is kept there.
+    const view = await assemble(memory, {
+      state: SAMPLE_STATE,
+      stateProfile: { ...DEFAULT_STATE_PROFILE, renderMode: 'numeric' },
+      budgetPlan: DEFAULT_BUDGET_PLAN,
+      maxCharacters: 2000,
+    })
+
+    // Counterfactual: a refusal for this combination never returns a view, and
+    // a hardcoded used: 0 in the state row reddens the row assertion.
+    expect(view.stateBlock).toHaveLength(109)
+    expect(view.budgetBreakdown?.find((usage) => usage.section === 'state')).toEqual({
+      section: 'state',
+      limit: 200,
+      used: 109,
+      dropped: 0,
+    })
+    // The shared pool still pays for the block: the history bound is the cap
+    // minus the block length, with no recall in this fixture.
+    expect(view.budgetBreakdown?.find((usage) => usage.section === 'history')?.limit).toBe(1891)
+    const turnCharacters = view.turns.reduce((total, turn) => total + turn.characters, 0)
+    expect(view.estimatedCharacters).toBe(109 + turnCharacters)
+    expect(view.estimatedCharacters).toBeLessThanOrEqual(2000)
+    expect(view.warnings).not.toContain(
+      'the state block did not fit the character budget and was dropped from context',
+    )
+  })
+
+  it('reports a state block dropped for size as used 0 and dropped 1 in the plan', async () => {
+    const memory = await seededMemory()
+    // A 200-character cap reserves floor(0.1 x 200) = 20 for the state section,
+    // so the 109-character block is dropped even though it fits 200 alone.
+    const view = await assemble(memory, {
+      state: SAMPLE_STATE,
+      budgetPlan: DEFAULT_BUDGET_PLAN,
+      maxCharacters: 200,
+    })
+
+    expect(view.stateBlock).toBeNull()
+    expect(view.budgetBreakdown?.find((usage) => usage.section === 'state')).toEqual({
+      section: 'state',
+      limit: 20,
+      used: 0,
+      dropped: 1,
+    })
+    expect(view.warnings).toContain(
+      'the state block did not fit the character budget and was dropped from context',
+    )
+  })
+
+  it('drops the state block for a NaN dimension and reports it as a validation loss', async () => {
+    const memory = await seededMemory()
+    const noState = await assemble(memory, { maxCharacters: 200 })
+    const view = await assemble(memory, {
+      state: { ...SAMPLE_STATE, mood: Number.NaN },
+      stateProfile: { ...DEFAULT_STATE_PROFILE, renderMode: 'numeric' },
+      maxCharacters: 200,
+    })
+
+    expect(view.stateBlock).toBeNull()
+    // Counterfactual: reusing the budget-drop guard reports a malformed state
+    // as "did not fit the character budget"; both warnings firing is the
+    // double-report this pair of assertions prevents.
+    expect(view.warnings).toContain(
+      'the state block was dropped because a state dimension is not a finite number',
+    )
+    expect(view.warnings).not.toContain(
+      'the state block did not fit the character budget and was dropped from context',
+    )
+    // A validation loss charges nothing: the numbers equal the no-state path.
+    expect(view.estimatedCharacters).toBe(noState.estimatedCharacters)
+    expect(view.turns).toHaveLength(noState.turns.length)
+    expect(renderDialoguePrompt(view)).not.toContain('Current inner state')
+  })
+
+  it('drops the state block for a null dimension in the verbal profile', async () => {
+    const memory = await seededMemory()
+    const noState = await assemble(memory, { maxCharacters: 200 })
+    const view = await assemble(memory, {
+      state: { ...SAMPLE_STATE, stress: null as unknown as number },
+      stateProfile: { ...DEFAULT_STATE_PROFILE, renderMode: 'verbal' },
+      maxCharacters: 200,
+    })
+
+    expect(view.stateBlock).toBeNull()
+    expect(view.warnings).toContain(
+      'the state block was dropped because a state dimension is not a finite number',
+    )
+    expect(view.warnings).not.toContain(
+      'the state block did not fit the character budget and was dropped from context',
+    )
+    expect(view.estimatedCharacters).toBe(noState.estimatedCharacters)
+    expect(renderDialoguePrompt(view)).not.toContain('Current inner state')
+  })
+
+  it('keeps the plan state row at used 0 and dropped 0 for a validation loss', async () => {
+    const memory = await seededMemory()
+    const view = await assemble(memory, {
+      state: { ...SAMPLE_STATE, energy: Number.POSITIVE_INFINITY },
+      budgetPlan: DEFAULT_BUDGET_PLAN,
+      maxCharacters: 200,
+    })
+
+    // Nothing was refused for size, so the row must not count a drop.
+    expect(view.stateBlock).toBeNull()
+    expect(view.budgetBreakdown?.find((usage) => usage.section === 'state')).toEqual({
+      section: 'state',
+      limit: 20,
+      used: 0,
+      dropped: 0,
+    })
+    expect(view.warnings).toContain(
+      'the state block was dropped because a state dimension is not a finite number',
+    )
+    expect(view.warnings).not.toContain(
+      'the state block did not fit the character budget and was dropped from context',
+    )
   })
 })
 

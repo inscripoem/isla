@@ -9,13 +9,16 @@ import {
   createDeliveryMemoryStore,
   createDialoguePort,
   createKeywordDeliveryRecall,
+  createWorkingMemoryStore,
   renderDialoguePrompt,
+  renderWorkingMemoryBlock,
 } from '../../src/dialogue'
 import type {
   AssembledDialogueContext,
   DeliveryMemoryStore,
   DialogueTextSource,
   PersonaRecallPort,
+  WorkingMemoryStore,
 } from '../../src/dialogue'
 import {
   DEFAULT_BUDGET_PLAN,
@@ -75,6 +78,7 @@ async function assembleWith(
     personaRecall?: PersonaRecallPort
     budgetPlan?: BudgetPlan
     state?: CharacterState
+    workingMemory?: WorkingMemoryStore
   } = {},
 ): Promise<AssembledDialogueContext> {
   const capture: { view: AssembledDialogueContext | null } = { view: null }
@@ -86,6 +90,7 @@ async function assembleWith(
     ...(options.personaRecall === undefined ? {} : { personaRecall: options.personaRecall }),
     ...(options.budgetPlan === undefined ? {} : { budgetPlan: options.budgetPlan }),
     ...(options.state === undefined ? {} : { state: options.state }),
+    ...(options.workingMemory === undefined ? {} : { workingMemory: options.workingMemory }),
   })
   await port.generate(options.request ?? fixtureDialogueRequest(), createCallContext(), {
     segment: async () => {},
@@ -544,11 +549,13 @@ describe('M4 layered budget: assembly', () => {
     ).toBe(false)
   })
 
-  it('refuses a budgetPlan combined with a state block', async () => {
+  it('charges a kept state block to the plan state section', async () => {
     const memory = createDeliveryMemoryStore()
-    await commitTurn(memory, 'turn-new', 'A plain reply for today.')
+    await commitTurn(memory, 'turn-new', 'A plain reply for today.') // 26 rendered characters
     // renderStateBlock at DEFAULT_STATE_PROFILE (numeric) is exactly this block,
-    // so no arithmetic here depends on the state module's own formatting.
+    // so no arithmetic here depends on the state module's own formatting. It
+    // renders at 109 characters: 48-character header + 60-character readings +
+    // the joining newline.
     const state: CharacterState = {
       mood: 0.5,
       stress: 0.5,
@@ -556,26 +563,211 @@ describe('M4 layered budget: assembly', () => {
       attachment: 1,
       confidence: 1,
     }
-    const request = fixtureDialogueRequest({
-      contextLimits: { maxTurns: 8, maxCharacters: 200 },
+    const request = fixtureDialogueRequest({ contextLimits: { maxTurns: 8, maxCharacters: 2000 } })
+
+    // A plan and a state block combine: floor(0.1 x 2000) = 200 for the state
+    // section, so the 109-character block is kept and charged there.
+    const view = await assembleWith(memory, { request, state, budgetPlan: DEFAULT_BUDGET_PLAN })
+
+    expect(view.stateBlock).toHaveLength(109)
+    expect(view.budgetBreakdown?.find((row) => row.section === 'state')).toEqual({
+      section: 'state',
+      limit: 200,
+      used: 109,
+      dropped: 0,
     })
+    expect(view.budgetBreakdown?.find((row) => row.section === 'workingMemory')).toEqual({
+      section: 'workingMemory',
+      limit: 200,
+      used: 0,
+      dropped: 0,
+    })
+    // The shared pool still pays for the kept block: the history bound is the
+    // cap minus the block, so removing the subtraction would report 2000 here.
+    expect(view.budgetBreakdown?.find((row) => row.section === 'history')?.limit).toBe(1891)
+    expect(view.estimatedCharacters).toBe(109 + 26)
+    expect(view.estimatedCharacters).toBeLessThanOrEqual(2000)
+    // The state block is not one of the charged lines for the token
+    // approximation: it has its own section row.
+    expect(view.estimatedTokens).toBe(7)
+    expect(view.warnings).not.toContain(
+      'the state block did not fit the character budget and was dropped from context',
+    )
+    expect(view.warnings).not.toContain(
+      'the state block was dropped because a state dimension is not a finite number',
+    )
+  })
 
-    // The state block is charged to the shared pool while the plan's state
-    // section has no charging point: assembling both would take history below
-    // its plan floor and report state as unused. It is refused instead, and the
-    // message names the reason so the caller is not left guessing.
-    await expect(
-      assembleWith(memory, { request, state, budgetPlan: DEFAULT_BUDGET_PLAN }),
-    ).rejects.toThrow(/budgetPlan cannot be combined with a state block/)
+  it('drops a state block longer than its section cap', async () => {
+    const memory = createDeliveryMemoryStore()
+    await commitTurn(memory, 'turn-new', 'A plain reply for today.')
+    const state: CharacterState = {
+      mood: 0.5,
+      stress: 0.5,
+      energy: 0.5,
+      attachment: 1,
+      confidence: 1,
+    }
+    const request = fixtureDialogueRequest({ contextLimits: { maxTurns: 8, maxCharacters: 200 } })
 
-    // Without a plan the state block still assembles, unchanged.
+    // floor(0.1 x 200) = 20 for the state section: the 109-character block is
+    // dropped whole even though it would fit the 200-character total alone.
+    const planBaseline = await assembleWith(memory, { request, budgetPlan: DEFAULT_BUDGET_PLAN })
+    const view = await assembleWith(memory, { request, state, budgetPlan: DEFAULT_BUDGET_PLAN })
+
+    // Counterfactual: judging the block against `maxCharacters` keeps it, and
+    // reporting it as a validation loss reports the wrong reason.
+    expect(view.stateBlock).toBeNull()
+    expect(view.warnings).toContain(
+      'the state block did not fit the character budget and was dropped from context',
+    )
+    expect(view.warnings).not.toContain(
+      'the state block was dropped because a state dimension is not a finite number',
+    )
+    expect(view.budgetBreakdown?.find((row) => row.section === 'state')).toEqual({
+      section: 'state',
+      limit: 20,
+      used: 0,
+      dropped: 1,
+    })
+    // A dropped block leaves the rest of the assembly exactly as it was: the
+    // pool never paid for it, so history is unchanged.
+    expect(view.turns.map((turn) => turn.turnId)).toEqual(
+      planBaseline.turns.map((turn) => turn.turnId),
+    )
+    expect(view.budgetBreakdown?.find((row) => row.section === 'history')).toEqual(
+      planBaseline.budgetBreakdown?.find((row) => row.section === 'history'),
+    )
+    expect(view.estimatedCharacters).toBe(planBaseline.estimatedCharacters)
+    expect(renderDialoguePrompt(view)).toBe(renderDialoguePrompt(planBaseline))
+  })
+
+  it('leaves the single-pool and plan-only paths unchanged', async () => {
+    const memory = createDeliveryMemoryStore()
+    await commitTurn(memory, 'turn-new', 'A plain reply for today.')
+    const state: CharacterState = {
+      mood: 0.5,
+      stress: 0.5,
+      energy: 0.5,
+      attachment: 1,
+      confidence: 1,
+    }
+    const request = fixtureDialogueRequest({ contextLimits: { maxTurns: 8, maxCharacters: 200 } })
+
+    // Without a plan the state block still assembles from the shared pool,
+    // unchanged.
     const singlePool = await assembleWith(memory, { request, state })
     expect(singlePool.stateBlock).not.toBeNull()
     expect(singlePool.budgetBreakdown).toBeUndefined()
     expect(singlePool.estimatedTokens).toBeUndefined()
-    // Plan without state input is unaffected by the guard.
+
+    // A plan without state input is unaffected by the state charging point.
     const layered = await assembleWith(memory, { request, budgetPlan: DEFAULT_BUDGET_PLAN })
     expect(layered.stateBlock).toBeNull()
     expect(layered.turns.map((turn) => turn.turnId)).toEqual(['turn-new'])
+  })
+})
+
+/**
+ * The combined bound required by D1. Both blocks are charged to the same
+ * `maxCharacters` pool when no plan is supplied, so each block passing its own
+ * check is not enough: the state block keeps precedence (persona -> state ->
+ * workingMemory, see ./budget) and the working-memory block yields whole.
+ */
+describe('M4 layered budget: combined character bound without a plan', () => {
+  const STATE: CharacterState = {
+    mood: 0.5,
+    stress: 0.5,
+    energy: 0.5,
+    attachment: 1,
+    confidence: 1,
+  }
+
+  /**
+   * One commitment whose rendered line is 108 characters, so the block measures
+   * 58 (header) + 1 (newline) + 108 = 167.
+   */
+  function workingMemoryStore(): WorkingMemoryStore {
+    const store = createWorkingMemoryStore({ sessionId: FIXTURE_SESSION_ID })
+    const recorded = store.record(
+      {
+        sessionId: FIXTURE_SESSION_ID,
+        kind: 'commitment',
+        text: 'x'.repeat(93),
+        actorId: 'aud-1',
+        nowMs: 1_000,
+        ttlMs: 60_000,
+      },
+      { status: 'applied', effectiveClassification: 'fully-delivered', recordId: 'record-1' },
+    )
+    if (recorded.status !== 'recorded') throw new Error('fixture entry was refused')
+    return store
+  }
+
+  const WM_DROP_WARNING =
+    'the working memory block did not fit the character budget and was dropped from context'
+
+  it('drops the working-memory block when the kept blocks together exceed the cap', async () => {
+    const memory = createDeliveryMemoryStore()
+    const store = workingMemoryStore()
+    const block = renderWorkingMemoryBlock(store.pending(1_000, FIXTURE_SESSION_ID))
+    if (block === null) throw new Error('fixture block was not renderable')
+
+    // The reproduced counterexample: each block fits 200 alone (109 and 167),
+    // and together they are 276. Before the fix both were kept and the total
+    // was charged past the cap with no warning.
+    expect(block).toHaveLength(167)
+    expect(109 + block.length).toBeGreaterThan(200)
+    expect(block.length).toBeLessThanOrEqual(200)
+
+    const request = fixtureDialogueRequest({ contextLimits: { maxTurns: 8, maxCharacters: 200 } })
+    const view = await assembleWith(memory, { request, state: STATE, workingMemory: store })
+
+    // Counterfactual: keeping both blocks (or dropping the higher-precedence
+    // state block instead) reddens the first two assertions.
+    expect(view.stateBlock).toHaveLength(109)
+    expect(view.workingMemoryBlock).toBeNull()
+    expect(view.estimatedCharacters).toBe(109)
+    expect(view.estimatedCharacters).toBeLessThanOrEqual(200)
+    expect(view.warnings).toContain(WM_DROP_WARNING)
+  })
+
+  it('drops a working-memory block that fits alone but not alongside a kept state block', async () => {
+    const memory = createDeliveryMemoryStore()
+    const store = workingMemoryStore()
+    const block = renderWorkingMemoryBlock(store.pending(1_000, FIXTURE_SESSION_ID))
+    if (block === null) throw new Error('fixture block was not renderable')
+
+    // 250: the 167-character block fits the cap on its own, but the kept
+    // 109-character state block leaves only 141, so only the combined test can
+    // refuse it. Counterfactual: a section-cap-only rule keeps both and charges
+    // 276.
+    const request = fixtureDialogueRequest({ contextLimits: { maxTurns: 8, maxCharacters: 250 } })
+    const view = await assembleWith(memory, { request, state: STATE, workingMemory: store })
+
+    expect(block.length).toBeLessThanOrEqual(250)
+    expect(109 + block.length).toBeGreaterThan(250)
+    expect(view.stateBlock).toHaveLength(109)
+    expect(view.workingMemoryBlock).toBeNull()
+    expect(view.estimatedCharacters).toBe(109)
+    expect(view.estimatedCharacters).toBeLessThanOrEqual(250)
+    expect(view.warnings).toContain(WM_DROP_WARNING)
+  })
+
+  it('keeps both blocks when the combined total fits', async () => {
+    const memory = createDeliveryMemoryStore()
+    const store = workingMemoryStore()
+    const block = renderWorkingMemoryBlock(store.pending(1_000, FIXTURE_SESSION_ID))
+    if (block === null) throw new Error('fixture block was not renderable')
+
+    const request = fixtureDialogueRequest({ contextLimits: { maxTurns: 8, maxCharacters: 2000 } })
+    const view = await assembleWith(memory, { request, state: STATE, workingMemory: store })
+
+    // Control: the combined bound is a bound, not a ban on the combination.
+    expect(view.stateBlock).toHaveLength(109)
+    expect(view.workingMemoryBlock).toBe(block)
+    expect(view.estimatedCharacters).toBe(109 + block.length)
+    expect(view.estimatedCharacters).toBeLessThanOrEqual(2000)
+    expect(view.warnings).not.toContain(WM_DROP_WARNING)
   })
 })

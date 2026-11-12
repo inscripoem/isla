@@ -238,9 +238,10 @@ export interface DialoguePortOptions {
    * rule and the assembled context is unchanged. Pure data: it adds no provider
    * call to the reply path.
    *
-   * Cannot be combined with `state` while the state block is charged to the
-   * shared pool: assembly throws for that combination instead of charging state
-   * against the wrong section.
+   * Combines with `state`: a supplied state block is charged to the plan's own
+   * `state` section, exactly as the working-memory block is charged to
+   * `workingMemory`, so each block is bounded by its own cap while the shared
+   * pool still pays for both.
    */
   budgetPlan?: BudgetPlan
   /**
@@ -262,12 +263,18 @@ export interface DialoguePortOptions {
    * behaviour.
    *
    * When supplied, each `generate` call first closes the loop:
-   * `observe(listenerTurns)` fulfils 'awaiting-reply' entries whose actor has
-   * since spoken — this only ever fires when a `listenerHistory` port is also
-   * supplied — and then `pending(clock.nowMs())` supplies the live entries to
-   * context assembly. The store is written by its owner after a successful
-   * delivery commit, never by this port; nothing here persists it, so a fresh
-   * process starts with an empty store.
+   * `observe(listenerTurns, request.sessionId)` fulfils 'awaiting-reply' entries
+   * whose actor has since spoken — this only ever fires when a `listenerHistory`
+   * port is also supplied — and then `pending(clock.nowMs(), request.sessionId)`
+   * supplies the live entries to context assembly. The selected input's own
+   * event is filtered out of the list handed to `observe`, exactly as context
+   * assembly filters it, so a port that returns the current utterance cannot
+   * answer the reply the character still owes; the raw list still reaches
+   * assembly unchanged. The store is constructed for one session, so
+   * `request.sessionId` must be that session (a read for another session
+   * throws). The store is written by its owner after a successful delivery
+   * commit, never by this port; nothing here persists it, so a fresh process
+   * starts with an empty store.
    *
    * Production injects neither option yet: `listenerHistory` is issue
    * #151/A01 (shape only, no production caller) and its data source is issue
@@ -508,14 +515,22 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
            * (it only fires when listener turns are supplied), then `pending`
            * supplies the live entries. Both are local, in-memory calls: no
            * provider attempt, no extra I/O beyond the listener read above.
+           *
+           * The selected input's own event is filtered here as well as in the
+           * assembler: `observe` must not let the model's current input fulfil
+           * the entry that input is answering. The raw list still reaches
+           * assembly unchanged.
            */
+          const listenerTurnsForObserve = (listenerTurns ?? []).filter(
+            (turn) => turn.eventId !== request.selectedInput.eventId,
+          )
           if (options.workingMemory !== undefined) {
-            options.workingMemory.observe(listenerTurns ?? [])
+            options.workingMemory.observe(listenerTurnsForObserve, request.sessionId)
           }
           const workingMemoryEntries =
             options.workingMemory === undefined
               ? undefined
-              : options.workingMemory.pending(clock.nowMs())
+              : options.workingMemory.pending(clock.nowMs(), request.sessionId)
           return await assembleDialogueContext({
             request,
             profile,

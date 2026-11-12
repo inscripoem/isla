@@ -56,10 +56,16 @@ import type { WorkingMemoryEntry } from './working-memory'
  * which characters are counted.
  *
  * The state block is best-effort, under the same rule as the rollup line: it is
- * charged to the shared pool before recall is fitted, and a block that does not
- * fit the whole cap on its own is dropped (with a warning) rather than rendered
- * past the cap. Without state input nothing is charged and every budget number
- * is exactly what it was before the block existed.
+ * charged before recall is fitted, and a block that does not fit the cap that
+ * applies to it is dropped (with a warning) rather than rendered past the cap.
+ * Without a plan that cap is the whole allowance; with a plan the block is
+ * bounded by the plan's own `state` section (./budget), while the shared pool
+ * still pays for it, so the two features combine and the history remainder
+ * never silently grows by the block length. A block whose own value is unusable
+ * - a dimension that is not a finite number - is dropped too, with a different
+ * warning: that is a validation loss, not a budget loss. Without state input
+ * nothing is charged and every budget number is exactly what it was before the
+ * block existed.
  *
  * When a `budgetPlan` is supplied, the recall block is additionally bounded by
  * its own section cap and whatever the other sections leave unused flows back to
@@ -68,11 +74,13 @@ import type { WorkingMemoryEntry } from './working-memory'
  * Working-memory block (issue #146 A07). When the caller supplies
  * `workingMemory` entries, the assembled context renders a `workingMemoryBlock`
  * of the pending items the character still owes and charges it to the character
- * budget: to the shared pool before recall fitting when no plan is supplied, or
- * to the plan's own `workingMemory` section when one is. A block that does not
- * fit is dropped whole with a warning, never rendered past its cap. Omitted or
- * empty means the feature is off: `workingMemoryBlock` is null and the prompt
- * and every budget number are exactly what they were without this option.
+ * budget: to the plan's own `workingMemory` section when one is supplied, and in
+ * every mode to the shared pool, because that pool's remainder is what bounds
+ * recall and history here. A block that does not fit its cap, or that no longer
+ * fits the shared cap alongside a kept state block, is dropped whole with a
+ * warning, never rendered past its cap. Omitted or empty means the feature is
+ * off: `workingMemoryBlock` is null and the prompt and every budget number are
+ * exactly what they were without this option.
  *
  * Retention extras. Two deterministic mechanisms fight the loss of important
  * old turns without widening the budget: salience pinning (./salience) makes
@@ -435,8 +443,11 @@ export interface AssembledDialogueContext {
   /**
    * Rendered state block ready for the prompt (./state-render), or null when no
    * state input was supplied (feature off, byte-identical to an assembly
-   * without it) or when the block alone did not fit the character cap. Present
-   * blocks are charged to `maxCharacters`.
+   * without it), when the block did not fit the cap that applies to it (the
+   * whole allowance without a plan, the plan's `state` section with one), or
+   * when a dimension was not a finite number. A present block is charged to the
+   * shared pool in both modes, and to its own `state` section row when a plan is
+   * supplied.
    */
   stateBlock: string | null
   /**
@@ -538,10 +549,9 @@ export interface AssembledDialogueContext {
    * listener rows and the rollup line - never over the persona block, section
    * headings or the rest of the prompt. The kept state block and the kept
    * working-memory block are the charged classes it does not cover: each has its
-   * own section row, and the state block cannot be combined with a plan at all
-   * (see the state block notes), so the state block is absent whenever this
-   * field is present. M4 has no tokenizer, so this stays a
-   * character-based approximation with the same not-tokens standing as
+   * own section row (`state.used`, `workingMemory.used`), so neither is added
+   * here and no charged character is counted twice. M4 has no tokenizer, so this
+   * stays a character-based approximation with the same not-tokens standing as
    * `estimatedCharacters`: it is an assembly-time diagnostic and must never feed
    * a quality or cost conclusion.
    */
@@ -641,7 +651,10 @@ export interface AssembleDialogueContextInput {
    * number are byte-identical to an assembly without this field.
    *
    * The value is rendered as given; this module never projects or appraises it.
-   * A caller with a state worker supplies the value that worker read.
+   * A caller with a state worker supplies the value that worker read. A
+   * dimension that is not a finite number makes the whole block unrenderable,
+   * so it is dropped and reported instead of rendering a made-up value (unknown
+   * is not zero, and it is not the top of the range either).
    */
   state?: CharacterState
   /**
@@ -661,9 +674,10 @@ export interface AssembleDialogueContextInput {
    * unchanged. Supplying it is pure data - no port, no I/O, no extra model call:
    * the allocation is resolved arithmetically during this assembly.
    *
-   * It cannot be combined with `state` while the state block is charged to the
-   * shared pool; that combination throws rather than assembling state against
-   * the wrong section.
+   * It combines with `state`: a supplied state block is charged to the plan's
+   * own `state` section, exactly as the working-memory block is charged to
+   * `workingMemory`, so each block is bounded by its own cap; the shared pool
+   * still pays for both, so the history remainder never grows past the cap.
    */
   budgetPlan?: BudgetPlan
   /**
@@ -1072,31 +1086,36 @@ export async function assembleDialogueContext(
         })
 
   /*
-   * State block. Rendered whenever state input exists, and charged to the
-   * shared maxCharacters pool BEFORE recall fitting so the cap stays a hard
-   * bound (see the module header: a cap that only applies when convenient is
-   * not a bound). Best-effort like the rollup line: when the block alone exceeds
-   * the whole cap it is dropped (stateBlock = null) and the loss is reported as
-   * a warning - it is never rendered past the cap. Same rule as `ContextRollup`
-   * and the rollup handling in `trimToCharacterBudget`. Without state input
-   * nothing renders and every budget number below is exactly what it was
-   * before this block existed.
+   * State block. Rendered whenever state input exists, and charged BEFORE recall
+   * fitting so the cap stays a hard bound (see the module header: a cap that
+   * only applies when convenient is not a bound). Best-effort like the rollup
+   * line: a block that does not fit the cap that applies to it is dropped
+   * (stateBlock = null) and the loss is reported as a warning - it is never
+   * rendered past the cap. Same rule as `ContextRollup` and the rollup handling
+   * in `trimToCharacterBudget`. Without state input nothing renders and every
+   * budget number below is exactly what it was before this block existed.
    *
-   * Later integration rule: if this file gains a layered budget that owns a
-   * 'state' section, the KEPT block's characters must move to that section cap
-   * and `sharedBudget` must stop subtracting them. Exactly one of the two
-   * charging points may be active - never both.
+   * Two charging points, both active on purpose:
+   *   - The KEEP decision is bounded by the plan's own `state` section when a
+   *     plan is supplied (`stateSectionCap`), and by `maxCharacters` without
+   *     one, so a plan plus state input assembles instead of being refused.
+   *   - A KEPT block is still subtracted from `sharedBudget` in BOTH modes. That
+   *     pool's remainder - not `limits.history` - is what bounds recall and
+   *     history, and `estimatedCharacters` keeps charging the block, so removing
+   *     it from the pool would let a long enough history exceed `maxCharacters`
+   *     by up to the block length and break the hard cap.
+   * `allocateBudget` already guarantees that the non-history section caps leave
+   * room for the history floor, so a kept state block cannot push the history
+   * bound below the floor for a plan it accepted; the floor check near the
+   * diagnostics stays as the backstop for that arithmetic.
    *
-   * Layered budget status. This file does own a 'state' section (./budget), but
-   * NOTHING has been moved: the block above the rollup is still charged to the
-   * shared pool, and the plan's `state` cap is not a charging point. Moving it
-   * would require `allocateBudget` to raise the history cap after a block is
-   * known to be dropped, since the planned history cap can be smaller than the
-   * effective remainder. Until then a plan combined with state input is
-   * REFUSED instead of assembled: the block would silently push the effective
-   * history remainder below the plan's floor and be reported as `state.used: 0`
-   * while actually consuming the pool. Without a plan, or without state input,
-   * every number below is exactly what it was before the plan existed.
+   * TWO drop reasons, never conflated:
+   *   - `stateDropped` - the block rendered but exceeded `stateSectionCap`. This
+   *     is a budget loss: `state.dropped` counts it and the budget warning fires.
+   *   - `stateInvalid` - `renderStateBlock` returned null because a dimension is
+   *     not a finite number. This is a validation loss: it is NOT a budget drop
+   *     (the breakdown stays 0) and it must not fire the budget warning, or the
+   *     operator would be told a malformed state was merely too long.
    */
   const renderedStateBlock =
     input.state === undefined
@@ -1104,30 +1123,18 @@ export async function assembleDialogueContext(
       : renderStateBlock(input.state, input.stateProfile ?? DEFAULT_STATE_PROFILE)
   const renderedStateCharacters = renderedStateBlock === null ? 0 : renderedStateBlock.length
   /*
-   * Keep the block only when it fits the cap on its own. A block that cannot fit
-   * even alone would otherwise push estimatedCharacters past maxCharacters and
-   * break the module header's "nothing assembled here may exceed it" rule.
+   * Keep the block only when it fits the cap that applies to it, so it can never
+   * push estimatedCharacters past maxCharacters.
    */
+  const stateSectionCap = limits === null ? maxCharacters : limits.state
   const stateBlock =
-    renderedStateBlock !== null && renderedStateCharacters <= maxCharacters
+    renderedStateBlock !== null && renderedStateCharacters <= stateSectionCap
       ? renderedStateBlock
       : null
   const stateBlockCharacters = stateBlock === null ? 0 : renderedStateCharacters
-  /*
-   * A plan is applied only to the sections it owns. With the current single
-   * charging point the state block lives in the shared pool, so combining the
-   * two would charge state outside its section: the effective history
-   * remainder could fall below the plan's floor and `state.used` would read 0
-   * while the pool lost the block. That combination is refused rather than
-   * silently assembled against the wrong section. No such assembly existed
-   * before (the plan and the state block each worked on their own), and the
-   * code remains reachable for a caller that supplies both.
-   */
-  if (limits !== null && stateBlock !== null) {
-    throw new Error(
-      'context: a budgetPlan cannot be combined with a state block while the block is charged to the shared pool',
-    )
-  }
+  const stateDropped =
+    input.state !== undefined && renderedStateBlock !== null && stateBlock === null ? 1 : 0
+  const stateInvalid = input.state !== undefined && renderedStateBlock === null
 
   /*
    * Working-memory block (issue #146 A07). Rendered from the entries the caller
@@ -1135,13 +1142,24 @@ export async function assembleDialogueContext(
    * for expiry by the store. Rendering is pure: `renderWorkingMemoryBlock` drops
    * 'suppressed' entries and returns null when nothing remains renderable.
    *
-   * The DROP decision differs by mode:
-   *   - WITHOUT a plan the block must fit `maxCharacters` on its own, at the
-   *     same precedence position as the state block.
-   *   - WITH a plan the block must fit `limits.workingMemory`, its own section.
-   * Either way an oversized block is dropped WHOLE (null) with the warning: the
-   * cap is hard, so the block is never rendered past its cap. Same rule as the
-   * state block.
+   * The DROP decision is one unconditional rule, identical in both modes: the
+   * block is kept only when BOTH hold -
+   *   renderedWorkingMemoryCharacters <= workingMemorySectionCap, where the cap
+   *     is `maxCharacters` without a plan and `limits.workingMemory` with one,
+   *   stateBlockCharacters + renderedWorkingMemoryCharacters <= maxCharacters.
+   * The second clause is decisive without a plan, where both blocks share the
+   * single pool: each fitting alone is not enough - cap 200, a 109-character
+   * state block and a 167-character working-memory block each fit alone, yet
+   * together they would exceed the cap with no warning. The state block keeps
+   * precedence because the allocation order is persona -> state -> workingMemory
+   * (./budget), so the lower-precedence block is the one that gives way, never
+   * the state block. With a plan the second clause cannot bind (every section
+   * cap is resolved from the same `maxCharacters`), and it is kept so there is
+   * one rule rather than a mode branch.
+   *
+   * Either way an oversized block is dropped WHOLE (null) with the existing
+   * warning: the cap is hard, so the block is never rendered past its cap. Same
+   * rule as the state block.
    *
    * The CHARGING is the same in both modes: a kept block's characters are
    * subtracted from the shared pool once (`sharedBudget`), because that pool's
@@ -1152,11 +1170,6 @@ export async function assembleDialogueContext(
    * cap (`workingMemory.used`), which is where the drop decision was made.
    * Without working-memory input both terms are zero and every number is
    * unchanged.
-   *
-   * A plan combined with state input still throws above, unchanged: that
-   * combination is refused for the state block's charging point, not this one.
-   * Without working-memory input nothing is rendered, nothing is charged and
-   * every number below is what it was before this block existed.
    */
   const renderedWorkingMemoryBlock =
     input.workingMemory === undefined ? null : renderWorkingMemoryBlock(input.workingMemory)
@@ -1164,7 +1177,9 @@ export async function assembleDialogueContext(
     renderedWorkingMemoryBlock === null ? 0 : renderedWorkingMemoryBlock.length
   const workingMemorySectionCap = limits === null ? maxCharacters : limits.workingMemory
   const workingMemoryBlock =
-    renderedWorkingMemoryBlock !== null && renderedWorkingMemoryCharacters <= workingMemorySectionCap
+    renderedWorkingMemoryBlock !== null &&
+    renderedWorkingMemoryCharacters <= workingMemorySectionCap &&
+    stateBlockCharacters + renderedWorkingMemoryCharacters <= maxCharacters
       ? renderedWorkingMemoryBlock
       : null
   const workingMemoryBlockCharacters =
@@ -1480,9 +1495,17 @@ export async function assembleDialogueContext(
   }
   /*
    * A dropped state block is reported, never silently lost: the caller asked for
-   * it to be rendered, and the prompt does not carry it.
+   * it to be rendered, and the prompt does not carry it. The two losses are
+   * distinct and mutually exclusive by construction - a validation drop has no
+   * rendered block at all, so it can never also be reported as a size loss -
+   * and one loss produces exactly one warning.
    */
-  if (input.state !== undefined && stateBlock === null) {
+  if (stateInvalid) {
+    warnings.push(
+      'the state block was dropped because a state dimension is not a finite number',
+    )
+  }
+  if (stateDropped > 0) {
     warnings.push(
       'the state block did not fit the character budget and was dropped from context',
     )
@@ -1620,10 +1643,9 @@ export async function assembleDialogueContext(
    * (heard-prefix) turns and the charged rollup line, so those are exactly the
    * lines `estimatedTokens` is computed over. The charged classes that are not
    * lines here are the kept state block and the kept working-memory block: each
-   * has its own section row. The state block cannot be combined with a plan at
-   * all (see the state block notes above), so it can never be charged while a
-   * plan is active; the working-memory block is charged to `workingMemory.used`
-   * below and is never added to `chargedLines` either, for the same reason.
+   * has its own section row - the state block to `state.used`, the
+   * working-memory block to `workingMemory.used` - and neither is added to
+   * `chargedLines`, so no charged character is counted twice.
    *
    * The incomplete heard-prefix turns have no row of their own either. They are
    * charged to the same pool as the history row, after the confirmed history,
@@ -1643,15 +1665,19 @@ export async function assembleDialogueContext(
    *
    * Unused capacity is reported, not re-spent: `history.limit` is the effective
    * bound after every other section returned its remainder, so `used <= limit`
-   * already proves the layered bound held. Sections with no content source in
-   * this batch (persona, state) report limit with used 0; `workingMemory` now has
-   * one - a kept block charges `used` and a whole-block drop counts as
-   * `dropped` - while persona and state still have none.
+   * already proves the layered bound held. Persona has no content source in this
+   * batch and reports limit with used 0. `state` and `workingMemory` each have a
+   * charging point: a kept block charges `used`, a whole-block drop for size
+   * counts as `dropped`, and a state block dropped for a non-finite dimension is
+   * a validation loss that is reported by its own warning and does NOT count as
+   * a budget drop (`used` and `dropped` both stay 0).
    *
-   * The plan's state section is a cap with no charging point; refusing that
-   * combination is what keeps this row honest AND keeps the history floor
-   * structural. The guard cannot be proved by the arithmetic in `budget.ts`,
-   * so it is asserted here rather than assumed.
+   * The history floor is structural: every kept block is bounded by its own
+   * section cap AND is subtracted from `sharedBudget`, so for a plan
+   * `allocateBudget` accepted `available >= maxCharacters * (1 - nonHistoryShare)
+   * >= floor(HISTORY_MIN_SHARE * maxCharacters)`. The floor check below is
+   * therefore unreachable for a valid plan; it stays as the backstop that the
+   * arithmetic above has not drifted.
    */
   const historyLimit = available
   let budgetDiagnostics: Pick<AssembledDialogueContext, 'estimatedTokens' | 'budgetBreakdown'> =
@@ -1675,11 +1701,8 @@ export async function assembleDialogueContext(
       {
         section: 'state',
         limit: limits.state,
-        used: 0,
-        // A plan and a state block are refused together (see the state block
-        // notes above), so no block can be charged while this row reports a
-        // limit. `used` stays 0 and is never counted twice.
-        dropped: 0,
+        used: stateBlockCharacters,
+        dropped: stateDropped,
       },
       /*
        * A kept block is charged to its own section, so the shared pool did not

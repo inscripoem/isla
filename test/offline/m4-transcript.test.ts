@@ -642,6 +642,7 @@ describe('M4 listener transcript', () => {
 
     // (b) With a state block the listener row must yield to it.
     const block = renderStateBlock(SAMPLE_STATE, DEFAULT_STATE_PROFILE)
+    if (block === null) throw new Error('fixture block was not renderable')
     const stateRequest = fixtureDialogueRequest({
       contextLimits: { maxTurns: 8, maxCharacters: block.length + 30 },
     })
