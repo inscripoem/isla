@@ -17,7 +17,8 @@ import {
   renderWorkingMemoryBlock,
 } from '../../src/dialogue'
 import { DEFAULT_BUDGET_PLAN } from '../../src/dialogue/budget'
-import type { DeliveryCommitAck } from '../../src/contracts'
+import type { DeliveryCommitAck, ConfirmedDelivery } from '../../src/contracts'
+import { confirmedDeliverySchema } from '../../src/contracts'
 import type {
   AssembledDialogueContext,
   DeliveryMemoryStore,
@@ -41,7 +42,9 @@ import type { ClockPort, DialogueRequest } from '../../src/contracts'
  * operator-suppressed items. The issue fixes three rules that a later edit
  * could quietly break:
  *   - admission only after the producing turn's delivery commit succeeded
- *     (an `applied` acknowledgement, nothing else);
+  *     (an `applied` acknowledgement, nothing else) AND the delivery that
+ *     produced the item classifies into the spoken bucket (a receipt for audio,
+ *     never a partial record);
  *   - newest expectation wins for the same kind and actor, with a hard cap of
  *     `WORKING_MEMORY_MAX_ENTRIES` pending entries, and every loser stays in
  *     the audit view instead of vanishing;
@@ -115,6 +118,43 @@ const DUPLICATE_ACK: DeliveryCommitAck = {
   recordId: 'record-fixture-1',
 }
 
+/**
+ * One producing delivery, validated by the contract schema so the fixture cannot
+ * drift from `confirmedDeliverySchema`. The default is a fully-delivered audio
+ * segment WITH a receipt, which `classifyMemoryBucket` places in the spoken
+ * bucket: the evidence layer of `record` admits it.
+ */
+function confirmedDelivery(overrides: Partial<ConfirmedDelivery> = {}): ConfirmedDelivery {
+  return confirmedDeliverySchema.parse({
+    sessionId: 'session-fixture',
+    turnId: 'turn-fixture-1',
+    segmentId: 'turn-fixture-1-seg-0',
+    textHash: 'hash-fixture-1',
+    text: 'Bring the notes.',
+    outputId: 'output-fixture-1',
+    receiptId: 'receipt-fixture-1',
+    classification: 'fully-delivered',
+    modality: 'audio',
+    segmentIndex: 0,
+    personaProfileId: 'character-fixture',
+    personaProfileVersion: '1',
+    ...overrides,
+  })
+}
+
+/** The delivery that matches `APPLIED`: spoken by the bucket rule. */
+const DELIVERY: ConfirmedDelivery = confirmedDelivery()
+
+/**
+ * The same spoken delivery, attributed to `sessionId`. Admission checks the
+ * delivery's session too, so a record for another store must carry a delivery
+ * for that same session; `recordAdmitted` derives it rather than callers
+ * repeating it.
+ */
+function deliveryFor(sessionId: string): ConfirmedDelivery {
+  return confirmedDelivery({ sessionId })
+}
+
 /** A start-of-test timestamp; every other time in this file is relative to it. */
 const T0 = 1_000
 
@@ -141,6 +181,7 @@ function recordAdmitted(
   const result = store.record(
     { sessionId, nowMs: T0, ttlMs: 60_000, ...input },
     APPLIED,
+    deliveryFor(sessionId),
   )
   if (result.status !== 'recorded') {
     throw new Error(`fixture entry was not recorded: ${result.reason}`)
@@ -186,6 +227,7 @@ describe('M4 working memory admission', () => {
       const result = store.record(
         { sessionId: STORE_SESSION, kind: 'awaiting-reply', text: 'Tell them the concert moved.', actorId: 'aud-1', nowMs: T0, ttlMs: 1_000 },
         ack,
+        DELIVERY,
       )
       expect(result).toEqual({ status: 'refused', reason: 'commit-not-applied' })
     }
@@ -199,7 +241,7 @@ describe('M4 working memory admission', () => {
     const store = newStore()
 
     expect(
-      store.record({ sessionId: STORE_SESSION, kind: 'commitment', text: '   ', actorId: null, nowMs: T0, ttlMs: 1_000 }, APPLIED),
+      store.record({ sessionId: STORE_SESSION, kind: 'commitment', text: '   ', actorId: null, nowMs: T0, ttlMs: 1_000 }, APPLIED, DELIVERY),
     ).toEqual({ status: 'refused', reason: 'empty-text' })
     expect(store.entries(T0, STORE_SESSION)).toEqual([])
   })
@@ -217,6 +259,7 @@ describe('M4 working memory admission', () => {
         ttlMs: 5_000,
       },
       APPLIED,
+      DELIVERY,
     )
     expect(result.status).toBe('recorded')
 
@@ -273,6 +316,7 @@ describe('M4 working memory admission', () => {
           ttlMs: 1_000,
         },
         partial,
+        DELIVERY,
       ),
     ).toEqual({ status: 'refused', reason: 'commit-not-spoken' })
     expect(store.entries(T0, STORE_SESSION)).toEqual([])
@@ -297,6 +341,7 @@ describe('M4 working memory admission', () => {
           ttlMs: 1_000,
         },
         undelivered,
+        DELIVERY,
       ),
     ).toEqual({ status: 'refused', reason: 'commit-not-spoken' })
     expect(store.pending(T0, STORE_SESSION)).toEqual([])
@@ -319,6 +364,7 @@ describe('M4 working memory admission', () => {
             ttlMs: 1_000,
           },
           ack,
+          DELIVERY,
         ),
       ).toEqual({ status: 'refused', reason: 'commit-not-applied' })
     }
@@ -341,6 +387,7 @@ describe('M4 working memory admission', () => {
           ttlMs: 1_000,
         },
         APPLIED,
+        DELIVERY,
       ),
     ).toEqual({ status: 'refused', reason: 'text-not-single-line' })
     expect(store.entries(T0, STORE_SESSION)).toEqual([])
@@ -360,11 +407,147 @@ describe('M4 working memory admission', () => {
           ttlMs: 1_000,
         },
         APPLIED,
+        DELIVERY,
       ),
     ).toEqual({ status: 'refused', reason: 'text-not-single-line' })
     // Counterfactual: normalising the break instead of refusing it leaves an
     // entry here.
     expect(store.pending(T0, STORE_SESSION)).toEqual([])
+  })
+})
+
+describe('M4 working memory admission evidence', () => {
+  /*
+   * Finding 1 (PR #151 P2): `DeliveryCommitAck` carries no receipt, modality or
+   * session, so an `applied` + `fully-delivered` acknowledgement alone cannot
+   * prove the delivery was spoken. `record` therefore judges the producing
+   * delivery with `classifyMemoryBucket` as well. Each of the first four cases
+   * fails if the evidence layer is dropped: the delivery would be admitted, or
+   * refused for the wrong reason, on its acknowledgement alone. The last two
+   * pin the order of the layers.
+   */
+
+  function recordWith(store: WorkingMemoryStore, delivery: ConfirmedDelivery) {
+    return store.record(
+      {
+        sessionId: STORE_SESSION,
+        kind: 'commitment',
+        text: 'Bring the notes.',
+        actorId: 'aud-1',
+        nowMs: T0,
+        ttlMs: 1_000,
+      },
+      APPLIED,
+      delivery,
+    )
+  }
+
+  it('refuses a fully-delivered audio delivery with no receipt as not-spoken-bucket', () => {
+    const store = newStore()
+    const unreceipted = confirmedDelivery({ modality: 'audio', receiptId: null })
+
+    // The actual defect: the bucket rule holds a receipt-less audio claim back
+    // as `audit-only` / `delivered-without-receipt`, so the store must refuse it
+    // even though the acknowledgement says `applied` + `fully-delivered`.
+    expect(recordWith(store, unreceipted)).toEqual({
+      status: 'refused',
+      reason: 'not-spoken-bucket',
+    })
+    expect(store.pending(T0, STORE_SESSION)).toEqual([])
+    expect(store.entries(T0, STORE_SESSION)).toEqual([])
+  })
+
+  it('admits a fully-delivered subtitle delivery with no receipt', () => {
+    const store = newStore()
+    const subtitle = confirmedDelivery({ modality: 'subtitle', receiptId: null })
+
+    // Control for the case above: `required-for-audio` does not ask a subtitle
+    // for a receipt, so the same input is a spoken delivery. Counterfactual:
+    // demanding a receipt for every modality reddens this case.
+    expect(recordWith(store, subtitle).status).toBe('recorded')
+    expect(store.pending(T0, STORE_SESSION)).toHaveLength(1)
+    expect(store.entries(T0, STORE_SESSION)).toHaveLength(1)
+  })
+
+  it('refuses a partial-unknown delivery with a receipt as not-spoken-bucket', () => {
+    const store = newStore()
+    const partial = confirmedDelivery({ classification: 'partial-unknown' })
+
+    // It classifies into the `heard-prefix` bucket, not `spoken`: the fragment
+    // belongs in its own marked section, never in a list rendered as pending.
+    expect(recordWith(store, partial)).toEqual({
+      status: 'refused',
+      reason: 'not-spoken-bucket',
+    })
+    expect(store.pending(T0, STORE_SESSION)).toEqual([])
+    expect(store.entries(T0, STORE_SESSION)).toEqual([])
+  })
+
+  it('refuses a delivery recorded for another session as session-mismatch', () => {
+    const store = newStore()
+    const foreign = confirmedDelivery({ sessionId: 'session-other' })
+
+    // A fully spoken delivery is still refused when it was produced in another
+    // session: the store serves one session and no entry crosses into it.
+    expect(recordWith(store, foreign)).toEqual({
+      status: 'refused',
+      reason: 'session-mismatch',
+    })
+    expect(store.pending(T0, STORE_SESSION)).toEqual([])
+    expect(store.entries(T0, STORE_SESSION)).toEqual([])
+  })
+
+  it('keeps the classification layer ahead of the evidence layer', () => {
+    const store = newStore()
+    const partialAck: DeliveryCommitAck = {
+      status: 'applied',
+      effectiveClassification: 'partial-unknown',
+      recordId: 'record-fixture-4',
+    }
+
+    // An `applied` + `partial-unknown` acknowledgement must still read
+    // `commit-not-spoken`, not the new reason: the layers do not shadow each
+    // other. Counterfactual: moving the bucket check first reddens this line.
+    expect(
+      store.record(
+        {
+          sessionId: STORE_SESSION,
+          kind: 'commitment',
+          text: 'Bring the notes.',
+          actorId: 'aud-1',
+          nowMs: T0,
+          ttlMs: 1_000,
+        },
+        partialAck,
+        confirmedDelivery({ classification: 'partial-unknown' }),
+      ),
+    ).toEqual({ status: 'refused', reason: 'commit-not-spoken' })
+    expect(store.entries(T0, STORE_SESSION)).toEqual([])
+  })
+
+  it('keeps note-shape refusals ahead of the evidence layer', () => {
+    const store = newStore()
+    const unreceipted = confirmedDelivery({ receiptId: null })
+
+    // The note-shape checks judge `input.text`, the bucket judges the delivery:
+    // an empty note together with a receipt-less delivery keeps its existing
+    // `empty-text` reason. Counterfactual: running the bucket check first
+    // reports `not-spoken-bucket` here.
+    expect(
+      store.record(
+        {
+          sessionId: STORE_SESSION,
+          kind: 'commitment',
+          text: '   ',
+          actorId: 'aud-1',
+          nowMs: T0,
+          ttlMs: 1_000,
+        },
+        APPLIED,
+        unreceipted,
+      ),
+    ).toEqual({ status: 'refused', reason: 'empty-text' })
+    expect(store.entries(T0, STORE_SESSION)).toEqual([])
   })
 })
 
@@ -385,6 +568,7 @@ describe('M4 working memory session binding', () => {
           ttlMs: 1_000,
         },
         APPLIED,
+        DELIVERY,
       ),
     ).toEqual({ status: 'refused', reason: 'session-mismatch' })
     expect(store.entries(T0, STORE_SESSION)).toEqual([])

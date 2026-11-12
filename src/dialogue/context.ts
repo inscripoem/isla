@@ -1705,9 +1705,11 @@ export async function assembleDialogueContext(
         dropped: stateDropped,
       },
       /*
-       * A kept block is charged to its own section, so the shared pool did not
-       * pay for it; a whole-block drop is one refused candidate. With no
-       * working-memory input both values stay 0, as before.
+       * A kept block is charged to its own section row AND subtracted from
+       * `sharedBudget` in both modes; the pool's remainder (not
+       * `limits.history`) bounds recall and history. A whole-block drop is one
+       * refused candidate. With no working-memory input both values stay 0, as
+       * before.
        */
       {
         section: 'workingMemory',

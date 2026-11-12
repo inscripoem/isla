@@ -3,6 +3,7 @@ import { createCallContext } from '../support/context'
 import {
   FIXTURE_SESSION_ID,
   fixtureCommitDelivery,
+  fixtureConfirmedDelivery,
   fixtureDialogueRequest,
 } from '../support/fixture-data'
 import {
@@ -699,6 +700,7 @@ describe('M4 layered budget: combined character bound without a plan', () => {
         ttlMs: 60_000,
       },
       { status: 'applied', effectiveClassification: 'fully-delivered', recordId: 'record-1' },
+      fixtureConfirmedDelivery(),
     )
     if (recorded.status !== 'recorded') throw new Error('fixture entry was refused')
     return store
@@ -769,5 +771,95 @@ describe('M4 layered budget: combined character bound without a plan', () => {
     expect(view.estimatedCharacters).toBe(109 + block.length)
     expect(view.estimatedCharacters).toBeLessThanOrEqual(2000)
     expect(view.warnings).not.toContain(WM_DROP_WARNING)
+  })
+})
+
+/**
+ * Plans plus state plus working memory in one assembly, without a plan as the
+ * baseline: the one combination no other case exercises end to end. It also pins
+ * the charging semantics the `workingMemory` row comment states - a kept block is
+ * charged to its own section row AND subtracted from `sharedBudget`, so the
+ * pool's remainder, not `limits.history`, bounds recall and history.
+ */
+describe('M4 layered budget: plan, state and working memory together', () => {
+  const WM_DROP_WARNING =
+    'the working memory block did not fit the character budget and was dropped from context'
+
+  const STATE: CharacterState = {
+    mood: 0.5,
+    stress: 0.5,
+    energy: 0.5,
+    attachment: 1,
+    confidence: 1,
+  }
+
+  it('keeps both blocks inside their own sections and history at its floor', async () => {
+    const memory = createDeliveryMemoryStore()
+    await commitTurn(memory, 'turn-new', 'A plain reply for today.')
+    const store = createWorkingMemoryStore({ sessionId: FIXTURE_SESSION_ID })
+    const recorded = store.record(
+      {
+        sessionId: FIXTURE_SESSION_ID,
+        kind: 'commitment',
+        text: 'Bring the notes.',
+        actorId: 'aud-1',
+        nowMs: 1_000,
+        ttlMs: 60_000,
+      },
+      { status: 'applied', effectiveClassification: 'fully-delivered', recordId: 'record-1' },
+      fixtureConfirmedDelivery(),
+    )
+    if (recorded.status !== 'recorded') throw new Error('fixture entry was refused')
+    const block = renderWorkingMemoryBlock(store.pending(1_000, FIXTURE_SESSION_ID))
+    if (block === null) throw new Error('fixture block was not renderable')
+
+    // floor(0.2 x 2000) = 400 persona, floor(0.1 x 2000) = 200 state and 200
+    // working memory, floor(0.4 x 2000) = 800 recall, and history takes the
+    // remainder. The kept state block is 109 characters; the block is 90.
+    const request = fixtureDialogueRequest({ contextLimits: { maxTurns: 8, maxCharacters: 2000 } })
+    expect(block).toHaveLength(90)
+
+    const view = await assembleWith(memory, {
+      request,
+      state: STATE,
+      workingMemory: store,
+      budgetPlan: DEFAULT_BUDGET_PLAN,
+    })
+
+    const row = (section: string) =>
+      view.budgetBreakdown?.find((usage) => usage.section === section)
+
+    // Both blocks stay within their own sections and are charged there once.
+    expect(view.stateBlock).toHaveLength(109)
+    expect(view.workingMemoryBlock).toBe(block)
+    expect(row('state')).toEqual({ section: 'state', limit: 200, used: 109, dropped: 0 })
+    expect(row('workingMemory')).toEqual({
+      section: 'workingMemory',
+      limit: 200,
+      used: 90,
+      dropped: 0,
+    })
+    expect(view.warnings).not.toContain(WM_DROP_WARNING)
+    expect(view.warnings).not.toContain(
+      'the state block did not fit the character budget and was dropped from context',
+    )
+
+    // The two blocks are charged once each, and the total stays inside the cap.
+    expect(view.estimatedCharacters).toBe(109 + 90 + 26)
+    expect(view.estimatedCharacters).toBeLessThanOrEqual(2000)
+
+    // History keeps its turn and its bound never falls below its floor. The
+    // limit is the shared-pool remainder after recall, with both kept blocks
+    // subtracted; counterfactual: dropping the working-memory subtraction from
+    // the pool raises this by the block length (90), and so does dropping the
+    // state-block subtraction (109). The floor is the plan's history share,
+    // floor(0.35 x 2000) = 700.
+    const floor = historyFloorCharacters(2000)
+    expect(view.turns.map((turn) => turn.turnId)).toEqual(['turn-new'])
+    expect(floor).toBe(700)
+    expect(row('history')?.limit).toBe(2000 - 109 - 90)
+    expect(row('history')?.limit).toBeGreaterThanOrEqual(floor)
+    expect(row('history')?.used).toBe(26)
+    expect(row('history')?.used).toBeLessThanOrEqual(floor)
   })
 })

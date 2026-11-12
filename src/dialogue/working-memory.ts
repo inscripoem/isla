@@ -1,5 +1,6 @@
-import type { DeliveryCommitAck } from '../contracts'
+import type { ConfirmedDelivery, DeliveryCommitAck } from '../contracts'
 import type { ListenerTurn } from './listener-history'
+import { classifyMemoryBucket } from './memory-semantics'
 
 /**
  * Working memory: a per-process list of what is still open for the character
@@ -10,9 +11,9 @@ import type { ListenerTurn } from './listener-history'
  * operator recorded but wants kept out of the prompt. It is deliberately
  * narrow and honest about its limits:
  *
- *   - Default off. Nothing in this step is consulted by any production caller,
- *     and no existing prompt or budget number changes. Context assembly will
- *     import this module in a later step of the same batch.
+ *   - Default off. The module is imported by context assembly, but it stays
+ *     default-off: nothing renders or is charged until a caller supplies
+ *     pending entries, so no existing prompt or budget number changes.
  *   - No persistence. The store is pure memory: no M6 schema, no storage
  *     module, no file. A new process, or a new store instance, starts empty.
  *   - One session per store. A store is constructed for exactly one
@@ -21,10 +22,13 @@ import type { ListenerTurn } from './listener-history'
  *     expose another session's entries.
  *   - Admission follows the delivery commit. `record` takes the full
  *     acknowledgement M6/M5 produced for the delivery that produced the item
- *     and admits only an `applied` one whose effective classification is
- *     `fully-delivered`: an item can never enter working memory before the turn
- *     that produced it is durably committed, and never when that turn was only
- *     partly (or not at all) delivered.
+ *     and the delivery itself, and admits only an `applied` one whose effective
+ *     classification is `fully-delivered` AND whose delivery
+ *     `classifyMemoryBucket` places in the spoken bucket: an item can never
+ *     enter working memory before the delivery that produced it is durably
+ *     committed, and never when that delivery is only partly (or not at all)
+ *     delivered, or when it is spoken without the evidence the bucket rule
+ *     requires.
  *   - Bounded. At most `WORKING_MEMORY_MAX_ENTRIES` entries stay pending, and
  *     the audit view keeps only the newest `WORKING_MEMORY_MAX_AUDIT_ENTRIES`
  *     non-pending entries, so `entries` returns at most 8 + 32 = 40 records.
@@ -105,6 +109,7 @@ export interface WorkingMemoryRecordInput {
 export type WorkingMemoryRefusalReason =
   | 'commit-not-applied'
   | 'commit-not-spoken'
+  | 'not-spoken-bucket'
   | 'empty-text'
   | 'text-not-single-line'
   | 'session-mismatch'
@@ -127,43 +132,64 @@ export interface WorkingMemoryStore {
    *   1. `input.sessionId` must be the session the store was constructed for.
    *      Any other session is refused with `'session-mismatch'` and leaves the
    *      store unchanged.
-   *   2. `ack.status` must be `'applied'` AND
-   *      `ack.effectiveClassification` must be `'fully-delivered'`. Every other
-   *      status - `'failed'`, `'conflict'` and also `'duplicate'` - is refused
-   *      with `'commit-not-applied'`, and leaves the store unchanged. A
-   *      `duplicate` acknowledgement means an `applied` pass already happened
-   *      for this delivery in this process, so re-recording would double-count
-   *      the item. An `applied` acknowledgement whose effective classification
-   *      is `'partial-unknown'` or `'not-delivered'` is refused with
-   *      `'commit-not-spoken'`: the delivery commit succeeded but the turn was
-   *      not fully heard, so it must not enter a list that renders as "still
-   *      pending". (Which audio counts as spoken is `classifyMemoryBucket`'s
-   *      decision, which an acknowledgement does not carry; see the note on
-   *      this module's limits.)
-   *   3. Empty or whitespace-only text is refused with `'empty-text'`.
-   *   4. Text containing a line break (`\n` or `\r`) is refused with
-   *      `'text-not-single-line'`: the rendered block is one line per item, so
-   *      a break would inject an unmarked line into the block. The text is kept
-   *      verbatim once admitted - no trimming, no newline collapsing.
-   *   5. Otherwise the entry is created with `seq` from a store-local counter
+   *   2. `delivery.sessionId` must be the same session. A delivery recorded for
+   *      another session is refused with `'session-mismatch'` and leaves the
+   *      store unchanged: the store serves one session, and an item cannot be
+   *      carried over from a session it was not produced in.
+   *   3. `ack.status` must be `'applied'`. Every other status - `'failed'`,
+   *      `'conflict'` and also `'duplicate'` - is refused with
+   *      `'commit-not-applied'`, and leaves the store unchanged. A `duplicate`
+   *      acknowledgement means an `applied` pass already happened for this
+   *      delivery in this process, so re-recording would double-count the item.
+   *   4. `ack.effectiveClassification` must be `'fully-delivered'`, the
+   *      classification layer: an `applied` acknowledgement whose effective
+   *      classification is `'partial-unknown'` or `'not-delivered'` is refused
+   *      with `'commit-not-spoken'`, because the delivery commit succeeded but
+   *      the turn was not fully heard, so it must not enter a list that renders
+   *      as "still pending".
+   *   5. The note shape is judged next, on `input.text`: empty or
+   *      whitespace-only text is refused with `'empty-text'`, and text
+   *      containing a line break (`\n` or `\r`) with `'text-not-single-line'` -
+   *      the rendered block is one line per item, so a break would inject an
+   *      unmarked line into the block. These checks run before the evidence
+   *      layer below on purpose: they judge the note, the bucket judges the
+   *      spoken text, and keeping note-shape refusals first preserves their
+   *      existing reason semantics. The text is kept verbatim once admitted -
+   *      no trimming, no newline collapsing.
+   *   6. `classifyMemoryBucket(delivery)` must place the producing delivery in
+   *      the `'spoken'` bucket, the evidence layer: a delivery that is not
+   *      spoken - a fully-delivered audio delivery with no receipt, or a
+   *      partial one kept as a heard-prefix fragment or in the audit view - is
+   *      refused with `'not-spoken-bucket'` and leaves the store unchanged. The
+   *      receipt rule is asked here rather than re-implemented, so
+   *      `SPOKEN_RECEIPT_POLICY` keeps one implementation point.
+   *
+   *      The two layers are distinct: the classification layer reads the
+   *      acknowledgement, the evidence layer reads the delivery, and neither
+   *      shadows the other. Every refusal above leaves the store unchanged.
+   *   7. Otherwise the entry is created with `seq` from a store-local counter
    *      starting at 0, `createdAtMs = nowMs` and `expiresAtMs = nowMs + ttlMs`.
-   *   6. Every still-pending entry of the same `kind` and the same `actorId`
+   *   8. Every still-pending entry of the same `kind` and the same `actorId`
    *      (including `null`) is marked `'superseded'`: a newer expectation
    *      replaces the older open one. Superseded entries remain in the audit
    *      view and are never returned as pending again.
-   *   7. While more than `WORKING_MEMORY_MAX_ENTRIES` entries are pending, the
+   *   9. While more than `WORKING_MEMORY_MAX_ENTRIES` entries are pending, the
    *      oldest pending entry (lowest `seq`) is marked `'evicted'`. Non-pending
    *      entries do not count against the cap but stay auditable, so the loss
    *      is never silent. Lazy expiry runs first, so an entry already past its
    *      TTL at `nowMs` is never the one evicted.
-   *   8. The audit view keeps only the newest
+   *  10. The audit view keeps only the newest
    *      `WORKING_MEMORY_MAX_AUDIT_ENTRIES` non-pending entries; older terminal
    *      entries are removed at the end of the call. Pending entries are never
    *      removed by this bound.
    *
    * The returned entry is a copy: mutating it does not change store state.
    */
-  record(input: WorkingMemoryRecordInput, ack: DeliveryCommitAck): WorkingMemoryRecordResult
+  record(
+    input: WorkingMemoryRecordInput,
+    ack: DeliveryCommitAck,
+    delivery: ConfirmedDelivery,
+  ): WorkingMemoryRecordResult
 
   /**
    * Closed-loop read: fulfil `awaiting-reply` entries the audience answered.
@@ -324,8 +350,12 @@ export function createWorkingMemoryStore(
   }
 
   return {
-    record(input, ack) {
+    record(input, ack, delivery) {
       if (input.sessionId !== boundSessionId) {
+        return { status: 'refused', reason: 'session-mismatch' }
+      }
+
+      if (delivery.sessionId !== boundSessionId) {
         return { status: 'refused', reason: 'session-mismatch' }
       }
 
@@ -333,7 +363,8 @@ export function createWorkingMemoryStore(
         return { status: 'refused', reason: 'commit-not-applied' }
       }
 
-      // Applied means "committed", not "spoken" (see `DeliveryCommitAck`).
+      // Classification layer: applied means "committed", not "spoken" (see
+      // `DeliveryCommitAck`).
       if (ack.effectiveClassification !== 'fully-delivered') {
         return { status: 'refused', reason: 'commit-not-spoken' }
       }
@@ -344,6 +375,13 @@ export function createWorkingMemoryStore(
 
       if (hasLineBreak(input.text)) {
         return { status: 'refused', reason: 'text-not-single-line' }
+      }
+
+      // Evidence layer: the acknowledgement carries no receipt, modality or
+      // session, so the producing delivery is judged by the bucket rule, which
+      // is the single implementation point of `SPOKEN_RECEIPT_POLICY`.
+      if (classifyMemoryBucket(delivery).bucket !== 'spoken') {
+        return { status: 'refused', reason: 'not-spoken-bucket' }
       }
 
       // The audit view must not show an entry as pending once its TTL has
