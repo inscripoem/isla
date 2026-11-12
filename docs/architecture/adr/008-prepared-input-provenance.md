@@ -88,7 +88,9 @@ parser can prove that the digest names the bytes on disk; it cannot prove that a
 `status ∈ { accepted, duplicate, rejected, not-submitted, no-acknowledgement }`; later entries stay
 `not-submitted` when the batch stops, and the list is empty only when nothing was submitted. Status is
 recorded, never inferred. `requestMessageId` and `eventId` are `null` when the observation does not support
-them — a rejected submission has a request id and no event id.
+them — a rejected submission has a request id and no event id, and a `not-submitted`
+input has no event id because it was never admitted (its request message id may already
+have been allocated before submission).
 
 `rejected`, `no-acknowledgement` and `not-submitted` are **terminal**: no later entry may be a submission
 (M5 review, 2026-11-09). `correlation: exact` requires at least one `accepted` or `duplicate` input and both
@@ -150,8 +152,8 @@ input order cannot be established, a `notRun` observation names a pair or occurr
 record, or an `exact`
 correlation lacks an observed acknowledgement. Strict shape validation belongs to the same refusal set:
 an unknown or extra field, a missing required field, a `status` or `correlation` outside the declared set,
-more than five prepared inputs, a `recordSetRevision` that is `null` under `exact`, and a rejected input
-carrying an event id all refuse the companion. A not-run observation is validated against the run's
+more than five prepared inputs, a `recordSetRevision` that is `null` under `exact`, and a rejected or
+`not-submitted` input carrying an event id all refuse the companion. A not-run observation is validated against the run's
 not-run occurrences only: a pair may also have an attempt, because repeated case ids are supported. A missing or extra entry is a refusal with a reason, never a partial join. Without a companion, every quality result for that run is `unscored` with reason
 `no-provenance-record`.
 

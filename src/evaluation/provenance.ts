@@ -320,10 +320,15 @@ function parseInputs(
     if (!(INPUT_STATUSES as readonly string[]).includes(entry.status as string)) {
       violations.push(`${at}.status must be one of ${INPUT_STATUSES.join(', ')}`)
     }
-    // ADR-008 D3: a rejected submission has a request id and no event id. An event
-    // id on a rejection claims an acknowledgement the status says never happened.
-    if (entry.status === 'rejected' && entry.eventId !== null) {
-      violations.push(`${at}.eventId must be null when status is rejected`)
+    // ADR-008 D3: a rejected or never-submitted input has no event id. The event id
+    // is created on admission, so an id on either status claims an acknowledgement
+    // the status says never happened. The request message id may already have been
+    // allocated before submission, so it is not constrained here.
+    if (
+      (entry.status === 'rejected' || entry.status === 'not-submitted') &&
+      entry.eventId !== null
+    ) {
+      violations.push(`${at}.eventId must be null when status is ${entry.status}`)
     }
     // Submission order (ADR-008 D3): `rejected`, `no-acknowledgement` and
     // `not-submitted` are terminal. A later *submitted* status would claim an

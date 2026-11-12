@@ -84,6 +84,20 @@ const OVERLAP_RUN = {
   notRun: parsedOverlap.input.run.notRun,
 }
 
+// A run with a not-run case, so the not-run observation path can be tested
+// without the binding refusal masking the input violation.
+const NOT_RUN_TEXT = JSON.stringify({
+  ...JSON.parse(RUN_TEXT),
+  notRun: [{ caseId: 'case-9', variantId: 'v1', reason: 'declined' }],
+})
+const parsedNotRun = parseRecordedRun(NOT_RUN_TEXT)
+if (!parsedNotRun.ok) throw new Error('not-run fixture run must parse')
+const NOT_RUN_RUN = {
+  runId: 'run-1',
+  records: parsedNotRun.input.run.records,
+  notRun: parsedNotRun.input.run.notRun,
+}
+
 const INPUT = {
   inputId: 'corpus-v1/case-1/event-1',
   sourceId: 'source-1',
@@ -447,7 +461,7 @@ describe('M5 review rules (2026-11-09)', () => {
             inputs: [
               INPUT,
               { ...INPUT, status: 'rejected', eventId: null },
-              { ...INPUT, status: 'not-submitted' },
+              { ...INPUT, status: 'not-submitted', requestMessageId: 'req-2', eventId: null },
             ],
           }),
           attempt({ attempt: 2 }),
@@ -457,6 +471,59 @@ describe('M5 review rules (2026-11-09)', () => {
       RUN_TEXT,
     )
     expect(result.ok).toBe(true)
+  })
+
+  it('refuses a not-submitted input in an executed attempt that claims an event id', () => {
+    const violations = refused(
+      parseProvenance(
+        companion({
+          attempts: [
+            attempt({
+              inputs: [
+                INPUT,
+                { ...INPUT, status: 'rejected', eventId: null },
+                { ...INPUT, status: 'not-submitted', requestMessageId: 'req-2', eventId: 'event-1' },
+              ],
+            }),
+            attempt({ attempt: 2 }),
+          ],
+        }),
+        RUN,
+        RUN_TEXT,
+      ),
+    )
+    expect(
+      violations.some((violation) =>
+        violation.includes('eventId must be null when status is not-submitted'),
+      ),
+    ).toBe(true)
+  })
+
+  it('refuses a not-submitted input in a not-run observation that claims an event id', () => {
+    const violations = refused(
+      parseProvenance(
+        companion({
+          runDigest: provenanceRunDigest(NOT_RUN_TEXT),
+          notRun: [
+            {
+              caseId: 'case-9',
+              variantId: 'v1',
+              inputs: [
+                { ...INPUT, status: 'rejected', eventId: null },
+                { ...INPUT, status: 'not-submitted', requestMessageId: 'req-2', eventId: 'event-1' },
+              ],
+            },
+          ],
+        }),
+        NOT_RUN_RUN,
+        NOT_RUN_TEXT,
+      ),
+    )
+    expect(
+      violations.some((violation) =>
+        violation.includes('eventId must be null when status is not-submitted'),
+      ),
+    ).toBe(true)
   })
 
   it('does not collide when identifiers contain the old NUL delimiter', () => {

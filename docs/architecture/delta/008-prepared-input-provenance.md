@@ -111,11 +111,13 @@ readiness 45/45; full **1586/1586** in 76 files; `pnpm verify` exit 0.
   entry is validated **only** against the run's `notRun` occurrence; an earlier executed-pair refusal was a
   false refusal and is removed. A runner-to-report regression covers the mixed case, and the report's
   not-run table now prints `Occurrence`, so two same-reason occurrences are distinguishable.
-- **A rejected input cannot claim an event id.** `status: rejected` with a non-null `eventId` is refused
-  (ADR-008 D3: a rejection has a request id and no event id); the positive stopped-batch fixture now uses
-  `eventId: null` for its rejected input.
+- **A rejected or never-submitted input cannot claim an event id.** `status: rejected` or
+  `status: not-submitted` with a non-null `eventId` is refused (ADR-008 D3: the event id is created on
+  admission; a request id may already exist). The positive stopped-batch fixture uses `eventId: null`
+  for those inputs, and negative coverage exists for both the executed-attempt and not-run paths.
 
-Verification at the current head: provenance **49** tests across the two files; `test:m6` **232/232** in 16
-files; trace 41/41; readiness 45/45; full **1590/1590** in 76 files; `pnpm verify` exit 0. Three mutations
+Verification at the current head: provenance **52** tests across the two files; `test:m6` **235/235** in 16
+files; trace 41/41; readiness 45/45; full **1593/1593** in 76 files; `pnpm verify` exit 0. Four mutations
 turned their own tests red and were restored: reinstating the executed-pair refusal, removing the
-rejected-event-id refusal, and removing the occurrence column.
+rejected-event-id refusal, removing the occurrence column, and removing the `not-submitted`
+event-id clause.

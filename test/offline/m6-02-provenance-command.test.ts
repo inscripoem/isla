@@ -371,7 +371,7 @@ describe('repeated not-run pairs (M5 contract, 2026-11-09)', () => {
             caseId: 'case-3',
             variantId: 'v1',
             occurrence: 2,
-            inputs: [{ ...INPUT, status: 'not-submitted' }],
+            inputs: [{ ...INPUT, status: 'not-submitted', eventId: null }],
           },
         ],
       }),
@@ -418,6 +418,46 @@ describe('repeated not-run pairs (M5 contract, 2026-11-09)', () => {
     ).toBe(1)
     expect(existsSync(output)).toBe(false)
     expect(stderr.mock.calls.flat().join('')).toContain('not a not-run occurrence')
+  })
+
+  it('refuses a not-submitted not-run input that claims an event id', () => {
+    const run = {
+      ...RUN,
+      notRun: [{ variantId: 'v1', caseId: 'case-3', reason: 'declined' }],
+    }
+    const runText = JSON.stringify(run)
+    const digest = provenanceRunDigest(runText)
+    const { input, output, provenance } = workspace()
+    writeFileSync(input, runText, 'utf8')
+    writeFileSync(
+      provenance,
+      JSON.stringify({
+        provenanceVersion: 1,
+        runId: 'run-1',
+        runDigest: digest,
+        attempts: [attempt('case-1'), attempt('case-2')],
+        notRun: [
+          {
+            caseId: 'case-3',
+            variantId: 'v1',
+            occurrence: 1,
+            inputs: [
+              { ...INPUT, status: 'rejected', eventId: null },
+              { ...INPUT, status: 'not-submitted', requestMessageId: 'req-2', eventId: 'event-1' },
+            ],
+          },
+        ],
+      }),
+      'utf8',
+    )
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    expect(
+      runReportCommand(['--input', input, '--output', output, '--provenance', provenance]),
+    ).toBe(1)
+    expect(existsSync(output)).toBe(false)
+    expect(stderr.mock.calls.flat().join('')).toContain(
+      'eventId must be null when status is not-submitted',
+    )
   })
 })
 
