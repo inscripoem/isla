@@ -83,6 +83,15 @@ This record links candidate requirements to machine-checkable acceptance criteri
 > the registered unit verifiers for the recovery view and storage-only restart;
 > all three link INV-12.
 
+The diagnostic CLI in `src/runtime/cli.ts` registers its SIGINT and SIGTERM
+handlers before announcing readiness. `test/offline/cli.test.ts` checks shutdown
+through the real CLI process, including signals at the readiness-write boundary,
+repeated signals and port reuse. This is supporting evidence for [Issue
+133](https://github.com/inscripoem/isla/issues/133), separate from C-73's
+production CLI verifier. The direct-signal tests are skipped on Windows; the
+reporting macOS environment still needs a retest. This note adds no case ID or
+platform acceptance.
+
 ### C-73/C-74 suite test names
 
 The registry retains one verifier file per case. These are the exact test names at `8c36cad`, accepted as suite-level evidence by M6; this list adds no new acceptance claim.

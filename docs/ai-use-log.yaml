@@ -5139,3 +5139,146 @@ entries:
       response validation, timeout behaviour or any rendered console state, and
       does not close #68 until the change merges. Live providers, acoustic
       verification, Windows behaviour and durable recovery are not claimed.
+
+  - date: "2026-10-31"
+    task: M5-issue133-diagnostic-cli-readiness-signal
+    member: M5
+    change: >-
+      Register SIGINT and SIGTERM handlers before the diagnostic runtime CLI
+      publishes its listening event, while preserving startup failure reporting,
+      the bound address, and the existing idempotent shutdown. Add direct-child
+      readiness-window regressions and a test-only output gate; check both
+      signals, repeated signals, and reuse of the released bound port.
+    requirements: []
+    invariants: []
+    cases: []
+    commits: []
+    agent: opencode/build
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    opencode_version: 2.2.2
+    launch_flags: [--agent, build, --format, json]
+    model_id: self-api/deepseek-v4-flash#xhigh
+    sessions: [ses_e7055c128ffegY9rapRNSosxO6]
+    supervision: >-
+      Captain authorised local work. The Codex supervisor scoped Issue 133,
+      inspected the affected entry and callers, and ran the checks. OpenCode
+      authored the source change, the tests and their helper. An initial test
+      used the tsx launcher and passed on the unfixed code, so it was replaced
+      with a direct-child PID handshake. The revised regression failed on both
+      SIGINT and SIGTERM before the fix and passed after it. A first full verify
+      then failed on two helper type errors; OpenCode corrected those errors and
+      the supervisor reran the full command. The supervisor added this factual
+      log entry after the checks; no user approval or remote publication of this
+      candidate is implied.
+    verification:
+      regression_before: "Three original cases passed and two forced readiness-window cases failed on SIGINT/SIGTERM termination."
+      focused_after: "Six cases passed, including the original three, both readiness-window signals, repeated signals and bound-port reuse."
+      verify: "Linux Node 22.23.4: pnpm verify exit 0, 1412 passed in 71 files; typecheck, lint and build passed."
+      platforms: >-
+        The three new direct-signal cases are skipped on Windows because
+        subprocess.kill force-terminates there. M2 reported intermittent
+        macOS failures; macOS verification of this candidate is still pending.
+    scope: >-
+      Diagnostic runtime CLI only; production-cli.ts and shared contracts are
+      unchanged. This does not establish physical output, live providers,
+      Windows shutdown, checkpoint acceptance or closure of Issue 133.
+
+  - date: "2026-10-31"
+    task: M5-issue133-publication-record
+    change: >-
+      Record publication of the diagnostic CLI readiness-signal implementation
+      in PR135 without changing the original implementation or its prior log.
+    requirements: []
+    invariants: []
+    cases: []
+    commits: [cd0fee7999804cd52fde0881b910561ae9c82b99]
+    agent: codex-supervisor
+    supervision: >-
+      Captain approved publication of the previously verified implementation.
+      OpenCode authored the original code and tests in the session already
+      recorded in the preceding implementation entry; this entry records the
+      published commit only and does not claim a new implementation session.
+    verification: >-
+      The published implementation had focused CLI 6/6 and Linux full verify
+      1412/1412 in 71 files. macOS retest remains pending; the three direct-signal
+      tests are skipped on Windows.
+
+  - date: "2026-11-11"
+    task: windows-portability-test-hardening
+    change: >-
+      Hardened offline tests for a Windows checkout, and appended this record to
+      docs/ai-use-log.yaml (the only non-test change). Edited seven test files:
+      boundaries.test.ts, m6-02-boundary.test.ts, m6-sqlite.test.ts,
+      requirements.test.ts, cli.test.ts, production-cli.test.ts and
+      m5-process-restart.test.ts. Graph resolution in boundaries.test.ts and
+      containment in m6-02-boundary.test.ts take an explicit path API, so
+      node:path.win32 semantics are simulated on Linux for real traversal, a
+      forbidden transitive import, a sibling module, case differences, sibling
+      prefixes and cross-drive targets. m6-sqlite.test.ts uses native temporary
+      roots and independently written expected paths, with no win32 injection.
+      requirements.test.ts normalizes CRLF only for the two schema-content
+      comparisons and still rejects other differences and a lone carriage
+      return. cli.test.ts launches the diagnostic CLI via the Node executable and
+      tsx loader and skips only its POSIX SIGINT/SIGTERM cases on Windows.
+      production-cli.test.ts skips only its four SIGTERM cases, checks health on
+      the IPC shutdown path and keeps the IPC pending-release and failure cases.
+      m5-process-restart.test.ts requires a successful forced kill and, on
+      Windows, an abnormal termination (non-zero code or non-null signal)
+      without inventing a value, keeps every database and no-replay assertion,
+      and uses IPC shutdown for the second process on Windows while keeping
+      SIGTERM on POSIX.
+    requirements: []
+    invariants: []
+    cases: []
+    commits: []
+    agent: build
+    opencode_version: 2.2.6
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    model: deepseek-v4-flash
+    provider: self-api
+    variant: xhigh
+    launch_flags: ["-m", "self-api/deepseek-v4-flash#xhigh", "--agent", "build", "--format", "json"]
+    sessions: [ses_e398f7510ffeDasJmKzoNfvFOQ]
+    supervision: >-
+      Captain approved local implementation of the test changes; this record was
+      appended in the same session. The model id, provider ID and variant above
+      are observed from native session message metadata; the upstream service
+      behind self-api is not inferred. No subagent was used, and no
+      credential values were intentionally read into the supervising
+      conversation.
+    human_review: >-
+      Local implementation approved; publication not reviewed or approved. A
+      detached Git worktree was created, with no branch, staging, commit, push,
+      merge, review or GitHub write.
+    transcript_record: >-
+      The session remains in the local OpenCode store; evidence will be saved
+      outside the checkout in the project evidence directory.
+    verification:
+      platform: Linux x86_64
+      base: e9e7e7be0138b90df1190ce4fc674d33607a461e
+      results: >-
+        pnpm verify stopped at test with 1545 passed and 1 failed (diagnostic
+        CLI SIGTERM); typecheck and lint passed, and a separate build passed.
+        test:m5 257/257, test:m6 186/186, test:readiness 47/47, test:trace 41/41.
+      limits: >-
+        Only the graph and containment tests simulate win32 semantics; this is
+        not a Windows run. Six POSIX-only cases are skipped on Windows. In a
+        temporary comparison, current main failed three forced readiness cases
+        and the existing PR #135 source passed all six; PR #135 is not merged. A
+        non-Git snapshot cannot satisfy the Git-metadata trace test, and these
+        changes do not fix that. The 18 Windows full-suite failure identities are
+        not established.
+    scope: >-
+      Test-only portability work plus this AI-use record and an ignored
+      temporary per-worktree OpenCode configuration. No production source,
+      shared helper, dependency or repository configuration changed, and no real
+      Windows execution or full-suite result had been claimed at that time.
+    later_verification: >-
+      On GitHub Actions Windows, commit 14f5aea615d0bf3ed5995f654f5888a51fc12993
+      passed 1540 tests and skipped 9 POSIX-only signal tests in a full Git
+      checkout; its source snapshot passed 1539, skipped 9 and failed one
+      Git-metadata test. The delivery candidate uses the same source and test
+      files but excludes the temporary probe workflow and its extra records.
+      See https://github.com/inscripoem/isla/actions/runs/42970448971.
