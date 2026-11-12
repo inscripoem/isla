@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { LIVE_TEXT_PROVIDER_ENV, readLiveTextProviderConfig } from './live-config'
+import {
+  LIVE_DECISION_PROVIDER_ENV,
+  LIVE_JEV_PROVIDER_ENV,
+  LIVE_TEXT_PROVIDER_ENV,
+  readLiveDecisionProviderConfig,
+  readLiveJevProviderConfig,
+  readLiveTextProviderConfig,
+} from './live-config'
 
 /**
  * Offline-safe tests for the live configuration loader. They run wherever the
@@ -72,3 +79,80 @@ describe('M4 live text provider configuration', () => {
     expect(report.reason).not.toContain('not-a-url')
   })
 })
+
+const MODEL_ENV_GROUPS = [
+  {
+    name: 'M3 live decision provider configuration',
+    env: LIVE_DECISION_PROVIDER_ENV,
+    read: readLiveDecisionProviderConfig,
+  },
+  {
+    name: 'M3 live JEV provider configuration',
+    env: LIVE_JEV_PROVIDER_ENV,
+    read: readLiveJevProviderConfig,
+  },
+] as const
+
+for (const group of MODEL_ENV_GROUPS) {
+  const modelEnv = (
+    values: Partial<Record<string, string>>,
+  ): NodeJS.ProcessEnv => ({
+    [group.env.baseUrl]: 'https://gateway.example.com/v1',
+    [group.env.model]: 'test-model',
+    [group.env.apiKey]: SECRET,
+    ...values,
+  })
+
+  describe(group.name, () => {
+    it('is unavailable with every variable missing', () => {
+      const report = group.read({})
+      expect(report.available).toBe(false)
+      expect(report.config).toBeNull()
+      expect(report.reason).toContain(group.env.baseUrl)
+      expect(report.reason).toContain(group.env.model)
+      expect(report.reason).toContain(group.env.apiKey)
+    })
+
+    it('names the missing variable when only one is absent', () => {
+      const report = group.read(modelEnv({ [group.env.apiKey]: undefined }))
+      expect(report.available).toBe(false)
+      expect(report.reason).toContain(group.env.apiKey)
+    })
+
+    it('treats a blank value as missing', () => {
+      const report = group.read(modelEnv({ [group.env.model]: '   ' }))
+      expect(report.available).toBe(false)
+      expect(report.reason).toContain(group.env.model)
+    })
+
+    it('refuses a base URL that is not http(s)', () => {
+      const report = group.read(
+        modelEnv({ [group.env.baseUrl]: 'ftp://gateway.example.com' }),
+      )
+      expect(report.available).toBe(false)
+      expect(report.reason).toContain(group.env.baseUrl)
+    })
+
+    it('parses a complete configuration and trims the base URL', () => {
+      const report = group.read(
+        modelEnv({ [group.env.baseUrl]: 'https://gateway.example.com/v1///' }),
+      )
+      expect(report.available).toBe(true)
+      expect(report.reason).toBeNull()
+      expect(report.config).not.toBeNull()
+      expect(report.config?.baseUrl).toBe('https://gateway.example.com/v1')
+      expect(report.config?.model).toBe('test-model')
+      expect(report.config?.apiKey).toBe(SECRET)
+    })
+
+    it('never echoes an environment value into the unavailability reason', () => {
+      const report = group.read(
+        modelEnv({ [group.env.baseUrl]: 'not-a-valid-url' }),
+      )
+      expect(report.available).toBe(false)
+      expect(report.reason).not.toContain(SECRET)
+      expect(report.reason).not.toContain('test-model')
+      expect(report.reason).not.toContain('not-a-valid-url')
+    })
+  })
+}
