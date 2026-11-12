@@ -6614,7 +6614,7 @@ entries:
       budget of 38 and expects 36). Commit tie: this label correction is carried by d4317f3, while the A02 bucket it rewords was introduced in af3c8e3.
     requirements: [FR-02]
     invariants: []
-    commits: [d4317f3]
+    commits: [7d9c5fa]
     agent: opencode/build
     provider: cslabllm
     model: DeepSeek-V4-Flash
@@ -6735,3 +6735,102 @@ entries:
     scope: >-
       M4 working-memory/state/budget/label fixes plus test:m4 additions
       consented by M5; no contract change.
+  - date: "2026-11-12"
+    task: M4-151-p2-round
+    change: >-
+      Address the four P2 findings of the M6 review of PR #151 (review
+      5871717372, on 34c4ee2) and the zero-risk part of its P3 debt, without
+      widening any contract and without changing the rendered prompt or any
+      budget number when the new inputs are absent. Working memory
+      (src/dialogue/working-memory.ts): `record` now takes the producing
+      `ConfirmedDelivery` as a required third argument and admits an item only
+      when the acknowledgement is `applied` with effective classification
+      `fully-delivered` AND `classifyMemoryBucket` places the delivery in the
+      spoken bucket; a fully-delivered audio delivery with no receipt, a
+      partial record kept as a heard-prefix fragment and an audit-only record
+      are refused with the new module-local reason `not-spoken-bucket`, and a
+      delivery naming another session is refused as `session-mismatch`. The
+      acknowledgement carries no receipt, modality or session, so the delivery
+      is judged by the bucket rule and `SPOKEN_RECEIPT_POLICY` keeps a single
+      implementation point in memory-semantics.ts; the two refusal layers stay
+      distinct, with the classification layer ahead of the evidence layer and
+      the note-shape refusals (`empty-text`, `text-not-single-line`) ahead of
+      both. The module header now states that the module is imported by
+      context assembly and stays default-off until a caller supplies entries.
+      Context assembly (src/dialogue/context.ts): the stale comment that said a
+      kept block is charged to its own section "so the shared pool did not pay
+      for it" is corrected to match the implementation - a kept block is
+      charged to its own section row and subtracted from `sharedBudget` in both
+      modes - with no behaviour change; the existing pin of `history.limit` at
+      its floor remains the regression guard. The eight `commits` fields of the
+      earlier entries now name their reachable post-rebase equivalents
+      (af3c8e3 -> e16fe4e, 14b92ee -> 70be84b, d4317f3 -> c7e9aa6,
+      c47c51f -> d008e12); the narrative SHAs of the 2026-11-11/12 entries are
+      kept as written, because they record the commands and the tree as they
+      were at the time, and this entry states that they name pre-rebase heads
+      and are not ancestors of 34c4ee2. The architecture documents follow: the
+      FR-02 row of trace-matrix.md now states the spoken-bucket condition and
+      corrects the C-04 wording to runtime conformance, the working-memory
+      admission row of runtime-policy-catalog.md lists the new reason and the
+      bucket condition, and memory-design.md describes the admission in terms
+      of the delivery that produced the item. No port, receipt-stage read,
+      provider call, contract, runtime, storage, manifest or AGENTS.md change;
+      there is still no production caller of `record`, so the rendered prompt
+      and every budget number stay byte-identical when the new inputs are
+      absent.
+    requirements: [FR-02]
+    invariants: []
+    commits: [8a54960]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: 2.0.20
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    sessions: [ses_e304e14bbffenBrhHRTvxFVyPJ, ses_e303be5f0ffeRirUJrkTetvZy6]
+    supervision: >-
+      The M4 supervision workflow (ZCode session) verified every claim of the
+      M6 review against the repository before the sessions were launched, and
+      wrote the English task book for them. The task book fixed the admission
+      order, the new refusal reason, the two-layer distinction, the fixture
+      requirements and the exact documentation edits, and stated the hard
+      constraints: no frozen path, no new stable id, no change to any
+      production behaviour outside src/dialogue, and no git mutation. All
+      application code was written by genuine OpenCode `build` sessions using
+      the configured DeepSeek-V4-Flash provider; the supervisor reviewed the
+      resulting diff and verified it against the task book rather than
+      accepting the sessions' own report. The first session
+      (ses_e304e14bbffenBrhHRTvxFVyPJ) was interrupted after it had added the
+      imports, the module header comment and the new refusal reason; the
+      second session (ses_e303be5f0ffeRirUJrkTetvZy6) continued from that
+      working-tree state and completed every remaining item. The supervisor
+      then re-ran the gates itself: `pnpm test:m4` -> 16 files / 377 tests
+      passed; `pnpm test:trace` -> 1 file / 41 tests passed; `pnpm typecheck`
+      (`tsc -b`) -> exit 0; `pnpm lint` (`oxlint`) -> exit 0, 0 warnings and 0
+      errors on 281 files; `pnpm test` -> 80 files, 1680 passed and 9 skipped;
+      `pnpm build` -> exit 0. The local `AGENTS.md` edit in the working tree
+      is the owner's uncommitted edit: this round did not modify, correct,
+      revert or commit it, and it remains in the working tree.
+    transcript_record: >-
+      The two sessions listed in `sessions` retain their conversations. Their
+      per-session record (id, title, time and role) is written outside this
+      repository in `m4-impl/151-p2/opencode-sessions.md`; no export is stored
+      in the repository.
+    verification:
+      base: 34c4ee2
+      reproduction: >-
+        Run from the repository root on the working tree that contains this
+        round's code changes. pnpm test:m4 -> 16 files / 377 tests passed.
+        pnpm test:trace -> 1 file / 41 tests passed. pnpm typecheck (tsc -b) ->
+        exit 0. pnpm lint (oxlint) -> exit 0; the default reporter prints
+        "Found 0 warnings and 0 errors." on 281 files with 116 rules. pnpm
+        test -> 80 files passed, 1680 passed and 9 skipped. pnpm build ->
+        exit 0. Gate G6 (pnpm gate:ai-use-log with AI_USE_LOG_BASE_FILE set to
+        a copy of the log at 34c4ee2 and the changed-file list) is run by CI;
+        this entry raises the head count to 160, against 159 at that base, so
+        the entry-count rule holds. The full suite and the remote `verify` run
+        are the final authority.
+    scope: >-
+      M4 working-memory admission evidence, the shared-budget comment
+      correction and the matching architecture documentation; no contract
+      change, no new stable id, no production behaviour change.

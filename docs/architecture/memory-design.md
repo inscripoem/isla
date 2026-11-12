@@ -176,13 +176,17 @@ owes, commitments she made, open threads and operator-suppressed items
   (`pending`, `entries`, `observe`) naming another session throws rather than returning an empty
   view.
 - **Admission follows the delivery commit.** `record` takes the full `DeliveryCommitAck` for the
-  delivery that produced the item. It admits only an `applied` acknowledgement whose effective
-  classification is `fully-delivered`; every other status (`failed`, `conflict`, `duplicate`) is
-  refused as `commit-not-applied`, and an applied acknowledgement that is only partly or not at all
-  delivered is refused as `commit-not-spoken`. The note must also be non-empty (`empty-text`) and a
-  single line (`text-not-single-line`), so a line break cannot inject an unmarked line into the
-  rendered block. An item therefore never enters working memory before its turn is durably
-  committed, and never when that turn was not fully heard.
+  delivery that produced the item, plus the `ConfirmedDelivery` itself. It admits only an `applied`
+  acknowledgement whose effective classification is `fully-delivered`; every other status (`failed`,
+  `conflict`, `duplicate`) is refused as `commit-not-applied`, and an applied acknowledgement that is
+  only partly or not at all delivered is refused as `commit-not-spoken`. The acknowledgement carries
+  no receipt, modality or session, so the delivery that produced the item must also classify into the
+  spoken bucket of `classifyMemoryBucket`; anything else - a receipt-less audio claim, a partial
+  record kept as a heard-prefix fragment, an audit-only record, or a delivery from another session -
+  is refused as `not-spoken-bucket` or `session-mismatch`. The note must also be non-empty
+  (`empty-text`) and a single line (`text-not-single-line`), so a line break cannot inject an
+  unmarked line into the rendered block. An item therefore never enters working memory before it is
+  durably committed, and never when the delivery that produced it was not spoken.
 - **Expiry is lazy and inclusive.** An entry is created with `expiresAtMs = nowMs + ttlMs` and
   counts as expired from `expiresAtMs` onward; expiry is applied when the store is read, not by a
   timer. A listener turn fulfils an `awaiting-reply` entry only inside
@@ -199,7 +203,7 @@ owes, commitments she made, open threads and operator-suppressed items
 - **Default off.** With no store supplied to `assembleDialogueContext`, no block is rendered and the
   prompt and every budget number are byte-identical to an assembly without the feature.
 
-**Trace reference.** This design note carries no FR-02/FR-04 table row of its own: the enforcing-module and test cells for the six new dialogue modules (`src/dialogue/budget.ts`, `listener-history.ts`, `state-render.ts`, `state.ts`, `transcript.ts`, `working-memory.ts`) live in the FR-02 row of `docs/architecture/trace-matrix.md`, and their failure behaviour is in the runtime-policy catalog. The state block (A08) is also rendered from caller-supplied state in process; it adds no persistent state and no row to the survival table above.
+**Trace reference.** This design note carries no FR-02/FR-04 table row of its own: the enforcing-module and test cells for the six new dialogue modules (`src/dialogue/budget.ts`, `listener-history.ts`, `state-render.ts`, `state.ts`, `transcript.ts`, `working-memory.ts`) live in the FR-02 row of `docs/architecture/trace-matrix.md`, and their failure behaviour is in the runtime-policy catalog. The state block (A08) is also rendered from caller-supplied state in process (issue #146: the in-process character state model); it adds no persistent state and no row to the survival table above.
 
 ## Retention and privacy
 
