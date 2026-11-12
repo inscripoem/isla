@@ -251,25 +251,14 @@ export function provenanceBindingViolations(
     }
   }
 
-  // ADR-008 D4: observations for a not-run case must name a case the run did not
-  // execute. A pair the run executed is an attempt, not a not-run observation.
-  // The run's `notRun[].reason` is the single authority; the companion carries
-  // observations only. Occurrences make repeated pairs explicit (M5, 2026-11-09).
+  // ADR-008 D4: a not-run observation must name an occurrence the run recorded as
+  // not run. A pair may also have attempts: `runComparison` accepts repeated case
+  // ids, so the same (caseId, variantId) can be one completed attempt and one
+  // separate not-run occurrence (M5 re-review, 2026-11-11). The run's
+  // `notRun[].reason` is the single authority; the companion carries observations
+  // only. Occurrences make repeated pairs explicit.
   const runNotRun = notRunReasonIndex(run)
-  // A pair the run executed is an attempt. A run that lists the same pair in both
-  // `records` and `notRun` is already inconsistent; the companion must not be able
-  // to turn that into a not-run observation that contradicts the attempt table.
-  const executedPairs = new Set(
-    run.records.map((record) => pairKey(record.caseId, record.variantId)),
-  )
   for (const entry of companion.notRun) {
-    const pair = pairKey(entry.caseId, entry.variantId)
-    if (executedPairs.has(pair)) {
-      violations.push(
-        `the companion records a not-run observation for ${entry.caseId}/${entry.variantId}, but the run executed that pair`,
-      )
-      continue
-    }
     const key = buildOccurrenceKey(entry.caseId, entry.variantId, entry.occurrence)
     if (!runNotRun.has(key)) {
       violations.push(
@@ -330,6 +319,11 @@ function parseInputs(
     }
     if (!(INPUT_STATUSES as readonly string[]).includes(entry.status as string)) {
       violations.push(`${at}.status must be one of ${INPUT_STATUSES.join(', ')}`)
+    }
+    // ADR-008 D3: a rejected submission has a request id and no event id. An event
+    // id on a rejection claims an acknowledgement the status says never happened.
+    if (entry.status === 'rejected' && entry.eventId !== null) {
+      violations.push(`${at}.eventId must be null when status is rejected`)
     }
     // Submission order (ADR-008 D3): `rejected`, `no-acknowledgement` and
     // `not-submitted` are terminal. A later *submitted* status would claim an

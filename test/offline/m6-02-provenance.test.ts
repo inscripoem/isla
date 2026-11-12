@@ -69,8 +69,9 @@ const RUN = { runId: 'run-1', records: parsedRun.input.run.records }
 const DIGEST = provenanceRunDigest(RUN_TEXT)
 const REVISION = 'a'.repeat(64)
 
-// A run that lists one executed pair in `notRun` too: the producer should not do
-// this, and the companion must not be able to turn it into a not-run observation.
+// A run with a repeated case id: one attempt and one separate not-run occurrence
+// for the same pair. `runComparison` accepts repeated case ids, so this shape is
+// legitimate (M5 re-review, 2026-11-11).
 const OVERLAP_TEXT = JSON.stringify({
   ...JSON.parse(RUN_TEXT),
   notRun: [{ caseId: 'case-1', variantId: 'v1', reason: 'declined' }],
@@ -370,6 +371,26 @@ describe('M5 review rules (2026-11-09)', () => {
     expect(result.ok).toBe(true)
   })
 
+  it('refuses a rejected input that claims an event id', () => {
+    const violations = refused(
+      parseProvenance(
+        companion({
+          attempts: [
+            attempt({
+              inputs: [{ ...INPUT, status: 'rejected', eventId: 'event-1' }],
+            }),
+            attempt({ attempt: 2 }),
+          ],
+        }),
+        RUN,
+        RUN_TEXT,
+      ),
+    )
+    expect(
+      violations.some((violation) => violation.includes('eventId must be null when status is rejected')),
+    ).toBe(true)
+  })
+
   it('refuses a submission after a rejection', () => {
     const violations = refused(
       parseProvenance(
@@ -378,7 +399,7 @@ describe('M5 review rules (2026-11-09)', () => {
             attempt({
               inputs: [
                 INPUT,
-                { ...INPUT, status: 'rejected' },
+                { ...INPUT, status: 'rejected', eventId: null },
                 { ...INPUT, status: 'accepted' },
               ],
             }),
@@ -425,7 +446,7 @@ describe('M5 review rules (2026-11-09)', () => {
           attempt({
             inputs: [
               INPUT,
-              { ...INPUT, status: 'rejected' },
+              { ...INPUT, status: 'rejected', eventId: null },
               { ...INPUT, status: 'not-submitted' },
             ],
           }),
@@ -509,26 +530,20 @@ describe('not-run observations (ADR-008 D4)', () => {
       ),
     )
     expect(
-      violations.some((violation) => violation.includes('but the run executed that pair')),
+      violations.some((violation) => violation.includes('not a not-run occurrence')),
     ).toBe(true)
   })
 
-  it('refuses a not-run observation for a pair the run both executed and did not run', () => {
-    const violations = refused(
-      parseProvenance(
-        companion({
-          runDigest: provenanceRunDigest(OVERLAP_TEXT),
-          notRun: [{ caseId: 'case-1', variantId: 'v1', inputs: [INPUT] }],
-        }),
-        OVERLAP_RUN,
-        OVERLAP_TEXT,
-      ),
+  it('accepts a not-run observation for a pair that also has an attempt', () => {
+    const result = parseProvenance(
+      companion({
+        runDigest: provenanceRunDigest(OVERLAP_TEXT),
+        notRun: [{ caseId: 'case-1', variantId: 'v1', inputs: [INPUT] }],
+      }),
+      OVERLAP_RUN,
+      OVERLAP_TEXT,
     )
-    expect(
-      violations.some((violation) =>
-        violation.includes('but the run executed that pair'),
-      ),
-    ).toBe(true)
+    expect(result.ok).toBe(true)
   })
 
   it('refuses a duplicate not-run pair', () => {

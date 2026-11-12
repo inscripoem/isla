@@ -7,6 +7,8 @@ import {
   type ProvenanceAttempt,
   type ProvenanceCompanionV1,
 } from '../../src/evaluation/provenance'
+import { runComparison } from '../../src/evaluation/comparison'
+import type { AttemptRecord } from '../../src/evaluation/metrics'
 import { parseRecordedRun } from '../../src/evaluation/recorded-run'
 import { parseReportCommandArgs, runReportCommand } from '../../src/evaluation/report-command'
 import { renderEvaluationReport } from '../../src/evaluation/report'
@@ -44,7 +46,7 @@ const CONDITIONS = {
   recall: { supplied: false, maxTurns: null },
 } as const
 
-function record(caseId: string) {
+function record(caseId: string): AttemptRecord {
   return {
     caseId,
     variantId: 'v1',
@@ -332,7 +334,7 @@ describe('M5 review rules at the report boundary (2026-11-09)', () => {
     ).toBe(0)
     const table = readFileSync(output, 'utf8')
     expect(table).toContain('### Not-run observations')
-    expect(table).toContain('| case-3 | v1 | declined |')
+    expect(table).toContain('| case-3 | v1 | 1 | declined |')
     expect(table).toContain('rejected 1')
   })
 })
@@ -379,8 +381,8 @@ describe('repeated not-run pairs (M5 contract, 2026-11-09)', () => {
       runReportCommand(['--input', input, '--output', output, '--provenance', provenance]),
     ).toBe(0)
     const table = readFileSync(output, 'utf8')
-    expect(table).toContain('| case-3 | v1 | rejected |')
-    expect(table).toContain('| case-3 | v1 | held |')
+    expect(table).toContain('| case-3 | v1 | 1 | rejected |')
+    expect(table).toContain('| case-3 | v1 | 2 | held |')
   })
 
   it('refuses an occurrence the run does not have', () => {
@@ -416,5 +418,62 @@ describe('repeated not-run pairs (M5 contract, 2026-11-09)', () => {
     ).toBe(1)
     expect(existsSync(output)).toBe(false)
     expect(stderr.mock.calls.flat().join('')).toContain('not a not-run occurrence')
+  })
+})
+
+describe('repeated case id: attempt and not-run for the same pair (M5, 2026-11-11)', () => {
+  it('writes the attempt and the not-run observation that the runner produced', async () => {
+    const cases = [
+      { id: 'case-1', input: 'first' },
+      { id: 'case-1', input: 'second' },
+    ]
+    const comparison = await runComparison(
+      { variants: [{ id: 'v1', kind: 'rules', combined: false }], cases },
+      {
+        runVariant: async (_variant, evalCase) =>
+          evalCase.input === 'first'
+            ? { ran: true, record: record('case-1') }
+            : { ran: false, reason: 'rejected' },
+      },
+    )
+    expect(comparison.records).toHaveLength(1)
+    expect(comparison.notRun).toHaveLength(1)
+
+    const run = {
+      ...RUN,
+      conditions: { ...CONDITIONS, sampleSize: 1 },
+      records: comparison.records,
+      notRun: comparison.notRun,
+    }
+    const runText = JSON.stringify(run)
+    const digest = provenanceRunDigest(runText)
+    const { input, output, provenance } = workspace()
+    writeFileSync(input, runText, 'utf8')
+    writeFileSync(
+      provenance,
+      JSON.stringify({
+        provenanceVersion: 1,
+        runId: 'run-1',
+        runDigest: digest,
+        attempts: [attempt('case-1')],
+        notRun: [
+          {
+            caseId: 'case-1',
+            variantId: 'v1',
+            occurrence: 1,
+            inputs: [{ ...INPUT, status: 'rejected', eventId: null }],
+          },
+        ],
+      }),
+      'utf8',
+    )
+
+    expect(
+      runReportCommand(['--input', input, '--output', output, '--provenance', provenance]),
+    ).toBe(0)
+    const table = readFileSync(output, 'utf8')
+    expect(table).toContain('| case-1 | v1 | 1 | exact |')
+    expect(table).toContain('| case-1 | v1 | 1 | rejected |')
+    expect(table).toContain('rejected 1')
   })
 })

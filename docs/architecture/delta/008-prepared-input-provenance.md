@@ -57,6 +57,10 @@ by content (`runDigest`) and a positional occurrence key, keeps unobserved value
 - **Case ids.** The provenance row carries ids pending; no case id is claimed or invented.
 - **Companion shape.** The root binding plus `attempts[]` reading still needs M5's explicit confirmation
   (DEBT-09).
+- **`exact` scope across a partial batch (M5, 2026-11-11).** A synthetic `accepted → no-acknowledgement →
+  not-submitted` batch can currently be recorded as `correlation: exact`. Whether `exact` describes the
+  admitted link or the complete batch is an open M5/M4 coordination question; this change does not decide
+  it, and the eligibility path must respect the agreed distinction before CP05 scoring.
 
 ## Traceability
 
@@ -100,9 +104,18 @@ readiness 45/45; full **1586/1586** in 76 files; `pnpm verify` exit 0.
   own regression.
 - `341303a` is the docs/ai-use record for that fix and for the Delta refresh below; it changes no code.
 - The review-fix pass at the current head also: builds the run's not-run reason index in **one** helper
-  (`notRunReasonIndex`) used by both the parser and the renderer, refuses a companion not-run observation for
-  a pair the run executed, and binds the five-input cap to C1's `MAX_SELECTION_CANDIDATES` with an agreement
-  test.
+  (`notRunReasonIndex`) used by both the parser and the renderer, and binds the five-input cap to C1's
+  `MAX_SELECTION_CANDIDATES` with an agreement test.
+- **Repeated case ids (M5 re-review, 2026-11-11).** `runComparison` accepts repeated case ids, so one
+  `(caseId, variantId)` may have both an attempt and a separate not-run occurrence. The companion not-run
+  entry is validated **only** against the run's `notRun` occurrence; an earlier executed-pair refusal was a
+  false refusal and is removed. A runner-to-report regression covers the mixed case, and the report's
+  not-run table now prints `Occurrence`, so two same-reason occurrences are distinguishable.
+- **A rejected input cannot claim an event id.** `status: rejected` with a non-null `eventId` is refused
+  (ADR-008 D3: a rejection has a request id and no event id); the positive stopped-batch fixture now uses
+  `eventId: null` for its rejected input.
 
-Verification at the current head: provenance **47** tests across the two files; `test:m6` **230/230** in 16
-files; trace 41/41; readiness 45/45; full **1588/1588** in 76 files; `pnpm verify` exit 0.
+Verification at the current head: provenance **49** tests across the two files; `test:m6` **232/232** in 16
+files; trace 41/41; readiness 45/45; full **1590/1590** in 76 files; `pnpm verify` exit 0. Three mutations
+turned their own tests red and were restored: reinstating the executed-pair refusal, removing the
+rejected-event-id refusal, and removing the occurrence column.

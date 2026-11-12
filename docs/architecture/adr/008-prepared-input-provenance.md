@@ -150,8 +150,9 @@ input order cannot be established, a `notRun` observation names a pair or occurr
 record, or an `exact`
 correlation lacks an observed acknowledgement. Strict shape validation belongs to the same refusal set:
 an unknown or extra field, a missing required field, a `status` or `correlation` outside the declared set,
-more than five prepared inputs, and a `recordSetRevision` that is `null` under `exact` all refuse the
-companion. A missing or extra entry is a refusal with a reason, never a partial join. Without a companion, every quality result for that run is `unscored` with reason
+more than five prepared inputs, a `recordSetRevision` that is `null` under `exact`, and a rejected input
+carrying an event id all refuse the companion. A not-run observation is validated against the run's
+not-run occurrences only: a pair may also have an attempt, because repeated case ids are supported. A missing or extra entry is a refusal with a reason, never a partial join. Without a companion, every quality result for that run is `unscored` with reason
 `no-provenance-record`.
 
 ### D9 — No schema or port change in this decision
@@ -192,9 +193,10 @@ own triggers; this ADR deliberately does not take it.
 | 1 | ~~Is `(corpusVersion, casesSha256, caseId, candidate.eventId)` the stable corpus identity?~~ | M3 | **Closed 2026-10-29** — confirmed for v1; `inputId` still needs M5's export |
 | 2 | ~~Does `history.source: 'none'` carry the empty-set digest or `null`?~~ | M4 | **Closed 2026-10-28** — empty-set digest for `none`; `null` means unobserved |
 | 3 | Who exports the per-input acknowledgement — `sourceId`, `requestMessageId`, `eventId` — and in what shape? | M5 | `requestMessageId`/`eventId` may stay `null`; correlation is `missing`. The producing export of all three must be pinned before any CP05 scoring that joins an attempt to dialogue-side records (M4, 2026-11-08); eligibility must cite names, not conventions. |
+| 4 | Does `correlation: exact` describe the admitted link or the complete submitted batch (e.g. `accepted → no-acknowledgement → not-submitted`)? | M5/M4 | A partial batch can currently be recorded as `exact`; eligibility must respect the agreed distinction before CP05 scoring |
 
-Rows 1 and 2 are closed by M3's and M4's answers; row 3 is the only blocking decision left. It blocks
-CP05 scoring, not the companion's merge.
+Rows 1 and 2 are closed by M3's and M4's answers. Row 3 blocks CP05 scoring, not the companion's merge.
+Row 4 must be agreed before the eligibility path fixes the `exact` distinction.
 
 ## Re-open triggers
 

@@ -409,8 +409,8 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
         '',
         '### Not-run observations',
         '',
-        '| Case | Variant | Reason | Prepared inputs |',
-        '| --- | --- | --- | --- |',
+        '| Case | Variant | Occurrence | Reason | Prepared inputs |',
+        '| --- | --- | --- | --- | --- |',
       )
       // The run's reason is the single authority (ADR-008 D4); the index is built by
       // the same helper the parser uses, so a repeated pair cannot pick up the
@@ -422,7 +422,7 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
             buildOccurrenceKey(entry.caseId, entry.variantId, entry.occurrence),
           ) ?? '—'
         lines.push(
-          `| ${cell(entry.caseId)} | ${cell(entry.variantId)} | ${cell(reason)} | ${preparedInputs(entry.inputs)} |`,
+          `| ${cell(entry.caseId)} | ${cell(entry.variantId)} | ${entry.occurrence} | ${cell(reason)} | ${preparedInputs(entry.inputs)} |`,
         )
       }
       lines.push(
