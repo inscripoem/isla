@@ -5599,3 +5599,42 @@ entries:
         the reason index keyed without the occurrence (2 command tests red).
       not_run: >-
         No Windows host; no provider run; M5/M4 review and merge remain.
+
+  - date: "2026-11-12"
+    task: "M6-02 / #100 M5 re-review fixes — repeated case ids and rejected event ids"
+    branch: m6-02-provenance
+    change: >-
+      Removes the executed-pair refusal that M5 showed to be a false refusal:
+      `runComparison` accepts repeated case ids, so one (caseId, variantId) may
+      have an attempt and a separate not-run occurrence. The companion not-run
+      entry is validated only against the run's `notRun` occurrence. Adds a
+      runner-to-report regression for the mixed case, prints `Occurrence` in the
+      report's not-run table so same-reason occurrences are distinguishable, and
+      refuses a rejected input carrying an event id (ADR-008 D3); the stopped-batch
+      fixture now uses `eventId: null`. ADR-008 records the exact-vs-complete-batch
+      question as open decision 4.
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: []
+    commits: [7f96f81]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode under M6 supervision after M5's changes-requested
+      review at ff676ba; the fix follows M5's reproducer.
+    human_review: >-
+      The Captain approved the #140 fix plan; M5/M4 re-review and merge remain human actions.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: a855701 (main, after rebase)
+      role: "provenance 49/49 across 2 files; test:m6 232/232 in 16 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0: 1590/1590 in 76 files; typecheck clean; lint clean."
+      mutation: >-
+        Three mutations each turned their own test red, then were restored:
+        reinstating the executed-pair refusal (3 red), removing the
+        rejected-event-id refusal (1 red), removing the occurrence column (3 red).
+      not_run: >-
+        No Windows host; no provider run; M5/M4 re-review and merge remain.
