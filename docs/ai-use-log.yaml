@@ -5101,6 +5101,45 @@ entries:
       M3 implementation and shared contracts are unchanged. This does not
       establish a live model, physical audio, avatar output or Windows result.
 
+  - date: "2026-11-10"
+    task: M2-01-boundary-workaround-removal
+    branch: chore/m2-boundary-cleanup
+    member: M2
+    change: >-
+      Replace the `operator-bootstrap` failure-reason tuple with a direct string
+      union and delete the comment that explained the import-graph checker
+      workaround. The workaround existed only because the former lexer misread
+      the first quoted token after an exported declaration as a module
+      specifier; the merged declaration parser makes it unnecessary.
+    requirements: [FR-01]
+    invariants: []
+    cases: []
+    commits: [8a1c0e6]
+    agent: trae-code
+    supervision: >-
+      The supervising assistant removed a workaround M2 had recorded as
+      removable only after the checker fix merged. No production behaviour,
+      contract, dependency, manifest or deployment change was made; the local
+      `package.json` edit remains uncommitted.
+    human_review: >-
+      The Captain directed continuation of the remaining M2 work with a commit
+      per completed slice. The change remains under review; no self-approval,
+      merge or reviewer acceptance is claimed.
+    transcript_record: >-
+      No OpenCode session was used for this two-line cleanup; the supervising
+      assistant's session is the only transcript and no raw record was copied
+      into the checkout.
+    verification:
+      base: e9e7e7b (origin/main)
+      boundaries: "pnpm exec vitest run test/offline/boundaries.test.ts: 12 passed / 1 file."
+      m2: "pnpm test:m2: 93 passed / 1 file."
+      typecheck: "pnpm typecheck: passed."
+    scope: >-
+      One console source file. This does not change the bootstrap request,
+      response validation, timeout behaviour or any rendered console state, and
+      does not close #68 until the change merges. Live providers, acoustic
+      verification, Windows behaviour and durable recovery are not claimed.
+
   - date: "2026-10-31"
     task: M5-issue133-diagnostic-cli-readiness-signal
     member: M5
