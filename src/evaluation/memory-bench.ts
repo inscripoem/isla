@@ -37,6 +37,21 @@ export interface MemoryCase {
   readonly probes: readonly MemoryProbe[]
 }
 
+/**
+ * The conditions that make two memory reports comparable. A report without
+ * identity is not comparable; the fields name the QA set, snapshot and the
+ * retrieval/LLM construction, not a score.
+ */
+export interface MemoryReportIdentity {
+  readonly qaSetId: string
+  readonly qaSetSha256: string
+  readonly snapshotId: string | null
+  readonly chunking: string
+  readonly embedding: string
+  readonly retrieval: string
+  readonly llm: string | null
+}
+
 export type ProbeRun =
   | {
       readonly ran: true
@@ -58,6 +73,7 @@ export interface ProbeReport {
   readonly recallAtK: number | null
   readonly precisionAtK: number | null
   readonly answerAccuracy: number | null
+  readonly retrievedCount: number
   readonly reason?: string
 }
 
@@ -78,6 +94,7 @@ export interface MemoryReport {
   readonly memoryReportVersion: typeof MEMORY_REPORT_VERSION
   readonly generatedAt: string
   readonly k: number
+  readonly identity: MemoryReportIdentity
   readonly cases: readonly CaseReport[]
   readonly byKind: Readonly<Record<ProbeKind, KindAggregate>>
   readonly aggregates: {
@@ -109,6 +126,7 @@ function score(
       recallAtK: null,
       precisionAtK: null,
       answerAccuracy: null,
+      retrievedCount: 0,
       reason: run.reason,
     }
   }
@@ -116,20 +134,31 @@ function score(
   const expected = new Set(probe.expected)
   const top = run.retrieved.slice(0, k)
   const hits = top.filter((id) => expected.has(id)).length
+  const retrievedCount = run.retrieved.length
   const recallAtK = probe.expected.length === 0 ? null : hits / probe.expected.length
-  // No expected ids means no precision to report; an empty set is not a zero score.
-  const precisionAtK = probe.expected.length === 0 ? null : hits / k
+  // M4 2026-11-13: divide by what was actually retrieved, not by k. A sparse
+  // result must not be punished as if it had k candidates. With no retrieval
+  // precision is undefined (null), never a fabricated zero; retrievedCount keeps
+  // either definition recomputable.
+  const precisionAtK =
+    probe.expected.length === 0 || retrievedCount === 0
+      ? null
+      : hits / Math.min(k, retrievedCount)
   const answerAccuracy =
     probe.expectedAnswer === undefined ? null : run.answer === probe.expectedAnswer ? 1 : 0
   const status: ProbeStatus =
     recallAtK === null && answerAccuracy === null ? 'unassessed' : 'scored'
-  return { status, recallAtK, precisionAtK, answerAccuracy }
+  return { status, recallAtK, precisionAtK, answerAccuracy, retrievedCount }
 }
 
 export async function runMemoryBench(
   cases: readonly MemoryCase[],
   runProbe: RunMemoryProbe,
-  options: { readonly generatedAt: string; readonly k?: number },
+  options: {
+    readonly generatedAt: string
+    readonly k?: number
+    readonly identity: MemoryReportIdentity
+  },
 ): Promise<MemoryReport> {
   const k = options.k ?? DEFAULT_K
   if (!Number.isInteger(k) || k < 1) throw new RangeError('k must be a positive integer')
@@ -182,6 +211,7 @@ export async function runMemoryBench(
     memoryReportVersion: MEMORY_REPORT_VERSION,
     generatedAt: options.generatedAt,
     k,
+    identity: options.identity,
     cases: caseReports,
     byKind,
     aggregates: {
@@ -196,14 +226,27 @@ export async function runMemoryBench(
 }
 
 
+function regressed(before: number | null, after: number | null): boolean {
+  return before !== null && after !== null && after < before
+}
+
+/**
+ * Compare recall, precision and labelled answer accuracy per probe kind.
+ * Tokens and p95 latency are informational, not gates. A kind is reported once
+ * when any gated metric regresses; the report names the regressed case class.
+ */
 export function compareMemoryReports(
   baseline: MemoryReport,
   current: MemoryReport,
 ): readonly ProbeKind[] {
   return KINDS.filter((kind) => {
-    const before = baseline.byKind[kind].recallAtK
-    const after = current.byKind[kind].recallAtK
-    return before !== null && after !== null && after < before
+    const before = baseline.byKind[kind]
+    const after = current.byKind[kind]
+    return (
+      regressed(before.recallAtK, after.recallAtK) ||
+      regressed(before.precisionAtK, after.precisionAtK) ||
+      regressed(before.answerAccuracy, after.answerAccuracy)
+    )
   })
 }
 
@@ -219,6 +262,10 @@ export function writeMemoryReport(
 
   const lines = [
     `Memory report ${report.generatedAt} (k=${report.k})`,
+    `qa set: ${report.identity.qaSetId} (${report.identity.qaSetSha256})`,
+    `snapshot: ${report.identity.snapshotId ?? '—'}`,
+    `chunking: ${report.identity.chunking}; embedding: ${report.identity.embedding}; retrieval: ${report.identity.retrieval}`,
+    `llm: ${report.identity.llm ?? '—'}`,
     `recall@${report.k}: ${report.aggregates.recallAtK ?? '—'}`,
     `precision@${report.k}: ${report.aggregates.precisionAtK ?? '—'}`,
     `answer accuracy: ${report.aggregates.answerAccuracy ?? '—'}`,

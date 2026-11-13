@@ -23,6 +23,16 @@ const CASES: readonly MemoryCase[] = [
   },
 ]
 
+const IDENTITY = {
+  qaSetId: 'qa-1',
+  qaSetSha256: 'b'.repeat(64),
+  snapshotId: 'snapshot-1',
+  chunking: 'turn',
+  embedding: 'none',
+  retrieval: 'keyword',
+  llm: 'fixture',
+} as const
+
 const runGood = async (_case: MemoryCase, probe: { question: string }): Promise<ProbeRun> => {
   if (probe.question === 'q1') {
     return { ran: true, retrieved: ['a', 'c'], tokens: 10, latencyMs: 10 }
@@ -51,20 +61,25 @@ afterEach(() => {
 
 describe('M6 memory benchmark', () => {
   it('scores recall and precision, keeps unassessed and not-run distinct', async () => {
-    const report = await runMemoryBench(CASES, runGood, { generatedAt: '2026-11-10' })
+    const report = await runMemoryBench(CASES, runGood, { generatedAt: '2026-11-10', identity: IDENTITY })
     expect(report.memoryReportVersion).toBe(1)
     const probes = report.cases[0]!.probes
     expect(probes.map((probe) => probe.status)).toEqual(['scored', 'unassessed', 'scored', 'not-run'])
     expect(probes[0]?.recallAtK).toBe(0.5)
     expect(probes[0]?.precisionAtK).toBe(0.5)
+    expect(probes[0]?.retrievedCount).toBe(2)
+    expect(probes[1]?.retrievedCount).toBe(0)
+    expect(probes[2]?.precisionAtK).toBe(1)
+    expect(probes[2]?.retrievedCount).toBe(1)
     expect(probes[2]?.answerAccuracy).toBe(1)
     expect(probes[3]?.reason).toBe('no corpus')
+    expect(report.identity).toEqual(IDENTITY)
   })
 
   it('aggregates tokens per turn, p95 latency and the excluded count', async () => {
-    const report = await runMemoryBench(CASES, runGood, { generatedAt: '2026-11-10' })
+    const report = await runMemoryBench(CASES, runGood, { generatedAt: '2026-11-10', identity: IDENTITY })
     expect(report.aggregates.recallAtK).toBeCloseTo(0.75)
-    expect(report.aggregates.precisionAtK).toBeCloseTo(0.4167, 3)
+    expect(report.aggregates.precisionAtK).toBeCloseTo(0.75, 3)
     expect(report.aggregates.answerAccuracy).toBe(1)
     expect(report.aggregates.tokensPerTurn).toBe(20)
     expect(report.aggregates.p95LatencyMs).toBe(100)
@@ -75,14 +90,56 @@ describe('M6 memory benchmark', () => {
   })
 
   it('is deterministic for the same input and generatedAt', async () => {
-    const first = await runMemoryBench(CASES, runGood, { generatedAt: '2026-11-10' })
-    const second = await runMemoryBench(CASES, runGood, { generatedAt: '2026-11-10' })
+    const first = await runMemoryBench(CASES, runGood, { generatedAt: '2026-11-10', identity: IDENTITY })
+    const second = await runMemoryBench(CASES, runGood, { generatedAt: '2026-11-10', identity: IDENTITY })
     expect(JSON.stringify(first)).toBe(JSON.stringify(second))
   })
 
+  it('scores precision against the retrieved count, not k', async () => {
+    const cases: readonly MemoryCase[] = [
+      {
+        id: 'sparse',
+        sessions: [{ sessionId: 's1', turns: [{}] }],
+        probes: [{ question: 'q', expected: ['a', 'b', 'c'], kind: 'recall', k: 3 }],
+      },
+    ]
+    const report = await runMemoryBench(
+      cases,
+      async () => ({ ran: true, retrieved: ['a'], tokens: 1, latencyMs: 1 }),
+      { generatedAt: '2026-11-10', identity: IDENTITY },
+    )
+    const probe = report.cases[0]!.probes[0]!
+    expect(probe.retrievedCount).toBe(1)
+    expect(probe.recallAtK).toBeCloseTo(1 / 3)
+    expect(probe.precisionAtK).toBe(1)
+  })
+
+  it('gates precision and accuracy regressions, not only recall', async () => {
+    const good = await runMemoryBench(CASES, runGood, {
+      generatedAt: '2026-11-10',
+      identity: IDENTITY,
+    })
+    const precisionOnly = {
+      ...good,
+      byKind: {
+        ...good.byKind,
+        recall: { ...good.byKind.recall, precisionAtK: 0.1 },
+      },
+    }
+    const accuracyOnly = {
+      ...good,
+      byKind: {
+        ...good.byKind,
+        persona: { ...good.byKind.persona, answerAccuracy: 0 },
+      },
+    }
+    expect(compareMemoryReports(good, precisionOnly)).toContain('recall')
+    expect(compareMemoryReports(good, accuracyOnly)).toContain('persona')
+  })
+
   it('names the regressed probe kinds', async () => {
-    const good = await runMemoryBench(CASES, runGood, { generatedAt: '2026-11-10' })
-    const bad = await runMemoryBench(CASES, runBad, { generatedAt: '2026-11-10' })
+    const good = await runMemoryBench(CASES, runGood, { generatedAt: '2026-11-10', identity: IDENTITY })
+    const bad = await runMemoryBench(CASES, runBad, { generatedAt: '2026-11-10', identity: IDENTITY })
     expect(compareMemoryReports(good, bad)).toEqual(['recall', 'persona'])
     expect(compareMemoryReports(bad, good)).toEqual([])
   })
@@ -92,18 +149,20 @@ describe('M6 memory benchmark', () => {
     directories.push(dir)
     const json = join(dir, 'memory-report.json')
     const summary = join(dir, 'summary.txt')
-    const report = await runMemoryBench(CASES, runGood, { generatedAt: '2026-11-10' })
+    const report = await runMemoryBench(CASES, runGood, { generatedAt: '2026-11-10', identity: IDENTITY })
     writeMemoryReport(report, json, summary)
     expect(JSON.parse(readFileSync(json, 'utf8')).memoryReportVersion).toBe(1)
     const text = readFileSync(summary, 'utf8')
     expect(text).toContain('recall@3')
     expect(text).toContain('excluded (not run): 1')
+    expect(text).toContain('qa set: qa-1')
   })
 
   it('refuses a case without probes', async () => {
     await expect(
       runMemoryBench([{ id: 'empty', sessions: [], probes: [] }], runGood, {
         generatedAt: '2026-11-10',
+        identity: IDENTITY,
       }),
     ).rejects.toThrow('has no probes')
   })

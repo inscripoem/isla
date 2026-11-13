@@ -71,7 +71,12 @@ episode or topic semantics.
 ### D7 — Evaluation is a separate artifact
 
 `runMemoryBench` writes `memoryReportVersion: 1` (JSON + summary), not `RecordedRunV1`: the frozen
-selection-run schema has no recall/precision/accuracy fields. `unassessed` and `not-run` remain
+selection-run schema has no recall/precision/accuracy fields. The report carries identity fields (QA
+set id + SHA-256, snapshot, chunking, embedding, retrieval and LLM identity) beside the metrics, so two
+runs are comparable only under named conditions. `precision@k` divides by
+`min(k, retrievedCount)`, not by `k`, and each probe records `retrievedCount`; an empty retrieval has
+`null` precision, never a fabricated zero. `compareMemoryReports` gates recall, precision and labelled
+answer accuracy; tokens per turn and p95 latency are informational. `unassessed` and `not-run` remain
 distinct; no zero substitution.
 
 ## Consequences
