@@ -5388,7 +5388,7 @@ entries:
       Draft to Ready for Review.
     human_review: >-
       All 12 cases in m3-selection-v1.1 now carry status: "reviewed" and
-      provenance: "human" signed by shallight (selection-001 on 2026-10-23;
+      provenance: "human" recorded by shallight (selection-001 on 2026-10-23;
       selection-002..selection-012 on 2026-11-13) with partial intent coverage.
       Merge remains human-gated.
     transcript_record: >-
@@ -5403,6 +5403,69 @@ entries:
         test:m3 91/91, test:trace 41/41, and full pnpm verify passed (typecheck,
         lint 0/0 on 273 files, vitest 1565/1565 across 74 files, vite build).
     scope: >-
-      Detached human review sign-off for selection-002..selection-012 and
+      Detached human review record for selection-002..selection-012 and
       associated test assertions; live provider execution and G4 measurement
       remain separate opt-in steps.
+
+  - date: "2026-11-14"
+    task: M3-02-issue98-peer-review-remediation
+    branch: feat/m3-98-corpus-and-variants
+    member: shallight (M3)
+    change: >-
+      Address M6, M5, and M4 peer-review findings on PR #155 without altering
+      any committed request, label, review, or manifest JSON file
+      (casesSha256 = c7c1b19d875e7510210e156656ad4749c33c82d6b54dbb1ee2bb7a6b9f68fa63).
+      Enforce https or loopback-only plain http base URLs without embedded
+      credentials (B5), add configurable positive-integer maxTokens defaulting
+      to 256 (B8), normalize /chat/completions endpoint URLs so API-root and
+      full-endpoint configurations both resolve cleanly (M5), cap response
+      payload size at 65,536 characters without body echo, track live vs
+      synthetic/mock SelectionPort provenance so mock or stub runs always
+      report certifiesCorpus: false (B1), delete the hand-written keyword mock
+      heuristic and offline superiority assertions in favour of non-certifying
+      runner mechanics checks (B2), assert exact character-for-character system
+      prompt parity against prompts/decision/response-plan-v1.md (B6), and
+      document recorded self-review plus M4 (@L01nki1) 12-case independent
+      cross-review and the initial pre-tuning split freeze in
+      test/fixtures/decision/v1/README.md (B3, B4).
+    requirements: [FR-01, FR-03, NFR-03, NFR-04]
+    invariants: [INV-07, INV-13, INV-14, INV-16]
+    cases: [C-06, C-11, C-13, C-14, C-15]
+    commits: [c681c9e6dfa55b6a1f1ad38bf0d7af008f2ebc5d]
+    agent: opencode/deepseek-v4-flash
+    opencode_version: 1.19.5
+    model_cli_id: "personal-deepseek/deepseek-v4-flash"
+    model: deepseek-v4-flash
+    resolved_model: deepseek-flash
+    provider: personal-deepseek
+    variant: xhigh
+    launch_flags: ["--pure", "--agent", "build", "-m", "personal-deepseek/deepseek-v4-flash", "--variant", "xhigh", "--format", "json"]
+    sessions:
+      - ses_e2961c091ffeD2MEtaLtxav74N
+    supervision: >-
+      Captain reviewed and approved the point-by-point remediation plan before
+      execution. All 9 touched files in commit c681c9e were inspected
+      line-by-line by the supervisor prior to commit; all 12 corpus request,
+      label, review, and manifest JSON files remained byte-identical to cb156c4.
+    human_review: >-
+      Addresses M6 and M5 CHANGES_REQUESTED items and records M4 (@L01nki1)'s
+      completed 12/12 independent label cross-review at cb156c4; sequenced to
+      rebase after PR #156 lands on main. Merge remains human-gated.
+    transcript_record: >-
+      Exported OpenCode session record ses_e2961c091ffeD2MEtaLtxav74N and JSONL
+      stream logs are stored outside the repository checkout in the supervisor
+      scratch evidence directory; zero secret tokens appear in repository files
+      or exported evidence.
+    verification:
+      platform: macOS arm64 (Darwin)
+      base: cb156c426c848cdecf2789029ac4c2957f45352d
+      results: >-
+        gate:ai-use-log passed, live-config 26/26 (8 live cases skipped cleanly),
+        test:m3 100/100, test:trace 41/41, and full pnpm verify passed
+        (typecheck, lint 0/0 on 273 files, vitest 1574/1574 across 74 files,
+        vite build).
+    scope: >-
+      Offline provider-adapter hardening, runner evidence-provenance gating,
+      non-certifying mechanics test cleanup, prompt parity check, and corpus
+      governance documentation; live provider execution and G4 quality
+      comparisons remain separate opt-in steps requiring real credentials.
