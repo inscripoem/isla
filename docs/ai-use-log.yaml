@@ -5605,3 +5605,39 @@ entries:
       not_run: >-
         No M4 derive/corpora, M5 runtime wiring, merge, live data or checkpoint
         acceptance. M5 has not answered the ADR-009 reservation request.
+
+  - date: "2026-11-13"
+    task: "M6 memory AI-use wording correction"
+    branch: m6-memory-foundation
+    change: >-
+      Replace "Captain" with "M6" in the ten places the memory-foundation entries
+      used it, so the supervising human is named consistently with the owner. Only
+      the eight memory-branch entries changed; other owners' historical entries and
+      the team documents keep their wording. No code, test, requirements or
+      behaviour change.
+    requirements: [FR-06, NFR-03, NFR-05]
+    invariants: []
+    cases: []
+    commits: [f3806f0]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      M6 asked for the wording correction and approved this commit and its push to
+      the existing draft PR #157. The correction is limited to M6's own entries.
+    human_review: >-
+      M6 approved the wording correction. No review, merge or checkpoint acceptance
+      is claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id is
+      claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main)
+      focused: "G6 with origin/main as the base; no test count changes because the change is text-only."
+      role: "test:trace 41/41; readiness 47/47; test:m6 215/215."
+      full_suite: "pnpm verify exit 0: 1578/1578 in 76 files."
+      mutation: "Not applicable: no executable behaviour changed."
+      not_run: >-
+        No AGENTS.md amendment (M6 deferred it), no rewrite of other owners'
+        entries, no merge.
