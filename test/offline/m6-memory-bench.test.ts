@@ -46,6 +46,13 @@ const runGood = async (_case: MemoryCase, probe: { question: string }): Promise<
   return { ran: false, reason: 'no corpus' }
 }
 
+const runSwap = async (evalCase: MemoryCase, probe: { question: string }): Promise<ProbeRun> => {
+  if (probe.question === 'q1') {
+    return { ran: true, retrieved: ['c', 'd'], tokens: 10, latencyMs: 10 }
+  }
+  return runGood(evalCase, probe)
+}
+
 const runBad = async (evalCase: MemoryCase, probe: { question: string }): Promise<ProbeRun> => {
   if (probe.question === 'q1') return { ran: true, retrieved: [], tokens: 10, latencyMs: 10 }
   if (probe.question === 'q3') {
@@ -135,6 +142,33 @@ describe('M6 memory benchmark', () => {
     }
     expect(compareMemoryReports(good, precisionOnly)).toContain('recall')
     expect(compareMemoryReports(good, accuracyOnly)).toContain('persona')
+  })
+
+  it('changes recall when the retrieval strategy changes', async () => {
+    const good = await runMemoryBench(CASES, runGood, {
+      generatedAt: '2026-11-10',
+      identity: IDENTITY,
+    })
+    const swapped = await runMemoryBench(CASES, runSwap, {
+      generatedAt: '2026-11-10',
+      identity: IDENTITY,
+    })
+    expect(swapped.byKind.recall.recallAtK).not.toBe(good.byKind.recall.recallAtK)
+    expect(compareMemoryReports(good, swapped)).toContain('recall')
+  })
+
+  it('is identical across a rebuilt case fixture (fixture-level restart proxy)', async () => {
+    const first = await runMemoryBench(CASES, runGood, {
+      generatedAt: '2026-11-10',
+      identity: IDENTITY,
+    })
+    const rebuilt = JSON.parse(JSON.stringify(CASES)) as MemoryCase[]
+    const second = await runMemoryBench(rebuilt, runGood, {
+      generatedAt: '2026-11-10',
+      identity: IDENTITY,
+    })
+    // Fixture-level proxy only: real restart/rebuild invariance awaits M4/M5 store wiring.
+    expect(JSON.stringify(second)).toBe(JSON.stringify(first))
   })
 
   it('names the regressed probe kinds', async () => {

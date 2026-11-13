@@ -59,14 +59,18 @@ overwrites. M5 decides whether to drop the conflicting write.
 deletion and no default retention period. Retention applies to the derived/owner/state/audience tables
 only; `events` and `deliveries` are append-only and are never deleted by this API. Tests assert that
 both deletion calls leave the events and deliveries counts unchanged, and that constructing a store
-performs no deletion. Retraction (a semantic marker with evidence retained) stays separate from
-deletion (physical removal).
+performs no deletion. `deleteAudience` is audience-targeted; `deleteOlderThan` is **global by age**.
+“Retention never removes another audience’s rows” therefore needs M5/M4 to confirm whether retention is
+global-by-age or per-audience; the current code implements the former. Retraction (a semantic marker
+with evidence retained) stays separate from deletion (physical removal).
 
 ### D6 — Derived memory is rebuilt through M4’s callbacks
 
 `rebuildDerived` clears the derived tables and replays events through M4-supplied `deriveEpisodes`
-and optional `deriveTopics` functions, then writes the cursor from the last event. M6 does not invent
-episode or topic semantics.
+and optional `deriveTopics` functions. Under the same `extractor_version` it writes
+`max(persisted, lastSeq)`, so a smaller event set cannot lower the cursor; under a new version it
+rebuilds the rows and resets the cursor under that version. M6 does not invent episode or topic
+semantics.
 
 ### D7 — Evaluation is a separate artifact
 
@@ -81,11 +85,14 @@ distinct; no zero substitution.
 
 ## Consequences
 
-- The design note must be updated: the cursor is durable for store callers, owner identity is
-  permitted only on a durable+consent binding, and derived/owner/state rows can be deleted explicitly.
-- M5 must enforce consent/durability and own the operator entry (`forgetAudience`, retention call,
-  audience export).
-- M4 must supply `deriveEpisodes`/`deriveTopics`, the state projection and the memory corpora.
+- The design note must be updated: the cursor is durable and extractor-version-scoped for store
+  callers; owner identity is permitted only on a **consenting** binding, and `durable` remains M4’s
+  cross-session recall gate, not the storage owner gate; derived/owner/state rows can be deleted
+  explicitly.
+- M5 must enforce its own durability/consent gate and own the operator entry (`forgetAudience`,
+  retention call, audience export); the storage boundary refuses a non-consenting owner write.
+- M4 must supply `deriveEpisodes`/`deriveTopics`, the state projection and the **real memory corpora**.
+  Until those corpora exist, X07 is fixture-only and must not be reported as a quality result.
 - The evidence tables remain append-only; a source-level cascade is **deferred** until the NFR-05
   deletion policy exists.
 - No case or invariant ID is allocated; trace rows use “ids pending” until #25 allocates them.

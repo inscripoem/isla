@@ -3,7 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createMemoryStore } from '../../src/storage'
-import { migrate, openDatabase } from '../../src/storage/sqlite'
+import {
+  BUILT_IN_MIGRATIONS,
+  migrate,
+  openDatabase,
+  readSchemaVersion,
+} from '../../src/storage/sqlite'
 import { fixtureRuntimeEvent } from '../support/fixture-data'
 
 const directories: string[] = []
@@ -88,6 +93,52 @@ describe('M6 memory store — schema and derived memory', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]?.summary).toBe('updated')
     expect(rows[0]?.sourceTurnIds).toEqual(['t1', 't2'])
+  })
+
+  it('upgrades a v2 database to v3 with existing evidence intact', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'isla-memory-migrate-'))
+    directories.push(dir)
+    const dbPath = join(dir, 'isla.db')
+    const database = openDatabase(dbPath)
+    open.push(database)
+    const io = { dbPath, backupDir: join(dir, 'backups') }
+    migrate(
+      database,
+      io,
+      BUILT_IN_MIGRATIONS.filter((migration) => migration.version <= 2),
+    )
+    expect(readSchemaVersion(database)).toBe(2)
+    database
+      .prepare(`
+        INSERT INTO events
+          (session_id, event_id, seq, timestamp_ms, epoch, turn_id, segment_id, output_id,
+           type, source_module, versions, payload)
+        VALUES ('s1', 'ev1', 1, 1000, 1, 't1', 'seg1', NULL, 'input.received', 'M5', NULL, '{"text":"hello"}')
+      `)
+      .run()
+    database
+      .prepare(`
+        INSERT INTO deliveries
+          (session_id, turn_id, segment_id, modality, text_hash, text, output_id, receipt_id,
+           classification, terminal_outcome, event_seq, segment_index, persona_profile_id,
+           persona_profile_version)
+        VALUES ('s1', 't1', 'seg1', 'audio', 'hash', 'hello', NULL, NULL,
+                'fully-delivered', 'completed', 1, 0, 'p', '1')
+      `)
+      .run()
+    expect(migrate(database, io).to).toBe(3)
+    const counts = database
+      .prepare('SELECT (SELECT COUNT(*) FROM events) AS events, (SELECT COUNT(*) FROM deliveries) AS deliveries')
+      .get() as { events: number; deliveries: number }
+    expect(counts).toEqual({ events: 1, deliveries: 1 })
+    const projectionColumns = (
+      database.prepare('PRAGMA table_info(projection_state)').all() as { name: string }[]
+    ).map((column) => column.name)
+    const ownerColumns = (
+      database.prepare('PRAGMA table_info(delivery_owner)').all() as { name: string }[]
+    ).map((column) => column.name)
+    expect(projectionColumns).toContain('extractor_version')
+    expect(ownerColumns).toContain('created_at_ms')
   })
 
   it('persists the projection cursor across reopen', () => {
@@ -326,10 +377,17 @@ describe('M6 memory store — audience, owner and state', () => {
     const day = 24 * 60 * 60 * 1000
     store.upsertEpisode(episode('old', 'aud-1', 0))
     store.upsertEpisode(episode('new', 'aud-1', 10 * day))
+    store.upsertEpisode(episode('other', 'aud-2', 10 * day))
+    store.upsertTopic(topic('other-topic', 'aud-2', 10 * day))
     store.recordSessionAudience('old-s', { audienceId: 'aud-1', durable: true, consent: true }, 0)
     store.recordSessionAudience('new-s', { audienceId: 'aud-1', durable: true, consent: true }, 10 * day)
+    store.recordSessionAudience('other-s', { audienceId: 'aud-2', durable: true, consent: true }, 10 * day)
     store.recordDeliveryOwner({ sessionId: 'old-s', turnId: 't', segmentId: 's' }, 'aud-1', 0)
     store.recordDeliveryOwner({ sessionId: 'new-s', turnId: 't', segmentId: 's' }, 'aud-1', 10 * day)
+    store.recordDeliveryOwner({ sessionId: 'other-s', turnId: 't', segmentId: 's' }, 'aud-2', 10 * day)
+    const state = { mood: 0, stress: 0, energy: 0, attachment: 0, confidence: 0 }
+    store.writeState({ sessionId: 'old-s', audienceId: 'aud-1', state, expectedVersion: 0, nowMs: 0 })
+    store.writeState({ sessionId: 'other-s', audienceId: 'aud-2', state, expectedVersion: 0, nowMs: 10 * day })
     open[0]!
       .prepare(`
         INSERT INTO events
@@ -352,11 +410,20 @@ describe('M6 memory store — audience, owner and state', () => {
     expect(counts.derived_episode).toBe(1)
     expect(counts.session_audience).toBe(1)
     expect(counts.delivery_owner).toBe(1)
+    expect(counts.session_state).toBe(1)
     expect(store.ownerOf({ sessionId: 'old-s', turnId: 't', segmentId: 's' })).toBeNull()
     expect(store.ownerOf({ sessionId: 'new-s', turnId: 't', segmentId: 's' })).toBe('aud-1')
     expect(store.readEpisodes({ audienceId: 'aud-1', limit: 10 }).map((row) => row.id)).toEqual([
       'new',
     ])
+    expect(store.readEpisodes({ audienceId: 'aud-2', limit: 10 }).map((row) => row.id)).toEqual([
+      'other',
+    ])
+    expect(store.readTopics({ audienceId: 'aud-2', limit: 10 }).map((row) => row.id)).toEqual([
+      'other-topic',
+    ])
+    expect(store.ownerOf({ sessionId: 'other-s', turnId: 't', segmentId: 's' })).toBe('aud-2')
+    expect(store.readState('other-s')).not.toBeNull()
     const evidence = open[0]!
       .prepare('SELECT (SELECT COUNT(*) FROM events) AS events, (SELECT COUNT(*) FROM deliveries) AS deliveries')
       .get() as { events: number; deliveries: number }
