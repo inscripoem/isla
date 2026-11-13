@@ -5678,3 +5678,47 @@ entries:
         the clause was restored.
       not_run: >-
         No Windows host; no live provider; M5 re-review and merge remain.
+  - date: "2026-11-13"
+    task: "M6-140-M5-re-review-fix"
+    branch: m6-02-provenance
+    change: >-
+      Address M5's 2026-11-13 P2 findings on PR #140. The provenance parser now
+      refuses two accepted inputs that share a requestMessageId or eventId within
+      one input list: a re-used request message id is a duplicate, and an
+      admission event id is created once. `accepted -> duplicate` remains valid.
+      The report command refuses an `--output` path equal to `--provenance`
+      before reading or writing, so the companion remains intact. Negative
+      regressions cover both repeated-acceptance keys and the same-path
+      destination. ADR-008 gains a producer-boundary note: the parser does not
+      infer the producing variant or attempt boundary from a status or a
+      free-text reason; CP05 scoring still needs the separate named
+      batch-completeness condition (#143). No schema, port, scoring or threshold
+      change.
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    cases: []
+    commits: [e981b79]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      The human M6 owner requested the fix and authorized the local change and
+      re-submission. The agent edited the owned evaluation files; the owner
+      reviewed the scope. No merge is claimed.
+    human_review: >-
+      The human M6 owner authorized the fix and re-submission; M5 re-review and
+      merge remain human actions.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id
+      is claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: e540bb4 (main at fix start); 216dda8 (PR head before the fix)
+      focused: "provenance 56/56 across 2 files."
+      role: "test:m6 242/242 in 16 files; trace 41/1; readiness 47/3."
+      full_suite: "pnpm verify exit 0: 1605/1605 in 76 files; typecheck clean; lint clean."
+      mutation: >-
+        Disabling the repeated-accepted check turned the two new requests red;
+        disabling the same-path check turned the command test red; both restored.
+      not_run: >-
+        No Windows host; no live provider; M5 re-review and merge remain.
