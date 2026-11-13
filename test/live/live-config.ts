@@ -23,6 +23,8 @@ export const LIVE_TEXT_PROVIDER_ENV = {
 } as const
 
 /** M3 general-model selection/reaction provider environment. */
+export const LIVE_DECISION_MAX_TOKENS_ENV = 'ISLA_LIVE_DECISION_MAX_TOKENS'
+
 export const LIVE_DECISION_PROVIDER_ENV = {
   /** Chat-completions base URL, without a trailing slash. */
   baseUrl: 'ISLA_LIVE_DECISION_BASE_URL',
@@ -33,6 +35,8 @@ export const LIVE_DECISION_PROVIDER_ENV = {
 } as const
 
 /** M3 dedicated Jev model environment for NFR-03 comparison. */
+export const LIVE_JEV_MAX_TOKENS_ENV = 'ISLA_LIVE_JEV_MAX_TOKENS'
+
 export const LIVE_JEV_PROVIDER_ENV = {
   /** Chat-completions base URL, without a trailing slash. */
   baseUrl: 'ISLA_LIVE_JEV_BASE_URL',
@@ -101,6 +105,8 @@ export interface LiveProviderConfig {
   baseUrl: string
   model: string
   apiKey: string
+  /** Optional positive completion-token limit; absent uses the adapter default. */
+  maxTokens?: number
 }
 
 export interface LiveProviderConfigReport {
@@ -116,9 +122,32 @@ interface LiveProviderEnv {
   readonly apiKey: string
 }
 
+function isLoopbackHostname(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '[::1]' ||
+    hostname === '::1'
+  )
+}
+
+/** Accepts https anywhere, or plain http only on loopback hosts. */
+function isLoopbackSafeBaseUrl(baseUrl: string): boolean {
+  let url: URL
+  try {
+    url = new URL(baseUrl)
+  } catch {
+    return false
+  }
+  if (url.username !== '' || url.password !== '') return false
+  if (url.protocol === 'https:') return true
+  return url.protocol === 'http:' && isLoopbackHostname(url.hostname)
+}
+
 function readModelProviderConfig(
   env: NodeJS.ProcessEnv,
   providerEnv: LiveProviderEnv,
+  maxTokensEnv: string,
   label: string,
 ): LiveProviderConfigReport {
   const missing = Object.values(providerEnv).filter((name) => blank(env[name]))
@@ -134,12 +163,27 @@ function readModelProviderConfig(
   const model = (env[providerEnv.model] ?? '').trim()
   const apiKey = (env[providerEnv.apiKey] ?? '').trim()
 
-  if (!/^https?:\/\//i.test(baseUrl)) {
+  if (!isLoopbackSafeBaseUrl(baseUrl)) {
     return {
       available: false,
-      reason: `${providerEnv.baseUrl} must be an http(s) URL`,
+      reason: `${providerEnv.baseUrl} must be an https URL or loopback http (localhost, 127.0.0.1, [::1])`,
       config: null,
     }
+  }
+
+  const rawMaxTokens = env[maxTokensEnv]
+  let maxTokens: number | undefined
+  if (!blank(rawMaxTokens)) {
+    const value = (rawMaxTokens ?? '').trim()
+    const parsed = /^[1-9][0-9]*$/.test(value) ? Number(value) : Number.NaN
+    if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+      return {
+        available: false,
+        reason: `${maxTokensEnv} must be a positive integer`,
+        config: null,
+      }
+    }
+    maxTokens = parsed
   }
 
   return {
@@ -149,6 +193,7 @@ function readModelProviderConfig(
       baseUrl: baseUrl.replace(/\/+$/, ''),
       model,
       apiKey,
+      ...(maxTokens === undefined ? {} : { maxTokens }),
     },
   }
 }
@@ -156,11 +201,21 @@ function readModelProviderConfig(
 export function readLiveDecisionProviderConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): LiveProviderConfigReport {
-  return readModelProviderConfig(env, LIVE_DECISION_PROVIDER_ENV, 'live decision')
+  return readModelProviderConfig(
+    env,
+    LIVE_DECISION_PROVIDER_ENV,
+    LIVE_DECISION_MAX_TOKENS_ENV,
+    'live decision',
+  )
 }
 
 export function readLiveJevProviderConfig(
   env: NodeJS.ProcessEnv = process.env,
 ): LiveProviderConfigReport {
-  return readModelProviderConfig(env, LIVE_JEV_PROVIDER_ENV, 'live jev')
+  return readModelProviderConfig(
+    env,
+    LIVE_JEV_PROVIDER_ENV,
+    LIVE_JEV_MAX_TOKENS_ENV,
+    'live jev',
+  )
 }
