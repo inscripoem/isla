@@ -6,6 +6,7 @@ import type {
   DeliveryClassification,
   EventStorePort,
   HistoryQueryPort,
+  InputAck,
   InputSource,
   InputSubmitMessage,
   RuntimeEvent,
@@ -96,11 +97,23 @@ import type { ProductionPeers } from './production'
  *    produced by the attached consumer's own playback machine; the adapter never
  *    fabricates one, and a consumer that confirms nothing leaves the delivery
  *    uncommitted and the attempt non-completed.
- *  - **Timing stays unknown.** Every stage timing and `totalMs` is `null`:
- *    `CycleTimings` are peer budgets, not observed durations, and no agreed
- *    method exists yet for `firstAudibleMs`/`stopToSilenceMs` (M1/M2) or for
- *    per-stage wall time (issue #41). A successful turn's wall time is never
- *    reported as input-to-first-audible.
+ *  - **Timing is reported only where the runtime records both endpoints.** The
+ *    observation and the record carry `submitMs` (`input.accepted` ->
+ *    `turn.started`), `planMs` (`turn.started` -> `selection.plan`) and
+ *    `dialogueMs` (`selection.plan` -> `dialogue.result`). A missing or repeated
+ *    endpoint, a multi-input batch whose dispatched input is ambiguous, or a
+ *    reversed event order is `null`, never zero. `planMs` is `null` today
+ *    because the coordinator persists the plan before starting the turn;
+ *    `synthesisMs`, `firstAudibleMs` and `stopToSilenceMs` have no observable
+ *    start/end pair at this boundary and stay `null`. `totalMs` also stays
+ *    `null`: a successful turn's wall time is never reported as
+ *    input-to-first-audible.
+ *  - **Admission is exported per input from the acknowledgement.** Each attempt
+ *    lists its prepared inputs in submission order with the ack's request message
+ *    id, event id and status; a stopped batch keeps its unsent entries as
+ *    `not-submitted`. `sourceId`/`inputId` stay `null` with a recorded reason
+ *    because the prepared plan carries no corpus metadata, and they are never
+ *    inferred from the runtime `source` channel (ADR-008 D5).
  *  - **Usage is joined by full invocation identity.** Each `provider.call` event
  *    is one M5 port invocation; a `provider.usage.late` event fills the same
  *    invocation rather than adding an attempt. Port invocation counts are not
@@ -168,6 +181,46 @@ export interface EvaluationInvocationObservation {
   readonly usageMissing: boolean | null
 }
 
+/**
+ * One prepared input's observed admission outcome. The status is explicit and
+ * is never inferred from text, array position or the runtime `source` channel.
+ *
+ * - `accepted` / `duplicate`: the runtime returned an event id; the input was
+ *   admitted (a duplicate reuses the id of the already-admitted original).
+ * - `rejected`: the runtime answered with a refusal; there is no event id.
+ * - `no-acknowledgement`: the submission threw, so no acknowledgement and no
+ *   event id were observed.
+ * - `not-submitted`: the batch stopped before this prepared input was sent.
+ */
+export type EvaluationInputAckStatus =
+  | 'accepted'
+  | 'duplicate'
+  | 'rejected'
+  | 'no-acknowledgement'
+  | 'not-submitted'
+
+export interface EvaluationInputAcknowledgement {
+  /** The submit message id, or `null` for an input that was never submitted. */
+  readonly requestMessageId: string | null
+  /** The acknowledgement's event id for accepted/duplicate; `null` otherwise. */
+  readonly eventId: string | null
+  readonly status: EvaluationInputAckStatus
+  /**
+   * The adapter clock when the acknowledgement returned; `null` when no
+   * acknowledgement returned (a thrown submission or an unsent input).
+   */
+  readonly admittedAtMs: number | null
+  /**
+   * Corpus-side source identity. Always `null` here: the prepared plan carries
+   * only source/text/actorId, so the adapter has no corpus metadata to bind.
+   */
+  readonly sourceId: string | null
+  /** Corpus identity tuple. Always `null` until corpus metadata is supplied. */
+  readonly inputId: string | null
+  /** Why `sourceId`/`inputId` are null; `null` when the identity is observed. */
+  readonly identityReason: string | null
+}
+
 export interface EvaluationAttemptObservation {
   /** The generated session id, so a caller can retrieve the raw evidence. */
   readonly sessionId: string
@@ -189,6 +242,20 @@ export interface EvaluationAttemptObservation {
   }[]
   readonly invocations: readonly EvaluationInvocationObservation[]
   readonly portInvocations: EvaluationPortInvocations
+  /**
+   * One entry per prepared input, in submission order. Entries after a stopped
+   * batch stay `not-submitted`; a submission that threw is
+   * `no-acknowledgement`. The acknowledgement, not the runtime `source`
+   * channel, is the admission evidence.
+   */
+  readonly inputs: readonly EvaluationInputAcknowledgement[]
+  /**
+   * Stage durations observed from this attempt's persisted events. A missing or
+   * ambiguous endpoint, or an interval whose recorded event order is reversed,
+   * is `null` — never zero and never inferred. `synthesisMs`, `firstAudibleMs`
+   * and `stopToSilenceMs` are not observable at this boundary and stay `null`.
+   */
+  readonly timings: StageTiming
   /**
    * The dialogue port's projected generation/discard accounting for this attempt,
    * in order. Observational only: it adds no storage write of its own (M5 owns the
@@ -275,14 +342,13 @@ export interface EvaluationAdapter {
   runVariant(variant: Variant, evalCase: EvalCase): Promise<VariantRun>
 }
 
-const NO_TIMING: StageTiming = {
-  submitMs: null,
-  planMs: null,
-  dialogueMs: null,
-  synthesisMs: null,
-  firstAudibleMs: null,
-  stopToSilenceMs: null,
-}
+/**
+ * Recorded reason for the unobserved corpus identity. The prepared plan carries
+ * only source/text/actorId, so `sourceId`/`inputId` cannot be bound; inferring
+ * them from the runtime `source` channel is forbidden (ADR-008 D5).
+ */
+export const INPUT_IDENTITY_UNAVAILABLE_REASON =
+  'the prepared input carries only source, text and actorId; the corpus sourceId and inputId are not supplied and are never inferred from the runtime source channel'
 
 const OPERATOR_CONTEXT: TrustedControlContext = {
   connectionId: 'evaluation-adapter-control',
@@ -439,6 +505,62 @@ function readEvidence(
   const turnDeliveries =
     turnId === null ? [] : deliveries.filter((delivery) => delivery.turnId === turnId)
   return { stopped, dependencyFailures, turnEndStatus, dialogueEndStatus, turnDeliveries }
+}
+
+/**
+ * Returns the attempt's only event of `type`, or `null` when none or more than
+ * one exists. A repeated endpoint is ambiguous: the adapter never picks one by
+ * array position.
+ */
+function singleEvent(events: readonly RuntimeEvent[], type: string): RuntimeEvent | null {
+  let found: RuntimeEvent | null = null
+  for (const event of events) {
+    if (event.type !== type) continue
+    if (found !== null) return null
+    found = event
+  }
+  return found
+}
+
+/**
+ * A duration between two recorded endpoints, or `null` when either endpoint is
+ * missing, the append order is not forward, or the timestamp delta is negative.
+ * A reversed interval is not a duration — it is never reported as zero.
+ */
+function intervalMs(earlier: RuntimeEvent | null, later: RuntimeEvent | null): number | null {
+  if (earlier === null || later === null) return null
+  if (later.seq <= earlier.seq) return null
+  const delta = later.timestampMs - earlier.timestampMs
+  return delta >= 0 ? delta : null
+}
+
+/**
+ * Stage timings observable from one attempt's persisted events.
+ *
+ * - `submitMs`: the admitted input's `input.accepted` -> `turn.started`. A batch
+ *   with zero or several admitted inputs leaves the dispatched input ambiguous,
+ *   so the interval is `null`.
+ * - `planMs`: `turn.started` -> `selection.plan`. The current coordinator persists
+ *   the plan before starting the turn, so this interval is reversed today and is
+ *   reported `null` rather than a negative or invented duration.
+ * - `dialogueMs`: `selection.plan` -> `dialogue.result`.
+ *
+ * A missing or repeated endpoint, or a reversed interval, is `null`. The three
+ * remaining stages have no start/end pair at this boundary and stay `null`.
+ */
+export function deriveStageTimings(events: readonly RuntimeEvent[]): StageTiming {
+  const accepted = singleEvent(events, 'input.accepted')
+  const turnStarted = singleEvent(events, 'turn.started')
+  const plan = singleEvent(events, 'selection.plan')
+  const dialogueResult = singleEvent(events, 'dialogue.result')
+  return {
+    submitMs: intervalMs(accepted, turnStarted),
+    planMs: intervalMs(turnStarted, plan),
+    dialogueMs: intervalMs(plan, dialogueResult),
+    synthesisMs: null,
+    firstAudibleMs: null,
+    stopToSilenceMs: null,
+  }
 }
 
 /**
@@ -1098,24 +1220,68 @@ export function createEvaluationAdapter(options: EvaluationAdapterOptions): Eval
         context: { ...INPUT_CONTEXT, actorId: prepared.actorId },
       }))
 
+      const inputObservations: EvaluationInputAcknowledgement[] = []
       let acceptedInputs = 0
       let admissionFailure: string | null = null
       for (let index = 0; index < inputsToAdmit.length; index += 1) {
         const { message, context } = inputsToAdmit[index]
-        let ack: Awaited<ReturnType<typeof composition.coordinator.endpoint.submitInput>>
+        let ack: InputAck
         try {
           ack = await composition.coordinator.endpoint.submitInput(message, context)
         } catch (error) {
+          inputObservations.push({
+            requestMessageId: message.messageId,
+            eventId: null,
+            status: 'no-acknowledgement',
+            admittedAtMs: null,
+            sourceId: null,
+            inputId: null,
+            identityReason: INPUT_IDENTITY_UNAVAILABLE_REASON,
+          })
           admissionFailure =
             `could not admit case input ${index + 1} of ${inputsToAdmit.length}: ${describeError(error)}`
           break
         }
+        const admittedAtMs = clock.nowMs()
         if (ack.status === 'rejected') {
+          inputObservations.push({
+            requestMessageId: ack.requestMessageId,
+            eventId: null,
+            status: 'rejected',
+            admittedAtMs,
+            sourceId: null,
+            inputId: null,
+            identityReason: INPUT_IDENTITY_UNAVAILABLE_REASON,
+          })
           admissionFailure =
             `case input ${index + 1} of ${inputsToAdmit.length} was rejected before selection (${ack.code}): ${ack.message}`
           break
         }
+        inputObservations.push({
+          requestMessageId: ack.requestMessageId,
+          eventId: ack.eventId,
+          status: ack.status,
+          admittedAtMs,
+          sourceId: null,
+          inputId: null,
+          identityReason: INPUT_IDENTITY_UNAVAILABLE_REASON,
+        })
         acceptedInputs += 1
+      }
+      // A batch stops after the first failure; every prepared input that was
+      // never sent stays explicit rather than disappearing from the order.
+      if (admissionFailure !== null) {
+        for (let index = inputObservations.length; index < inputsToAdmit.length; index += 1) {
+          inputObservations.push({
+            requestMessageId: null,
+            eventId: null,
+            status: 'not-submitted',
+            admittedAtMs: null,
+            sourceId: null,
+            inputId: null,
+            identityReason: INPUT_IDENTITY_UNAVAILABLE_REASON,
+          })
+        }
       }
 
       // Nothing was accepted: the case is still a not-run, exactly as the single
@@ -1160,6 +1326,7 @@ export function createEvaluationAdapter(options: EvaluationAdapterOptions): Eval
       const outputConfirmation = composition.coordinator.outputConfirmation()
       const invocations = joinInvocations(events)
       const evidence = readEvidence(events, deliveries, cycle?.turnId ?? null)
+      const timings = deriveStageTimings(events)
 
       const mapped =
         admissionFailure === null
@@ -1220,6 +1387,10 @@ export function createEvaluationAdapter(options: EvaluationAdapterOptions): Eval
               reaction: metrics.reactionAttempts,
               dialogue: metrics.dialogueAttempts,
             },
+            // Copied so a consumer cannot revise the record through the
+            // observation it was handed.
+            inputs: inputObservations.map((input) => ({ ...input })),
+            timings: { ...timings },
             /*
              * The diagnostic cutoff: these two arrays are copied immediately
              * before onObservation runs. A later rejection of the forwarded
@@ -1288,7 +1459,9 @@ export function createEvaluationAdapter(options: EvaluationAdapterOptions): Eval
         variantId: requested.id,
         cold: false,
         outcome: mapped.outcome,
-        timing: { ...NO_TIMING },
+        // Only intervals recorded by this attempt are reported; missing or
+        // reversed endpoints stay null and `totalMs` remains unobserved.
+        timing: { ...timings },
         totalMs: null,
         attempts: null,
         usage: aggregateUsage(invocations),
