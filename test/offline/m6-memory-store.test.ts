@@ -212,10 +212,12 @@ describe('M6 memory store — audience, owner and state', () => {
     expect(row.audience_id).toBe('aud-1')
   })
 
-  it('deletes one audience and leaves the other intact', () => {
+  it('deletes one audience, cascades memory, and never deletes evidence', () => {
     const store = storeAt()
     store.upsertEpisode(episode('e1', 'aud-1'))
     store.upsertEpisode(episode('e2', 'aud-2'))
+    store.upsertTopic(topic('t1', 'aud-1'))
+    store.upsertTopic(topic('t2', 'aud-2'))
     store.writeState({
       sessionId: 's1',
       audienceId: 'aud-1',
@@ -223,10 +225,52 @@ describe('M6 memory store — audience, owner and state', () => {
       expectedVersion: 0,
       nowMs: 1,
     })
+    store.recordSessionAudience('s1', { audienceId: 'aud-1', durable: true, consent: true }, 1)
+    store.recordDeliveryOwner({ sessionId: 's1', turnId: 't1', segmentId: 'seg1' }, 'aud-1', 2)
+    open[0]!
+      .prepare(`
+        INSERT INTO events
+          (session_id, event_id, seq, timestamp_ms, epoch, turn_id, segment_id, output_id,
+           type, source_module, versions, payload)
+        VALUES ('s1', 'ev1', 1, 1000, 1, 't1', 'seg1', NULL, 'input.received', 'M5', NULL, '{"text":"hello"}')
+      `)
+      .run()
+    open[0]!
+      .prepare(`
+        INSERT INTO deliveries
+          (session_id, turn_id, segment_id, modality, text_hash, text, output_id, receipt_id,
+           classification, terminal_outcome, event_seq, segment_index, persona_profile_id,
+           persona_profile_version)
+        VALUES ('s1', 't1', 'seg1', 'audio', 'hash', 'hello', NULL, NULL,
+                'fully-delivered', 'completed', 1, 0, 'p', '1')
+      `)
+      .run()
     const counts = store.deleteAudience('aud-1')
-    expect(counts.derived_episode).toBe(1)
+    expect(counts).toMatchObject({
+      delivery_owner: 1,
+      derived_episode: 1,
+      derived_topic: 1,
+      session_state: 1,
+      session_audience: 1,
+    })
     expect(store.readEpisodes({ audienceId: 'aud-1', limit: 10 })).toHaveLength(0)
+    expect(store.readTopics({ audienceId: 'aud-1', limit: 10 })).toHaveLength(0)
     expect(store.readEpisodes({ audienceId: 'aud-2', limit: 10 })).toHaveLength(1)
+    expect(store.readTopics({ audienceId: 'aud-2', limit: 10 })).toHaveLength(1)
+    const evidence = open[0]!
+      .prepare('SELECT (SELECT COUNT(*) FROM events) AS events, (SELECT COUNT(*) FROM deliveries) AS deliveries')
+      .get() as { events: number; deliveries: number }
+    expect(evidence.events).toBe(1)
+    expect(evidence.deliveries).toBe(1)
+  })
+
+  it('does not delete memory rows when the store is re-created', () => {
+    const store = storeAt()
+    store.upsertEpisode(episode('e1', 'aud-1'))
+    store.recordSessionAudience('s1', { audienceId: 'aud-1', durable: true, consent: true }, 1)
+    const recreated = createMemoryStore(open[0]!)
+    expect(recreated.readEpisodes({ audienceId: 'aud-1', limit: 10 })).toHaveLength(1)
+    expect(recreated.exportAudience('aud-1')).toContain('"kind":"episode"')
   })
 
   it('deletes only rows older than the cutoff', () => {
@@ -238,6 +282,24 @@ describe('M6 memory store — audience, owner and state', () => {
     store.recordSessionAudience('new-s', { audienceId: 'aud-1', durable: true, consent: true }, 10 * day)
     store.recordDeliveryOwner({ sessionId: 'old-s', turnId: 't', segmentId: 's' }, 'aud-1', 0)
     store.recordDeliveryOwner({ sessionId: 'new-s', turnId: 't', segmentId: 's' }, 'aud-1', 10 * day)
+    open[0]!
+      .prepare(`
+        INSERT INTO events
+          (session_id, event_id, seq, timestamp_ms, epoch, turn_id, segment_id, output_id,
+           type, source_module, versions, payload)
+        VALUES ('old-s', 'ev-old', 1, 0, 1, 't', 's', NULL, 'input.received', 'M5', NULL, '{"text":"old"}')
+      `)
+      .run()
+    open[0]!
+      .prepare(`
+        INSERT INTO deliveries
+          (session_id, turn_id, segment_id, modality, text_hash, text, output_id, receipt_id,
+           classification, terminal_outcome, event_seq, segment_index, persona_profile_id,
+           persona_profile_version)
+        VALUES ('old-s', 't', 's', 'audio', 'hash', 'old', NULL, NULL,
+                'fully-delivered', 'completed', 1, 0, 'p', '1')
+      `)
+      .run()
     const counts = store.deleteOlderThan(1, 10 * day)
     expect(counts.derived_episode).toBe(1)
     expect(counts.session_audience).toBe(1)
@@ -247,6 +309,11 @@ describe('M6 memory store — audience, owner and state', () => {
     expect(store.readEpisodes({ audienceId: 'aud-1', limit: 10 }).map((row) => row.id)).toEqual([
       'new',
     ])
+    const evidence = open[0]!
+      .prepare('SELECT (SELECT COUNT(*) FROM events) AS events, (SELECT COUNT(*) FROM deliveries) AS deliveries')
+      .get() as { events: number; deliveries: number }
+    expect(evidence.events).toBe(1)
+    expect(evidence.deliveries).toBe(1)
   })
 
   it('exports only the target audience', () => {

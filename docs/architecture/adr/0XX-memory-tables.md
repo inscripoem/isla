@@ -51,9 +51,11 @@ overwrites. M5 decides whether to drop the conflicting write.
 ### D5 — Deletion and retention are explicit, never automatic
 
 `deleteAudience` and `deleteOlderThan` run only when an operator calls them; there is no startup
-deletion and no default retention period. Retention applies to the derived/owner/state tables only;
-`events` and `deliveries` are append-only and are never deleted by this API. Retraction (a semantic
-marker with evidence retained) stays separate from deletion (physical removal).
+deletion and no default retention period. Retention applies to the derived/owner/state/audience tables
+only; `events` and `deliveries` are append-only and are never deleted by this API. Tests assert that
+both deletion calls leave the events and deliveries counts unchanged, and that constructing a store
+performs no deletion. Retraction (a semantic marker with evidence retained) stays separate from
+deletion (physical removal).
 
 ### D6 — Derived memory is rebuilt through M4’s callbacks
 
