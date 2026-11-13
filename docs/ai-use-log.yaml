@@ -5438,3 +5438,45 @@ entries:
       full_suite: "pnpm verify exit 0: 1570/1570 in 76 files; typecheck clean; lint clean."
       not_run: >-
         No push, merge, runtime wiring, checkpoint acceptance or live data.
+
+  - date: "2026-11-13"
+    task: "M6-X02 cursor extractor version"
+    branch: m6-memory-foundation
+    change: >-
+      Scope the durable projection cursor to the extractor version. Add
+      `projection_state.extractor_version`; an incremental write with a different
+      version returns `version-mismatch`; a same-version rebuild writes
+      `max(persisted, rebuild_result)`, so a smaller event set cannot lower the
+      cursor; a new-version rebuild clears the derived rows and resets the cursor
+      under the new version. Keep the M4 derive callbacks and leave the evidence
+      tables unchanged. Update ADR D2. No runtime, contract, scoring or threshold
+      change.
+    requirements: [FR-06, NFR-03]
+    invariants: [INV-06, INV-10]
+    cases: []
+    commits: [ca012bf]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      The human M6 owner approved the M6-X02-1 slice. The agent edited the
+      M6-owned storage files and ADR; no push or merge is claimed.
+    human_review: >-
+      Captain (M6) approved the slice; M4/M5 review pending. No checkpoint
+      acceptance is claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id
+      is claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main); f5d367f (branch before this slice)
+      focused: "m6-memory-store 18/18."
+      role: "test:m6 210/210 in 16 files; trace 41/1; readiness 47/3."
+      full_suite: "pnpm verify exit 0: 1573/1573 in 76 files; typecheck clean; lint clean."
+      mutation: >-
+        Disabling the version-mismatch check reddened its test; replacing the
+        same-version max with the rebuild result reddened the smaller-event test;
+        both restored.
+      not_run: >-
+        No push, merge, M4 derive integration, runtime wiring, checkpoint
+        acceptance or live data.
