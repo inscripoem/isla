@@ -1,0 +1,10 @@
+{
+  "caseId": "selection-003",
+  "status": "reviewed",
+  "provenance": "human",
+  "reviewerId": "shallight",
+  "reviewedAt": "2026-11-13",
+  "requestSha256": "c865c4956d00c21e982fcc6531cd33dcd4472bc4b38b541fe2da1c5dc1c98db6",
+  "labelSha256": "48e538741ab9cec0a21b8a03ebaee5aecad04562273c96298dd6f8b49a2e9842",
+  "notes": "Approved candidate scores: message-003-b = 2, message-003-a = 1, message-003-c = 0, defer = 0. Accepted answer for message-003-b and acknowledge for message-003-a/c. Intent coverage remains partial; heldOut remains false."
+}

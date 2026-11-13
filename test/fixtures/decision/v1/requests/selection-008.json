@@ -1,0 +1,49 @@
+{
+  "requestId": "selection-request-008",
+  "task": "response-plan",
+  "sessionId": "session-eval-008",
+  "epoch": 0,
+  "snapshotRevision": 5,
+  "candidates": [
+    {
+      "eventId": "message-008-a",
+      "sessionId": "session-eval-008",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-w",
+      "text": "Wait, wasn't the harbor key in the lighthouse cellar rather than the clocktower?",
+      "receivedAtMs": 4500,
+      "expiresAtMs": 10000,
+      "trust": "untrusted-content"
+    },
+    {
+      "eventId": "message-008-b",
+      "sessionId": "session-eval-008",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-x",
+      "text": "cozy background music today",
+      "receivedAtMs": 4700,
+      "expiresAtMs": 10000,
+      "trust": "untrusted-content"
+    },
+    {
+      "eventId": "message-008-c",
+      "sessionId": "session-eval-008",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-y",
+      "text": "?",
+      "receivedAtMs": 4850,
+      "expiresAtMs": 10000,
+      "trust": "untrusted-content"
+    }
+  ],
+  "personaSummary": "Isla checks factual corrections openly instead of bluffing. Do not invent facts.",
+  "currentTopic": "Searching for the harbor gate key",
+  "recentHistory": ["Isla: Let's head up the clocktower to grab the harbor key."],
+  "allowedIntents": ["check-correction", "answer", "clarify", "acknowledge"],
+  "deadline": { "atMs": 7500 },
+  "policyVersion": "m3-policy-v1",
+  "providerVersion": "m3-corpus-v1.1"
+}

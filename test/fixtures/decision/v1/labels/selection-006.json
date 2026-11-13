@@ -1,0 +1,35 @@
+{
+  "caseId": "selection-006",
+  "selectionScores": [
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-006-a"],
+      "score": 2
+    },
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-006-b"],
+      "score": 1
+    },
+    {
+      "disposition": "defer",
+      "selectedEventIds": [],
+      "score": 0
+    }
+  ],
+  "intentLabels": [
+    {
+      "selectedEventId": "message-006-a",
+      "acceptableIntents": ["support"],
+      "coverage": "partial",
+      "coverageRationale": null
+    },
+    {
+      "selectedEventId": "message-006-b",
+      "acceptableIntents": ["acknowledge"],
+      "coverage": "partial",
+      "coverageRationale": null
+    }
+  ],
+  "rationale": "Supporting the discouraged viewer (message-006-a) with 'support' is the preferred outcome and intent; welcoming the first-time viewer (message-006-b) with 'acknowledge' is an acceptable alternative, and waiting is not preferred. Intent coverage is partial, so unlisted allowed intents remain unassessed."
+}

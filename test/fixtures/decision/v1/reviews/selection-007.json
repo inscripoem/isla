@@ -1,0 +1,10 @@
+{
+  "caseId": "selection-007",
+  "status": "reviewed",
+  "provenance": "human",
+  "reviewerId": "shallight",
+  "reviewedAt": "2026-11-13",
+  "requestSha256": "3f3336b105e67a7a032bd027a6374d3f4365825c8e91f1881e504e48fbf968e3",
+  "labelSha256": "88cce723e9ccdc0f0d1fca77009165616c3bdd6869787d1157d87c40bb207b10",
+  "notes": "Approved candidate scores: message-007-b = 2 (playful), message-007-a = 1 (acknowledge), message-007-c = 0, defer = 0. Intent coverage remains partial; heldOut remains true."
+}

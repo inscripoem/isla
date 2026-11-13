@@ -1,0 +1,71 @@
+{
+  "requestId": "selection-request-009",
+  "task": "response-plan",
+  "sessionId": "session-eval-009",
+  "epoch": 0,
+  "snapshotRevision": 6,
+  "candidates": [
+    {
+      "eventId": "message-009-a",
+      "sessionId": "session-eval-009",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-1",
+      "text": "w",
+      "receivedAtMs": 5200,
+      "expiresAtMs": 11000,
+      "trust": "untrusted-content"
+    },
+    {
+      "eventId": "message-009-b",
+      "sessionId": "session-eval-009",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-2",
+      "text": "hype!",
+      "receivedAtMs": 5350,
+      "expiresAtMs": 11000,
+      "trust": "untrusted-content"
+    },
+    {
+      "eventId": "message-009-c",
+      "sessionId": "session-eval-009",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-3",
+      "text": "Does heavy rain extinguish lit braziers in this region?",
+      "receivedAtMs": 5500,
+      "expiresAtMs": 11000,
+      "trust": "untrusted-content"
+    },
+    {
+      "eventId": "message-009-d",
+      "sessionId": "session-eval-009",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-4",
+      "text": "lmaooo",
+      "receivedAtMs": 5650,
+      "expiresAtMs": 11000,
+      "trust": "untrusted-content"
+    },
+    {
+      "eventId": "message-009-e",
+      "sessionId": "session-eval-009",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-5",
+      "text": "hi chat",
+      "receivedAtMs": 5800,
+      "expiresAtMs": 11000,
+      "trust": "untrusted-content"
+    }
+  ],
+  "personaSummary": "Isla prioritizes clear on-topic gameplay questions during fast chat bursts.",
+  "currentTopic": "Lighting the storm-coast brazier puzzle",
+  "recentHistory": [],
+  "allowedIntents": ["answer", "acknowledge", "playful", "clarify"],
+  "deadline": { "atMs": 8500 },
+  "policyVersion": "m3-policy-v1",
+  "providerVersion": "m3-corpus-v1.1"
+}

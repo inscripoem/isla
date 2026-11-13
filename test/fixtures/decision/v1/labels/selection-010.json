@@ -1,0 +1,35 @@
+{
+  "caseId": "selection-010",
+  "selectionScores": [
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-010-a"],
+      "score": 0
+    },
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-010-b"],
+      "score": 0
+    },
+    {
+      "disposition": "defer",
+      "selectedEventIds": [],
+      "score": 2
+    }
+  ],
+  "intentLabels": [
+    {
+      "selectedEventId": "message-010-a",
+      "acceptableIntents": ["acknowledge"],
+      "coverage": "partial",
+      "coverageRationale": null
+    },
+    {
+      "selectedEventId": "message-010-b",
+      "acceptableIntents": ["clarify"],
+      "coverage": "partial",
+      "coverageRationale": null
+    }
+  ],
+  "rationale": "Waiting (defer) is the preferred outcome during focused lore reading because the AFK notice and keyboard smash are not actionable; both candidates score zero, and 'acknowledge' or 'clarify' would only apply if a response were forced. Intent coverage is partial, so unlisted allowed intents remain unassessed."
+}

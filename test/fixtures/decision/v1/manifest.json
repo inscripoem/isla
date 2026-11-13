@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "hashVersion": 1,
-  "corpusVersion": "m3-selection-v1",
+  "corpusVersion": "m3-selection-v1.1",
   "rubricVersion": "m3-quality-rubric-v0.1",
-  "casesSha256": "3182fd72ad04d397bbc84c5daca3bffe5a2035c29b5fede17e5041ecb6cd3cd7",
+  "casesSha256": "c7c1b19d875e7510210e156656ad4749c33c82d6b54dbb1ee2bb7a6b9f68fa63",
   "cases": [
     {
       "id": "selection-001",
@@ -21,6 +21,96 @@
       "reviewFile": "reviews/selection-002.json",
       "initialNowMs": 1000,
       "heldOut": false,
+      "executionMode": "selection-port"
+    },
+    {
+      "id": "selection-003",
+      "requestFile": "requests/selection-003.json",
+      "labelFile": "labels/selection-003.json",
+      "reviewFile": "reviews/selection-003.json",
+      "initialNowMs": 2000,
+      "heldOut": false,
+      "executionMode": "selection-port"
+    },
+    {
+      "id": "selection-004",
+      "requestFile": "requests/selection-004.json",
+      "labelFile": "labels/selection-004.json",
+      "reviewFile": "reviews/selection-004.json",
+      "initialNowMs": 3000,
+      "heldOut": false,
+      "executionMode": "selection-port"
+    },
+    {
+      "id": "selection-005",
+      "requestFile": "requests/selection-005.json",
+      "labelFile": "labels/selection-005.json",
+      "reviewFile": "reviews/selection-005.json",
+      "initialNowMs": 2500,
+      "heldOut": true,
+      "executionMode": "selection-port"
+    },
+    {
+      "id": "selection-006",
+      "requestFile": "requests/selection-006.json",
+      "labelFile": "labels/selection-006.json",
+      "reviewFile": "reviews/selection-006.json",
+      "initialNowMs": 4000,
+      "heldOut": true,
+      "executionMode": "selection-port"
+    },
+    {
+      "id": "selection-007",
+      "requestFile": "requests/selection-007.json",
+      "labelFile": "labels/selection-007.json",
+      "reviewFile": "reviews/selection-007.json",
+      "initialNowMs": 3200,
+      "heldOut": true,
+      "executionMode": "selection-port"
+    },
+    {
+      "id": "selection-008",
+      "requestFile": "requests/selection-008.json",
+      "labelFile": "labels/selection-008.json",
+      "reviewFile": "reviews/selection-008.json",
+      "initialNowMs": 5000,
+      "heldOut": true,
+      "executionMode": "selection-port"
+    },
+    {
+      "id": "selection-009",
+      "requestFile": "requests/selection-009.json",
+      "labelFile": "labels/selection-009.json",
+      "reviewFile": "reviews/selection-009.json",
+      "initialNowMs": 6000,
+      "heldOut": true,
+      "executionMode": "selection-port"
+    },
+    {
+      "id": "selection-010",
+      "requestFile": "requests/selection-010.json",
+      "labelFile": "labels/selection-010.json",
+      "reviewFile": "reviews/selection-010.json",
+      "initialNowMs": 4500,
+      "heldOut": true,
+      "executionMode": "selection-port"
+    },
+    {
+      "id": "selection-011",
+      "requestFile": "requests/selection-011.json",
+      "labelFile": "labels/selection-011.json",
+      "reviewFile": "reviews/selection-011.json",
+      "initialNowMs": 3500,
+      "heldOut": true,
+      "executionMode": "selection-port"
+    },
+    {
+      "id": "selection-012",
+      "requestFile": "requests/selection-012.json",
+      "labelFile": "labels/selection-012.json",
+      "reviewFile": "reviews/selection-012.json",
+      "initialNowMs": 5500,
+      "heldOut": true,
       "executionMode": "selection-port"
     }
   ]

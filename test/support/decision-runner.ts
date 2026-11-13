@@ -5,13 +5,31 @@ import type {
   SelectionResult,
 } from '../../src/contracts'
 import { selectionResultSchema } from '../../src/contracts'
-import { SelectionCallError } from '../../src/decision'
+import {
+  M3_COMPARISON_VARIANTS,
+  ProviderSelectionError,
+  SelectionCallError,
+  createRuleSelectionPort,
+  isLiveProviderSelectionPort,
+  isMockProviderSelectionPort,
+} from '../../src/decision'
+import type {
+  ComparisonRun,
+  EvalCase,
+  Variant,
+  VariantRun,
+} from '../../src/evaluation/comparison'
+import { runComparison } from '../../src/evaluation/comparison'
 import { createCallContext } from './context'
 import type {
   LoadedDecisionCorpus,
   LoadedDecisionCorpusCase,
 } from './decision-corpus'
-import { DecisionCorpusError, loadDecisionCorpus } from './decision-corpus'
+import {
+  DecisionCorpusError,
+  loadDecisionCorpus,
+  toEvalCase,
+} from './decision-corpus'
 import { createVirtualClock } from './virtual-clock'
 
 /**
@@ -107,6 +125,296 @@ export interface SelectionFactoryContext {
   readonly initialNowMs: number
 }
 
+/** Optional model ports for the multi-variant corpus comparison. */
+export interface SelectionVariantPorts {
+  readonly generalModel?: (
+    clock: ClockPort,
+    context: SelectionFactoryContext,
+  ) => SelectionPort
+  readonly jevModel?: (
+    clock: ClockPort,
+    context: SelectionFactoryContext,
+  ) => SelectionPort
+}
+
+/**
+ * Adopted-score summary for one split. A draft, failed or unscored case is
+ * counted as unreviewed rather than contributing a fabricated zero, and a split
+ * with no adopted case has an unknown (null) sum.
+ */
+export interface SelectionSplitScoreSummary {
+  readonly caseCount: number
+  readonly adoptedCount: number
+  readonly unreviewedOrUnscoredCount: number
+  readonly adoptedScoreSum: number | null
+}
+
+export interface SelectionVariantsCorpusRun {
+  readonly corpusVersion: string
+  readonly casesSha256: string
+  readonly comparison: ComparisonRun
+  readonly observationsByVariant: Readonly<
+    Record<string, readonly SelectionCaseObservation[]>
+  >
+  readonly splitScoresByVariant: Readonly<
+    Record<
+      string,
+      {
+        readonly dev: SelectionSplitScoreSummary
+        readonly heldOut: SelectionSplitScoreSummary
+      }
+    >
+  >
+}
+
+const NO_ATTEMPT_TIMING = {
+  submitMs: null,
+  planMs: null,
+  dialogueMs: null,
+  synthesisMs: null,
+  firstAudibleMs: null,
+  stopToSilenceMs: null,
+} as const
+
+function toVariantRun(
+  variant: Variant,
+  observation: SelectionCaseObservation,
+): VariantRun {
+  if (observation.status === 'observed') {
+    return {
+      ran: true,
+      record: {
+        caseId: observation.caseId,
+        variantId: variant.id,
+        cold: false,
+        outcome: 'completed',
+        timing: {
+          ...NO_ATTEMPT_TIMING,
+          planMs: observation.result.usage.elapsedMs,
+        },
+        totalMs: null,
+        attempts: variant.kind === 'rules' ? 0 : 1,
+        usage: {
+          inputTokens: observation.result.usage.inputTokens,
+          outputTokens: observation.result.usage.outputTokens,
+          costUsd: null,
+          usageMissing: observation.result.usage.usageMissing,
+        },
+        failureReason: null,
+      },
+    }
+  }
+
+  if (observation.status === 'invalid-result') {
+    return {
+      ran: true,
+      record: {
+        caseId: observation.caseId,
+        variantId: variant.id,
+        cold: false,
+        outcome: 'failed',
+        timing: { ...NO_ATTEMPT_TIMING },
+        totalMs: null,
+        attempts: variant.kind === 'rules' ? 0 : 1,
+        usage: {
+          inputTokens: null,
+          outputTokens: null,
+          costUsd: null,
+          usageMissing: true,
+        },
+        failureReason: `invalid-result:${observation.reason}`,
+      },
+    }
+  }
+
+  return {
+    ran: true,
+    record: {
+      caseId: observation.caseId,
+      variantId: variant.id,
+      cold: false,
+      outcome: observation.failure.kind === 'aborted' ? 'cancelled' : 'failed',
+      timing: { ...NO_ATTEMPT_TIMING },
+      totalMs: null,
+      attempts: observation.failure.kind === 'construction-failed' ? 0 : null,
+      usage: {
+        inputTokens: null,
+        outputTokens: null,
+        costUsd: null,
+        usageMissing: true,
+      },
+      failureReason: `${observation.failure.kind}:${observation.failure.message}`,
+    },
+  }
+}
+
+function splitScore(
+  observations: readonly SelectionCaseObservation[],
+): SelectionSplitScoreSummary {
+  let adoptedCount = 0
+  let adoptedScoreSum = 0
+  let unreviewedOrUnscoredCount = 0
+  for (const observation of observations) {
+    if (
+      observation.status === 'observed' &&
+      observation.scoreStatus === 'adopted' &&
+      observation.adoptedScore !== null
+    ) {
+      adoptedCount += 1
+      adoptedScoreSum += observation.adoptedScore
+    } else {
+      unreviewedOrUnscoredCount += 1
+    }
+  }
+  return {
+    caseCount: observations.length,
+    adoptedCount,
+    unreviewedOrUnscoredCount,
+    adoptedScoreSum: adoptedCount === 0 ? null : adoptedScoreSum,
+  }
+}
+
+/**
+ * Runs every M3 comparison variant that is executable in selection-port mode
+ * over the loaded corpus. It maps each case through `toEvalCase` so reference
+ * labels and reply intents never reach the port or M6's case envelope, and it
+ * records an honest not-run entry for variants that cannot execute here.
+ */
+export async function runSelectionVariantsOnCorpus(
+  corpus: LoadedDecisionCorpus,
+  ports: SelectionVariantPorts = {},
+): Promise<SelectionVariantsCorpusRun> {
+  const casesById = new Map(
+    corpus.cases.map((entry) => [entry.entry.id, entry]),
+  )
+  const evalCases: EvalCase[] = corpus.cases.map((entry) =>
+    toEvalCase(entry.entry, entry.request),
+  )
+  const observationsByVariant: Record<string, SelectionCaseObservation[]> = {}
+  for (const variant of M3_COMPARISON_VARIANTS) {
+    observationsByVariant[variant.id] = []
+  }
+  const heldOutById = new Map(
+    corpus.cases.map((entry) => [entry.entry.id, entry.entry.heldOut]),
+  )
+
+  const runVariant = async (
+    variant: Variant,
+    evalCase: EvalCase,
+  ): Promise<VariantRun> => {
+    const entry = casesById.get(evalCase.id)
+    if (entry === undefined) {
+      return {
+        ran: false,
+        reason: `corpus has no case ${evalCase.id}`,
+      }
+    }
+
+    let createSelection:
+      | ((clock: ClockPort, context: SelectionFactoryContext) => SelectionPort)
+      | undefined
+    if (variant.id === 'm3-rules') {
+      createSelection = (clock) => createRuleSelectionPort({ clock })
+    } else if (variant.id === 'm3-general-model') {
+      if (ports.generalModel === undefined) {
+        return {
+          ran: false,
+          reason: 'm3-general-model selection provider is not configured',
+        }
+      }
+      createSelection = ports.generalModel
+    } else if (variant.id === 'm3-jev') {
+      if (ports.jevModel === undefined) {
+        return {
+          ran: false,
+          reason: 'm3-jev selection provider is not configured',
+        }
+      }
+      createSelection = ports.jevModel
+    } else if (variant.id === 'm3-m4-combined') {
+      return {
+        ran: false,
+        reason:
+          'm3-m4-combined requires full-turn selection-and-dialogue execution, not selection-port mode',
+      }
+    } else {
+      return {
+        ran: false,
+        reason: `unsupported M3 comparison variant ${variant.id}`,
+      }
+    }
+
+    if (createSelection === undefined) {
+      return {
+        ran: false,
+        reason: `variant ${variant.id} has no selection factory`,
+      }
+    }
+
+    const factory = createSelection
+    const tracksLiveness =
+      variant.id === 'm3-general-model' || variant.id === 'm3-jev'
+    let syntheticPort = false
+    const createPort = (
+      clock: ClockPort,
+      context: SelectionFactoryContext,
+    ): SelectionPort => {
+      const port = factory(clock, context)
+      if (tracksLiveness) {
+        syntheticPort = !isLiveProviderSelectionPort(port)
+      }
+      return port
+    }
+    const runOptions: SelectionRunOptions = tracksLiveness
+      ? {
+          createSelection: createPort,
+          get syntheticPort() {
+            return syntheticPort
+          },
+        }
+      : { createSelection: createPort }
+
+    const observation = await runSelectionCase(entry, runOptions)
+    const observations = observationsByVariant[variant.id] ?? []
+    observations.push(observation)
+    observationsByVariant[variant.id] = observations
+    return toVariantRun(variant, observation)
+  }
+
+  const comparison = await runComparison(
+    { variants: M3_COMPARISON_VARIANTS, cases: evalCases },
+    { runVariant },
+  )
+
+  const splitScoresByVariant: Record<
+    string,
+    {
+      readonly dev: SelectionSplitScoreSummary
+      readonly heldOut: SelectionSplitScoreSummary
+    }
+  > = {}
+  for (const [variantId, observations] of Object.entries(observationsByVariant)) {
+    const dev: SelectionCaseObservation[] = []
+    const heldOut: SelectionCaseObservation[] = []
+    for (const observation of observations) {
+      if (heldOutById.get(observation.caseId) === true) heldOut.push(observation)
+      else dev.push(observation)
+    }
+    splitScoresByVariant[variantId] = {
+      dev: splitScore(dev),
+      heldOut: splitScore(heldOut),
+    }
+  }
+
+  return {
+    corpusVersion: corpus.manifest.corpusVersion,
+    casesSha256: corpus.casesSha256,
+    comparison,
+    observationsByVariant,
+    splitScoresByVariant,
+  }
+}
+
 export interface SelectionRunOptions {
   /**
    * Creates the port for one case. The runner supplies a fresh virtual clock
@@ -121,6 +429,8 @@ export interface SelectionRunOptions {
   /** Defaults to the request deadline. Tests may supply an earlier caller deadline. */
   readonly contextDeadlineAtMs?: (entry: LoadedDecisionCorpusCase) => number
   readonly allowSynthetic?: boolean
+  /** Marks the executing port as a synthetic mechanic rather than corpus evidence. */
+  readonly syntheticPort?: boolean
 }
 
 export type SelectionCorpusResult =
@@ -226,6 +536,13 @@ export function validateSelectionResult(
 
 function failureKind(error: unknown): SelectionFailureKind {
   if (error instanceof SelectionCallError) return error.code
+  if (error instanceof ProviderSelectionError) {
+    return error.code === 'aborted' ||
+      error.code === 'deadline-exceeded' ||
+      error.code === 'invalid-deadline'
+      ? error.code
+      : 'threw'
+  }
   if (
     error !== null &&
     typeof error === 'object' &&
@@ -264,6 +581,7 @@ function intentSuitability(
 function observe(
   entry: LoadedDecisionCorpusCase,
   result: SelectionResult,
+  options?: { readonly syntheticPort?: boolean },
 ): ObservedSelection {
   const base = {
     caseId: entry.entry.id,
@@ -302,9 +620,13 @@ function observe(
   )
   const candidateScore = score?.score ?? null
   const suitability = intentSuitability(result, entry)
+  const syntheticPort = options?.syntheticPort === true
   const certifiesCorpus =
-    entry.review.provenance === 'human' && base.evidenceClass === 'corpus'
+    !syntheticPort &&
+    entry.review.provenance === 'human' &&
+    base.evidenceClass === 'corpus'
   const diagnostics: string[] = []
+  if (syntheticPort) diagnostics.push('synthetic-port')
   if (candidateScore === null) diagnostics.push('label-outcome-not-covered')
   if (suitability === 'unassessed') diagnostics.push('intent-not-assessed')
 
@@ -400,7 +722,9 @@ export async function runSelectionCase(
     }
   }
 
-  return observe(entry, validation.result)
+  const syntheticPort =
+    options.syntheticPort === true || isMockProviderSelectionPort(selection)
+  return observe(entry, validation.result, { syntheticPort })
 }
 
 export function runSelectionCorpus(

@@ -20,5 +20,5 @@
       "coverageRationale": null
     }
   ],
-  "rationale": "The input is unintelligible; waiting is preferred until a clearer input arrives. This draft is not adopted evidence."
+  "rationale": "The input is unintelligible; waiting (defer) is preferred until a clearer input arrives. Intent coverage is partial, so unlisted allowed intents remain unassessed."
 }

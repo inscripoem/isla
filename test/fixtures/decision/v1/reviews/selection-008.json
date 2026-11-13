@@ -1,0 +1,10 @@
+{
+  "caseId": "selection-008",
+  "status": "reviewed",
+  "provenance": "human",
+  "reviewerId": "shallight",
+  "reviewedAt": "2026-11-13",
+  "requestSha256": "3a805d41fcac5f6cf0ec815ec3be4804fee39c4f075d41f5a3273b1ec98c5c6d",
+  "labelSha256": "22d1172695ed8bd3b1abeb69b56ebf43a128a38f60e2add9cc9fca7a917a31a1",
+  "notes": "Approved candidate scores: message-008-a = 2 (check-correction), message-008-b = 1 (acknowledge), message-008-c = 0, defer = 0. Intent coverage remains partial; heldOut remains true."
+}
