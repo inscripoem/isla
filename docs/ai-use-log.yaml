@@ -5454,3 +5454,41 @@ entries:
       not_run: >-
         No push, PR, merge, ruleset change, live provider or evaluation run. G2/G3/G5
         policies have no dedicated record (marked convention).
+
+  - date: "2026-11-13"
+    task: "M6 G6 clone-stability repair"
+    branch: m6-gate-enforcement
+    change: >-
+      Repair G6 after the first CI run failed while the same gate passed locally.
+      The failing rule is now clone-stable: a newly added entry must cite commits
+      reachable from HEAD, and historical entries are advisory when their commit is
+      absent in a fresh clone. The four entries added by this branch were repointed
+      to the rebased commit ids, and the historical commit exemptions were removed
+      because they no longer cover any failing case. No runtime code changed.
+    requirements: [FR-06, NFR-04]
+    invariants: [INV-14]
+    cases: []
+    commits: [898a25b]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      M6 reported the failing PR checks and asked for the branch to be fixed. Kept
+      local until the repair was verified in a fresh clone.
+    human_review: >-
+      M6 requested the repair. No independent review or checkpoint acceptance is
+      claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id is
+      claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: c8605e2 (main)
+      focused: "test:gates 142/142; G6 passes with the base log; fresh-clone reproduction passes."
+      role: "test:m6 186/186; test:trace 49/49; readiness 47/47."
+      full_suite: "pnpm verify exit 0: 1614/1614 in 76 files."
+      mutation: >-
+        Two new tests cover the split (historical absent -> advice, new unreachable
+        -> violation); disabling the reachability branch turns them red.
+      not_run: >-
+        Remote CI after the push is not yet observed.
