@@ -40,6 +40,8 @@ export interface TraceFs extends RestorationFileView {
 
 /** Exact test citation: `test/…/x.test.ts::the test title`. */
 const TEST_CITATION = /`(test\/[^`]+\.test\.ts)::([^`]+)`/g
+/** A citation that names a test file without a path, so it cannot be resolved. */
+const BARE_CITATION = /`([^`/]+\.test\.ts)::([^`]+)`/g
 const ADR_TOKEN = /ADR-\d{3}/
 
 /** One expiry-dated exemption for a trace row's ADR cell. */
@@ -269,6 +271,12 @@ export function collectTraceViolations(fs: TraceFs, options: TraceOptions = {}):
             if (!hasTestTitle(fs.read(file), title)) {
               add('trace-test-unknown', `trace row cites ${file}::${title}, which the file does not contain`)
             }
+          }
+          for (const match of cell.matchAll(BARE_CITATION)) {
+            add(
+              'trace-test-unresolved',
+              `trace row cites ${match[1]}::${match[2]} without a test/ path, so the title cannot be checked`,
+            )
           }
           if (cell.includes('.test.ts') && !cell.includes('::')) {
             options.onAdvisory?.(

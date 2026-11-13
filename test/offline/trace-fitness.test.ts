@@ -542,6 +542,15 @@ ${cells}
     expect(collectTraceViolations(fs).map((v) => v.code)).toContain('trace-test-missing')
   })
 
+  it('rejects a citation that names a test file without a path', () => {
+    const fs = overridden(nodeTraceFs(ROOT), {
+      [trace]: withRow(
+        '| FR-06 | x | `src/storage/event-store.ts` | P | C-19 | `m6-storage.test.ts::a title` | — | ADR-001 | in review | M6 |',
+      ),
+    })
+    expect(collectTraceViolations(fs).map((v) => v.code)).toContain('trace-test-unresolved')
+  })
+
   it('reports a prose-only citation as advice, not a failure', () => {
     const advisories: string[] = []
     const fs = overridden(nodeTraceFs(ROOT), {

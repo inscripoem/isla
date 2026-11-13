@@ -1,7 +1,9 @@
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { EVALUATION_TABLE_PATH } from './artifacts'
 import { columnIndex, parseTables } from './markdown'
+import { parse as parseYaml } from 'yaml'
 
 /**
  * M6 / R3 — gate G4: semantic evaluation (ADR-006).
@@ -24,6 +26,8 @@ import { columnIndex, parseTables } from './markdown'
  * case-insensitively in the table text: hardware, provider(s), workload, sample
  * size and cold/warm state.
  */
+const GATE_BASELINE_PATH = 'docs/code-governance/gate-baseline.yaml'
+
 const REQUIRED_CONDITIONS = ['hardware', 'provider', 'workload', 'sample', 'cold'] as const
 
 export interface EvalGateResult {
@@ -41,6 +45,24 @@ const CLAIM_DOCUMENTS = ['README.md', 'Report.md'] as const
 export interface ClaimDocument {
   readonly path: string
   readonly text: string
+}
+
+/** One expiry-dated exemption for a reviewed prose-claim exception. */
+export interface ClaimExemption {
+  /** SHA-256 of `path|trimmed line`. */
+  readonly key: string
+  readonly expires: string
+}
+
+export interface EvalGateOptions {
+  readonly claimExemptions?: readonly ClaimExemption[]
+  /** Today as YYYY-MM-DD; an expired exemption fails instead of renewing itself. */
+  readonly today?: string
+}
+
+/** Stable identity for one claim line, so an edited sentence loses its exemption. */
+export function claimLineKey(path: string, line: string): string {
+  return createHash('sha256').update(`${path}|${line.trim()}`).digest('hex')
 }
 
 /** Claims recorded in the evaluation table must carry a value and a conditions reference. */
@@ -71,12 +93,27 @@ function claimTableViolations(table: string): string[] {
  * the number is asserted, the conditions are absent, and nothing can check it.
  * Targets and requirements are not claims, so they pass.
  */
-function proseClaimViolations(documents: readonly ClaimDocument[], hasTable: boolean): string[] {
+function proseClaimViolations(
+  documents: readonly ClaimDocument[],
+  hasTable: boolean,
+  options: EvalGateOptions,
+): string[] {
   const violations: string[] = []
+  const today = options.today ?? new Date().toISOString().slice(0, 10)
   for (const document of documents) {
     for (const line of document.text.split('\n')) {
       if (!CLAIM_MARKER.test(line) || !/\d/.test(line)) continue
       if (TARGET_WORD.test(line)) continue
+      const exemption = options.claimExemptions?.find(
+        (entry) => entry.key === claimLineKey(document.path, line),
+      )
+      if (exemption !== undefined) {
+        if (exemption.expires >= today) continue
+        violations.push(
+          `${document.path} claim exemption expired on ${exemption.expires}; re-review the sentence`,
+        )
+        continue
+      }
       if (!hasTable) {
         violations.push(
           `${document.path} states a measured result ("${line.trim().slice(0, 80)}") but ${EVALUATION_TABLE_PATH} does not exist`,
@@ -94,8 +131,9 @@ function proseClaimViolations(documents: readonly ClaimDocument[], hasTable: boo
 export function collectEvalGateViolations(
   table: string | null,
   documents: readonly ClaimDocument[] = [],
+  options: EvalGateOptions = {},
 ): EvalGateResult {
-  const claims = proseClaimViolations(documents, table !== null)
+  const claims = proseClaimViolations(documents, table !== null, options)
   if (table === null) return { ran: claims.length > 0, violations: claims }
   const haystack = table.toLowerCase()
   const violations = [
@@ -109,8 +147,32 @@ export function collectEvalGateViolations(
   return { ran: true, violations }
 }
 
-function runCli(table: string | null, documents: readonly ClaimDocument[] = []): number {
-  const result = collectEvalGateViolations(table, documents)
+function readClaimExemptions(): ClaimExemption[] {
+  if (!existsSync(GATE_BASELINE_PATH)) return []
+  try {
+    const parsed = parseYaml(readFileSync(GATE_BASELINE_PATH, 'utf8')) as {
+      claims?: unknown
+    } | null
+    const claims = parsed?.claims
+    if (!Array.isArray(claims)) return []
+    return claims.filter(
+      (entry): entry is ClaimExemption =>
+        entry !== null &&
+        typeof entry === 'object' &&
+        typeof (entry as ClaimExemption).key === 'string' &&
+        typeof (entry as ClaimExemption).expires === 'string',
+    )
+  } catch {
+    return []
+  }
+}
+
+function runCli(
+  table: string | null,
+  documents: readonly ClaimDocument[] = [],
+  options: EvalGateOptions = {},
+): number {
+  const result = collectEvalGateViolations(table, documents, options)
   if (!result.ran) {
     process.stdout.write(
       'G4: not run — no evaluation set or provider access (this is not a pass)\n',
@@ -133,5 +195,6 @@ if (invokedDirectly) {
     path,
     text: readFileSync(path, 'utf8'),
   }))
-  process.exitCode = runCli(table, documents)
+  const claimExemptions = readClaimExemptions()
+  process.exitCode = runCli(table, documents, { claimExemptions })
 }

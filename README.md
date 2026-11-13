@@ -123,7 +123,7 @@ The CI pipeline implements six gate checks plus the traceability fitness functio
 | G1 — tests approved before implementation | the **`verify` job**: `docs/code-governance/test-approvals.yaml` must cover every changed code path and be committed before the first code commit (evidence mode); the `tests-approved` label remains the advisory rule for bases without the record |
 | G2 — static analysis + boundary | `pnpm typecheck && pnpm lint`; `pnpm test:readiness` (import/permission boundaries) |
 | G3 — requirements schema | `pnpm test:readiness` (registry validation) |
-| G4 — semantic evaluation | `pnpm gate:eval` — reports **not run** only when there is neither a table nor a claim; fails a table that omits the fixed conditions NFR-01 requires, a claim row with no value or conditions, and a measured prose claim with no evaluation table |
+| G4 — semantic evaluation | `pnpm gate:eval` — reports **not run** only when there is neither a table nor a claim; fails a table that omits the fixed conditions NFR-01 requires, a claim row with no value or conditions, and a measured prose claim with no evaluation table; reviewed exceptions expire in `gate-baseline.yaml` |
 | G5 — regression | `pnpm test` (all offline suites) |
 | G6 — AI-use log | `pnpm gate:ai-use-log` over the pull-request diff |
 | traceability | `pnpm test:trace` (INV-13: the chain is machine-checked; a changed frozen path passes only on a verified default-branch restoration for a feature-branch push) |

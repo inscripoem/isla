@@ -12,9 +12,13 @@ import { execFileSync } from 'node:child_process'
  * into pure functions, so the rules can be tested without a repository.
  */
 
-function git(args: readonly string[]): string | null {
+function git(args: readonly string[], cwd?: string): string | null {
   try {
-    return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+    return execFileSync('git', args, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      ...(cwd === undefined ? {} : { cwd }),
+    })
   } catch {
     return null
   }
@@ -24,8 +28,8 @@ function git(args: readonly string[]): string | null {
  * Every commit reachable from HEAD, full SHAs. One call for the whole log, so the
  * AI-use gate does not spawn a process per entry.
  */
-export function reachableCommits(): ReadonlySet<string> | null {
-  const output = git(['rev-list', 'HEAD'])
+export function reachableCommits(cwd?: string): ReadonlySet<string> | null {
+  const output = git(['rev-list', 'HEAD'], cwd)
   if (output === null) return null
   const shas = output
     .split('\n')
@@ -39,9 +43,13 @@ export function reachableCommits(): ReadonlySet<string> | null {
  * range is unknown or no commit touches them. An empty base is rejected: a missing
  * base must not silently become "the whole history".
  */
-export function firstCommitTouching(paths: readonly string[], base: string | null): string | null {
+export function firstCommitTouching(
+  paths: readonly string[],
+  base: string | null,
+  cwd?: string,
+): string | null {
   if (base === null || base.trim().length === 0 || paths.length === 0) return null
-  const output = git(['rev-list', '--reverse', `${base}..HEAD`, '--', ...paths])
+  const output = git(['rev-list', '--reverse', `${base}..HEAD`, '--', ...paths], cwd)
   if (output === null) return null
   const first = output
     .split('\n')
@@ -51,10 +59,15 @@ export function firstCommitTouching(paths: readonly string[], base: string | nul
 }
 
 /** `true`/`false` from git, or `null` when the answer is unavailable. */
-export function isAncestorOf(ancestor: string, descendant: string): boolean | null {
+export function isAncestorOf(
+  ancestor: string,
+  descendant: string,
+  cwd?: string,
+): boolean | null {
   try {
     execFileSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], {
       stdio: 'ignore',
+      ...(cwd === undefined ? {} : { cwd }),
     })
     return true
   } catch (error) {
@@ -65,8 +78,8 @@ export function isAncestorOf(ancestor: string, descendant: string): boolean | nu
 }
 
 /** Committer date (ISO 8601) of a commit, or `null` when it cannot be read. */
-export function commitTime(sha: string): string | null {
-  const output = git(['show', '-s', '--format=%cI', sha])
+export function commitTime(sha: string, cwd?: string): string | null {
+  const output = git(['show', '-s', '--format=%cI', sha], cwd)
   return output === null ? null : output.trim() || null
 }
 
@@ -80,7 +93,10 @@ export function commitTime(sha: string): string | null {
  * (measured 2026-11-13: 54 of 58 cited commits exist, 0 are reachable from HEAD).
  * Reachability is reported as advice, never as a failure.
  */
-export function existingCommits(shas: readonly string[]): ReadonlyMap<string, string> | null {
+export function existingCommits(
+  shas: readonly string[],
+  cwd?: string,
+): ReadonlyMap<string, string> | null {
   if (shas.length === 0) return new Map()
   try {
     const output = execFileSync(
@@ -90,6 +106,7 @@ export function existingCommits(shas: readonly string[]): ReadonlyMap<string, st
         encoding: 'utf8',
         input: `${shas.join('\n')}\n`,
         stdio: ['pipe', 'pipe', 'ignore'],
+        ...(cwd === undefined ? {} : { cwd }),
       },
     )
     const map = new Map<string, string>()
@@ -106,7 +123,7 @@ export function existingCommits(shas: readonly string[]): ReadonlyMap<string, st
 }
 
 /** Merge base of `ref` and HEAD, or `null` when it cannot be resolved. */
-export function mergeBase(ref: string): string | null {
-  const output = git(['merge-base', ref, 'HEAD'])
+export function mergeBase(ref: string, cwd?: string): string | null {
+  const output = git(['merge-base', ref, 'HEAD'], cwd)
   return output === null ? null : output.trim() || null
 }

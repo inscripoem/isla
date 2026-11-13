@@ -33,3 +33,7 @@ traceRows:
   - key: "888c336c864ec6bf5b60da0ac012ba5e1fd33c70d6a226136dfd52b981d9cc3a"
     expires: "2026-12-15"
     reason: "INV-15 / FR-06 row links #25 coordination instead of an ADR; M5 owns the row"
+
+# Reviewed prose-claim exceptions. The key is the SHA-256 of `path|trimmed line`,
+# so editing the sentence invalidates the exemption.
+claims: []

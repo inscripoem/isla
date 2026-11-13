@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { collectEvalGateViolations, type ClaimDocument } from '../../src/evaluation/eval-gate'
+import {
+  claimLineKey,
+  collectEvalGateViolations,
+  type ClaimDocument,
+  type ClaimExemption,
+} from '../../src/evaluation/eval-gate'
 
 /**
  * Gate G4 is a semantic-evaluation gate with no evaluation set yet (DEBT-01), so
@@ -83,5 +88,40 @@ Hardware: M2 MacBook. Provider: DeepSeek. Workload: 20 turns. Sample: 20 runs. C
   it('accepts a complete claim row', () => {
     const withRow = `${table}| recall@3 | 0.8 | hardware+provider | run.json |\n`
     expect(collectEvalGateViolations(withRow).violations).toEqual([])
+  })
+})
+
+describe('G4 claim exemptions expire', () => {
+  const line = 'Measured p95 latency was 120 ms on the laptop.'
+  const docs: ClaimDocument[] = [{ path: 'README.md', text: line }]
+  const exemption = (expires: string): ClaimExemption[] => [
+    { key: claimLineKey('README.md', line), expires },
+  ]
+
+  it('accepts a reviewed exception before its expiry', () => {
+    const result = collectEvalGateViolations(null, docs, {
+      claimExemptions: exemption('2026-12-31'),
+      today: '2026-11-13',
+    })
+    expect(result.violations).toEqual([])
+  })
+
+  it('fails the same line after the exemption expires', () => {
+    const result = collectEvalGateViolations(null, docs, {
+      claimExemptions: exemption('2026-01-01'),
+      today: '2026-11-13',
+    })
+    expect(result.violations.join(' ')).toContain('expired')
+  })
+
+  it('does not let an exemption hide a different sentence', () => {
+    const other: ClaimDocument[] = [
+      { path: 'README.md', text: 'Measured p95 latency was 900 ms on the laptop.' },
+    ]
+    const result = collectEvalGateViolations(null, other, {
+      claimExemptions: exemption('2026-12-31'),
+      today: '2026-11-13',
+    })
+    expect(result.violations.join(' ')).toContain('does not exist')
   })
 })

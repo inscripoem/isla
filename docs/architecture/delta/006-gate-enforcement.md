@@ -27,6 +27,21 @@ or schema change).
 - **Tests.** `pnpm test:gates` selects the four gate suites, which previously ran only in the full
   suite and not in `pnpm test:m6`.
 
+## Gap closure (2026-11-13, second pass)
+
+- **G4 exemptions.** A reviewed prose-claim exception lives in `gate-baseline.yaml` under `claims:`,
+  keyed by the SHA-256 of `path|trimmed line`. Editing the sentence removes the exemption; an expired
+  exemption fails the gate instead of renewing itself.
+- **Real git tests.** `gate-git-facts.test.ts` builds temporary repositories: an amended (rewritten)
+  code commit keeps the approval record as an ancestor, a record committed after the code is rejected,
+  and a `--depth 1` clone cannot answer ancestry and hides older objects, so the gate fails closed.
+- **Citation migration and a closed loophole.** The two rows that cited `m6-storage.test.ts::INV-05/06`
+  without a path now carry full `test/…::title` forms; INV-13 and INV-14 cite exact titles. A bare
+  `x.test.ts::title` now fails as `trace-test-unresolved` instead of being silently ignored.
+- **Plan defect resolved.** The plan's §3 listed `trace-matrix.md` as read-only except five ADR cells,
+  while §8 required updating the INV-13/INV-14 evidence cells. §8 is the evidence requirement and wins;
+  §3's list was too narrow. Recorded here so the contradiction is not silently repeated.
+
 ## What each gate now proves — and what it does not
 
 | Gate | Proves | Does not prove |
