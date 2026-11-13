@@ -10,6 +10,8 @@ import {
   ProviderSelectionError,
   SelectionCallError,
   createRuleSelectionPort,
+  isLiveProviderSelectionPort,
+  isMockProviderSelectionPort,
 } from '../../src/decision'
 import type {
   ComparisonRun,
@@ -349,7 +351,30 @@ export async function runSelectionVariantsOnCorpus(
       }
     }
 
-    const observation = await runSelectionCase(entry, { createSelection })
+    const factory = createSelection
+    const tracksLiveness =
+      variant.id === 'm3-general-model' || variant.id === 'm3-jev'
+    let syntheticPort = false
+    const createPort = (
+      clock: ClockPort,
+      context: SelectionFactoryContext,
+    ): SelectionPort => {
+      const port = factory(clock, context)
+      if (tracksLiveness) {
+        syntheticPort = !isLiveProviderSelectionPort(port)
+      }
+      return port
+    }
+    const runOptions: SelectionRunOptions = tracksLiveness
+      ? {
+          createSelection: createPort,
+          get syntheticPort() {
+            return syntheticPort
+          },
+        }
+      : { createSelection: createPort }
+
+    const observation = await runSelectionCase(entry, runOptions)
     const observations = observationsByVariant[variant.id] ?? []
     observations.push(observation)
     observationsByVariant[variant.id] = observations
@@ -404,6 +429,8 @@ export interface SelectionRunOptions {
   /** Defaults to the request deadline. Tests may supply an earlier caller deadline. */
   readonly contextDeadlineAtMs?: (entry: LoadedDecisionCorpusCase) => number
   readonly allowSynthetic?: boolean
+  /** Marks the executing port as a synthetic mechanic rather than corpus evidence. */
+  readonly syntheticPort?: boolean
 }
 
 export type SelectionCorpusResult =
@@ -554,6 +581,7 @@ function intentSuitability(
 function observe(
   entry: LoadedDecisionCorpusCase,
   result: SelectionResult,
+  options?: { readonly syntheticPort?: boolean },
 ): ObservedSelection {
   const base = {
     caseId: entry.entry.id,
@@ -592,9 +620,13 @@ function observe(
   )
   const candidateScore = score?.score ?? null
   const suitability = intentSuitability(result, entry)
+  const syntheticPort = options?.syntheticPort === true
   const certifiesCorpus =
-    entry.review.provenance === 'human' && base.evidenceClass === 'corpus'
+    !syntheticPort &&
+    entry.review.provenance === 'human' &&
+    base.evidenceClass === 'corpus'
   const diagnostics: string[] = []
+  if (syntheticPort) diagnostics.push('synthetic-port')
   if (candidateScore === null) diagnostics.push('label-outcome-not-covered')
   if (suitability === 'unassessed') diagnostics.push('intent-not-assessed')
 
@@ -690,7 +722,9 @@ export async function runSelectionCase(
     }
   }
 
-  return observe(entry, validation.result)
+  const syntheticPort =
+    options.syntheticPort === true || isMockProviderSelectionPort(selection)
+  return observe(entry, validation.result, { syntheticPort })
 }
 
 export function runSelectionCorpus(

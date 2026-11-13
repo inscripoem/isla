@@ -20,7 +20,9 @@ import type {
 import { selectionResultSchema } from '../../src/contracts'
 import {
   DECISION_PROMPT_VERSION,
+  DEFAULT_DECISION_MAX_TOKENS,
   M3_COMPARISON_VARIANTS,
+  MAX_DECISION_RESPONSE_CHARS,
   RULE_REACTION_MODEL_VERSION,
   RULE_REACTION_PROVIDER,
   ReactionCallError,
@@ -31,6 +33,7 @@ import {
   createOpenAiCompatibleSelectionPort,
   createRuleReactionPort,
   createRuleSelectionPort,
+  renderReactionSystemPrompt,
   renderSelectionSystemPrompt,
   renderSelectionUserPrompt,
 } from '../../src/decision'
@@ -64,13 +67,13 @@ import {
   runSelectionCorpusFromManifest,
   runSelectionVariantsOnCorpus,
 } from '../support/decision-runner'
-import type { SelectionVariantsCorpusRun } from '../support/decision-runner'
 import { createSyntheticReviewedCorpus } from '../support/decision-synthetic-review'
 import {
   fixtureDecisionRequest,
   fixtureInputEvent,
   fixtureSelectionRequest,
   fixtureSelectionResult,
+  fixtureUsage,
 } from '../support/fixture-data'
 import { createCoordinatorRunner } from '../support/runner-factories'
 import { createVirtualClock } from '../support/virtual-clock'
@@ -440,117 +443,49 @@ function readSelectionPrompt(init: RequestInit): SelectionPromptPayload {
   }
 }
 
-/**
- * A deliberately simple "model" heuristic used only to exercise the provider
- * transport deterministically. It never reads reference labels; it chooses from
- * the untrusted candidates by surface form.
- */
-function modelSelectionProposal(payload: SelectionPromptPayload): {
-  readonly disposition: 'respond' | 'defer'
-  readonly selectedEventIds: readonly string[]
-  readonly replyIntent: string | null
-  readonly reasonCode: string
-} {
-  const candidates = payload.untrusted.candidates.filter(
-    (candidate) => !candidate.text.trim().toUpperCase().startsWith('SYSTEM OVERRIDE'),
-  )
-  const allowed = payload.trusted.allowedIntents
-  const preferred = (intent: string): string =>
-    allowed.includes(intent) ? intent : (allowed[0] ?? 'answer')
-
-  const sideChat =
-    candidates.length > 0 &&
-    candidates.every((candidate) => /^\s*@\S+/.test(candidate.text))
-  if (sideChat) {
-    return {
-      disposition: 'defer',
-      selectedEventIds: [],
-      replyIntent: null,
-      reasonCode: 'mock-side-chat',
-    }
-  }
-
-  const question = candidates.find((candidate) => candidate.text.includes('?'))
-  if (question !== undefined) {
-    return {
-      disposition: 'respond',
-      selectedEventIds: [question.eventId],
-      replyIntent: preferred('answer'),
-      reasonCode: 'mock-question',
-    }
-  }
-  const support = candidates.find((candidate) =>
-    /(discourag|wiped|feeling)/i.test(candidate.text),
-  )
-  if (support !== undefined) {
-    return {
-      disposition: 'respond',
-      selectedEventIds: [support.eventId],
-      replyIntent: preferred('support'),
-      reasonCode: 'mock-support',
-    }
-  }
-  const greeting = candidates.find((candidate) =>
-    /\b(hi|hello|welcome|joined|audio check|first time)\b/i.test(candidate.text),
-  )
-  if (greeting !== undefined) {
-    return {
-      disposition: 'respond',
-      selectedEventIds: [greeting.eventId],
-      replyIntent: preferred('acknowledge'),
-      reasonCode: 'mock-greeting',
-    }
-  }
-  return {
-    disposition: 'defer',
-    selectedEventIds: [],
-    replyIntent: null,
-    reasonCode: 'mock-defer',
-  }
+function canonicalPromptBlock(
+  specification: string,
+  heading: string,
+): string {
+  const headingIndex = specification.indexOf(heading)
+  if (headingIndex < 0) throw new Error(`missing prompt section ${heading}`)
+  const fenceMarker = '```\n'
+  const fenceStart = specification.indexOf(fenceMarker, headingIndex)
+  if (fenceStart < 0) throw new Error(`missing canonical fence in ${heading}`)
+  const contentStart = fenceStart + fenceMarker.length
+  const fenceEnd = specification.indexOf('\n```', contentStart)
+  if (fenceEnd < 0) throw new Error(`unterminated canonical fence in ${heading}`)
+  return specification.slice(contentStart, fenceEnd)
 }
 
-function modelFetch(servedModel: string): DecisionFetch {
+/**
+ * A minimal mechanics stub: it reads only the outbound request body to pick the
+ * first offered candidate and the first allowed reply intent. It is not a model,
+ * makes no quality claim and never reads reference labels.
+ */
+function mechanicsModelFetch(servedModel: string): DecisionFetch {
   return async (_url, init) => {
-    const proposal = modelSelectionProposal(readSelectionPrompt(init))
+    const payload = readSelectionPrompt(init)
+    const candidate = payload.untrusted.candidates[0]
+    const proposal =
+      candidate === undefined
+        ? {
+            disposition: 'defer',
+            selectedEventIds: [],
+            replyIntent: null,
+            reasonCode: 'mock-mechanics',
+          }
+        : {
+            disposition: 'respond',
+            selectedEventIds: [candidate.eventId],
+            replyIntent: payload.trusted.allowedIntents[0] ?? 'answer',
+            reasonCode: 'mock-mechanics',
+          }
     return completionResponse(JSON.stringify(proposal), {
       model: servedModel,
       usage: { prompt_tokens: 20, completion_tokens: 10 },
     })
   }
-}
-
-function exhaustiveLabelOverrides(
-  base: LoadedDecisionCorpus,
-): Record<string, DecisionReferenceLabel> {
-  const overrides: Record<string, DecisionReferenceLabel> = {}
-  for (const loaded of base.cases) {
-    overrides[loaded.entry.id] = {
-      ...structuredClone(loaded.label),
-      intentLabels: loaded.label.intentLabels.map((label) => ({
-        ...label,
-        coverage: 'exhaustive' as const,
-        coverageRationale:
-          'Synthetic exhaustive coverage used only by the multi-variant runner test.',
-      })),
-    }
-  }
-  return overrides
-}
-
-function variantObservation(
-  run: SelectionVariantsCorpusRun,
-  variantId: string,
-  caseId: string,
-) {
-  const observations = run.observationsByVariant[variantId]
-  if (observations === undefined) {
-    throw new Error(`variant ${variantId} produced no observations`)
-  }
-  const observation = observations.find((entry) => entry.caseId === caseId)
-  if (observation === undefined) {
-    throw new Error(`variant ${variantId} has no observation for ${caseId}`)
-  }
-  return observation
 }
 
 function findObservation(
@@ -2009,6 +1944,23 @@ describe('M3 OpenAI-compatible SelectionPort', () => {
     expect(specification).toContain(DECISION_PROMPT_VERSION)
   })
 
+  it('keeps the canonical system prompts in parity with the prompt specification', () => {
+    const specification = readFileSync(
+      join(process.cwd(), 'prompts', 'decision', 'response-plan-v1.md'),
+      'utf8',
+    ).replace(/\r\n/g, '\n')
+    const selectionCanonicalBlock = canonicalPromptBlock(
+      specification,
+      '### 2.1 System boundary rules',
+    )
+    const reactionCanonicalBlock = canonicalPromptBlock(
+      specification,
+      '### 3.1 System boundary rules',
+    )
+    expect(selectionCanonicalBlock).toBe(renderSelectionSystemPrompt())
+    expect(reactionCanonicalBlock).toBe(renderReactionSystemPrompt())
+  })
+
   it('attempts once and maps HTTP, transport and malformed response faults', async () => {
     const request = providerSelectionRequest({
       candidates: [fixtureInputEvent({ eventId: 'candidate-1' })],
@@ -2104,6 +2056,155 @@ describe('M3 OpenAI-compatible SelectionPort', () => {
       'invalid-proposal',
     )
     expect(expired.calls()).toBe(1)
+  })
+
+  it('accepts https and loopback http base URLs but rejects remote http and credentialed URLs', async () => {
+    const request = providerSelectionRequest({
+      candidates: [fixtureInputEvent({ eventId: 'candidate-1' })],
+    })
+
+    for (const baseUrl of [
+      'http://decision.example.com/v1',
+      'https://user:pass@decision.example.com/v1',
+    ]) {
+      const fetch = countingFetch(async () =>
+        completionResponse(selectionProposal()),
+      )
+      await expectSelectionError(
+        providerSelectionPort(fetch.fetchImpl, { baseUrl }).select(
+          request,
+          createCallContext(3000),
+        ),
+        'invalid-config',
+      )
+      expect(fetch.calls()).toBe(0)
+
+      const message = await rejectionMessage(
+        providerSelectionPort(fetch.fetchImpl, { baseUrl }).select(
+          request,
+          createCallContext(3000),
+        ),
+      )
+      expect(message).not.toContain(baseUrl)
+      expect(message).not.toContain('user:pass')
+      expect(message).not.toContain(DECISION_API_KEY)
+    }
+
+    for (const baseUrl of [
+      'https://decision.example.com/v1',
+      'http://localhost:8080/v1',
+      'http://127.0.0.1:8080/v1',
+      'http://[::1]:8080/v1',
+    ]) {
+      const fetch = countingFetch(async () =>
+        completionResponse(selectionProposal()),
+      )
+      const result = await providerSelectionPort(fetch.fetchImpl, {
+        baseUrl,
+      }).select(request, createCallContext(3000))
+      expect(result.disposition).toBe('respond')
+      expect(fetch.calls()).toBe(1)
+    }
+  })
+
+  it('sends max_tokens by default or as configured and rejects invalid values before fetch', async () => {
+    const request = providerSelectionRequest({
+      candidates: [fixtureInputEvent({ eventId: 'candidate-1' })],
+    })
+    const bodies: Array<Record<string, unknown>> = []
+
+    const defaultFetch = countingFetch(async (_url, init) => {
+      bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>)
+      return completionResponse(selectionProposal())
+    })
+    await providerSelectionPort(defaultFetch.fetchImpl).select(
+      request,
+      createCallContext(3000),
+    )
+    expect(bodies[0]?.max_tokens).toBe(DEFAULT_DECISION_MAX_TOKENS)
+
+    const customFetch = countingFetch(async (_url, init) => {
+      bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>)
+      return completionResponse(selectionProposal())
+    })
+    await providerSelectionPort(customFetch.fetchImpl, {
+      maxTokens: 128,
+    }).select(request, createCallContext(3000))
+    expect(bodies[1]?.max_tokens).toBe(128)
+
+    const keepFetch = countingFetch(async () => {
+      throw new Error('fetch must not run')
+    })
+    for (const maxTokens of [0, -1, 1.5, Number.NaN]) {
+      await expectSelectionError(
+        providerSelectionPort(keepFetch.fetchImpl, { maxTokens }).select(
+          request,
+          createCallContext(3000),
+        ),
+        'invalid-config',
+      )
+    }
+    expect(keepFetch.calls()).toBe(0)
+  })
+
+  it('normalizes API roots and full endpoints to one /chat/completions URL', async () => {
+    const request = providerSelectionRequest({
+      candidates: [fixtureInputEvent({ eventId: 'candidate-1' })],
+    })
+    const expected = 'https://decision.example.com/v1/chat/completions'
+
+    for (const baseUrl of [
+      'https://decision.example.com/v1',
+      'https://decision.example.com/v1/',
+      'https://decision.example.com/v1/chat/completions',
+      'https://decision.example.com/v1/chat/completions/',
+    ]) {
+      const urls: string[] = []
+      const fetch = countingFetch(async (url) => {
+        urls.push(url)
+        return completionResponse(selectionProposal())
+      })
+      await providerSelectionPort(fetch.fetchImpl, { baseUrl }).select(
+        request,
+        createCallContext(3000),
+      )
+      expect(urls).toEqual([expected])
+    }
+  })
+
+  it('rejects responses over the size bound without echoing the body', async () => {
+    const request = providerSelectionRequest({
+      candidates: [fixtureInputEvent({ eventId: 'candidate-1' })],
+    })
+    const byHeader = {
+      status: 200,
+      headers: {
+        get: (name: string) =>
+          name.toLowerCase() === 'content-length'
+            ? String(MAX_DECISION_RESPONSE_CHARS + 1)
+            : null,
+      },
+      text: async () => DECISION_BODY_SENTINEL,
+    } as unknown as Response
+    const headerRun = providerSelectionPort(async () => byHeader).select(
+      request,
+      createCallContext(3000),
+    )
+    await expectSelectionError(headerRun, 'invalid-json')
+    expect(await rejectionMessage(headerRun)).not.toContain(
+      DECISION_BODY_SENTINEL,
+    )
+
+    const oversizedBody = `${DECISION_BODY_SENTINEL}${'x'.repeat(
+      MAX_DECISION_RESPONSE_CHARS,
+    )}`
+    const bodyRun = providerSelectionPort(async () =>
+      textResponse(oversizedBody),
+    ).select(request, createCallContext(3000))
+    await expectSelectionError(bodyRun, 'invalid-json')
+    expect(await rejectionMessage(bodyRun)).not.toContain(
+      DECISION_BODY_SENTINEL,
+    )
   })
 
   it('performs zero-fetch pre-checks for abort, deadlines, clock and configuration faults', async () => {
@@ -2306,6 +2407,159 @@ describe('M3 OpenAI-compatible ReactionPort', () => {
       completionResponse(fenced),
     ).decide(request, createCallContext(3000))
     expect(fencedResult).toMatchObject({ status: 'selected', actionId: 'neutral' })
+  })
+
+  it('accepts https and loopback http base URLs but rejects remote http and credentialed URLs', async () => {
+    const request = providerDecisionRequest({
+      eligibleActionIds: ['neutral', 'smile'],
+      segmentText: 'That was great!',
+    })
+
+    for (const baseUrl of [
+      'http://decision.example.com/v1',
+      'https://user:pass@decision.example.com/v1',
+    ]) {
+      const fetch = countingFetch(async () =>
+        completionResponse(reactionProposal()),
+      )
+      await expectReactionError(
+        providerReactionPort(fetch.fetchImpl, { baseUrl }).decide(
+          request,
+          createCallContext(3000),
+        ),
+        'invalid-config',
+      )
+      expect(fetch.calls()).toBe(0)
+
+      const message = await rejectionMessage(
+        providerReactionPort(fetch.fetchImpl, { baseUrl }).decide(
+          request,
+          createCallContext(3000),
+        ),
+      )
+      expect(message).not.toContain(baseUrl)
+      expect(message).not.toContain('user:pass')
+      expect(message).not.toContain(DECISION_API_KEY)
+    }
+
+    for (const baseUrl of [
+      'https://decision.example.com/v1',
+      'http://localhost:8080/v1',
+      'http://127.0.0.1:8080/v1',
+      'http://[::1]:8080/v1',
+    ]) {
+      const fetch = countingFetch(async () =>
+        completionResponse(reactionProposal()),
+      )
+      const result = await providerReactionPort(fetch.fetchImpl, {
+        baseUrl,
+      }).decide(request, createCallContext(3000))
+      expect(result.status).toBe('selected')
+      expect(fetch.calls()).toBe(1)
+    }
+  })
+
+  it('sends max_tokens by default or as configured and rejects invalid values before fetch', async () => {
+    const request = providerDecisionRequest({
+      eligibleActionIds: ['neutral', 'smile'],
+      segmentText: 'That was great!',
+    })
+    const bodies: Array<Record<string, unknown>> = []
+
+    const defaultFetch = countingFetch(async (_url, init) => {
+      bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>)
+      return completionResponse(reactionProposal())
+    })
+    await providerReactionPort(defaultFetch.fetchImpl).decide(
+      request,
+      createCallContext(3000),
+    )
+    expect(bodies[0]?.max_tokens).toBe(DEFAULT_DECISION_MAX_TOKENS)
+
+    const customFetch = countingFetch(async (_url, init) => {
+      bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>)
+      return completionResponse(reactionProposal())
+    })
+    await providerReactionPort(customFetch.fetchImpl, {
+      maxTokens: 128,
+    }).decide(request, createCallContext(3000))
+    expect(bodies[1]?.max_tokens).toBe(128)
+
+    const keepFetch = countingFetch(async () => {
+      throw new Error('fetch must not run')
+    })
+    for (const maxTokens of [0, -1, 1.5, Number.NaN]) {
+      await expectReactionError(
+        providerReactionPort(keepFetch.fetchImpl, { maxTokens }).decide(
+          request,
+          createCallContext(3000),
+        ),
+        'invalid-config',
+      )
+    }
+    expect(keepFetch.calls()).toBe(0)
+  })
+
+  it('normalizes API roots and full endpoints to one /chat/completions URL', async () => {
+    const request = providerDecisionRequest({
+      eligibleActionIds: ['neutral', 'smile'],
+      segmentText: 'That was great!',
+    })
+    const expected = 'https://decision.example.com/v1/chat/completions'
+
+    for (const baseUrl of [
+      'https://decision.example.com/v1',
+      'https://decision.example.com/v1/',
+      'https://decision.example.com/v1/chat/completions',
+      'https://decision.example.com/v1/chat/completions/',
+    ]) {
+      const urls: string[] = []
+      const fetch = countingFetch(async (url) => {
+        urls.push(url)
+        return completionResponse(reactionProposal())
+      })
+      await providerReactionPort(fetch.fetchImpl, { baseUrl }).decide(
+        request,
+        createCallContext(3000),
+      )
+      expect(urls).toEqual([expected])
+    }
+  })
+
+  it('rejects responses over the size bound without echoing the body', async () => {
+    const request = providerDecisionRequest({
+      eligibleActionIds: ['neutral', 'smile'],
+      segmentText: 'That was great!',
+    })
+    const byHeader = {
+      status: 200,
+      headers: {
+        get: (name: string) =>
+          name.toLowerCase() === 'content-length'
+            ? String(MAX_DECISION_RESPONSE_CHARS + 1)
+            : null,
+      },
+      text: async () => DECISION_BODY_SENTINEL,
+    } as unknown as Response
+    const headerRun = providerReactionPort(async () => byHeader).decide(
+      request,
+      createCallContext(3000),
+    )
+    await expectReactionError(headerRun, 'invalid-json')
+    expect(await rejectionMessage(headerRun)).not.toContain(
+      DECISION_BODY_SENTINEL,
+    )
+
+    const oversizedBody = `${DECISION_BODY_SENTINEL}${'x'.repeat(
+      MAX_DECISION_RESPONSE_CHARS,
+    )}`
+    const bodyRun = providerReactionPort(async () =>
+      textResponse(oversizedBody),
+    ).decide(request, createCallContext(3000))
+    await expectReactionError(bodyRun, 'invalid-json')
+    expect(await rejectionMessage(bodyRun)).not.toContain(
+      DECISION_BODY_SENTINEL,
+    )
   })
 
   it('attempts once and rejects invalid decisions without a fallback', async () => {
@@ -2537,7 +2791,7 @@ describe('M3 comparison variants and multi-variant corpus runner', () => {
     })
   })
 
-  it('scores model variants above the rules baseline on topical, defer, burst and injection cases', async () => {
+  it('runs mock model variants through runComparison as non-certifying mechanics checks without quality claims', async () => {
     const base = baseCorpus()
     const modelPorts = {
       generalModel: (clock: ClockPort) =>
@@ -2546,7 +2800,7 @@ describe('M3 comparison variants and multi-variant corpus runner', () => {
           baseUrl: DECISION_BASE_URL,
           model: 'mock-general-model',
           apiKey: DECISION_API_KEY,
-          fetchImpl: modelFetch('mock-general-model'),
+          fetchImpl: mechanicsModelFetch('mock-general-model'),
         }),
       jevModel: (clock: ClockPort) =>
         createOpenAiCompatibleSelectionPort({
@@ -2554,109 +2808,103 @@ describe('M3 comparison variants and multi-variant corpus runner', () => {
           baseUrl: DECISION_BASE_URL,
           model: 'mock-jev',
           apiKey: DECISION_API_KEY,
-          fetchImpl: modelFetch('mock-jev'),
+          fetchImpl: mechanicsModelFetch('mock-jev'),
         }),
     }
 
-    const realRun = await runSelectionVariantsOnCorpus(base, modelPorts)
-    for (const variantId of ['m3-rules', 'm3-general-model', 'm3-jev']) {
-      const observations = realRun.observationsByVariant[variantId] ?? []
+    const run = await runSelectionVariantsOnCorpus(base, modelPorts)
+
+    const rules = run.observationsByVariant['m3-rules'] ?? []
+    expect(rules).toHaveLength(12)
+    expect(
+      rules.every(
+        (observation) =>
+          observation.status === 'observed' &&
+          observation.certifiesCorpus === true,
+      ),
+    ).toBe(true)
+    expect(run.splitScoresByVariant['m3-rules']?.dev).toEqual({
+      caseCount: 4,
+      adoptedCount: 4,
+      unreviewedOrUnscoredCount: 0,
+      adoptedScoreSum: 3,
+    })
+    expect(run.splitScoresByVariant['m3-rules']?.heldOut).toEqual({
+      caseCount: 8,
+      adoptedCount: 8,
+      unreviewedOrUnscoredCount: 0,
+      adoptedScoreSum: 9,
+    })
+
+    for (const variantId of ['m3-general-model', 'm3-jev']) {
+      const observations = run.observationsByVariant[variantId] ?? []
       expect(observations).toHaveLength(12)
       expect(
         observations.every(
           (observation) =>
-            observation.status === 'observed' &&
-            observation.scoreStatus === 'adopted' &&
-            observation.adoptedScore !== null &&
-            observation.certifiesCorpus === true,
+            observation.certifiesCorpus === false &&
+            observation.diagnostics.includes('synthetic-port'),
         ),
       ).toBe(true)
-    }
-    for (const caseId of [
-      'selection-003',
-      'selection-004',
-      'selection-009',
-      'selection-010',
-      'selection-012',
-    ]) {
-      const rules = variantObservation(realRun, 'm3-rules', caseId)
-      const general = variantObservation(realRun, 'm3-general-model', caseId)
-      expect(rules.status).toBe('observed')
-      expect(general.status).toBe('observed')
-      if (rules.status !== 'observed' || general.status !== 'observed') continue
-      expect(general.adoptedScore!).toBeGreaterThan(rules.adoptedScore ?? -1)
-    }
-    const injection = variantObservation(
-      realRun,
-      'm3-general-model',
-      'selection-012',
-    )
-    expect(injection.status).toBe('observed')
-    if (injection.status === 'observed') {
-      expect(injection.selectedEventId).toBe('message-012-b')
-      expect(injection.replyIntent).toBe('answer')
-      expect(injection.intentSuitability).toBe('appropriate')
-      expect(injection.certifiesCorpus).toBe(true)
-    }
-
-    const synthetic = createSyntheticReviewedCorpus({
-      base,
-      reviewedCaseIds: base.cases.map((entry) => entry.entry.id),
-      labelOverrides: exhaustiveLabelOverrides(base),
-    })
-    try {
-      const corpus = loadDecisionCorpus(synthetic.manifestPath, {
-        allowSynthetic: true,
-      })
-      const run = await runSelectionVariantsOnCorpus(corpus, modelPorts)
-
-      for (const variantId of ['m3-general-model', 'm3-jev']) {
-        expect(run.observationsByVariant[variantId]).toHaveLength(12)
-        for (const caseId of [
-          'selection-003',
-          'selection-004',
-          'selection-009',
-          'selection-010',
-          'selection-012',
-        ]) {
-          const rules = variantObservation(run, 'm3-rules', caseId)
-          const model = variantObservation(run, variantId, caseId)
-          expect(rules.status).toBe('observed')
-          expect(model.status).toBe('observed')
-          if (rules.status !== 'observed' || model.status !== 'observed') continue
-          expect(model.adoptedScore).not.toBeNull()
-          expect(model.adoptedScore!).toBeGreaterThan(rules.adoptedScore ?? -1)
-        }
-      }
-
-      const rulesDev = run.splitScoresByVariant['m3-rules']?.dev
-      const rulesHeldOut = run.splitScoresByVariant['m3-rules']?.heldOut
-      const generalDev = run.splitScoresByVariant['m3-general-model']?.dev
-      const generalHeldOut = run.splitScoresByVariant['m3-general-model']?.heldOut
-      expect(generalDev?.adoptedScoreSum ?? 0).toBeGreaterThan(
-        rulesDev?.adoptedScoreSum ?? 0,
-      )
-      expect(generalHeldOut?.adoptedScoreSum ?? 0).toBeGreaterThan(
-        rulesHeldOut?.adoptedScoreSum ?? 0,
-      )
-
-      const combinedNotRun = run.comparison.notRun.filter(
-        (entry) => entry.variantId === 'm3-m4-combined',
-      )
-      expect(combinedNotRun).toHaveLength(12)
-      expect(
-        combinedNotRun.every((entry) =>
-          entry.reason.includes('selection-port mode'),
-        ),
-      ).toBe(true)
+      expect(run.splitScoresByVariant[variantId]?.dev.caseCount).toBe(4)
+      expect(run.splitScoresByVariant[variantId]?.heldOut.caseCount).toBe(8)
       expect(
         run.comparison.records.some(
-          (record) => record.variantId === 'm3-m4-combined',
+          (record) => record.variantId === variantId,
         ),
-      ).toBe(false)
-    } finally {
-      synthetic.cleanup()
+      ).toBe(true)
     }
+    expect(run.comparison.records).toHaveLength(36)
+
+    const customStub: SelectionPort = {
+      async select(request) {
+        const candidate = request.candidates[0]
+        const disposition: 'respond' | 'defer' =
+          candidate === undefined ? 'defer' : 'respond'
+        return fixtureSelectionResult({
+          requestId: request.requestId,
+          sessionId: request.sessionId,
+          epoch: request.epoch,
+          snapshotRevision: request.snapshotRevision,
+          disposition,
+          selectedEventIds: candidate === undefined ? [] : [candidate.eventId],
+          replyIntent:
+            candidate === undefined
+              ? null
+              : (request.allowedIntents[0] ?? 'answer'),
+          reasonCode: 'custom-stub',
+          usage: fixtureUsage({ requestId: request.requestId }),
+        })
+      },
+    }
+    const stubRun = await runSelectionVariantsOnCorpus(base, {
+      generalModel: () => customStub,
+    })
+    const stubObservations =
+      stubRun.observationsByVariant['m3-general-model'] ?? []
+    expect(stubObservations).toHaveLength(12)
+    expect(
+      stubObservations.every(
+        (observation) =>
+          observation.certifiesCorpus === false &&
+          observation.diagnostics.includes('synthetic-port'),
+      ),
+    ).toBe(true)
+
+    const combinedNotRun = run.comparison.notRun.filter(
+      (entry) => entry.variantId === 'm3-m4-combined',
+    )
+    expect(combinedNotRun).toHaveLength(12)
+    expect(
+      combinedNotRun.every((entry) =>
+        entry.reason.includes('selection-port mode'),
+      ),
+    ).toBe(true)
+    expect(
+      run.comparison.records.some(
+        (record) => record.variantId === 'm3-m4-combined',
+      ),
+    ).toBe(false)
   })
 })
 
