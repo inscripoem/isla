@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  LIVE_DECISION_MAX_TOKENS_ENV,
   LIVE_DECISION_PROVIDER_ENV,
+  LIVE_JEV_MAX_TOKENS_ENV,
   LIVE_JEV_PROVIDER_ENV,
   LIVE_TEXT_PROVIDER_ENV,
   readLiveDecisionProviderConfig,
@@ -84,11 +86,13 @@ const MODEL_ENV_GROUPS = [
   {
     name: 'M3 live decision provider configuration',
     env: LIVE_DECISION_PROVIDER_ENV,
+    maxTokensEnv: LIVE_DECISION_MAX_TOKENS_ENV,
     read: readLiveDecisionProviderConfig,
   },
   {
     name: 'M3 live JEV provider configuration',
     env: LIVE_JEV_PROVIDER_ENV,
+    maxTokensEnv: LIVE_JEV_MAX_TOKENS_ENV,
     read: readLiveJevProviderConfig,
   },
 ] as const
@@ -131,6 +135,61 @@ for (const group of MODEL_ENV_GROUPS) {
       )
       expect(report.available).toBe(false)
       expect(report.reason).toContain(group.env.baseUrl)
+    })
+
+    it('refuses remote plaintext http but accepts loopback http', () => {
+      const remote = group.read(
+        modelEnv({ [group.env.baseUrl]: 'http://gateway.example.com/v1' }),
+      )
+      expect(remote.available).toBe(false)
+      expect(remote.config).toBeNull()
+      expect(remote.reason).toContain(group.env.baseUrl)
+      expect(remote.reason).not.toContain('gateway.example.com')
+      expect(remote.reason).not.toContain('http://gateway.example.com/v1')
+
+      for (const baseUrl of [
+        'http://127.0.0.1:8080/v1',
+        'http://localhost:8080/v1',
+        'http://[::1]:8080/v1',
+      ]) {
+        const report = group.read(modelEnv({ [group.env.baseUrl]: baseUrl }))
+        expect(report.available).toBe(true)
+        expect(report.reason).toBeNull()
+        expect(report.config?.baseUrl).toBe(baseUrl)
+      }
+    })
+
+    it('parses an optional positive integer maxTokens', () => {
+      const report = group.read(
+        modelEnv({ [group.maxTokensEnv]: '512' }),
+      )
+      expect(report.available).toBe(true)
+      expect(report.config?.maxTokens).toBe(512)
+    })
+
+    it('omits maxTokens when the variable is unset or blank', () => {
+      const unset = group.read(modelEnv({}))
+      expect(unset.available).toBe(true)
+      expect(unset.config?.maxTokens).toBeUndefined()
+
+      const blank = group.read(
+        modelEnv({ [group.maxTokensEnv]: '   ' }),
+      )
+      expect(blank.available).toBe(true)
+      expect(blank.config?.maxTokens).toBeUndefined()
+    })
+
+    it('rejects invalid maxTokens without echoing any value', () => {
+      for (const value of ['0', '-5', 'abc']) {
+        const report = group.read(
+          modelEnv({ [group.maxTokensEnv]: value }),
+        )
+        expect(report.available).toBe(false)
+        expect(report.config).toBeNull()
+        expect(report.reason).toContain(group.maxTokensEnv)
+        expect(report.reason).not.toContain(value)
+        expect(report.reason).not.toContain(SECRET)
+      }
     })
 
     it('parses a complete configuration and trims the base URL', () => {

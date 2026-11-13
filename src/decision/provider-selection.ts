@@ -24,6 +24,8 @@ import { selectionRequestSchema, selectionResultSchema } from '../contracts'
 export const DECISION_PROMPT_VERSION = 'm3-decision-prompt-v1'
 export const PROVIDER_SELECTION_MODEL_VERSION = 'openai-compatible-selection-v1'
 export const DEFAULT_PROVIDER_SELECTION_NAME = 'openai-compatible'
+export const DEFAULT_DECISION_MAX_TOKENS = 256
+export const MAX_DECISION_RESPONSE_CHARS = 65_536
 
 export type ProviderSelectionErrorCode =
   | 'aborted'
@@ -47,6 +49,19 @@ export class ProviderSelectionError extends Error {
   }
 }
 
+const liveProviderSelectionPorts = new WeakSet<SelectionPort>()
+const mockProviderSelectionPorts = new WeakSet<SelectionPort>()
+
+/** True when the port was created without an injected transport (live fetch). */
+export function isLiveProviderSelectionPort(port: SelectionPort): boolean {
+  return liveProviderSelectionPorts.has(port)
+}
+
+/** True when the port was created with an injected transport (test mock). */
+export function isMockProviderSelectionPort(port: SelectionPort): boolean {
+  return mockProviderSelectionPorts.has(port)
+}
+
 export type DecisionFetch = (url: string, init: RequestInit) => Promise<Response>
 
 export interface OpenAiCompatibleSelectionPortOptions {
@@ -64,6 +79,8 @@ export interface OpenAiCompatibleSelectionPortOptions {
   readonly modelVersion?: string
   /** Pricing reference for offline accounting; null or absent means unknown. */
   readonly pricingRef?: string | null
+  /** Maximum completion tokens; defaults to DEFAULT_DECISION_MAX_TOKENS. */
+  readonly maxTokens?: number
   /** Transport seam for deterministic tests. Defaults to the global fetch. */
   readonly fetchImpl?: DecisionFetch
 }
@@ -193,9 +210,40 @@ export function renderSelectionUserPrompt(request: SelectionRequest): string {
   ].join('\n')
 }
 
+function isLoopbackHostname(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '[::1]' ||
+    hostname === '::1'
+  )
+}
+
+/** Parses a provider base URL, accepting https or loopback-only plain http. */
+function parseProviderBaseUrl(baseUrl: unknown): URL | null {
+  if (typeof baseUrl !== 'string') return null
+  const trimmed = baseUrl.trim()
+  if (trimmed.length === 0) return null
+  let url: URL
+  try {
+    url = new URL(trimmed)
+  } catch {
+    return null
+  }
+  if (url.username !== '' || url.password !== '') return null
+  if (url.protocol === 'https:') return url
+  if (url.protocol === 'http:' && isLoopbackHostname(url.hostname)) return url
+  return null
+}
+
 /** Joins the configured base URL with the endpoint path regardless of trailing slashes. */
 function completionsUrl(baseUrl: string): string {
-  return `${baseUrl.trim().replace(/\/+$/, '')}/chat/completions`
+  const endpoint = '/chat/completions'
+  const trimmed = baseUrl.trim().replace(/\/+$/, '')
+  if (trimmed.toLowerCase().endsWith(endpoint)) {
+    return `${trimmed.slice(0, trimmed.length - endpoint.length)}${endpoint}`
+  }
+  return `${trimmed}${endpoint}`
 }
 
 /** Strips an optional surrounding markdown code fence from model content. */
@@ -272,7 +320,7 @@ export function createOpenAiCompatibleSelectionPort(
   }
   const { clock } = options
 
-  return {
+  const port: SelectionPort = {
     async select(
       request: SelectionRequest,
       context: CallContext,
@@ -304,10 +352,10 @@ export function createOpenAiCompatibleSelectionPort(
           'provider selection requires a non-blank apiKey',
         )
       }
-      if (!isNonBlank(options.baseUrl) || !/^https?:\/\//i.test(options.baseUrl.trim())) {
+      if (parseProviderBaseUrl(options.baseUrl) === null) {
         throw new ProviderSelectionError(
           'invalid-config',
-          'provider selection requires an http(s) baseUrl',
+          'provider selection requires an https baseUrl or loopback http',
         )
       }
       if (!isNonBlank(options.model)) {
@@ -335,6 +383,17 @@ export function createOpenAiCompatibleSelectionPort(
         throw new ProviderSelectionError(
           'invalid-config',
           'provider selection requires a non-blank pricingRef when supplied',
+        )
+      }
+      const maxTokens = options.maxTokens ?? DEFAULT_DECISION_MAX_TOKENS
+      if (
+        typeof maxTokens !== 'number' ||
+        !Number.isSafeInteger(maxTokens) ||
+        maxTokens <= 0
+      ) {
+        throw new ProviderSelectionError(
+          'invalid-config',
+          'provider selection requires a positive integer maxTokens',
         )
       }
 
@@ -410,6 +469,7 @@ export function createOpenAiCompatibleSelectionPort(
               model: options.model.trim(),
               temperature: 0,
               stream: false,
+              max_tokens: maxTokens,
               messages: [
                 { role: 'system', content: renderSelectionSystemPrompt() },
                 {
@@ -450,6 +510,20 @@ export function createOpenAiCompatibleSelectionPort(
           )
         }
 
+        if (typeof response.headers?.get === 'function') {
+          const contentLength = Number(response.headers.get('content-length'))
+          if (
+            Number.isFinite(contentLength) &&
+            Number.isInteger(contentLength) &&
+            contentLength > MAX_DECISION_RESPONSE_CHARS
+          ) {
+            throw new ProviderSelectionError(
+              'invalid-json',
+              'openai-compatible selection response exceeds maximum size',
+            )
+          }
+        }
+
         let text: string
         try {
           text = await response.text()
@@ -474,6 +548,12 @@ export function createOpenAiCompatibleSelectionPort(
           throw new ProviderSelectionError(
             'deadline-exceeded',
             `selection deadline ${governingAtMs} has expired`,
+          )
+        }
+        if (text.length > MAX_DECISION_RESPONSE_CHARS) {
+          throw new ProviderSelectionError(
+            'invalid-json',
+            'openai-compatible selection response exceeds maximum size',
           )
         }
 
@@ -638,4 +718,11 @@ export function createOpenAiCompatibleSelectionPort(
       }
     },
   }
+
+  if (options.fetchImpl === undefined) {
+    liveProviderSelectionPorts.add(port)
+  } else {
+    mockProviderSelectionPorts.add(port)
+  }
+  return port
 }

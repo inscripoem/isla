@@ -11,7 +11,11 @@ import {
   decisionResultSchema,
 } from '../contracts'
 import type { DecisionFetch } from './provider-selection'
-import { DECISION_PROMPT_VERSION } from './provider-selection'
+import {
+  DECISION_PROMPT_VERSION,
+  DEFAULT_DECISION_MAX_TOKENS,
+  MAX_DECISION_RESPONSE_CHARS,
+} from './provider-selection'
 
 /**
  * Provider-backed C3 segment-reaction decisions over the OpenAI-compatible
@@ -67,6 +71,8 @@ export interface OpenAiCompatibleReactionPortOptions {
   readonly modelVersion?: string
   /** Pricing reference for offline accounting; null or absent means unknown. */
   readonly pricingRef?: string | null
+  /** Maximum completion tokens; defaults to DEFAULT_DECISION_MAX_TOKENS. */
+  readonly maxTokens?: number
   /** Transport seam for deterministic tests. Defaults to the global fetch. */
   readonly fetchImpl?: DecisionFetch
 }
@@ -185,9 +191,40 @@ export function renderReactionUserPrompt(request: DecisionRequest): string {
   ].join('\n')
 }
 
+function isLoopbackHostname(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '[::1]' ||
+    hostname === '::1'
+  )
+}
+
+/** Parses a provider base URL, accepting https or loopback-only plain http. */
+function parseProviderBaseUrl(baseUrl: unknown): URL | null {
+  if (typeof baseUrl !== 'string') return null
+  const trimmed = baseUrl.trim()
+  if (trimmed.length === 0) return null
+  let url: URL
+  try {
+    url = new URL(trimmed)
+  } catch {
+    return null
+  }
+  if (url.username !== '' || url.password !== '') return null
+  if (url.protocol === 'https:') return url
+  if (url.protocol === 'http:' && isLoopbackHostname(url.hostname)) return url
+  return null
+}
+
 /** Joins the configured base URL with the endpoint path regardless of trailing slashes. */
 function completionsUrl(baseUrl: string): string {
-  return `${baseUrl.trim().replace(/\/+$/, '')}/chat/completions`
+  const endpoint = '/chat/completions'
+  const trimmed = baseUrl.trim().replace(/\/+$/, '')
+  if (trimmed.toLowerCase().endsWith(endpoint)) {
+    return `${trimmed.slice(0, trimmed.length - endpoint.length)}${endpoint}`
+  }
+  return `${trimmed}${endpoint}`
 }
 
 /** Strips an optional surrounding markdown code fence from model content. */
@@ -296,10 +333,10 @@ export function createOpenAiCompatibleReactionPort(
           'provider reaction requires a non-blank apiKey',
         )
       }
-      if (!isNonBlank(options.baseUrl) || !/^https?:\/\//i.test(options.baseUrl.trim())) {
+      if (parseProviderBaseUrl(options.baseUrl) === null) {
         throw new ProviderReactionError(
           'invalid-config',
-          'provider reaction requires an http(s) baseUrl',
+          'provider reaction requires an https baseUrl or loopback http',
         )
       }
       if (!isNonBlank(options.model)) {
@@ -327,6 +364,17 @@ export function createOpenAiCompatibleReactionPort(
         throw new ProviderReactionError(
           'invalid-config',
           'provider reaction requires a non-blank pricingRef when supplied',
+        )
+      }
+      const maxTokens = options.maxTokens ?? DEFAULT_DECISION_MAX_TOKENS
+      if (
+        typeof maxTokens !== 'number' ||
+        !Number.isSafeInteger(maxTokens) ||
+        maxTokens <= 0
+      ) {
+        throw new ProviderReactionError(
+          'invalid-config',
+          'provider reaction requires a positive integer maxTokens',
         )
       }
 
@@ -408,6 +456,7 @@ export function createOpenAiCompatibleReactionPort(
               model: options.model.trim(),
               temperature: 0,
               stream: false,
+              max_tokens: maxTokens,
               messages: [
                 { role: 'system', content: renderReactionSystemPrompt() },
                 {
@@ -448,6 +497,20 @@ export function createOpenAiCompatibleReactionPort(
           )
         }
 
+        if (typeof response.headers?.get === 'function') {
+          const contentLength = Number(response.headers.get('content-length'))
+          if (
+            Number.isFinite(contentLength) &&
+            Number.isInteger(contentLength) &&
+            contentLength > MAX_DECISION_RESPONSE_CHARS
+          ) {
+            throw new ProviderReactionError(
+              'invalid-json',
+              'openai-compatible reaction response exceeds maximum size',
+            )
+          }
+        }
+
         let text: string
         try {
           text = await response.text()
@@ -472,6 +535,12 @@ export function createOpenAiCompatibleReactionPort(
           throw new ProviderReactionError(
             'deadline-exceeded',
             `reaction deadline ${governingAtMs} has expired`,
+          )
+        }
+        if (text.length > MAX_DECISION_RESPONSE_CHARS) {
+          throw new ProviderReactionError(
+            'invalid-json',
+            'openai-compatible reaction response exceeds maximum size',
           )
         }
 
