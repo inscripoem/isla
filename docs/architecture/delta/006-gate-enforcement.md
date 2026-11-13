@@ -16,10 +16,12 @@ or schema change).
   performance claims (`p95`, `p99`, `recall@`, `precision@`, `accuracy`, `tokens per`, `cost per`);
   an unqualified measured claim without an evaluation table fails. Wording such as *target*,
   *threshold*, *requirement*, *goal* marks an intention, not a claim, and passes.
-- **G6 — references must exist.** Every cited commit must be an object in the repository; every cited
-  case id must exist in `docs/req/case-registry.yaml`; every cited invariant must exist in
-  `docs/architecture/invariants.md`. A register that cannot be read, or an unavailable object database,
-  fails closed. `docs/code-governance/gate-baseline.yaml` holds expiry-dated exemptions.
+- **G6 — references must exist.** A **newly added** entry must cite commits **reachable from HEAD**;
+  historical entries are checked as advice only, because a fresh clone does not carry the orphaned
+  commits of squash-merged work. Every cited case id must exist in `docs/req/case-registry.yaml`; every
+  cited invariant must exist in `docs/architecture/invariants.md`. A register that cannot be read, or
+  an unavailable history, fails closed. `docs/code-governance/gate-baseline.yaml` holds expiry-dated
+  exemptions for the other gates.
 - **trace — exact citations and ADR cells.** `` `test/…/x.test.ts::title` `` is checked against the
   file's actual test titles. Prose-only citations stay path-checked and are reported as
   `unverified-citation` advice, not failures. A row's ADR cell must contain `ADR-\d{3}` or start with
@@ -83,8 +85,16 @@ rejected that rule for this repository:
 - 4 do not exist at all (M1 and M4 entries 110, 116, 117, 118).
 
 Ancestry as a failure rule would fail the entire log and demand a 54-entry permanent exemption, which
-would make the gate meaningless. The failing rule is therefore **existence**; reachability is reported
-as advice. The 4 missing commits are baselined until **2026-12-15** for their owners to correct.
+would make the gate meaningless.
+
+**Corrected after the first CI run (2026-11-13).** "Object exists" is not clone-stable either: the
+GitHub checkout carries only reachable objects, so 30+ historical entries failed in CI while the same
+gate passed locally against dangling objects. The rule is now **new entries → reachable from HEAD;
+historical entries → advisory**. The same run exposed a defect in this branch: rebasing rewrote the
+branch's own commit ids while the AI-use entries still cited the pre-rebase ids, which existed locally
+and nowhere else. Those entries were repointed after the final rebase. The 4 genuinely missing
+historical commits remain recorded for their owners (M1/M4 entries 110, 116, 117, 118) but no longer
+need an exemption.
 
 ## Cutover
 

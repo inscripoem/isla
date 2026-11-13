@@ -224,6 +224,7 @@ entries:
     invariantIds: new Set(['INV-14']),
     baseline: [],
     today: '2026-11-13',
+    historicalBefore: 0,
     ...overrides,
   })
 
@@ -255,14 +256,30 @@ entries:
     expect(violations.join(' ')).toContain('object database is unavailable')
   })
 
-  it('reports an existing but unreachable commit as advice, not a failure', () => {
+  it('reports a historical entry\'s absent commit as advice, not a failure', () => {
     const advisories: string[] = []
     const violations = collectAiUseLogReferenceViolations(
       log('[fedcba9]'),
-      deps({ onAdvisory: (message) => advisories.push(message) }),
+      deps({
+        historicalBefore: 1,
+        onAdvisory: (message) => advisories.push(message),
+      }),
     )
     expect(violations).toEqual([])
-    expect(advisories.join(' ')).toContain('not reachable from HEAD')
+    expect(advisories.join(' ')).toContain('historical entry')
+  })
+
+  it('rejects a new entry whose commit is not reachable from HEAD', () => {
+    const violations = collectAiUseLogReferenceViolations(log('[fedcba9]'), deps())
+    expect(violations.join(' ')).toContain('not reachable from HEAD')
+  })
+
+  it('fails closed when commit history is unavailable for a new entry', () => {
+    const violations = collectAiUseLogReferenceViolations(
+      log('[abcdef1]'),
+      deps({ reachableCommits: null }),
+    )
+    expect(violations.join(' ')).toContain('commit history is unavailable')
   })
 
   it('rejects an unknown case id', () => {

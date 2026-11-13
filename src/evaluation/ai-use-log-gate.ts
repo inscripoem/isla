@@ -173,6 +173,14 @@ export interface AiUseReferenceDeps {
   readonly reachableCommits?: ReadonlySet<string> | null
   /** Called for facts that are reported but do not fail the gate. */
   readonly onAdvisory?: (message: string) => void
+  /**
+   * Entries with an index below this are historical: their commits are checked
+   * only as advice, because a fresh clone does not carry the orphaned commits of
+   * squash-merged work. Entries at or after it are new and must cite commits
+   * reachable from HEAD. Defaults to 0 (every entry is new) so a caller cannot
+   * accidentally weaken the rule by omitting it.
+   */
+  readonly historicalBefore?: number
   readonly caseIds: ReadonlySet<string> | null
   readonly invariantIds: ReadonlySet<string> | null
   readonly baseline: readonly AiUseBaselineItem[]
@@ -244,6 +252,7 @@ export function collectAiUseLogReferenceFindings(
     const record = entry as Record<string, unknown>
     const label = typeof record.task === 'string' ? record.task : `entry ${index}`
 
+    const historical = index < (deps.historicalBefore ?? 0)
     const commits = Array.isArray(record.commits) ? record.commits : []
     for (const raw of commits) {
       if (typeof raw !== 'string') {
@@ -285,6 +294,14 @@ export function collectAiUseLogReferenceFindings(
         continue
       }
       const full = deps.existingCommits.get(sha) ?? ''
+      if (historical) {
+        // A fresh clone cannot see the orphaned commits of squash-merged work;
+        // failing on that would make the gate depend on the reviewer's clone.
+        deps.onAdvisory?.(
+          `${label} (entry ${index}) cites ${sha}, which is not present in this clone (historical entry)`,
+        )
+        continue
+      }
       if (full.length === 0) {
         const exempt = baselineItem(deps, 'commit', sha)
         if (exempt !== null && !exempt.expired) continue
@@ -305,10 +322,23 @@ export function collectAiUseLogReferenceFindings(
         })
         continue
       }
-      if (deps.reachableCommits != null && !deps.reachableCommits.has(full)) {
-        deps.onAdvisory?.(
-          `${label} (entry ${index}) cites ${sha}, which exists but is not reachable from HEAD (squash-merge history)`,
-        )
+      const reachableSet = deps.reachableCommits
+      if (reachableSet === null || reachableSet === undefined) {
+        findings.push({
+          policy: 'POL-G6-03',
+          trigger: 'register-unreadable',
+          message: `${label} (entry ${index}) cites ${sha}, but commit history is unavailable; G6 cannot verify it`,
+          evidence: { register: 'commit-history' },
+        })
+        continue
+      }
+      if (!reachableSet.has(full)) {
+        findings.push({
+          policy: 'POL-G6-02',
+          trigger: 'commit-unreachable',
+          message: `${label} (entry ${index}) is a new entry citing ${sha}, which is not reachable from HEAD`,
+          evidence: { entry: label, field: 'commits', value: sha },
+        })
       }
     }
 
@@ -408,6 +438,7 @@ function collectAiUseLogFindings(changedFiles: readonly string[]): GateFinding[]
 function buildReferenceDeps(
   text: string,
   onAdvisory?: (message: string) => void,
+  historicalBefore = 0,
 ): AiUseReferenceDeps {
   const readRegister = (path: string): string | null =>
     existsSync(path) ? readFileSync(path, 'utf8') : null
@@ -441,6 +472,7 @@ function buildReferenceDeps(
     baseline,
     today: new Date().toISOString().slice(0, 10),
     onAdvisory,
+    historicalBefore,
   }
 }
 
@@ -456,13 +488,21 @@ function runCli(changedFiles: readonly string[]): number {
 
   if (headText !== null) {
     let unreachable = 0
-    const deps = buildReferenceDeps(headText, () => {
-      unreachable += 1
-    })
+    const baseText = readLogBase()
+    const counted = baseText === null ? null : countEntries(baseText)
+    const historicalBefore =
+      counted === null || 'error' in counted ? Number.MAX_SAFE_INTEGER : counted.count
+    const deps = buildReferenceDeps(
+      headText,
+      () => {
+        unreachable += 1
+      },
+      historicalBefore,
+    )
     violations.push(...collectAiUseLogReferenceViolations(headText, deps))
     if (unreachable > 0) {
       process.stdout.write(
-        `G6 advisory: ${unreachable} cited commit(s) exist but are not reachable from HEAD (squash-merge history)\n`,
+        `G6 advisory: ${unreachable} historical citation(s) were not verified in this clone (squash-merge history)\n`,
       )
     }
   }

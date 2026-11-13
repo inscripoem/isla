@@ -8,23 +8,10 @@
 #
 # Owner: M6. Reviewed: 2026-11-13 with the gate implementation.
 version: "1"
-items:
-  - kind: commit
-    value: "572c99c"
-    expires: "2026-12-15"
-    reason: "M4-03 (entry 110) cites a commit that is no longer an object; M4 owns the entry"
-  - kind: commit
-    value: "305656452dcf92106b911ad55b0223b420b6ec23"
-    expires: "2026-12-15"
-    reason: "M1-02-C-VTS-offline (entry 116) cites a commit that is no longer an object; M1 owns the entry"
-  - kind: commit
-    value: "1cb4dd10b68fb2494fcbd50b59a93f03cbf9a13c"
-    expires: "2026-12-15"
-    reason: "M1-02-C-main-synchronization (entry 117) cites a commit that is no longer an object; M1 owns the entry"
-  - kind: commit
-    value: "5be067250bf532fb9836ddfcf16640a82aab55b6"
-    expires: "2026-12-15"
-    reason: "M1-02-D1-connection-offline (entry 118) cites a commit that is no longer an object; M1 owns the entry"
+items: []
+# Historical AI-use entries may cite commits that a fresh clone does not carry
+# (squash-merged work). Those are advisory, never failures, so they need no
+# exemption. Only a NEW entry is required to cite a commit reachable from HEAD.
 
 # Trace rows whose ADR cell cannot yet name a number. The key is the SHA-256 of
 # `requirement|component|interface`; editing any of those cells invalidates the
