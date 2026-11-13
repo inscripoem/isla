@@ -5304,10 +5304,10 @@ entries:
     model: deepseek-v4.1-flash
     supervision: >-
       Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
-      the Captain approved the memory-foundation plan for #147/#148. The ADR/Delta
+      M6 approved the memory-foundation plan for #147/#148. The ADR/Delta
       and design/trace updates await the number reservation in #25.
     human_review: >-
-      Captain (M6) approved the slice; M4/M5 review pending. No checkpoint
+      M6 approved the slice; M4/M5 review pending. No checkpoint
       acceptance or merge is claimed.
     transcript_record: >-
       The OpenCode session record is retained locally; no export was produced.
@@ -5345,10 +5345,10 @@ entries:
     model: deepseek-v4.1-flash
     supervision: >-
       Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
-      the Captain approved the self-review findings. The ADR/Delta and design/trace
+      M6 approved the self-review findings. The ADR/Delta and design/trace
       updates remain pending the number reservation in #25.
     human_review: >-
-      Captain (M6) approved the fix plan; M4/M5 review pending. No checkpoint
+      M6 approved the fix plan; M4/M5 review pending. No checkpoint
       acceptance or merge is claimed.
     transcript_record: >-
       The OpenCode session record is retained locally; no export was produced.
@@ -5388,7 +5388,7 @@ entries:
       implementation. The agent edited the M6-owned storage files; no push or
       merge is claimed.
     human_review: >-
-      Captain (M6) approved the plan; M4/M5 review pending. No checkpoint
+      M6 approved the plan; M4/M5 review pending. No checkpoint
       acceptance is claimed.
     transcript_record: >-
       The local session record is retained outside the checkout; no session id
@@ -5425,7 +5425,7 @@ entries:
       The human M6 owner approved the M6-X08-1 slice. The agent edited the
       M6-owned storage tests and ADR; no push or merge is claimed.
     human_review: >-
-      Captain (M6) approved the slice; M4/M5 review pending. No checkpoint
+      M6 approved the slice; M4/M5 review pending. No checkpoint
       acceptance is claimed.
     transcript_record: >-
       The local session record is retained outside the checkout; no session id
@@ -5462,7 +5462,7 @@ entries:
       The human M6 owner approved the M6-X02-1 slice. The agent edited the
       M6-owned storage files and ADR; no push or merge is claimed.
     human_review: >-
-      Captain (M6) approved the slice; M4/M5 review pending. No checkpoint
+      M6 approved the slice; M4/M5 review pending. No checkpoint
       acceptance is claimed.
     transcript_record: >-
       The local session record is retained outside the checkout; no session id
@@ -5505,7 +5505,7 @@ entries:
       The human M6 owner approved the M6-X07-1 slice. The agent edited the
       M6-owned evaluation files and ADR; no push or merge is claimed.
     human_review: >-
-      Captain (M6) approved the slice; M4/M5 review pending. No checkpoint
+      M6 approved the slice; M4/M5 review pending. No checkpoint
       acceptance is claimed.
     transcript_record: >-
       The local session record is retained outside the checkout; no session id
@@ -5547,7 +5547,7 @@ entries:
       agent edited the M6-owned docs, tests and corpus-status note; no push or
       merge is claimed.
     human_review: >-
-      Captain (M6) approved the local fixes; M4/M5 review pending. No checkpoint
+      M6 approved the local fixes; M4/M5 review pending. No checkpoint
       acceptance is claimed.
     transcript_record: >-
       The local session record is retained outside the checkout; no session id
@@ -5590,7 +5590,7 @@ entries:
       publication is a draft only: no merge and no checkpoint acceptance is
       claimed, and the ADR number still awaits M5's allocation in #25.
     human_review: >-
-      Captain (M6) approved the local corrections and the draft publication. M4/M5
+      M6 approved the local corrections and the draft publication. M4/M5
       review of the draft PR is pending; no merge approval is claimed.
     transcript_record: >-
       The local session record is retained outside the checkout; no session id is
