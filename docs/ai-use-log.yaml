@@ -5523,3 +5523,42 @@ entries:
       not_run: >-
         No push, merge, M4 corpora, live data, quality verdict or checkpoint
         acceptance.
+
+  - date: "2026-11-13"
+    task: "M6 memory documentation and acceptance closure"
+    branch: m6-memory-foundation
+    change: >-
+      Align the memory ADR/Delta/memory-design/trace with the implemented rules:
+      extractor-version-scoped cursor, consent-gated owner writes, and X07
+      identity/precision/accuracy comparison. Add a v2→v3 migration test, an X08
+      age-retention test with a younger other audience, and X07 strategy/restart
+      fixture tests. Record that real X07 corpora are M4-owned and that
+      `deleteOlderThan` is global by age, with per-audience retention still an
+      M5/M4 decision. No code, runtime or contract change.
+    requirements: [FR-06, NFR-03, NFR-05]
+    invariants: [INV-06, INV-10, INV-16]
+    cases: []
+    commits: [ad8eb7f]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      The human M6 owner approved the local documentation/acceptance closure. The
+      agent edited the M6-owned docs, tests and corpus-status note; no push or
+      merge is claimed.
+    human_review: >-
+      Captain (M6) approved the local fixes; M4/M5 review pending. No checkpoint
+      acceptance is claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id
+      is claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main); 825eaab (branch before this closure)
+      focused: "m6-memory-store 19/19; m6-memory-bench 10/10."
+      role: "test:m6 215/215 in 16 files; trace 41/1; readiness 47/3."
+      full_suite: "pnpm verify exit 0: 1578/1578 in 76 files; typecheck clean; lint clean."
+      mutation: "No new production code path; existing X02/X03/X07/X08 mutations remain red-then-restored."
+      not_run: >-
+        No M4 derive/corpora, M5 runtime wiring, push, merge, live data or
+        checkpoint acceptance.
