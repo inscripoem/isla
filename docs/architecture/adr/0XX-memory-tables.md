@@ -32,12 +32,15 @@ columns.
 value (`stale`), so a restart resumes and a cursor cannot rewind. The `MemoryProjectionPort` itself
 remains in-process; the durable cursor is a storage helper for callers that need restart continuity.
 
-### D3 — Owner identity only on an explicit durable-and-consent write
+### D3 — Owner identity only on an explicit consenting write
 
 `recordSessionAudience` is insert-once: a different binding returns `conflict` and the original
-timestamp is preserved. `recordDeliveryOwner` returns `recorded` or `conflict`; a conflict means
-“unowned” and is never retried into a wrong attribution. Storage records what M5 supplies; it does not
-decide consent. Without a durable, consenting binding the listener stays anonymous and session-scoped.
+timestamp is preserved. `recordDeliveryOwner` now enforces consent at the storage boundary: no binding
+or an anonymous binding returns `unowned`; a binding whose `consent` is `0` returns `refused`; a
+different bound owner returns `conflict`; only a consenting binding writes an owner row. The refusal is
+data, never retried into a wrong attribution. `delivery_owner.created_at_ms` is retention metadata, not
+prompt input or evidence. A session first bound anonymously cannot later acquire a consenting audience;
+that v1 insert-once limit is deliberate.
 
 ### D4 — State is per session and never re-attributed
 

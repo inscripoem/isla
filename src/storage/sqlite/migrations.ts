@@ -185,6 +185,7 @@ export const BUILT_IN_MIGRATIONS: readonly Migration[] = [
           turn_id TEXT NOT NULL,
           segment_id TEXT NOT NULL,
           audience_id TEXT NOT NULL,
+          created_at_ms REAL NOT NULL,
           PRIMARY KEY (session_id, turn_id, segment_id)
         )
       `)

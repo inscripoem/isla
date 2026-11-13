@@ -158,11 +158,39 @@ describe('M6 memory store — audience, owner and state', () => {
 
   it('records an owner once and refuses a different owner', () => {
     const store = storeAt()
+    store.recordSessionAudience('s1', { audienceId: 'aud-1', durable: true, consent: true }, 1)
     const key = { sessionId: 's1', turnId: 't1', segmentId: 'seg1' }
-    expect(store.recordDeliveryOwner(key, 'aud-1')).toBe('recorded')
-    expect(store.recordDeliveryOwner(key, 'aud-1')).toBe('recorded')
-    expect(store.recordDeliveryOwner(key, 'aud-2')).toBe('conflict')
+    expect(store.recordDeliveryOwner(key, 'aud-1', 2)).toBe('recorded')
+    expect(store.recordDeliveryOwner(key, 'aud-1', 3)).toBe('recorded')
+    expect(store.recordDeliveryOwner(key, 'aud-2', 4)).toBe('conflict')
     expect(store.ownerOf(key)).toBe('aud-1')
+    const row = open[0]!
+      .prepare('SELECT created_at_ms FROM delivery_owner WHERE session_id = ? AND turn_id = ? AND segment_id = ?')
+      .get('s1', 't1', 'seg1') as { created_at_ms: number }
+    expect(row.created_at_ms).toBe(2)
+  })
+
+  it('returns unowned without a binding and does not write an owner', () => {
+    const store = storeAt()
+    const key = { sessionId: 's1', turnId: 't1', segmentId: 'seg1' }
+    expect(store.recordDeliveryOwner(key, 'aud-1', 1)).toBe('unowned')
+    expect(store.ownerOf(key)).toBeNull()
+  })
+
+  it('returns unowned for an anonymous binding', () => {
+    const store = storeAt()
+    store.recordSessionAudience('s1', { audienceId: null, durable: false, consent: false }, 1)
+    const key = { sessionId: 's1', turnId: 't1', segmentId: 'seg1' }
+    expect(store.recordDeliveryOwner(key, 'aud-1', 2)).toBe('unowned')
+    expect(store.ownerOf(key)).toBeNull()
+  })
+
+  it('returns refused when the binding has not consented and writes no owner', () => {
+    const store = storeAt()
+    store.recordSessionAudience('s1', { audienceId: 'aud-1', durable: true, consent: false }, 1)
+    const key = { sessionId: 's1', turnId: 't1', segmentId: 'seg1' }
+    expect(store.recordDeliveryOwner(key, 'aud-1', 2)).toBe('refused')
+    expect(store.ownerOf(key)).toBeNull()
   })
 
   it('reads state back after reopen and refuses a stale version', () => {
@@ -208,8 +236,8 @@ describe('M6 memory store — audience, owner and state', () => {
     store.upsertEpisode(episode('new', 'aud-1', 10 * day))
     store.recordSessionAudience('old-s', { audienceId: 'aud-1', durable: true, consent: true }, 0)
     store.recordSessionAudience('new-s', { audienceId: 'aud-1', durable: true, consent: true }, 10 * day)
-    store.recordDeliveryOwner({ sessionId: 'old-s', turnId: 't', segmentId: 's' }, 'aud-1')
-    store.recordDeliveryOwner({ sessionId: 'new-s', turnId: 't', segmentId: 's' }, 'aud-1')
+    store.recordDeliveryOwner({ sessionId: 'old-s', turnId: 't', segmentId: 's' }, 'aud-1', 0)
+    store.recordDeliveryOwner({ sessionId: 'new-s', turnId: 't', segmentId: 's' }, 'aud-1', 10 * day)
     const counts = store.deleteOlderThan(1, 10 * day)
     expect(counts.derived_episode).toBe(1)
     expect(counts.session_audience).toBe(1)
@@ -233,7 +261,8 @@ describe('M6 memory store — audience, owner and state', () => {
       expectedVersion: 0,
       nowMs: 1,
     })
-    store.recordDeliveryOwner({ sessionId: 's1', turnId: 't1', segmentId: 'seg1' }, 'aud-1')
+    store.recordSessionAudience('s1', { audienceId: 'aud-1', durable: true, consent: true }, 1)
+    store.recordDeliveryOwner({ sessionId: 's1', turnId: 't1', segmentId: 'seg1' }, 'aud-1', 2)
     open[0]!
       .prepare(`
         INSERT INTO events

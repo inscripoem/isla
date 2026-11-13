@@ -60,7 +60,7 @@ export interface OwnerKey {
   readonly segmentId: string
 }
 
-export type OwnerWrite = 'recorded' | 'conflict'
+export type OwnerWrite = 'recorded' | 'conflict' | 'unowned' | 'refused'
 export type StateWrite =
   | { readonly ok: true; readonly version: number }
   | { readonly ok: false; readonly reason: 'conflict' }
@@ -86,7 +86,7 @@ export interface MemoryStore {
     binding: { audienceId: string | null; durable: boolean; consent: boolean },
     nowMs: number,
   ): 'recorded' | 'conflict'
-  recordDeliveryOwner(key: OwnerKey, audienceId: string): OwnerWrite
+  recordDeliveryOwner(key: OwnerKey, audienceId: string, nowMs: number): OwnerWrite
   ownerOf(key: OwnerKey): string | null
   readState(sessionId: string): StoredCharacterState | null
   writeState(input: {
@@ -154,8 +154,8 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
     'SELECT audience_id FROM delivery_owner WHERE session_id = ? AND turn_id = ? AND segment_id = ?',
   )
   const insertOwner = database.prepare(`
-    INSERT INTO delivery_owner (session_id, turn_id, segment_id, audience_id)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO delivery_owner (session_id, turn_id, segment_id, audience_id, created_at_ms)
+    VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(session_id, turn_id, segment_id) DO NOTHING
   `)
   const readState = database.prepare(
@@ -205,8 +205,19 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
     }
   }
 
-  function ownerWrite(key: OwnerKey, audienceId: string): OwnerWrite {
-    insertOwner.run(key.sessionId, key.turnId, key.segmentId, audienceId)
+  function ownerWrite(key: OwnerKey, audienceId: string, nowMs: number): OwnerWrite {
+    // M6-X03-1 / M4 2026-11-13: consent is enforced at the storage boundary.
+    // No binding or an anonymous binding is `unowned`; a binding that exists but
+    // has not consented is `refused`; a different owner is a `conflict`. Only a
+    // consenting binding can create an owner row. The caller never retries a
+    // refusal into a different attribution.
+    const binding = readAudience.get(key.sessionId) as
+      | { audience_id: string | null; durable: number; consent: number }
+      | undefined
+    if (binding === undefined || binding.audience_id === null) return 'unowned'
+    if (binding.consent === 0) return 'refused'
+    if (binding.audience_id !== audienceId) return 'conflict'
+    insertOwner.run(key.sessionId, key.turnId, key.segmentId, audienceId, nowMs)
     const existing = readOwner.get(key.sessionId, key.turnId, key.segmentId) as
       | { audience_id: string }
       | undefined
@@ -476,11 +487,7 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
           database.prepare('DELETE FROM session_state WHERE updated_at_ms < ?').run(cutoff).changes,
         )
         counts.delivery_owner = Number(
-          database
-            .prepare(
-              'DELETE FROM delivery_owner WHERE session_id IN (SELECT session_id FROM session_audience WHERE created_at_ms < ?)',
-            )
-            .run(cutoff).changes,
+          database.prepare('DELETE FROM delivery_owner WHERE created_at_ms < ?').run(cutoff).changes,
         )
         counts.session_audience = Number(
           database.prepare('DELETE FROM session_audience WHERE created_at_ms < ?').run(cutoff)
