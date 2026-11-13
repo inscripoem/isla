@@ -5373,3 +5373,40 @@ entries:
       not_run: >-
         No branch-protection change, no push, no PR, no live provider or evaluation
         run.
+
+  - date: "2026-11-13"
+    task: "M6 merge-blocking position correction"
+    branch: m6-gate-enforcement
+    change: >-
+      Correct the merge-blocking claim in DEBT-09, the ADR-006 enforcement delta and
+      verification-constraints. The active Protect Main ruleset requires the verify
+      check (integration 15368) with no bypass actors, so a failing gate step blocks
+      a pull-request merge; the two new documents had repeated a stale October note
+      that said otherwise. Records the remaining limits: G1 runs advise until the
+      base carries the approvals record, branch creation is exempt, and strict
+      up-to-date checks are off. No code change.
+    requirements: [NFR-04]
+    invariants: [INV-13, INV-14]
+    cases: []
+    commits: [d08f20d]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      M6 approved the three corrections after the live ruleset was re-measured. Kept
+      local: no push, PR or ruleset change.
+    human_review: >-
+      M6 approved the correction. No independent review or checkpoint acceptance is
+      claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id is
+      claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main)
+      focused: "gh api rulesets/24803426 shows required_status_checks [verify] and bypass_actors null."
+      role: "test:trace 49/49; readiness 47/47."
+      full_suite: "pnpm verify exit 0: 1598/1598 in 75 files (code unchanged by this docs-only correction)."
+      mutation: "Not applicable: documentation only."
+      not_run: >-
+        No ruleset change, no push, no PR, no live provider run.
