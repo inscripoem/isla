@@ -5562,3 +5562,46 @@ entries:
       not_run: >-
         No M4 derive/corpora, M5 runtime wiring, push, merge, live data or
         checkpoint acceptance.
+
+  - date: "2026-11-13"
+    task: "M6 memory trace corrections and draft-PR publication"
+    branch: m6-memory-foundation
+    change: >-
+      Close the traceability gaps found in the read-only audit: repoint the two
+      AI-use commit links to their rebased commits, replace "Runtime monitor"
+      cells that implied a live caller with the measured fact that no production
+      caller exists, split owner cells into enforcement (M6) and acceptance
+      (M3/M5), state that no invariant row governs the memory store and that
+      INV-06/10/11/16 cover other components, drop X04 from the ADR and Delta
+      titles while the seed remains pending #151, refresh the Delta base and
+      AI-use entry count, and replace the "unpublished / local only / do not
+      publish" wording with the draft-PR position. No production code, contract
+      or behaviour change.
+    requirements: [FR-06, NFR-03, NFR-05]
+    invariants: [INV-06, INV-10, INV-11, INV-16]
+    cases: []
+    commits: [379e292]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      The human M6 owner approved the seven audit fixes, then separately approved
+      creating two commits, pushing the branch and opening a draft PR. The
+      publication is a draft only: no merge and no checkpoint acceptance is
+      claimed, and the ADR number still awaits M5's allocation in #25.
+    human_review: >-
+      Captain (M6) approved the local corrections and the draft publication. M4/M5
+      review of the draft PR is pending; no merge approval is claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id is
+      claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main)
+      focused: "memory store 19/19; memory bench 10/10 (unchanged by this docs-only correction)."
+      role: "test:trace 41/41; readiness 47/47; test:m6 215/215 in 16 files."
+      full_suite: "pnpm verify exit 0: 1578/1578 in 76 files; typecheck clean; lint clean."
+      mutation: "No production behaviour changed, so no new mutation applies; the existing mutation record stands."
+      not_run: >-
+        No M4 derive/corpora, M5 runtime wiring, merge, live data or checkpoint
+        acceptance. M5 has not answered the ADR-009 reservation request.
