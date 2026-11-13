@@ -5352,3 +5352,57 @@ entries:
       adopted corpus quality scores remain unclaimed until credentials are
       supplied for opt-in measurement and human review sign-off promotes
       selection-002..selection-012 from draft to reviewed.
+
+  - date: "2026-11-13"
+    task: M3-02-issue98-human-label-signoff
+    branch: feat/m3-98-corpus-and-variants
+    member: shallight (M3)
+    change: >-
+      Record human reviewer shallight's explicit sign-off on 2026-11-13 for
+      selection-002 through selection-012 in test/fixtures/decision/v1,
+      completing 12/12 human-reviewed provenance (status: "reviewed",
+      provenance: "human", SHA-256-bound requestSha256 and labelSha256,
+      casesSha256 = c7c1b19d875e7510210e156656ad4749c33c82d6b54dbb1ee2bb7a6b9f68fa63)
+      for m3-selection-v1.1. Refresh test/fixtures/decision/v1/README.md and
+      update test/offline/m3-decision.test.ts so negative draft-label guards run
+      against mutated temporary corpus copies while the committed 12-case corpus
+      is verified as 12/12 human-reviewed.
+    requirements: [FR-01, NFR-03]
+    invariants: [INV-07, INV-13, INV-14, INV-16]
+    cases: [C-13]
+    commits: [6fc008fa9145cb92376d5a440472d91596f201f2]
+    agent: opencode/deepseek-v4-flash
+    opencode_version: 1.19.5
+    model_cli_id: "personal-deepseek/deepseek-v4-flash"
+    model: deepseek-v4-flash
+    resolved_model: deepseek-flash
+    provider: personal-deepseek
+    variant: xhigh
+    launch_flags: ["--pure", "--agent", "build", "-m", "personal-deepseek/deepseek-v4-flash", "--variant", "xhigh", "--format", "json"]
+    sessions:
+      - ses_e2cbec712ffeV2duIpJ5sHMMKT
+    supervision: >-
+      Captain (shallight) personally reviewed the translated and original
+      scenarios, candidates, scores, and intents for selection-002..selection-012
+      and explicitly authorized human sign-off and promotion of PR #155 from
+      Draft to Ready for Review.
+    human_review: >-
+      All 12 cases in m3-selection-v1.1 now carry status: "reviewed" and
+      provenance: "human" signed by shallight (selection-001 on 2026-10-23;
+      selection-002..selection-012 on 2026-11-13) with partial intent coverage.
+      Merge remains human-gated.
+    transcript_record: >-
+      Exported OpenCode session record ses_e2cbec712ffeV2duIpJ5sHMMKT is stored
+      outside the repository checkout in the supervisor scratch evidence
+      directory; zero secret tokens appear in repository files or exported
+      evidence.
+    verification:
+      platform: macOS arm64 (Darwin)
+      base: f970c13db59ad6f75935a5fafb0e623db7b62237
+      results: >-
+        test:m3 91/91, test:trace 41/41, and full pnpm verify passed (typecheck,
+        lint 0/0 on 273 files, vitest 1565/1565 across 74 files, vite build).
+    scope: >-
+      Detached human review sign-off for selection-002..selection-012 and
+      associated test assertions; live provider execution and G4 measurement
+      remain separate opt-in steps.
