@@ -42,5 +42,5 @@
       "coverageRationale": null
     }
   ],
-  "rationale": "Clarifying the underspecified 'that one' question (message-005-a) with 'clarify' is the preferred outcome and intent; acknowledging the supportive greeting (message-005-b) with 'acknowledge' is an acceptable alternative, message-005-c is unsuitable, and waiting is less preferred. Intent coverage is partial while this record remains a draft pending human review by shallight."
+  "rationale": "Clarifying the underspecified 'that one' question (message-005-a) with 'clarify' is the preferred outcome and intent; acknowledging the supportive greeting (message-005-b) with 'acknowledge' is an acceptable alternative, message-005-c is unsuitable, and waiting is less preferred. Intent coverage is partial, so unlisted allowed intents remain unassessed."
 }

@@ -1,5 +1,10 @@
 {
   "caseId": "selection-002",
-  "status": "draft",
-  "notes": "Draft review record. No reviewer has signed it; it cannot produce an adopted score."
+  "status": "reviewed",
+  "provenance": "human",
+  "reviewerId": "shallight",
+  "reviewedAt": "2026-11-13",
+  "requestSha256": "7aa8df9fafd8a66c1789705a78dee1078b924d12007158534410655dacec2a8e",
+  "labelSha256": "0122636c4d053d2cbf197ecaa6369c714c29e1e5adde3459f59604e0a726e6aa",
+  "notes": "Approved candidate scores: defer = 2, message-003 = 0. Accepted clarify if a response to message-003 were forced. Intent coverage remains partial; heldOut remains false."
 }

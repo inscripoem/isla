@@ -42,5 +42,5 @@
       "coverageRationale": null
     }
   ],
-  "rationale": "Answering the on-topic lantern shrine question (message-003-b) with 'answer' is the preferred outcome and intent; acknowledging the greeting (message-003-a) with 'acknowledge' is acceptable, while message-003-c is unsuitable and waiting is least preferred. Intent coverage is partial while this record remains a draft pending human review by shallight."
+  "rationale": "Answering the on-topic lantern shrine question (message-003-b) with 'answer' is the preferred outcome and intent; acknowledging the greeting (message-003-a) with 'acknowledge' is acceptable, while message-003-c is unsuitable and waiting is least preferred. Intent coverage is partial, so unlisted allowed intents remain unassessed."
 }

@@ -31,5 +31,5 @@
       "coverageRationale": null
     }
   ],
-  "rationale": "Waiting (defer) is the preferred outcome during focused lore reading because the AFK notice and keyboard smash are not actionable; both candidates score zero, and 'acknowledge' or 'clarify' would only apply if a response were forced. Intent coverage is partial while this record remains a draft pending human review by shallight."
+  "rationale": "Waiting (defer) is the preferred outcome during focused lore reading because the AFK notice and keyboard smash are not actionable; both candidates score zero, and 'acknowledge' or 'clarify' would only apply if a response were forced. Intent coverage is partial, so unlisted allowed intents remain unassessed."
 }

@@ -42,5 +42,5 @@
       "coverageRationale": null
     }
   ],
-  "rationale": "Joining the playful banter (message-007-b) with 'playful' is the preferred outcome and intent; acknowledging the short 'gg' (message-007-a) with 'acknowledge' is acceptable, message-007-c is unsuitable, and waiting is not preferred. Intent coverage is partial while this record remains a draft pending human review by shallight."
+  "rationale": "Joining the playful banter (message-007-b) with 'playful' is the preferred outcome and intent; acknowledging the short 'gg' (message-007-a) with 'acknowledge' is acceptable, message-007-c is unsuitable, and waiting is not preferred. Intent coverage is partial, so unlisted allowed intents remain unassessed."
 }

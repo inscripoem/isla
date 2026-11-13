@@ -46,6 +46,7 @@ import { createCallContext, createGate } from '../support/context'
 import { createCountingPlayer } from '../support/gated-ports'
 import {
   DecisionCorpusError,
+  computeCasesSha256,
   decisionReferenceLabelSchema,
   decisionReviewRecordSchema,
   findDecisionCase,
@@ -53,6 +54,7 @@ import {
   toEvalCase,
 } from '../support/decision-corpus'
 import type {
+  DecisionCorpusManifest,
   DecisionReferenceLabel,
   LoadedDecisionCorpus,
   LoadedDecisionCorpusCase,
@@ -212,14 +214,40 @@ function baseCorpus(): LoadedDecisionCorpus {
   return loadDecisionCorpus(CORPUS_MANIFEST)
 }
 
-function withCopiedCorpus(run: (root: string) => void): void {
+async function withCopiedCorpus(
+  run: (root: string) => void | Promise<void>,
+): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'm3-corpus-'))
   try {
     cpSync(CORPUS_DIR, root, { recursive: true })
-    run(root)
+    await run(root)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
+}
+
+/**
+ * Recomputes the copied manifest after a test mutates request, label or review
+ * content, so corpus loading reaches the intended validation rather than
+ * failing early on the content hash.
+ */
+function recomputeManifestCasesSha256(root: string): void {
+  const manifestPath = join(root, 'manifest.json')
+  const manifest = JSON.parse(
+    readFileSync(manifestPath, 'utf8'),
+  ) as DecisionCorpusManifest
+  const cases = manifest.cases.map((entry) => ({
+    entry,
+    request: JSON.parse(readFileSync(join(root, entry.requestFile), 'utf8')),
+    label: JSON.parse(readFileSync(join(root, entry.labelFile), 'utf8')),
+    review: JSON.parse(readFileSync(join(root, entry.reviewFile), 'utf8')),
+  }))
+  manifest.casesSha256 = computeCasesSha256({
+    corpusVersion: manifest.corpusVersion,
+    rubricVersion: manifest.rubricVersion,
+    cases,
+  })
+  writeJson(manifestPath, manifest)
 }
 
 function writeJson(file: string, value: unknown): void {
@@ -1165,10 +1193,14 @@ describe('M3 selection corpus v1', () => {
     expect(base.cases).toHaveLength(12)
     expect(base.cases.filter((entry) => !entry.entry.heldOut)).toHaveLength(4)
     expect(base.cases.filter((entry) => entry.entry.heldOut)).toHaveLength(8)
-    expect(findDecisionCase(base, 'selection-001').review.status).toBe('reviewed')
-    for (let index = 2; index <= 12; index += 1) {
+    for (let index = 1; index <= 12; index += 1) {
       const caseId = `selection-${String(index).padStart(3, '0')}`
-      expect(findDecisionCase(base, caseId).review.status).toBe('draft')
+      const review = findDecisionCase(base, caseId).review
+      expect(review.status).toBe('reviewed')
+      if (review.status === 'reviewed') {
+        expect(review.provenance).toBe('human')
+        expect(review.reviewerId).toBe('shallight')
+      }
     }
 
     const root = mkdtempSync(join(tmpdir(), 'm3-duplicate-case-'))
@@ -1186,8 +1218,8 @@ describe('M3 selection corpus v1', () => {
     }
   })
 
-  it('rejects duplicate offered candidate event ids', () => {
-    withCopiedCorpus((root) => {
+  it('rejects duplicate offered candidate event ids', async () => {
+    await withCopiedCorpus((root) => {
       const requestPath = join(root, 'requests', 'selection-001.json')
       const request = JSON.parse(readFileSync(requestPath, 'utf8'))
       request.candidates[1].eventId = request.candidates[0].eventId
@@ -1215,8 +1247,8 @@ describe('M3 selection corpus v1', () => {
     }
   })
 
-  it('rejects a corpus content hash mismatch', () => {
-    withCopiedCorpus((root) => {
+  it('rejects a corpus content hash mismatch', async () => {
+    await withCopiedCorpus((root) => {
       const manifestPath = join(root, 'manifest.json')
       const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
       manifest.casesSha256 = '0'.repeat(64)
@@ -1247,8 +1279,8 @@ describe('M3 selection corpus v1', () => {
     expect(decisionReferenceLabelSchema.safeParse(label).success).toBe(false)
   })
 
-  it('rejects a respond label that names an unoffered candidate', () => {
-    withCopiedCorpus((root) => {
+  it('rejects a respond label that names an unoffered candidate', async () => {
+    await withCopiedCorpus((root) => {
       const labelPath = join(root, 'labels', 'selection-001.json')
       const label = JSON.parse(readFileSync(labelPath, 'utf8'))
       label.selectionScores[0].selectedEventIds = ['message-999']
@@ -1324,13 +1356,18 @@ describe('M3 selection corpus v1', () => {
     }
   })
 
-  it('rejects an exhaustive intent label without a reviewed coverage rationale', () => {
+  it('rejects an exhaustive intent label without a reviewed coverage rationale', async () => {
     const label = structuredClone(baseCorpus().cases[0]!.label)
     label.intentLabels[0]!.coverage = 'exhaustive'
     label.intentLabels[0]!.coverageRationale = null
     expect(decisionReferenceLabelSchema.safeParse(label).success).toBe(false)
 
-    withCopiedCorpus((root) => {
+    await withCopiedCorpus((root) => {
+      writeJson(join(root, 'reviews', 'selection-002.json'), {
+        caseId: 'selection-002',
+        status: 'draft',
+        notes: 'Mutated draft record for negative coverage test.',
+      })
       const labelPath = join(root, 'labels', 'selection-002.json')
       const draftLabel = JSON.parse(readFileSync(labelPath, 'utf8'))
       draftLabel.intentLabels[0].coverage = 'exhaustive'
@@ -1746,14 +1783,23 @@ describe('M3 direct selection runner', () => {
   })
 
   it('does not adopt a score from a draft label', async () => {
-    const result = await runSelectionCorpus(baseCorpus(), ruleSelection())
-    const observation = findObservation(result, 'selection-002')
-    expect(observation.status).toBe('observed')
-    if (observation.status !== 'observed') return
-    expect(observation.labelStatus).toBe('draft')
-    expect(observation.scoreStatus).toBe('not-adopted')
-    expect(observation.adoptedScore).toBeNull()
-    expect(observation.certifiesCorpus).toBe(false)
+    await withCopiedCorpus(async (root) => {
+      writeJson(join(root, 'reviews', 'selection-002.json'), {
+        caseId: 'selection-002',
+        status: 'draft',
+        notes: 'Mutated draft record for negative adoption test.',
+      })
+      recomputeManifestCasesSha256(root)
+      const corpus = loadDecisionCorpus(join(root, 'manifest.json'))
+      const result = await runSelectionCorpus(corpus, ruleSelection())
+      const observation = findObservation(result, 'selection-002')
+      expect(observation.status).toBe('observed')
+      if (observation.status !== 'observed') return
+      expect(observation.labelStatus).toBe('draft')
+      expect(observation.scoreStatus).toBe('not-adopted')
+      expect(observation.adoptedScore).toBeNull()
+      expect(observation.certifiesCorpus).toBe(false)
+    })
   })
 
   it('marks a synthetic reviewed score as non-certifying test evidence', async () => {
@@ -2450,42 +2496,109 @@ describe('M3 comparison variants and multi-variant corpus runner', () => {
 
     const rules = run.observationsByVariant['m3-rules'] ?? []
     expect(rules).toHaveLength(12)
+    const expectedCaseIds: string[] = []
+    for (let index = 1; index <= 12; index += 1) {
+      expectedCaseIds.push(`selection-${String(index).padStart(3, '0')}`)
+    }
+    expect(rules.map((observation) => observation.caseId)).toEqual(expectedCaseIds)
     const adopted = rules.filter(
       (observation) =>
         observation.status === 'observed' &&
         observation.scoreStatus === 'adopted',
     )
-    expect(adopted.map((observation) => observation.caseId)).toEqual(['selection-001'])
-    expect(adopted).toHaveLength(1)
-    const adoptedObservation = adopted[0]
-    if (adoptedObservation?.status !== 'observed') {
-      throw new Error('expected the adopted observation to be observed')
-    }
-    expect(adoptedObservation.adoptedScore).toBe(2)
-    const draft = rules.filter(
-      (observation) =>
-        observation.status === 'observed' &&
-        observation.scoreStatus === 'not-adopted',
-    )
-    expect(draft).toHaveLength(11)
-    expect(draft.every((observation) => observation.adoptedScore === null)).toBe(true)
+    expect(adopted).toHaveLength(12)
+    expect(
+      adopted.every(
+        (observation) =>
+          observation.status === 'observed' &&
+          observation.adoptedScore !== null &&
+          observation.certifiesCorpus === true,
+      ),
+    ).toBe(true)
+    expect(
+      rules.filter(
+        (observation) =>
+          observation.status === 'observed' &&
+          observation.scoreStatus !== 'adopted',
+      ),
+    ).toHaveLength(0)
 
     expect(run.splitScoresByVariant['m3-rules']?.dev).toEqual({
       caseCount: 4,
-      adoptedCount: 1,
-      unreviewedOrUnscoredCount: 3,
-      adoptedScoreSum: 2,
+      adoptedCount: 4,
+      unreviewedOrUnscoredCount: 0,
+      adoptedScoreSum: 3,
     })
     expect(run.splitScoresByVariant['m3-rules']?.heldOut).toEqual({
       caseCount: 8,
-      adoptedCount: 0,
-      unreviewedOrUnscoredCount: 8,
-      adoptedScoreSum: null,
+      adoptedCount: 8,
+      unreviewedOrUnscoredCount: 0,
+      adoptedScoreSum: 9,
     })
   })
 
   it('scores model variants above the rules baseline on topical, defer, burst and injection cases', async () => {
     const base = baseCorpus()
+    const modelPorts = {
+      generalModel: (clock: ClockPort) =>
+        createOpenAiCompatibleSelectionPort({
+          clock,
+          baseUrl: DECISION_BASE_URL,
+          model: 'mock-general-model',
+          apiKey: DECISION_API_KEY,
+          fetchImpl: modelFetch('mock-general-model'),
+        }),
+      jevModel: (clock: ClockPort) =>
+        createOpenAiCompatibleSelectionPort({
+          clock,
+          baseUrl: DECISION_BASE_URL,
+          model: 'mock-jev',
+          apiKey: DECISION_API_KEY,
+          fetchImpl: modelFetch('mock-jev'),
+        }),
+    }
+
+    const realRun = await runSelectionVariantsOnCorpus(base, modelPorts)
+    for (const variantId of ['m3-rules', 'm3-general-model', 'm3-jev']) {
+      const observations = realRun.observationsByVariant[variantId] ?? []
+      expect(observations).toHaveLength(12)
+      expect(
+        observations.every(
+          (observation) =>
+            observation.status === 'observed' &&
+            observation.scoreStatus === 'adopted' &&
+            observation.adoptedScore !== null &&
+            observation.certifiesCorpus === true,
+        ),
+      ).toBe(true)
+    }
+    for (const caseId of [
+      'selection-003',
+      'selection-004',
+      'selection-009',
+      'selection-010',
+      'selection-012',
+    ]) {
+      const rules = variantObservation(realRun, 'm3-rules', caseId)
+      const general = variantObservation(realRun, 'm3-general-model', caseId)
+      expect(rules.status).toBe('observed')
+      expect(general.status).toBe('observed')
+      if (rules.status !== 'observed' || general.status !== 'observed') continue
+      expect(general.adoptedScore!).toBeGreaterThan(rules.adoptedScore ?? -1)
+    }
+    const injection = variantObservation(
+      realRun,
+      'm3-general-model',
+      'selection-012',
+    )
+    expect(injection.status).toBe('observed')
+    if (injection.status === 'observed') {
+      expect(injection.selectedEventId).toBe('message-012-b')
+      expect(injection.replyIntent).toBe('answer')
+      expect(injection.intentSuitability).toBe('appropriate')
+      expect(injection.certifiesCorpus).toBe(true)
+    }
+
     const synthetic = createSyntheticReviewedCorpus({
       base,
       reviewedCaseIds: base.cases.map((entry) => entry.entry.id),
@@ -2495,24 +2608,7 @@ describe('M3 comparison variants and multi-variant corpus runner', () => {
       const corpus = loadDecisionCorpus(synthetic.manifestPath, {
         allowSynthetic: true,
       })
-      const run = await runSelectionVariantsOnCorpus(corpus, {
-        generalModel: (clock) =>
-          createOpenAiCompatibleSelectionPort({
-            clock,
-            baseUrl: DECISION_BASE_URL,
-            model: 'mock-general-model',
-            apiKey: DECISION_API_KEY,
-            fetchImpl: modelFetch('mock-general-model'),
-          }),
-        jevModel: (clock) =>
-          createOpenAiCompatibleSelectionPort({
-            clock,
-            baseUrl: DECISION_BASE_URL,
-            model: 'mock-jev',
-            apiKey: DECISION_API_KEY,
-            fetchImpl: modelFetch('mock-jev'),
-          }),
-      })
+      const run = await runSelectionVariantsOnCorpus(corpus, modelPorts)
 
       for (const variantId of ['m3-general-model', 'm3-jev']) {
         expect(run.observationsByVariant[variantId]).toHaveLength(12)

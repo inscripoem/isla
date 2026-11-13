@@ -31,5 +31,5 @@
       "coverageRationale": null
     }
   ],
-  "rationale": "Supporting the discouraged viewer (message-006-a) with 'support' is the preferred outcome and intent; welcoming the first-time viewer (message-006-b) with 'acknowledge' is an acceptable alternative, and waiting is not preferred. Intent coverage is partial while this record remains a draft pending human review by shallight."
+  "rationale": "Supporting the discouraged viewer (message-006-a) with 'support' is the preferred outcome and intent; welcoming the first-time viewer (message-006-b) with 'acknowledge' is an acceptable alternative, and waiting is not preferred. Intent coverage is partial, so unlisted allowed intents remain unassessed."
 }
