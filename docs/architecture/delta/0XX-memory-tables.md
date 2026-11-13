@@ -1,9 +1,9 @@
-# Delta-0XX — Memory-tables foundation (X02/X03/X04/X07/X08)
+# Delta-0XX — Memory-tables foundation (X02/X03/X07/X08)
 
-Change record for the memory-tables ADR (number pending allocation in #25; do not publish under this
-name). Date: 2026-11-10. Branch `m6-memory-foundation`, local only.
+Change record for the memory-tables ADR (number pending allocation in #25; do not merge under this
+name). Date: 2026-11-10. Branch `m6-memory-foundation`, draft PR only, not merged.
 
-## Change (against `main` `e9e7e7b`)
+## Change (against `main` `e9e7e7b`; rebased onto `f99e2f5`)
 
 - **ADDED** `src/storage/memory-store.ts` — `createMemoryStore` over six tables: idempotent
   episode/topic upserts, filtered reads, the durable extractor-version-scoped projection cursor
@@ -17,7 +17,7 @@ name). Date: 2026-11-10. Branch `m6-memory-foundation`, local only.
 - **MODIFIED** `src/storage/sqlite/migrations.ts` — schema **v3**: the six tables and indexes.
 - **MODIFIED** `src/storage/index.ts` — export the store.
 - **MODIFIED** `package.json` — the two suites join `test:m6`.
-- **MODIFIED** `docs/ai-use-log.yaml` — two supervised-session entries.
+- **MODIFIED** `docs/ai-use-log.yaml` — seven supervised-session entries for this branch.
 - **MODIFIED** `docs/architecture/memory-design.md` — cursor/version, owner/consent, derived memory,
   state, retention/deletion, evaluation identity; the recorded limits.
 - **MODIFIED** `docs/architecture/trace-matrix.md` — five rows, **ids pending**.

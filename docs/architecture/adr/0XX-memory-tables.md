@@ -1,11 +1,18 @@
-# ADR-0XX — Memory-tables foundation (X02/X03/X04/X08)
+# ADR-0XX — Memory-tables foundation (X02/X03/X07/X08)
 
-Status: **draft — number pending allocation in #25; do not publish or merge under this name.**
+Status: **proposal — number pending allocation in #25; do not merge under this name. A draft PR
+carries it for M4/M5 review.**
 Date: 2026-11-10. Owner: M6 (storage/evaluation). Affected reviewers: **M4** (derived/state
 semantics), **M5** (consent, durability, operator surface).
 
-Related: #147, #148 · `docs/architecture/memory-design.md` · INV-06, INV-10, INV-11, INV-16 ·
-ADR-003/004/005 · NFR-03, NFR-05 · #25, #107.
+Related: #147, #148 · `docs/architecture/memory-design.md` · ADR-003/004/005 · NFR-03, NFR-05 ·
+#25, #107.
+
+Invariants: **no invariant row governs this mechanism.** `INV-06` enforces the in-process projection
+bookmark in `src/storage/memory-projection.ts`, `INV-10` enforces config validation, `INV-11` the
+migration runner and `INV-16` evaluation accounting. Citing them here for the durable cursor would
+over-claim, so this ADR does not. A memory-store invariant is requested in #25; until it exists, the
+cursor and owner rules are enforced only by the tests named in the trace rows.
 
 ## Context
 
@@ -14,8 +21,12 @@ persistent projection cursor (X02), audience-bound owner attribution (X03), char
 privacy/deletion/retention (X08) and a memory evaluation harness (X07). The accepted design currently
 says the projection cursor is in-process, automatic cross-session memory is out of v0.2, and v0.2
 deletes no evidence. The implementation in `src/storage/memory-store.ts` and
-`src/evaluation/memory-bench.ts` is local, tested and unpublished; this ADR records the decision it
+`src/evaluation/memory-bench.ts` is tested and carried on a draft PR (not merged); this ADR records the decision it
 implements and the policy change it requires.
+
+X04's `session_state` storage ships here (D1, D4). X04's **audience-level latest-state seed** is out of
+scope: it has no decision, no API and no test in this change, and waits on #151 and M4's
+`CharacterState` mapping. It is therefore absent from the title and from the trace rows' claims.
 
 ## Decision
 
@@ -118,6 +129,9 @@ distinct; no zero substitution.
 - **Source-level cascade** — not built; derived rows are deleted by audience, not by deleted source.
   Trigger: the formal NFR-05 deletion policy.
 - **Retention scheduling** — deliberately absent; the operator call is the only path.
+- **Audience on a state conflict (open question, M4/M5)** — `writeState` keeps the first audience when a
+  later write names a different one and still returns success. Should a different audience be an
+  explicit `conflict` instead of a silent drop? No behaviour changes until M4/M5 answer.
 
 ## Re-open triggers
 
@@ -128,4 +142,9 @@ distinct; no zero substitution.
 
 ## Traceability
 
-FR-06 · NFR-03 · NFR-05 · INV-06 · INV-10 · INV-11 · INV-16 · ADR-003/004/005 · #147/#148 · #25/#107.
+FR-06 · NFR-03 · NFR-05 · ADR-003/004/005 · #147/#148 · #25/#107.
+
+No invariant row governs `src/storage/memory-store.ts` or `src/evaluation/memory-bench.ts`. INV-06,
+INV-10, INV-11 and INV-16 cover `memory-projection.ts`, `config.ts`, the migration runner and
+evaluation accounting respectively; they are not claimed here. A dedicated invariant and the case IDs
+are pending #25.

@@ -5294,11 +5294,11 @@ entries:
       audience-scoped export. `runMemoryBench` adds a separate memory report with
       recall@k, precision@k, labelled answer accuracy, tokens per turn, p95
       latency and excluded count; unassessed and not-run stay distinct. No runtime
-      wiring, scheduler, dependency or contract change.
+      wiring, scheduler, dependency or contract change. The commit was rewritten by the rebase onto `f99e2f5` (was `a9ea79b`).
     requirements: [FR-06, NFR-03, NFR-05]
     invariants: [INV-10, INV-11, INV-16]
     cases: []
-    commits: [a9ea79b]
+    commits: [e666cba]
     agent: opencode/deepseek-v4.1-flash
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -5335,11 +5335,11 @@ entries:
       session bindings; `exportAudience` names the audience on state/event lines;
       the memory bench reports precision as unknown for an empty expected set.
       Tests cover topics, clearDerived, audience binding, projection rewind,
-      state attribution, retention bindings and export scope.
+      state attribution, retention bindings and export scope. The commit was rewritten by the rebase onto `f99e2f5` (was `18ea5be`).
     requirements: [FR-06, NFR-03, NFR-05]
     invariants: [INV-06, INV-10, INV-11, INV-16]
     cases: []
-    commits: [18ea5be]
+    commits: [15bfcea]
     agent: opencode/deepseek-v4.1-flash
     provider: opencode-go
     model: deepseek-v4.1-flash
