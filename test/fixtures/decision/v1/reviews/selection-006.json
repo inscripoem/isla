@@ -1,5 +1,10 @@
 {
   "caseId": "selection-006",
-  "status": "draft",
-  "notes": "Draft review record awaiting human sign-off by shallight; cannot produce an adopted score until reviewed."
+  "status": "reviewed",
+  "provenance": "human",
+  "reviewerId": "shallight",
+  "reviewedAt": "2026-11-13",
+  "requestSha256": "b13098efcee32887f6c69358b6a55698fed45354fcdc5e3fc652a1fdc09746bc",
+  "labelSha256": "39ffa4479477446f2aa8cc73efdaa859e52c9718cd2df2aead9af709453ca34c",
+  "notes": "Approved candidate scores: message-006-a = 2 (support), message-006-b = 1 (acknowledge), defer = 0. Intent coverage remains partial; heldOut remains true."
 }

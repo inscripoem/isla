@@ -1,6 +1,6 @@
 # M3 selection corpus v1.1
 
-Status: under review. Owner: M3.
+Status: human-reviewed. Owner: M3.
 
 `corpusVersion` is `m3-selection-v1.1`; `rubricVersion` is
 `m3-quality-rubric-v0.1`. The manifest's `casesSha256` is a SHA-256 digest over
@@ -46,17 +46,18 @@ prompt-injection resistance.
 
 ## Review status
 
-`selection-001` is reviewed by `shallight` on `2026-10-23`, bound to the
-request and label hashes in its detached review record. Its scores are
-message-001 = 2, message-002 = 1 and defer = 0; `answer` and `acknowledge` are
-accepted for their respective candidates, coverage remains `partial`, and
+All 12 cases in `m3-selection-v1.1` are human-reviewed (`status: "reviewed"`,
+`provenance: "human"`) by `shallight`: `selection-001` on `2026-10-23` and
+`selection-002` through `selection-012` on `2026-11-13`. Each review record is
+bound to the exact `requestSha256` and `labelSha256` digests of its request and
+reference label, and every intent label retains `coverage: "partial"`.
+
+The `selection-001` scores are message-001 = 2, message-002 = 1 and defer = 0;
+`answer` and `acknowledge` are accepted for their respective candidates, and
 `heldOut` remains false. The approval does not authorize inventing the game
 name or certify generated dialogue.
 
-`selection-002` and `selection-003`..`selection-012` remain `draft` and must not
-produce an adopted score. A `reviewed` record requires a named human reviewer,
-an actual review date, and matching request and label hashes.
-`provenance: "synthetic-test"` records are permitted only for mechanics tests;
-they never certify corpus evidence. Exhaustive intent coverage requires a
-reviewed `coverageRationale`; otherwise unlisted allowed intents are
-unassessed.
+A `draft` review record produces no adopted score. Records with
+`provenance: "synthetic-test"` are permitted only for mechanics tests; they
+never certify corpus evidence. Exhaustive intent coverage requires a reviewed
+`coverageRationale`; otherwise unlisted allowed intents are unassessed.

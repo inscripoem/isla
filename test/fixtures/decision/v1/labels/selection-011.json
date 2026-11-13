@@ -42,5 +42,5 @@
       "coverageRationale": null
     }
   ],
-  "rationale": "Acknowledging the co-host's lobby arrival (message-011-a) with 'acknowledge' is the preferred outcome and intent; welcoming Mira from chat (message-011-b) with 'acknowledge' is an acceptable alternative, message-011-c is unsuitable, and waiting is not preferred under the restricted intents. Intent coverage is partial while this record remains a draft pending human review by shallight."
+  "rationale": "Acknowledging the co-host's lobby arrival (message-011-a) with 'acknowledge' is the preferred outcome and intent; welcoming Mira from chat (message-011-b) with 'acknowledge' is an acceptable alternative, message-011-c is unsuitable, and waiting is not preferred under the restricted intents. Intent coverage is partial, so unlisted allowed intents remain unassessed."
 }

@@ -64,5 +64,5 @@
       "coverageRationale": null
     }
   ],
-  "rationale": "Answering the substantive brazier question (message-009-c) with 'answer' is the preferred outcome and intent; acknowledging 'hype!' (message-009-b) with 'acknowledge' is an acceptable alternative, while the short emotes and noise are unsuitable and waiting is not preferred. Intent coverage is partial while this record remains a draft pending human review by shallight."
+  "rationale": "Answering the substantive brazier question (message-009-c) with 'answer' is the preferred outcome and intent; acknowledging 'hype!' (message-009-b) with 'acknowledge' is an acceptable alternative, while the short emotes and noise are unsuitable and waiting is not preferred. Intent coverage is partial, so unlisted allowed intents remain unassessed."
 }
