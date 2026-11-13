@@ -3,7 +3,7 @@
   "hashVersion": 1,
   "corpusVersion": "m3-selection-v1.1",
   "rubricVersion": "m3-quality-rubric-v0.1",
-  "casesSha256": "7b5f6dcab96be8d599b0ddacb0916616a343853f04df0fa8bbad8610df605895",
+  "casesSha256": "c7c1b19d875e7510210e156656ad4749c33c82d6b54dbb1ee2bb7a6b9f68fa63",
   "cases": [
     {
       "id": "selection-001",
