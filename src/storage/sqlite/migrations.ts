@@ -167,6 +167,7 @@ export const BUILT_IN_MIGRATIONS: readonly Migration[] = [
         CREATE TABLE IF NOT EXISTS projection_state (
           session_id TEXT PRIMARY KEY,
           applied_seq INTEGER NOT NULL,
+          extractor_version TEXT NOT NULL,
           updated_at_ms REAL NOT NULL
         )
       `)

@@ -26,10 +26,15 @@ Schema v3 adds `derived_episode`, `derived_topic`, `projection_state`, `session_
 `deliveries` tables are unchanged. Derived rows store ids, never copied text; no vector or graph
 columns.
 
-### D2 — The cursor is durable and monotonic
+### D2 — The cursor is durable, monotonic and extractor-scoped
 
-`createMemoryStore` persists `applied_seq` per session. `writeProjection` refuses a non-increasing
-value (`stale`), so a restart resumes and a cursor cannot rewind. The `MemoryProjectionPort` itself
+`createMemoryStore` persists `applied_seq` and `extractor_version` per session. An incremental
+`writeProjection` refuses a non-increasing value (`stale`) and refuses a different extractor version
+(`version-mismatch`), so a restart resumes and a cursor cannot rewind. A rebuild under the same
+extractor version writes `max(persisted, rebuild_result)`, so a smaller event set cannot lower the
+cursor. A rebuild under a new extractor version rebuilds the derived rows and the cursor together under
+that version; carrying the old cursor across a semantic change would break “rebuild equals
+incremental” in the other direction. Evidence tables are unchanged. The `MemoryProjectionPort` itself
 remains in-process; the durable cursor is a storage helper for callers that need restart continuity.
 
 ### D3 — Owner identity only on an explicit consenting write

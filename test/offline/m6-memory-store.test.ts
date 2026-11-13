@@ -92,15 +92,26 @@ describe('M6 memory store — schema and derived memory', () => {
 
   it('persists the projection cursor across reopen', () => {
     const store = storeAt()
-    expect(store.writeProjection('s1', 5, 1000)).toBe('written')
-    expect(store.writeProjection('s1', 3, 2000)).toBe('stale')
+    expect(store.writeProjection('s1', 5, 1000, 'v1')).toBe('written')
+    expect(store.writeProjection('s1', 3, 2000, 'v1')).toBe('stale')
     expect(store.readProjection('s1')).toBe(5)
+    expect(store.readProjectionVersion('s1')).toBe('v1')
     open[0]!.close()
     open.pop()
     const dbPath = join(directories[0]!, 'isla.db')
     const reopened = openDatabase(dbPath)
     open.push(reopened)
-    expect(createMemoryStore(reopened).readProjection('s1')).toBe(5)
+    const recreated = createMemoryStore(reopened)
+    expect(recreated.readProjection('s1')).toBe(5)
+    expect(recreated.readProjectionVersion('s1')).toBe('v1')
+  })
+
+  it('refuses an incremental write from a different extractor version', () => {
+    const store = storeAt()
+    expect(store.writeProjection('s1', 5, 1000, 'v1')).toBe('written')
+    expect(store.writeProjection('s1', 6, 2000, 'v2')).toBe('version-mismatch')
+    expect(store.readProjection('s1')).toBe(5)
+    expect(store.readProjectionVersion('s1')).toBe('v1')
   })
 
   it('rebuilds derived episodes and the cursor from events', () => {
@@ -115,6 +126,7 @@ describe('M6 memory store — schema and derived memory', () => {
       events,
       (sessionEvents) => [episode(`derived-${sessionEvents[0]?.sessionId}`, null, 20)],
       () => [topic('derived-topic', 'aud-1')],
+      'v1',
     )
     expect(result).toEqual({ sessions: 1, episodes: 1, topics: 1 })
     expect(store.readEpisodes({ sessionId: 's1', limit: 10 }).map((row) => row.id)).toEqual([
@@ -124,6 +136,42 @@ describe('M6 memory store — schema and derived memory', () => {
       'derived-topic',
     ])
     expect(store.readProjection('s1')).toBe(2)
+    expect(store.readProjectionVersion('s1')).toBe('v1')
+  })
+
+  it('does not lower the cursor when a same-version rebuild sees fewer events', () => {
+    const store = storeAt()
+    expect(store.writeProjection('s1', 5, 1000, 'v1')).toBe('written')
+    const events = [
+      fixtureRuntimeEvent({ eventId: 'e1', seq: 2, sessionId: 's1', timestampMs: 20 }),
+    ]
+    store.rebuildDerived(
+      events,
+      () => [episode('derived-s1', null, 20)],
+      () => [],
+      'v1',
+    )
+    expect(store.readProjection('s1')).toBe(5)
+    expect(store.readProjectionVersion('s1')).toBe('v1')
+  })
+
+  it('rebuilds rows and cursor under a new extractor version', () => {
+    const store = storeAt()
+    expect(store.writeProjection('s1', 5, 1000, 'v1')).toBe('written')
+    const events = [
+      fixtureRuntimeEvent({ eventId: 'e1', seq: 2, sessionId: 's1', timestampMs: 20 }),
+    ]
+    store.rebuildDerived(
+      events,
+      () => [{ ...episode('derived-s1', null, 20), extractorVersion: 'v2' }],
+      () => [],
+      'v2',
+    )
+    expect(store.readProjection('s1')).toBe(2)
+    expect(store.readProjectionVersion('s1')).toBe('v2')
+    expect(store.readEpisodes({ sessionId: 's1', limit: 10 }).map((row) => row.id)).toEqual([
+      'derived-s1',
+    ])
   })
 
   it('upserts topics idempotently and clears derived rows', () => {

@@ -71,15 +71,22 @@ export interface MemoryStore {
   readEpisodes(query: { sessionId?: string; audienceId?: string; limit: number }): DerivedEpisode[]
   readTopics(query: { audienceId: string; limit: number }): DerivedTopic[]
   readProjection(sessionId: string): number
-  writeProjection(sessionId: string, appliedSeq: number, nowMs: number): 'written' | 'stale'
+  readProjectionVersion(sessionId: string): string | null
+  writeProjection(
+    sessionId: string,
+    appliedSeq: number,
+    nowMs: number,
+    extractorVersion: string,
+  ): 'written' | 'stale' | 'version-mismatch'
   clearDerived(): void
   rebuildDerived(
     events: readonly RuntimeEvent[],
     deriveEpisodes: (events: readonly RuntimeEvent[]) => readonly DerivedEpisode[],
-    deriveTopics?: (
+    deriveTopics: (
       episodes: readonly DerivedEpisode[],
       events: readonly RuntimeEvent[],
-    ) => readonly DerivedTopic[],
+    ) => readonly DerivedTopic[] | undefined,
+    extractorVersion: string,
   ): { sessions: number; episodes: number; topics: number }
   recordSessionAudience(
     sessionId: string,
@@ -134,13 +141,14 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
       updated_at_ms = excluded.updated_at_ms
   `)
   const readProjection = database.prepare(
-    'SELECT applied_seq FROM projection_state WHERE session_id = ?',
+    'SELECT applied_seq, extractor_version FROM projection_state WHERE session_id = ?',
   )
   const writeProjection = database.prepare(`
-    INSERT INTO projection_state (session_id, applied_seq, updated_at_ms)
-    VALUES (?, ?, ?)
+    INSERT INTO projection_state (session_id, applied_seq, updated_at_ms, extractor_version)
+    VALUES (?, ?, ?, ?)
     ON CONFLICT(session_id) DO UPDATE SET
-      applied_seq = excluded.applied_seq, updated_at_ms = excluded.updated_at_ms
+      applied_seq = excluded.applied_seq, updated_at_ms = excluded.updated_at_ms,
+      extractor_version = excluded.extractor_version
   `)
   const readAudience = database.prepare(
     'SELECT audience_id, durable, consent FROM session_audience WHERE session_id = ?',
@@ -288,11 +296,19 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
       return row?.applied_seq ?? 0
     },
 
-    writeProjection(sessionId, appliedSeq, nowMs) {
-      const current = (readProjection.get(sessionId) as { applied_seq: number } | undefined)
-        ?.applied_seq ?? 0
+    readProjectionVersion(sessionId) {
+      const row = readProjection.get(sessionId) as { extractor_version: string } | undefined
+      return row?.extractor_version ?? null
+    },
+
+    writeProjection(sessionId, appliedSeq, nowMs, extractorVersion) {
+      const row = readProjection.get(sessionId) as
+        | { applied_seq: number; extractor_version: string }
+        | undefined
+      if (row !== undefined && row.extractor_version !== extractorVersion) return 'version-mismatch'
+      const current = row?.applied_seq ?? 0
       if (appliedSeq <= current) return 'stale'
-      writeProjection.run(sessionId, appliedSeq, nowMs)
+      writeProjection.run(sessionId, appliedSeq, nowMs, extractorVersion)
       return 'written'
     },
 
@@ -301,7 +317,7 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
       database.exec('DELETE FROM derived_topic')
     },
 
-    rebuildDerived(events, deriveEpisodes, deriveTopics) {
+    rebuildDerived(events, deriveEpisodes, deriveTopics, extractorVersion) {
       const sessions = new Map<string, RuntimeEvent[]>()
       for (const event of events) {
         const list = sessions.get(event.sessionId) ?? []
@@ -355,7 +371,14 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
               lastTimestamp = event.timestampMs
             }
           }
-          writeProjection.run(sessionId, lastSeq, lastTimestamp)
+          const existing = readProjection.get(sessionId) as
+            | { applied_seq: number; extractor_version: string }
+            | undefined
+          const nextSeq =
+            existing !== undefined && existing.extractor_version === extractorVersion
+              ? Math.max(existing.applied_seq, lastSeq)
+              : lastSeq
+          writeProjection.run(sessionId, nextSeq, lastTimestamp, extractorVersion)
         }
         database.exec('COMMIT')
         return { sessions: sessions.size, episodes, topics }
