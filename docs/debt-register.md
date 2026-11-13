@@ -14,6 +14,7 @@ agent-induced bloat, evaluation debt, guardrail debt, human/cognitive debt.
 | DEBT-06 | agent-induced bloat | multiple stacked PRs pending merge (#9/#23/#24) | rebase churn | team | sequence merges |
 | DEBT-07 | guardrail debt | M4 reports 5 Windows-only `test:m6` failures (`m6-sqlite` ×3, `m6-02-boundary` ×2); Linux passes 181/14 and the cleanup branch 182/14 | no Windows test claim; CI is Linux-only | M6 | separate platform investigation; do not claim Windows coverage |
 | DEBT-08 | evaluation debt | documentation claims about live configuration are not machine-checked; M6-GOV-11 cannot be satisfied by a docs-only slice | a false or stale claim can ship inside a reviewable document (BUG-017) | M6 | every claim names its command; a negative claim needs a positive read; refresh the thread at write time. Trigger: refusal experiment or a read-only claims check |
+| DEBT-14 | evaluation debt | the recorded run carries no corpus identity (`FixedConditions` has no `corpusVersion`/`casesSha256`), so the label file's corpus tuple is checked only against the supplied manifest | a label file for one corpus can be joined to a run produced from another whenever the manifest matches the labels (#145) | M6/M3 | add a corpus field in a versioned run-schema decision (trigger: the first formal run, or a second corpus version); until then the operator supplies the run and the manifest together |
 
 ## PR53 IPC literal follow-up
 
