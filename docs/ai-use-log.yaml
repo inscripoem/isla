@@ -5480,3 +5480,46 @@ entries:
       not_run: >-
         No push, merge, M4 derive integration, runtime wiring, checkpoint
         acceptance or live data.
+
+  - date: "2026-11-13"
+    task: "M6-X07 memory bench corrections"
+    branch: m6-memory-foundation
+    change: >-
+      Correct the memory benchmark: `precisionAtK` divides by
+      `min(k, retrievedCount)` and each probe records `retrievedCount`; empty
+      retrieval reports precision `null`, not a fabricated zero. Add report
+      identity fields (QA set id + SHA-256, snapshot, chunking, embedding,
+      retrieval, LLM) so runs are comparable only under named conditions.
+      `compareMemoryReports` now gates recall, precision and labelled answer
+      accuracy; tokens per turn and p95 remain informational. Summary prints the
+      identity; ADR D7 records the rules. No contract, runtime, scoring or
+      threshold change; M4 corpora remain pending.
+    requirements: [NFR-03]
+    invariants: [INV-16]
+    cases: []
+    commits: [8877d39]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      The human M6 owner approved the M6-X07-1 slice. The agent edited the
+      M6-owned evaluation files and ADR; no push or merge is claimed.
+    human_review: >-
+      Captain (M6) approved the slice; M4/M5 review pending. No checkpoint
+      acceptance is claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id
+      is claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main); 0a63ab4 (branch before this slice)
+      focused: "m6-memory-bench 8/8."
+      role: "test:m6 212/212 in 16 files; trace 41/1; readiness 47/3."
+      full_suite: "pnpm verify exit 0: 1575/1575 in 76 files; typecheck clean; lint clean."
+      mutation: >-
+        Dividing precision by k reddened the sparse-precision and aggregate
+        tests; recalling only the recall comparison reddened the
+        precision/accuracy regression test; both restored.
+      not_run: >-
+        No push, merge, M4 corpora, live data, quality verdict or checkpoint
+        acceptance.
