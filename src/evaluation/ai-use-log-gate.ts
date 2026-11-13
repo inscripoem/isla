@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { parse as parseYaml } from 'yaml'
 import { readChangedFiles } from './changed-files'
+import { writeFindings, type GateFinding } from './gate-record'
 import { existingCommits, reachableCommits } from './git-facts'
 import { caseIdsFromRegistry, invariantIdsFromRegister } from './registers'
 
@@ -224,10 +225,10 @@ export function collectCitedCommits(text: string): string[] {
  * violations. A gate that passes because its register failed to load is worse than
  * one that fails loudly.
  */
-export function collectAiUseLogReferenceViolations(
+export function collectAiUseLogReferenceFindings(
   text: string,
   deps: AiUseReferenceDeps,
-): string[] {
+): GateFinding[] {
   let parsed: unknown
   try {
     parsed = parseYaml(text)
@@ -237,7 +238,7 @@ export function collectAiUseLogReferenceViolations(
   const entries = (parsed as { entries?: unknown } | null)?.entries
   if (!Array.isArray(entries)) return []
 
-  const violations: string[] = []
+  const findings: GateFinding[] = []
   entries.forEach((entry, index) => {
     if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return
     const record = entry as Record<string, unknown>
@@ -246,25 +247,41 @@ export function collectAiUseLogReferenceViolations(
     const commits = Array.isArray(record.commits) ? record.commits : []
     for (const raw of commits) {
       if (typeof raw !== 'string') {
-        // A bare number is a YAML integer, not a commit id; silently skipping it
-        // would turn a malformed citation into a pass.
-        violations.push(`${label} (entry ${index}) has a non-string commit entry`)
+        findings.push({
+          policy: 'POL-G6-02',
+          trigger: 'commit-not-a-string',
+          message: `${label} (entry ${index}) has a non-string commit entry`,
+          evidence: { entry: label, field: 'commits', value: String(raw) },
+        })
         continue
       }
       if (raw.trim().length === 0) continue
       const sha = raw.trim()
       if (sha.length < MIN_SHA_LENGTH) {
-        violations.push(`${label} (entry ${index}) cites "${sha}", which is too short to identify a commit`)
+        findings.push({
+          policy: 'POL-G6-02',
+          trigger: 'commit-too-short',
+          message: `${label} (entry ${index}) cites "${sha}", which is too short to identify a commit`,
+          evidence: { entry: label, field: 'commits', value: sha },
+        })
         continue
       }
       if (deps.existingCommits === null) {
-        violations.push(
-          `${label} (entry ${index}) cites ${sha}, but the object database is unavailable; G6 cannot verify it`,
-        )
+        findings.push({
+          policy: 'POL-G6-03',
+          trigger: 'register-unreadable',
+          message: `${label} (entry ${index}) cites ${sha}, but the object database is unavailable; G6 cannot verify it`,
+          evidence: { register: 'object-database' },
+        })
         continue
       }
       if (!deps.existingCommits.has(sha)) {
-        violations.push(`${label} (entry ${index}) cites ${sha}, which G6 was not asked to resolve`)
+        findings.push({
+          policy: 'POL-G6-02',
+          trigger: 'commit-unresolved',
+          message: `${label} (entry ${index}) cites ${sha}, which G6 was not asked to resolve`,
+          evidence: { entry: label, field: 'commits', value: sha },
+        })
         continue
       }
       const full = deps.existingCommits.get(sha) ?? ''
@@ -272,14 +289,20 @@ export function collectAiUseLogReferenceViolations(
         const exempt = baselineItem(deps, 'commit', sha)
         if (exempt !== null && !exempt.expired) continue
         if (exempt !== null && exempt.expired) {
-          violations.push(
-            `${label} (entry ${index}) cites ${sha}, whose exemption expired on ${exempt.item.expires}`,
-          )
+          findings.push({
+            policy: 'POL-G6-04',
+            trigger: 'baseline-expired',
+            message: `${label} (entry ${index}) cites ${sha}, whose exemption expired on ${exempt.item.expires}`,
+            evidence: { value: sha, expires: exempt.item.expires },
+          })
           continue
         }
-        violations.push(
-          `${label} (entry ${index}) cites ${sha}, which is not an object in this repository`,
-        )
+        findings.push({
+          policy: 'POL-G6-02',
+          trigger: 'commit-missing',
+          message: `${label} (entry ${index}) cites ${sha}, which is not an object in this repository`,
+          evidence: { entry: label, field: 'commits', value: sha },
+        })
         continue
       }
       if (deps.reachableCommits != null && !deps.reachableCommits.has(full)) {
@@ -294,13 +317,32 @@ export function collectAiUseLogReferenceViolations(
       if (typeof raw !== 'string' || raw.trim().length === 0) continue
       const id = raw.trim()
       if (deps.caseIds === null) {
-        violations.push(`${label} (entry ${index}) cites ${id}, but the case registry is unavailable`)
+        findings.push({
+          policy: 'POL-G6-03',
+          trigger: 'register-unreadable',
+          message: `${label} (entry ${index}) cites ${id}, but the case registry is unavailable`,
+          evidence: { register: 'case-registry' },
+        })
         continue
       }
       if (deps.caseIds.has(id)) continue
       const exempt = baselineItem(deps, 'case', id)
       if (exempt !== null && !exempt.expired) continue
-      violations.push(`${label} (entry ${index}) cites case ${id}, which is not in the case registry`)
+      if (exempt !== null && exempt.expired) {
+        findings.push({
+          policy: 'POL-G6-04',
+          trigger: 'baseline-expired',
+          message: `${label} (entry ${index}) cites case ${id}, whose exemption expired on ${exempt.item.expires}`,
+          evidence: { value: id, expires: exempt.item.expires },
+        })
+        continue
+      }
+      findings.push({
+        policy: 'POL-G6-02',
+        trigger: 'case-unknown',
+        message: `${label} (entry ${index}) cites case ${id}, which is not in the case registry`,
+        evidence: { entry: label, field: 'cases', value: id },
+      })
     }
 
     const invariants = Array.isArray(record.invariants) ? record.invariants : []
@@ -308,16 +350,98 @@ export function collectAiUseLogReferenceViolations(
       if (typeof raw !== 'string' || raw.trim().length === 0) continue
       const id = raw.trim()
       if (deps.invariantIds === null) {
-        violations.push(`${label} (entry ${index}) cites ${id}, but the invariant register is unavailable`)
+        findings.push({
+          policy: 'POL-G6-03',
+          trigger: 'register-unreadable',
+          message: `${label} (entry ${index}) cites ${id}, but the invariant register is unavailable`,
+          evidence: { register: 'invariant-register' },
+        })
         continue
       }
       if (deps.invariantIds.has(id)) continue
       const exempt = baselineItem(deps, 'invariant', id)
       if (exempt !== null && !exempt.expired) continue
-      violations.push(`${label} (entry ${index}) cites invariant ${id}, which is not in the register`)
+      if (exempt !== null && exempt.expired) {
+        findings.push({
+          policy: 'POL-G6-04',
+          trigger: 'baseline-expired',
+          message: `${label} (entry ${index}) cites invariant ${id}, whose exemption expired on ${exempt.item.expires}`,
+          evidence: { value: id, expires: exempt.item.expires },
+        })
+        continue
+      }
+      findings.push({
+        policy: 'POL-G6-02',
+        trigger: 'invariant-unknown',
+        message: `${label} (entry ${index}) cites invariant ${id}, which is not in the register`,
+        evidence: { entry: label, field: 'invariants', value: id },
+      })
     }
   })
-  return violations
+  return findings
+}
+
+/** String view for callers that only need messages (existing tests and logs). */
+export function collectAiUseLogReferenceViolations(
+  text: string,
+  deps: AiUseReferenceDeps,
+): string[] {
+  return collectAiUseLogReferenceFindings(text, deps).map((finding) => finding.message)
+}
+
+/** The rule violation as a finding, so the failure record names POL-G6-01. */
+function collectAiUseLogFindings(changedFiles: readonly string[]): GateFinding[] {
+  const messages = collectAiUseLogViolations(changedFiles)
+  if (messages.length === 0) return []
+  const codeFiles = changedFiles.filter((file) =>
+    CODE_OR_PROMPT_PREFIXES.some((prefix) => file.startsWith(prefix)),
+  )
+  return messages.map((message) => ({
+    policy: 'POL-G6-01',
+    trigger: 'log-not-updated',
+    message,
+    evidence: { changed_files: codeFiles, log_changed: changedFiles.includes(AI_USE_LOG_PATH) },
+  }))
+}
+
+/** Build the reference deps once, for both the check and the failure record. */
+function buildReferenceDeps(
+  text: string,
+  onAdvisory?: (message: string) => void,
+): AiUseReferenceDeps {
+  const readRegister = (path: string): string | null =>
+    existsSync(path) ? readFileSync(path, 'utf8') : null
+  const casesText = readRegister(CASE_REGISTRY_PATH)
+  const invariantsText = readRegister(INVARIANT_REGISTER_PATH)
+  const baselineText = readRegister(GATE_BASELINE_PATH)
+  let baseline: AiUseBaselineItem[] = []
+  if (baselineText !== null) {
+    try {
+      const parsed = parseYaml(baselineText) as { items?: unknown } | null
+      const items = parsed?.items
+      if (Array.isArray(items)) {
+        baseline = items.filter(
+          (item): item is AiUseBaselineItem =>
+            item !== null &&
+            typeof item === 'object' &&
+            typeof (item as AiUseBaselineItem).kind === 'string' &&
+            typeof (item as AiUseBaselineItem).value === 'string' &&
+            typeof (item as AiUseBaselineItem).expires === 'string',
+        )
+      }
+    } catch {
+      baseline = []
+    }
+  }
+  return {
+    existingCommits: existingCommits(collectCitedCommits(text)),
+    reachableCommits: reachableCommits(),
+    caseIds: casesText === null ? null : caseIdsFromRegistry(casesText),
+    invariantIds: invariantsText === null ? null : invariantIdsFromRegister(invariantsText),
+    baseline,
+    today: new Date().toISOString().slice(0, 10),
+    onAdvisory,
+  }
 }
 
 function runCli(changedFiles: readonly string[]): number {
@@ -331,47 +455,11 @@ function runCli(changedFiles: readonly string[]): number {
   }
 
   if (headText !== null) {
-    const readRegister = (path: string): string | null =>
-      existsSync(path) ? readFileSync(path, 'utf8') : null
-    const casesText = readRegister(CASE_REGISTRY_PATH)
-    const invariantsText = readRegister(INVARIANT_REGISTER_PATH)
-    const baselineText = readRegister(GATE_BASELINE_PATH)
-    let baseline: AiUseBaselineItem[] = []
-    if (baselineText !== null) {
-      try {
-        const parsed = parseYaml(baselineText) as { items?: unknown } | null
-        const items = parsed?.items
-        if (Array.isArray(items)) {
-          baseline = items.filter(
-            (item): item is AiUseBaselineItem =>
-              item !== null &&
-              typeof item === 'object' &&
-              typeof (item as AiUseBaselineItem).kind === 'string' &&
-              typeof (item as AiUseBaselineItem).value === 'string' &&
-              typeof (item as AiUseBaselineItem).expires === 'string',
-          )
-        }
-      } catch (error) {
-        violations.push(
-          `${GATE_BASELINE_PATH} is not valid YAML: ${error instanceof Error ? error.message : String(error)}`,
-        )
-      }
-    }
-    const cited = collectCitedCommits(headText)
     let unreachable = 0
-    violations.push(
-      ...collectAiUseLogReferenceViolations(headText, {
-        existingCommits: existingCommits(cited),
-        reachableCommits: reachableCommits(),
-        caseIds: casesText === null ? null : caseIdsFromRegistry(casesText),
-        invariantIds: invariantsText === null ? null : invariantIdsFromRegister(invariantsText),
-        baseline,
-        today: new Date().toISOString().slice(0, 10),
-        onAdvisory: () => {
-          unreachable += 1
-        },
-      }),
-    )
+    const deps = buildReferenceDeps(headText, () => {
+      unreachable += 1
+    })
+    violations.push(...collectAiUseLogReferenceViolations(headText, deps))
     if (unreachable > 0) {
       process.stdout.write(
         `G6 advisory: ${unreachable} cited commit(s) exist but are not reachable from HEAD (squash-merge history)\n`,
@@ -395,6 +483,22 @@ function runCli(changedFiles: readonly string[]): number {
     return 0
   }
   for (const violation of violations) process.stderr.write(`G6: ${violation}\n`)
+  const findings: GateFinding[] = []
+  if (changedFiles.length > 0) {
+    findings.push(...collectAiUseLogFindings(changedFiles))
+  }
+  if (headText !== null) {
+    findings.push(...collectAiUseLogReferenceFindings(headText, buildReferenceDeps(headText)))
+  }
+  try {
+    for (const path of writeFindings(findings)) {
+      process.stdout.write(`G6: failure record ${path}\n`)
+    }
+  } catch (error) {
+    process.stderr.write(
+      `G6: could not write the failure record: ${error instanceof Error ? error.message : String(error)}\n`,
+    )
+  }
   return 1
 }
 

@@ -42,6 +42,27 @@ or schema change).
   while §8 required updating the INV-13/INV-14 evidence cells. §8 is the evidence requirement and wins;
   §3's list was too narrow. Recorded here so the contradiction is not silently repeated.
 
+## Gate failure records and policies (2026-11-13, third pass)
+
+A gate verdict now carries the decision that follows it. `src/evaluation/gate-record.ts` is the single
+source for 20 policies (`POL-PIPE-*`, `POL-G1-*`, `POL-G4-*`, `POL-G6-*`, `POL-TR-*`, `POL-G2/3/5-*`),
+each declaring its decision, its action and exactly the evidence fields it promises. The same table is
+rendered into `docs/architecture/runtime-policy-catalog.md` under **Pipeline gates (M6)**, and an
+agreement test compares the two sets.
+
+- **Records.** Every failing gate writes `.cache/gate-failures/<policy>-<commit>-<utc>.json`; CI uploads
+  the directory for 14 days and the summary names each file. One record per policy per run, so a
+  repeated failure does not bury the decision in duplicates.
+- **Completeness.** `buildGateRecord` throws when the evidence keys differ from the declared fields.
+  A policy cannot promise seven fields and emit six; the test fails first.
+- **Pipeline.** Every gate step is `if: always()`, so one failure no longer hides the rest; the
+  aggregate step records any gate that did not succeed as `not-verified` (POL-PIPE-01).
+- **Honesty.** G2/G3/G5 have policies but no dedicated record: their failing step is the record, and
+  the catalog marks them `convention`. There is no pager; the escalation column says `none` and names
+  the human role that reads the check.
+- **Defect found while verifying.** The standalone `gate:trace` entry point did not load the ADR-cell
+  baseline and failed on the known `INV-15` row; it now reads the same baseline as the test.
+
 ## What each gate now proves — and what it does not
 
 | Gate | Proves | Does not prove |

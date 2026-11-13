@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
-import { EVALUATION_TABLE_PATH } from './artifacts'
-import { columnIndex, parseTables } from './markdown'
 import { parse as parseYaml } from 'yaml'
+import { EVALUATION_TABLE_PATH } from './artifacts'
+import { writeFindings, type GateFinding } from './gate-record'
+import { columnIndex, parseTables } from './markdown'
 
 /**
  * M6 / R3 — gate G4: semantic evaluation (ADR-006).
@@ -16,16 +17,10 @@ import { parse as parseYaml } from 'yaml'
  * latency claim, and a gate that silently disappears is worse than one that says
  * it did not run.
  *
- * The pure function is exported so tests can prove every outcome without an
- * evaluation set, and so the gate can be wired to a real evaluation report when
- * M6-02 produces one.
+ * Findings carry the policy that owns the response (POL-G4-0x); the CLI writes one
+ * failure record per policy so an operator reads a decision, not a log.
  */
 
-/**
- * The fixed conditions NFR-01 requires an evaluation report to document, matched
- * case-insensitively in the table text: hardware, provider(s), workload, sample
- * size and cold/warm state.
- */
 const GATE_BASELINE_PATH = 'docs/code-governance/gate-baseline.yaml'
 
 const REQUIRED_CONDITIONS = ['hardware', 'provider', 'workload', 'sample', 'cold'] as const
@@ -66,8 +61,8 @@ export function claimLineKey(path: string, line: string): string {
 }
 
 /** Claims recorded in the evaluation table must carry a value and a conditions reference. */
-function claimTableViolations(table: string): string[] {
-  const violations: string[] = []
+function claimTableFindings(table: string): GateFinding[] {
+  const findings: GateFinding[] = []
   for (const candidate of parseTables(table)) {
     const claimColumn = columnIndex(candidate.header, 'Claim')
     if (claimColumn < 0) continue
@@ -78,14 +73,24 @@ function claimTableViolations(table: string): string[] {
       const claim = (row[claimColumn] ?? '').trim()
       if (claim.length === 0) return
       if ((row[valueColumn] ?? '').trim().length === 0) {
-        violations.push(`claim "${claim}" (row ${index + 1}) records no value`)
+        findings.push({
+          policy: 'POL-G4-02',
+          trigger: 'claim-value-missing',
+          message: `claim "${claim}" (row ${index + 1}) records no value`,
+          evidence: { claim, missing: 'value' },
+        })
       }
       if ((row[conditionsColumn] ?? '').trim().length === 0) {
-        violations.push(`claim "${claim}" (row ${index + 1}) names no fixed conditions`)
+        findings.push({
+          policy: 'POL-G4-02',
+          trigger: 'claim-conditions-missing',
+          message: `claim "${claim}" (row ${index + 1}) names no fixed conditions`,
+          evidence: { claim, missing: 'conditions' },
+        })
       }
     })
   }
-  return violations
+  return findings
 }
 
 /**
@@ -93,58 +98,88 @@ function claimTableViolations(table: string): string[] {
  * the number is asserted, the conditions are absent, and nothing can check it.
  * Targets and requirements are not claims, so they pass.
  */
-function proseClaimViolations(
+function proseClaimFindings(
   documents: readonly ClaimDocument[],
   hasTable: boolean,
   options: EvalGateOptions,
-): string[] {
-  const violations: string[] = []
+): GateFinding[] {
+  const findings: GateFinding[] = []
   const today = options.today ?? new Date().toISOString().slice(0, 10)
   for (const document of documents) {
-    for (const line of document.text.split('\n')) {
-      if (!CLAIM_MARKER.test(line) || !/\d/.test(line)) continue
-      if (TARGET_WORD.test(line)) continue
+    document.text.split('\n').forEach((line, index) => {
+      if (!CLAIM_MARKER.test(line) || !/\d/.test(line)) return
+      if (TARGET_WORD.test(line)) return
       const exemption = options.claimExemptions?.find(
         (entry) => entry.key === claimLineKey(document.path, line),
       )
       if (exemption !== undefined) {
-        if (exemption.expires >= today) continue
-        violations.push(
-          `${document.path} claim exemption expired on ${exemption.expires}; re-review the sentence`,
-        )
-        continue
+        if (exemption.expires >= today) return
+        findings.push({
+          policy: 'POL-G4-04',
+          trigger: 'exemption-expired',
+          message: `${document.path} claim exemption expired on ${exemption.expires}; re-review the sentence`,
+          evidence: { document: document.path, line: index + 1, expires: exemption.expires },
+        })
+        return
       }
       if (!hasTable) {
-        violations.push(
-          `${document.path} states a measured result ("${line.trim().slice(0, 80)}") but ${EVALUATION_TABLE_PATH} does not exist`,
-        )
+        findings.push({
+          policy: 'POL-G4-01',
+          trigger: 'claim-without-table',
+          message: `${document.path} states a measured result ("${line.trim().slice(0, 80)}") but ${EVALUATION_TABLE_PATH} does not exist`,
+          evidence: {
+            document: document.path,
+            line: index + 1,
+            claim: line.trim().slice(0, 200),
+            missing: 'table',
+          },
+        })
       }
-    }
+    })
   }
-  return violations
+  return findings
 }
 
 /**
  * Check an evaluation table's text, or `null` when there is none. Absence is not
  * a violation — it is a *not run*, which the caller must report as such.
  */
+export function collectEvalGateFindings(
+  table: string | null,
+  documents: readonly ClaimDocument[] = [],
+  options: EvalGateOptions = {},
+): { readonly ran: boolean; readonly findings: readonly GateFinding[] } {
+  const claims = proseClaimFindings(documents, table !== null, options)
+  if (table === null) return { ran: claims.length > 0, findings: claims }
+  const haystack = table.toLowerCase()
+  const findings: GateFinding[] = [
+    ...REQUIRED_CONDITIONS.filter((condition) => !haystack.includes(condition)).map(
+      (condition): GateFinding => ({
+        policy: 'POL-G4-01',
+        trigger: 'condition-missing',
+        message: `${EVALUATION_TABLE_PATH} does not record the ${condition} condition required by NFR-01 (gate G4)`,
+        evidence: {
+          document: EVALUATION_TABLE_PATH,
+          line: null,
+          claim: condition,
+          missing: 'condition',
+        },
+      }),
+    ),
+    ...claimTableFindings(table),
+    ...claims,
+  ]
+  return { ran: true, findings }
+}
+
+/** String view for callers that only need messages (existing tests and logs). */
 export function collectEvalGateViolations(
   table: string | null,
   documents: readonly ClaimDocument[] = [],
   options: EvalGateOptions = {},
 ): EvalGateResult {
-  const claims = proseClaimViolations(documents, table !== null, options)
-  if (table === null) return { ran: claims.length > 0, violations: claims }
-  const haystack = table.toLowerCase()
-  const violations = [
-    ...REQUIRED_CONDITIONS.filter((condition) => !haystack.includes(condition)).map(
-      (condition) =>
-        `${EVALUATION_TABLE_PATH} does not record the ${condition} condition required by NFR-01 (gate G4)`,
-    ),
-    ...claimTableViolations(table),
-    ...claims,
-  ]
-  return { ran: true, violations }
+  const result = collectEvalGateFindings(table, documents, options)
+  return { ran: result.ran, violations: result.findings.map((finding) => finding.message) }
 }
 
 function readClaimExemptions(): ClaimExemption[] {
@@ -171,19 +206,27 @@ function runCli(
   table: string | null,
   documents: readonly ClaimDocument[] = [],
   options: EvalGateOptions = {},
+  context: { commit?: string | null; base?: string | null } = {},
 ): number {
-  const result = collectEvalGateViolations(table, documents, options)
+  const result = collectEvalGateFindings(table, documents, options)
   if (!result.ran) {
-    process.stdout.write(
-      'G4: not run — no evaluation set or provider access (this is not a pass)\n',
-    )
+    process.stdout.write('G4: not run — no evaluation set or provider access (this is not a pass)\n')
     return 0
   }
-  if (result.violations.length === 0) {
+  if (result.findings.length === 0) {
     process.stdout.write('G4: evaluation table records the fixed conditions NFR-01 requires\n')
     return 0
   }
-  for (const violation of result.violations) process.stderr.write(`G4: ${violation}\n`)
+  for (const finding of result.findings) process.stderr.write(`G4: ${finding.message}\n`)
+  try {
+    for (const path of writeFindings(result.findings, context)) {
+      process.stdout.write(`G4: failure record ${path}\n`)
+    }
+  } catch (error) {
+    process.stderr.write(
+      `G4: could not write the failure record: ${error instanceof Error ? error.message : String(error)}\n`,
+    )
+  }
   return 1
 }
 

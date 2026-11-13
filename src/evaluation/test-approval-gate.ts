@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { parseDocument } from 'yaml'
 import { readChangedFiles } from './changed-files'
+import { writeFindings, type GateFinding } from './gate-record'
 import { commitTime, firstCommitTouching, isAncestorOf, mergeBase } from './git-facts'
 
 /**
@@ -175,54 +176,107 @@ function covers(scope: string, file: string): boolean {
  * never a pass. The one thing it cannot check is whether a human actually approved;
  * that stays a review obligation and is stated in the ADR.
  */
-export function collectApprovalEvidenceViolations(input: ApprovalEvidenceInput): string[] {
+export function collectApprovalEvidenceFindings(
+  input: ApprovalEvidenceInput,
+): GateFinding[] {
   if (!input.isPullRequest) return []
   const codeFiles = input.changedFiles.filter((file) =>
     CODE_OR_PROMPT_PREFIXES.some((prefix) => file.startsWith(prefix)),
   )
   if (codeFiles.length === 0) return []
 
-  const violations: string[] = []
+  const findings: GateFinding[] = []
   if (input.approvals === null) {
     return [
-      `this pull request changes code or prompts but ${APPROVALS_PATH} is missing or unreadable (gate G1)`,
+      {
+        policy: 'POL-G1-01',
+        trigger: 'record-missing',
+        message: `this pull request changes code or prompts but ${APPROVALS_PATH} is missing or unreadable (gate G1)`,
+        evidence: {
+          files: codeFiles,
+          approval_id: null,
+          record_commit: input.recordFirstTouch,
+          first_code_commit: input.firstCodeCommit,
+          approved_at: null,
+        },
+      },
     ]
   }
 
   const covering = new Map<string, ApprovalRecord>()
+  const uncovered: string[] = []
   for (const file of codeFiles) {
     const match = input.approvals.find((approval) =>
       approval.scope.some((scope) => covers(scope, file)),
     )
     if (match === undefined) {
-      violations.push(`no recorded approval covers ${file} (gate G1)`)
+      uncovered.push(file)
       continue
     }
     covering.set(file, match)
+  }
+  if (uncovered.length > 0) {
+    findings.push({
+      policy: 'POL-G1-01',
+      trigger: 'scope-miss',
+      message: `no recorded approval covers ${uncovered.join(', ')} (gate G1)`,
+      evidence: {
+        files: uncovered,
+        approval_id: null,
+        record_commit: input.recordFirstTouch,
+        first_code_commit: input.firstCodeCommit,
+        approved_at: null,
+      },
+    })
   }
 
   for (const [file, approval] of covering) {
     for (const test of approval.tests) {
       if (!input.fileExists(test)) {
-        violations.push(`approval ${approval.id} names ${test}, which does not exist (gate G1)`)
+        findings.push({
+          policy: 'POL-G1-01',
+          trigger: 'test-missing',
+          message: `approval ${approval.id} names ${test}, which does not exist (gate G1)`,
+          evidence: {
+            files: [file],
+            approval_id: approval.id,
+            record_commit: input.recordFirstTouch,
+            first_code_commit: input.firstCodeCommit,
+            approved_at: approval.approved_at,
+          },
+        })
       }
     }
-    void file
   }
 
   if (input.recordFirstTouch !== null) {
     if (input.firstCodeCommit === null) {
-      violations.push(
-        'code changed but the first code commit could not be determined; G1 is not verified',
-      )
+      findings.push({
+        policy: 'POL-G1-03',
+        trigger: 'history-unavailable',
+        message: 'code changed but the first code commit could not be determined; G1 is not verified',
+        evidence: { reason: 'first code commit not found in the diff range' },
+      })
     } else {
       const ordered = input.isAncestor(input.recordFirstTouch, input.firstCodeCommit)
       if (ordered === null) {
-        violations.push('commit history is unavailable; G1 is not verified')
+        findings.push({
+          policy: 'POL-G1-03',
+          trigger: 'history-unavailable',
+          message: 'commit history is unavailable; G1 is not verified',
+          evidence: { reason: 'git could not answer whether the record precedes the code' },
+        })
       } else if (!ordered) {
-        violations.push(
-          `the approval record was committed after implementation began: ${input.recordFirstTouch} is not an ancestor of ${input.firstCodeCommit} (gate G1)`,
-        )
+        findings.push({
+          policy: 'POL-G1-02',
+          trigger: 'record-late',
+          message: `the approval record was committed after implementation began: ${input.recordFirstTouch} is not an ancestor of ${input.firstCodeCommit} (gate G1)`,
+          evidence: {
+            approval_id: input.approvals[0]?.id ?? null,
+            approved_at: input.approvals[0]?.approved_at ?? null,
+            first_code_commit: input.firstCodeCommit,
+          },
+        })
       }
     }
   }
@@ -232,14 +286,26 @@ export function collectApprovalEvidenceViolations(input: ApprovalEvidenceInput):
       const approved = Date.parse(approval.approved_at)
       const first = Date.parse(input.firstCodeCommitTime)
       if (Number.isFinite(approved) && Number.isFinite(first) && approved > first) {
-        violations.push(
-          `approval ${approval.id} is dated ${approval.approved_at}, after the first code commit (${input.firstCodeCommitTime}) (gate G1)`,
-        )
+        findings.push({
+          policy: 'POL-G1-02',
+          trigger: 'approval-dated-late',
+          message: `approval ${approval.id} is dated ${approval.approved_at}, after the first code commit (${input.firstCodeCommitTime}) (gate G1)`,
+          evidence: {
+            approval_id: approval.id,
+            approved_at: approval.approved_at,
+            first_code_commit: input.firstCodeCommit,
+          },
+        })
       }
     }
   }
 
-  return violations
+  return findings
+}
+
+/** String view for callers that only need the messages (existing tests and logs). */
+export function collectApprovalEvidenceViolations(input: ApprovalEvidenceInput): string[] {
+  return collectApprovalEvidenceFindings(input).map((finding) => finding.message)
 }
 
 function main(argv: readonly string[]): number {
@@ -278,6 +344,30 @@ function main(argv: readonly string[]): number {
       return 0
     }
     for (const violation of violations) process.stderr.write(`G1 (evidence): ${violation}\n`)
+    try {
+      const changed = argv.length > 1 ? argv.slice(1) : readChangedFiles()
+      const approvalsText = existsSync(APPROVALS_PATH) ? readFileSync(APPROVALS_PATH, 'utf8') : null
+      const parsed = approvalsText === null ? null : parseApprovals(approvalsText)
+      const firstCode = firstCommitTouching(['src', 'prompts'], base)
+      const paths = writeFindings(
+        collectApprovalEvidenceFindings({
+          isPullRequest: process.env.GITHUB_EVENT_NAME === 'pull_request',
+          changedFiles: changed,
+          approvals: parsed !== null && parsed.ok ? parsed.approvals : null,
+          recordFirstTouch: firstCommitTouching([APPROVALS_PATH], base),
+          firstCodeCommit: firstCode,
+          firstCodeCommitTime: firstCode === null ? null : commitTime(firstCode),
+          isAncestor: isAncestorOf,
+          fileExists: (relative) => existsSync(relative),
+        }),
+        { base, commit: firstCode },
+      )
+      for (const path of paths) process.stdout.write(`G1: failure record ${path}\n`)
+    } catch (error) {
+      process.stderr.write(
+        `G1: could not write the failure record: ${error instanceof Error ? error.message : String(error)}\n`,
+      )
+    }
     return 1
   }
   const labels = (process.env.PR_LABELS ?? '')
