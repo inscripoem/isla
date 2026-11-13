@@ -5282,6 +5282,7 @@ entries:
       Git-metadata test. The delivery candidate uses the same source and test
       files but excludes the temporary probe workflow and its extra records.
       See https://github.com/inscripoem/isla/actions/runs/42970448971.
+  - date: "2026-11-10"
     task: "M6 memory foundation / #147, #148"
     branch: m6-memory-foundation
     change: >-
@@ -5362,3 +5363,44 @@ entries:
       not_run: >-
         ADR/Delta and design/trace updates pending the #25 reservation. No push,
         runtime wiring or checkpoint claim.
+
+  - date: "2026-11-13"
+    task: "M6-X03 storage consent fix"
+    branch: m6-memory-foundation
+    change: >-
+      Enforce X03 owner consent at the storage boundary: `recordDeliveryOwner`
+      reads the session audience binding, returns `unowned` when there is no
+      binding or the binding is anonymous, `refused` when consent is 0,
+      `conflict` when the bound owner differs, and writes only a consenting
+      owner. Add `delivery_owner.created_at_ms` as retention metadata and use it
+      for `deleteOlderThan`; keep `recordSessionAudience` insert-once and the v1
+      anonymous-upgrade limit. Update ADR D3. No runtime, contract, scoring or
+      threshold change.
+    requirements: [FR-06, NFR-05]
+    invariants: [INV-06, INV-10]
+    cases: []
+    commits: [19c3204]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      The human M6 owner approved the M6-MEM-0 + M6-X03-1 plan and the local
+      implementation. The agent edited the M6-owned storage files; no push or
+      merge is claimed.
+    human_review: >-
+      Captain (M6) approved the plan; M4/M5 review pending. No checkpoint
+      acceptance is claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id
+      is claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main); aedf3d2 (rebased branch before the fix)
+      focused: "m6-memory-store 14/14."
+      role: "test:m6 206/206 in 16 files; trace 41/1; readiness 47/3."
+      full_suite: "pnpm verify exit 0: 1569/1569 in 76 files; typecheck clean; lint clean."
+      mutation: >-
+        Disabling the consent refusal turned the refused case red; writing a
+        zero owner timestamp turned the owner/timestamp tests red; both restored.
+      not_run: >-
+        No push, merge, runtime wiring, checkpoint acceptance or live data.
