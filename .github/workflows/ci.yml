@@ -81,6 +81,7 @@ jobs:
             : > .cache/ai-use-log.base.yaml
           fi
           COUNT="$(tr -cd '\0' < .cache/changed-files.nul | wc -c | tr -d ' ')"
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
           # Pin the trusted default-branch revision once, only for a feature-branch
           # push. Every other event leaves it empty, so the trace gate stays strict.
@@ -96,13 +97,24 @@ jobs:
           echo "trusted default-branch baseline: ${BASELINE:-none}"
           echo "changed files: $COUNT"
 
-      - name: G1 - test approval (advisory until the team enables it)
+      - name: G1 - test approval (evidence once the record exists at the base)
         id: g1
         if: github.event_name == 'pull_request'
         env:
           PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
           CHANGED_FILES_FILE: .cache/changed-files.nul
-        run: pnpm gate:test-approval advise
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GATE_BASE_SHA: ${{ steps.changed.outputs.base }}
+        run: |
+          set -euo pipefail
+          # A pull request whose base already carries the approval record is gated
+          # on ordering evidence; an older base keeps the label rule, so enabling
+          # the record does not retroactively fail pull requests opened before it.
+          if git cat-file -e "$PR_BASE_SHA:docs/code-governance/test-approvals.yaml" 2>/dev/null; then
+            pnpm gate:test-approval evidence
+          else
+            pnpm gate:test-approval advise
+          fi
 
       - name: G2 - static analysis (typecheck + lint)
         id: g2
@@ -156,7 +168,7 @@ jobs:
             echo "| Gate | Outcome |"
             echo "| --- | --- |"
             echo "| diff acquisition | ${{ steps.changed.outcome }} — ${{ steps.changed.outputs.count }} file(s) |"
-            echo "| G1 test approval (advisory) | ${{ steps.g1.outcome }} |"
+            echo "| G1 test approval (evidence when the base carries the record) | ${{ steps.g1.outcome }} |"
             echo "| G2 static analysis + boundary | ${{ steps.g2.outcome }} |"
             echo "| G3 requirements schema | ${{ steps.g3.outcome }} |"
             echo "| trace traceability fitness | ${{ steps.trace.outcome }} |"

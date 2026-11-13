@@ -12,13 +12,24 @@ import {
   type RestorationContext,
   type RestorationGit,
 } from '../../src/evaluation/frozen-restoration'
+import { readFileSync } from 'node:fs'
+import { parse as parseYaml } from 'yaml'
 import {
   collectTraceViolations,
   nodeTraceFs,
+  traceRowKey,
+  type AdrBaselineRow,
   type TraceFs,
 } from '../../src/evaluation/trace-fitness'
 
 const ROOT = process.cwd()
+
+/** The committed ADR-cell exemptions, read the way CI reads them. */
+const ADR_BASELINE = (
+  parseYaml(readFileSync('docs/code-governance/gate-baseline.yaml', 'utf8')) as {
+    traceRows?: AdrBaselineRow[]
+  }
+).traceRows
 
 /** Wrap the real filesystem view, overriding individual files to inject defects. */
 function overridden(base: TraceFs, overrides: Record<string, string>): TraceFs {
@@ -47,6 +58,8 @@ describe('traceability fitness functions (C-34)', () => {
       changedFiles: readChangedFiles(),
       restoration: restoration ?? undefined,
       onRestoration: (message) => process.stderr.write(`trace: ${message}\n`),
+      adrBaseline: ADR_BASELINE ?? [],
+      today: '2026-11-13',
     })
     expect(violations).toEqual([])
   })
@@ -80,7 +93,13 @@ describe('traceability fitness functions (C-34)', () => {
     process.env[CHANGED_FILES_ENV] = empty
     try {
       expect(readChangedFiles()).toEqual([])
-      expect(collectTraceViolations(nodeTraceFs(ROOT), { changedFiles: readChangedFiles() })).toEqual([])
+      expect(
+        collectTraceViolations(nodeTraceFs(ROOT), {
+          changedFiles: readChangedFiles(),
+          adrBaseline: ADR_BASELINE ?? [],
+          today: '2026-11-13',
+        }),
+      ).toEqual([])
     } finally {
       if (previous === undefined) delete process.env[CHANGED_FILES_ENV]
       else process.env[CHANGED_FILES_ENV] = previous
@@ -477,5 +496,104 @@ describe('owner-prefixed ids (structural-constraints.md §3)', () => {
       [INVARIANTS]: base.read(INVARIANTS).replace(/^\| INV-12 \|(.*)\| M6 \|$/m, '| INV-12 |$1| M5 |'),
     })
     expect(found).not.toContain('invariant-owner-mismatch')
+  })
+})
+
+describe('trace gate: exact test citations and ADR cells (Tier 1, 1.4/1.5)', () => {
+  const trace = 'docs/architecture/trace-matrix.md'
+  const withRow = (cells: string): string => `# Trace matrix
+
+| Requirement | Consequence | Enforcing component | Interface | Case | Test / evidence | Runtime monitor | ADR | Status | Owner |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+${cells}
+`
+
+  const titles = ["it('keeps the projection bookmark independent per session', () => {})"].join('\n')
+
+  it('accepts a citation whose title exists in the file', () => {
+    const base = nodeTraceFs(ROOT)
+    const fs = overridden(base, {
+      'test/offline/m6-storage.test.ts': titles,
+      [trace]: withRow(
+        '| FR-06 | x | `src/storage/event-store.ts` | P | C-19 | `test/offline/m6-storage.test.ts::keeps the projection bookmark independent per session` | — | ADR-001 | in review | M6 |',
+      ),
+    })
+    const codes = collectTraceViolations(fs).map((v) => v.code)
+    expect(codes).not.toContain('trace-test-unknown')
+    expect(codes).not.toContain('trace-test-missing')
+  })
+
+  it('rejects a citation whose title the file does not contain', () => {
+    const fs = overridden(nodeTraceFs(ROOT), {
+      'test/offline/m6-storage.test.ts': titles,
+      [trace]: withRow(
+        '| FR-06 | x | `src/storage/event-store.ts` | P | C-19 | `test/offline/m6-storage.test.ts::a title nobody wrote` | — | ADR-001 | in review | M6 |',
+      ),
+    })
+    expect(collectTraceViolations(fs).map((v) => v.code)).toContain('trace-test-unknown')
+  })
+
+  it('rejects a citation pointing at a missing test file', () => {
+    const fs = overridden(nodeTraceFs(ROOT), {
+      [trace]: withRow(
+        '| FR-06 | x | `src/storage/event-store.ts` | P | C-19 | `test/offline/not-there.test.ts::anything` | — | ADR-001 | in review | M6 |',
+      ),
+    })
+    expect(collectTraceViolations(fs).map((v) => v.code)).toContain('trace-test-missing')
+  })
+
+  it('reports a prose-only citation as advice, not a failure', () => {
+    const advisories: string[] = []
+    const fs = overridden(nodeTraceFs(ROOT), {
+      [trace]: withRow(
+        '| FR-06 | x | `src/storage/event-store.ts` | P | C-19 | `m6-storage.test.ts` (a prose note) | — | ADR-001 | in review | M6 |',
+      ),
+    })
+    const codes = collectTraceViolations(fs, { onAdvisory: (m) => advisories.push(m) }).map(
+      (v) => v.code,
+    )
+    expect(codes).toEqual([])
+    expect(advisories.join(' ')).toContain('unverified')
+  })
+
+  it('rejects an ADR cell that names no ADR number', () => {
+    const fs = overridden(nodeTraceFs(ROOT), {
+      [trace]: withRow(
+        '| FR-06 | x | `src/storage/event-store.ts` | P | C-19 | `m6-storage.test.ts` | — | pending allocation (#25) | in review | M6 |',
+      ),
+    })
+    expect(collectTraceViolations(fs).map((v) => v.code)).toContain('trace-adr-unnumbered')
+  })
+
+  it('accepts an unexpired row exemption but rejects it after expiry', () => {
+    const row =
+      '| FR-06 | x | `src/storage/event-store.ts` | P | C-19 | `m6-storage.test.ts` | — | pending allocation (#25) | in review | M6 |'
+    const key = traceRowKey('FR-06', '`src/storage/event-store.ts`', 'P')
+    const fs = overridden(nodeTraceFs(ROOT), { [trace]: withRow(row) })
+    expect(
+      collectTraceViolations(fs, {
+        adrBaseline: [{ key, expires: '2026-12-31' }],
+        today: '2026-11-13',
+      }).map((v) => v.code),
+    ).toEqual([])
+    expect(
+      collectTraceViolations(fs, {
+        adrBaseline: [{ key, expires: '2026-01-01' }],
+        today: '2026-11-13',
+      }).map((v) => v.code),
+    ).toContain('trace-adr-baseline-expired')
+  })
+
+  it('does not let an exemption follow an edited row', () => {
+    const edited =
+      '| FR-06 | x | `src/storage/other-store.ts` | P | C-19 | `m6-storage.test.ts` | — | pending allocation (#25) | in review | M6 |'
+    const key = traceRowKey('FR-06', '`src/storage/event-store.ts`', 'P')
+    const fs = overridden(nodeTraceFs(ROOT), { [trace]: withRow(edited) })
+    expect(
+      collectTraceViolations(fs, {
+        adrBaseline: [{ key, expires: '2026-12-31' }],
+        today: '2026-11-13',
+      }).map((v) => v.code),
+    ).toContain('trace-adr-unnumbered')
   })
 })

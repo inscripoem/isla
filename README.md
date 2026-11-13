@@ -116,14 +116,14 @@ Tests run locally without model services and exercise HTTP/WebSocket success, re
 
 ## Blocking gates (D7)
 
-The CI pipeline implements six gate checks plus the traceability fitness function; the design is recorded in [ADR-006](docs/architecture/adr/006-gate-tooling.md). G1 remains advisory, and G4 reports not run when its required evidence is absent.
+The CI pipeline implements six gate checks plus the traceability fitness function; the design is recorded in [ADR-006](docs/architecture/adr/006-gate-tooling.md) and its [enforcement delta](docs/architecture/delta/006-gate-enforcement.md). G1 uses recorded approval evidence once the approval record exists at the pull request's base and keeps the label rule (advisory) for older bases. G4 reports not run when there is no evidence at all, and fails a measured claim that has no evaluation table or no fixed conditions.
 
 | Gate | Enforced by |
 | --- | --- |
-| G1 — tests approved before implementation | the **`verify` job** (advisory step): the `tests-approved` label on a code/prompt pull request |
+| G1 — tests approved before implementation | the **`verify` job**: `docs/code-governance/test-approvals.yaml` must cover every changed code path and be committed before the first code commit (evidence mode); the `tests-approved` label remains the advisory rule for bases without the record |
 | G2 — static analysis + boundary | `pnpm typecheck && pnpm lint`; `pnpm test:readiness` (import/permission boundaries) |
 | G3 — requirements schema | `pnpm test:readiness` (registry validation) |
-| G4 — semantic evaluation | `pnpm gate:eval` — reports **not run** without an evaluation set + provider access (never a pass), and fails an evaluation table that omits the fixed conditions NFR-01 requires |
+| G4 — semantic evaluation | `pnpm gate:eval` — reports **not run** only when there is neither a table nor a claim; fails a table that omits the fixed conditions NFR-01 requires, a claim row with no value or conditions, and a measured prose claim with no evaluation table |
 | G5 — regression | `pnpm test` (all offline suites) |
 | G6 — AI-use log | `pnpm gate:ai-use-log` over the pull-request diff |
 | traceability | `pnpm test:trace` (INV-13: the chain is machine-checked; a changed frozen path passes only on a verified default-branch restoration for a feature-branch push) |

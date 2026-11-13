@@ -5,9 +5,12 @@ import { describe, expect, it } from 'vitest'
 import {
   AI_USE_LOG_PATH,
   collectAiUseLogEntryViolations,
+  collectAiUseLogReferenceViolations,
   collectAiUseLogShapeViolations,
   collectAiUseLogViolations,
+  type AiUseReferenceDeps,
 } from '../../src/evaluation/ai-use-log-gate'
+import { caseIdsFromRegistry, invariantIdsFromRegister } from '../../src/evaluation/registers'
 import { CHANGED_FILES_ENV, readChangedFiles } from '../../src/evaluation/changed-files'
 
 /** Write a changed-file list the way CI does, and read it back as the gate would. */
@@ -195,5 +198,136 @@ describe('the log change must add an entry (not merely touch or edit one)', () =
 
   it('is not verified without a base copy (a local run)', () => {
     expect(collectAiUseLogEntryViolations(['src/x.ts', AI_USE_LOG_PATH], null, BASE)).toEqual([])
+  })
+})
+
+describe('G6 references: commit and id existence (Tier 1, 1.3)', () => {
+  const log = (commits: string, cases = '[]', invariants = '[]'): string => `version: "1"
+entries:
+  - date: 2026-11-13
+    task: slice
+    change: A real change.
+    requirements: [FR-06]
+    invariants: ${invariants}
+    cases: ${cases}
+    commits: ${commits}
+    agent: opencode/build
+`
+
+  const deps = (overrides: Partial<AiUseReferenceDeps> = {}): AiUseReferenceDeps => ({
+    existingCommits: new Map([
+      ['abcdef1', 'abcdef1234567890'],
+      ['fedcba9', 'fedcba9876543210'],
+    ]),
+    reachableCommits: new Set(['abcdef1234567890']),
+    caseIds: new Set(['C-36']),
+    invariantIds: new Set(['INV-14']),
+    baseline: [],
+    today: '2026-11-13',
+    ...overrides,
+  })
+
+  it('accepts a cited commit that exists', () => {
+    expect(collectAiUseLogReferenceViolations(log('[abcdef1]'), deps())).toEqual([])
+  })
+
+  it('rejects a cited commit that is not an object in the repository', () => {
+    const violations = collectAiUseLogReferenceViolations(
+      log('[deadbee]'),
+      deps({ existingCommits: new Map([['deadbee', '']]) }),
+    )
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toContain('deadbee')
+    expect(violations[0]).toContain('not an object in this repository')
+  })
+
+  it('rejects a SHA too short to identify a commit', () => {
+    expect(collectAiUseLogReferenceViolations(log('[abc]'), deps()).join(' ')).toContain(
+      'too short to identify',
+    )
+  })
+
+  it('fails closed when the object database is unavailable', () => {
+    const violations = collectAiUseLogReferenceViolations(
+      log('[abcdef1]'),
+      deps({ existingCommits: null }),
+    )
+    expect(violations.join(' ')).toContain('object database is unavailable')
+  })
+
+  it('reports an existing but unreachable commit as advice, not a failure', () => {
+    const advisories: string[] = []
+    const violations = collectAiUseLogReferenceViolations(
+      log('[fedcba9]'),
+      deps({ onAdvisory: (message) => advisories.push(message) }),
+    )
+    expect(violations).toEqual([])
+    expect(advisories.join(' ')).toContain('not reachable from HEAD')
+  })
+
+  it('rejects an unknown case id', () => {
+    expect(collectAiUseLogReferenceViolations(log('[]', '[C-99]'), deps()).join(' ')).toContain(
+      'C-99',
+    )
+  })
+
+  it('rejects an unknown invariant id', () => {
+    expect(
+      collectAiUseLogReferenceViolations(log('[]', '[]', '[INV-99]'), deps()).join(' '),
+    ).toContain('INV-99')
+  })
+
+  it('fails closed when a register is unavailable and ids are cited', () => {
+    expect(
+      collectAiUseLogReferenceViolations(log('[]', '[C-36]'), deps({ caseIds: null })).join(' '),
+    ).toContain('case registry is unavailable')
+  })
+
+  it('accepts a baselined missing commit before its expiry', () => {
+    const baseline = [{ kind: 'commit' as const, value: 'deadbee', expires: '2026-12-31' }]
+    expect(
+      collectAiUseLogReferenceViolations(
+        log('[deadbee]'),
+        deps({ existingCommits: new Map([['deadbee', '']]), baseline }),
+      ),
+    ).toEqual([])
+  })
+
+  it('rejects a baselined missing commit after its expiry', () => {
+    const baseline = [{ kind: 'commit' as const, value: 'deadbee', expires: '2026-01-01' }]
+    const violations = collectAiUseLogReferenceViolations(
+      log('[deadbee]'),
+      deps({ existingCommits: new Map([['deadbee', '']]), baseline }),
+    )
+    expect(violations.join(' ')).toContain('expired')
+  })
+
+  it('does not let a baseline entry hide a different missing commit', () => {
+    const baseline = [{ kind: 'commit' as const, value: 'deadbee', expires: '2026-12-31' }]
+    const violations = collectAiUseLogReferenceViolations(
+      log('[0badbad]'),
+      deps({ existingCommits: new Map([['0badbad', '']]), baseline }),
+    )
+    expect(violations.join(' ')).toContain('0badbad')
+  })
+})
+
+describe('register loaders agree with the committed registers (T0)', () => {
+  it('sees the committed case ids', () => {
+    const ids = caseIdsFromRegistry(readFileSync('docs/req/case-registry.yaml', 'utf8'))
+    expect(ids).not.toBeNull()
+    expect(ids?.has('C-36')).toBe(true)
+  })
+
+  it('sees the committed invariant ids', () => {
+    const ids = invariantIdsFromRegister(readFileSync('docs/architecture/invariants.md', 'utf8'))
+    expect(ids).not.toBeNull()
+    expect(ids?.has('INV-14')).toBe(true)
+    expect(ids?.has('INV-13')).toBe(true)
+  })
+
+  it('returns null rather than an empty set for an unparsable register', () => {
+    expect(caseIdsFromRegistry('not: [valid')).toBeNull()
+    expect(invariantIdsFromRegister('# no table here')).toBeNull()
   })
 })
