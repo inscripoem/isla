@@ -74,8 +74,12 @@ base keeps the label rule. No open pull request is retroactively failed.
 ## Limits
 
 - The gate cannot see authorship. A record can be written by an agent; review checks content.
-- None of this blocks a merge until branch protection requires the `verify` check. That remains a
-  human/remote setting (DEBT-09).
+- The gates block pull-request merges to `main`: the active *Protect Main* ruleset requires the
+  `verify` check (integration 15368, `bypass_actors: null`, `current_user_can_bypass: never`;
+  measured 2026-11-13). G1 still runs `advise` until the base carries `test-approvals.yaml`;
+  switching new bases to `evidence` is the team decision ADR-006 D2 records, and it is owed before
+  this branch merges. `do_not_enforce_on_create` exempts branch creation and
+  `strict_required_status_checks_policy` is false, so a branch need not be up to date.
 - The G4 prose scan is a heuristic over two named files; a reviewed exception needs a baseline entry
   with an expiry, not a silent edit.
 - Prose-only trace citations remain advisory until they are migrated to `::` form.

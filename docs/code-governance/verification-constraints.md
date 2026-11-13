@@ -166,10 +166,12 @@ both recorded check runs on `4e4f7cd` report `verify`, `success`, app `github-ac
 **What blocks a merge.** Every step of that job: G2 typecheck + lint, G3 readiness, trace, G5 regression,
 G6 AI-use log, G4 evaluation gate and the build. A red step anywhere makes the required check red.
 
-**What does not block.** G1, test approval. ADR-006 D2 makes it blocking when *the team agrees* **and** the
-check is required; the second condition now holds and the first does not — the step still runs
-`gate:test-approval advise` (`.github/workflows/ci.yml:99-105`) and cannot fail. Requiring `verify` did not
-activate G1.
+**What does not block yet.** G1, test approval, on a base that does not carry
+`docs/code-governance/test-approvals.yaml`: the step runs `gate:test-approval advise`
+(`.github/workflows/ci.yml:100-115`) and cannot fail. On a base that carries the record, CI selects
+`evidence` mode, and a failing G1 step makes the required `verify` check red — so the cutover is what
+activates G1. ADR-006 D2 makes that activation a team decision; the code path exists, the decision is
+still owed before this branch merges.
 
 **What this does not establish.**
 
