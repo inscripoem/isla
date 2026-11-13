@@ -5330,3 +5330,46 @@ entries:
       not_run: >-
         No branch-protection change, no push, no PR, no live provider or evaluation
         run. G4 still reports not run without an evaluation set.
+
+  - date: "2026-11-13"
+    task: "M6 Tier 1 gate gap closure"
+    branch: m6-gate-enforcement
+    change: >-
+      Close the three gaps found in the plan verification. G4 gains expiry-dated
+      reviewed exceptions for prose claims, keyed by path and trimmed line so an
+      edited sentence loses its exemption. New real-git tests build temporary
+      repositories and prove that an amended code commit keeps the approval record
+      as an ancestor, that a late record is rejected, and that a --depth 1 clone
+      cannot answer ancestry and hides the older object, so the gates fail closed.
+      The trace gate now rejects a bare x.test.ts::title as trace-test-unresolved,
+      and the INV-05/06/13/14 rows cite path-qualified exact titles. The plan's
+      section 3/8 contradiction about editing trace-matrix.md is resolved in the
+      delta: the evidence-cell update required by section 8 wins.
+    requirements: [FR-06, NFR-04]
+    invariants: [INV-13, INV-14]
+    cases: []
+    commits: [c4e0337]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      M6 approved the three gap closures and the paper fix to the plan contradiction,
+      and required the work to stay local. No push, PR, review or merge is claimed.
+    human_review: >-
+      M6 approved the scope. No independent review or checkpoint acceptance is claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id is
+      claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main)
+      focused: "test:gates 126/126 in 5 files; gate-git-facts 3/3."
+      role: "test:m6 186/186; test:trace 49/49; readiness 47/47."
+      full_suite: "pnpm verify exit 0: 1598/1598 in 75 files."
+      mutation: >-
+        Three new mutations turned their tests red and were restored: G4 exemption
+        lookup disabled (2 failed), bare-citation rule disabled (1 failed),
+        shallow-clone fail-closed disabled (1 failed).
+      not_run: >-
+        No branch-protection change, no push, no PR, no live provider or evaluation
+        run.
