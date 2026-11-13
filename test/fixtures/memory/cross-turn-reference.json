@@ -1,0 +1,171 @@
+{
+  "corpusId": "cross-turn-reference",
+  "corpusVersion": 1,
+  "heldOutCaseIds": ["ctr-03", "ctr-06"],
+  "cases": [
+    {
+      "id": "ctr-01",
+      "sessions": [
+        {
+          "sessionId": "ctr-s1",
+          "turns": [
+            { "id": "ctr-01-s1-t01", "speaker": "audience", "text": "Hello there. I just got home from work.", "atMs": 0 },
+            { "id": "ctr-01-s1-t02", "speaker": "audience", "text": "Could you play the old sailing song for me?", "atMs": 4000 },
+            { "id": "ctr-01-s1-t03", "speaker": "character", "text": "Of course. The sailing song it is.", "atMs": 8000 },
+            { "id": "ctr-01-s1-t04", "speaker": "audience", "text": "Lovely. The harbour weather is calm tonight.", "atMs": 12000 },
+            { "id": "ctr-01-s1-t05", "speaker": "audience", "text": "Which song did I ask you to play earlier?", "atMs": 16000 }
+          ]
+        },
+        {
+          "sessionId": "ctr-s2",
+          "turns": [
+            { "id": "ctr-01-s2-t01", "speaker": "audience", "text": "Good morning, lighthouse keeper.", "atMs": 0 },
+            { "id": "ctr-01-s2-t02", "speaker": "character", "text": "Morning to you. The gulls are loud today.", "atMs": 5000 },
+            { "id": "ctr-01-s2-t03", "speaker": "audience", "text": "Then let us start softly.", "atMs": 9000 }
+          ]
+        }
+      ],
+      "probes": [
+        { "question": "Which song did I ask you to play earlier?", "expected": ["ctr-01-s1-t02"], "kind": "recall" }
+      ]
+    },
+    {
+      "id": "ctr-02",
+      "sessions": [
+        {
+          "sessionId": "ctr-s1",
+          "turns": [
+            { "id": "ctr-02-s1-t01", "speaker": "audience", "text": "I want something cheerful today.", "atMs": 0 },
+            { "id": "ctr-02-s1-t02", "speaker": "character", "text": "Cheerful is my specialty.", "atMs": 3000 },
+            { "id": "ctr-02-s1-t03", "speaker": "character", "text": "Have you tried the card game Pebble Run?", "atMs": 6000 },
+            { "id": "ctr-02-s1-t04", "speaker": "audience", "text": "I have not, but it sounds delightful.", "atMs": 9000 }
+          ]
+        },
+        {
+          "sessionId": "ctr-s2",
+          "turns": [
+            { "id": "ctr-02-s2-t01", "speaker": "audience", "text": "It is noon and I am starving.", "atMs": 0 },
+            { "id": "ctr-02-s2-t02", "speaker": "audience", "text": "I usually eat at the Copper Kettle, near the pier.", "atMs": 4000 },
+            { "id": "ctr-02-s2-t03", "speaker": "character", "text": "The Copper Kettle sounds worth a visit.", "atMs": 8000 }
+          ]
+        },
+        {
+          "sessionId": "ctr-s3",
+          "turns": [
+            { "id": "ctr-02-s3-t01", "speaker": "audience", "text": "I finally have a free evening.", "atMs": 0 },
+            { "id": "ctr-02-s3-t02", "speaker": "character", "text": "An evening for games, then.", "atMs": 3000 },
+            { "id": "ctr-02-s3-t03", "speaker": "audience", "text": "Tell me again about that game you mentioned last week.", "atMs": 6000 }
+          ]
+        }
+      ],
+      "probes": [
+        { "question": "What was the game you mentioned last week?", "expected": ["ctr-02-s1-t03"], "kind": "recall" },
+        { "question": "Which lunch place did I name first?", "expected": ["ctr-02-s2-t02"], "kind": "recall" }
+      ]
+    },
+    {
+      "id": "ctr-03",
+      "sessions": [
+        {
+          "sessionId": "ctr-s1",
+          "turns": [
+            { "id": "ctr-03-s1-t01", "speaker": "audience", "text": "I finished a novel about a paper boat.", "atMs": 0 },
+            { "id": "ctr-03-s1-t02", "speaker": "audience", "text": "I am also reading The Quiet Ferry.", "atMs": 4000 },
+            { "id": "ctr-03-s1-t03", "speaker": "audience", "text": "My friend lent me The Laughing Owl.", "atMs": 8000 },
+            { "id": "ctr-03-s1-t04", "speaker": "character", "text": "Three books in one conversation. Impressive.", "atMs": 12000 },
+            { "id": "ctr-03-s1-t05", "speaker": "audience", "text": "Do you like stories about rivers?", "atMs": 16000 },
+            { "id": "ctr-03-s1-t06", "speaker": "audience", "text": "I would like to talk about that book more carefully.", "atMs": 20000 }
+          ]
+        },
+        {
+          "sessionId": "ctr-s2",
+          "turns": [
+            { "id": "ctr-03-s2-t01", "speaker": "audience", "text": "Back again for reading hour.", "atMs": 0 },
+            { "id": "ctr-03-s2-t02", "speaker": "character", "text": "Then let us open the pages.", "atMs": 3000 },
+            { "id": "ctr-03-s2-t03", "speaker": "audience", "text": "Where were we in the reading?", "atMs": 6000 }
+          ]
+        }
+      ],
+      "probes": [
+        { "question": "About which book did I tell you I was reading?", "expected": ["ctr-03-s1-t02"], "kind": "recall" }
+      ]
+    },
+    {
+      "id": "ctr-04",
+      "sessions": [
+        {
+          "sessionId": "ctr-s1",
+          "turns": [
+            { "id": "ctr-04-s1-t01", "speaker": "audience", "text": "Where should I start a walk tomorrow?", "atMs": 0 },
+            { "id": "ctr-04-s1-t02", "speaker": "character", "text": "Start by the old bridge and head north.", "atMs": 3000 },
+            { "id": "ctr-04-s1-t03", "speaker": "audience", "text": "I will take that advice.", "atMs": 6000 }
+          ]
+        },
+        {
+          "sessionId": "ctr-s2",
+          "turns": [
+            { "id": "ctr-04-s2-t01", "speaker": "character", "text": "There is a small cafe near the mill, called Fern Corner.", "atMs": 0 },
+            { "id": "ctr-04-s2-t02", "speaker": "audience", "text": "I walked past the mill this morning.", "atMs": 4000 },
+            { "id": "ctr-04-s2-t03", "speaker": "character", "text": "Then you were very close to a good cup of tea.", "atMs": 8000 },
+            { "id": "ctr-04-s2-t04", "speaker": "audience", "text": "Where did your character say the cafe was?", "atMs": 12000 },
+            { "id": "ctr-04-s2-t05", "speaker": "character", "text": "Near the mill, at the end of the lane.", "atMs": 16000 }
+          ]
+        }
+      ],
+      "probes": [
+        { "question": "Where did your character say the cafe was?", "expected": ["ctr-04-s2-t01"], "kind": "recall" }
+      ]
+    },
+    {
+      "id": "ctr-05",
+      "sessions": [
+        {
+          "sessionId": "ctr-s1",
+          "turns": [
+            { "id": "ctr-05-s1-t01", "speaker": "audience", "text": "I need something to watch tonight.", "atMs": 0 },
+            { "id": "ctr-05-s1-t02", "speaker": "audience", "text": "I am in the mood for something gentle.", "atMs": 4000 },
+            { "id": "ctr-05-s1-t03", "speaker": "character", "text": "Try The Long Pier. It is a quiet little film.", "atMs": 8000 },
+            { "id": "ctr-05-s1-t04", "speaker": "character", "text": "If you want something lighter, The Paper Moon works too.", "atMs": 12000 },
+            { "id": "ctr-05-s1-t05", "speaker": "audience", "text": "What movie did you recommend?", "atMs": 16000 }
+          ]
+        },
+        {
+          "sessionId": "ctr-s2",
+          "turns": [
+            { "id": "ctr-05-s2-t01", "speaker": "audience", "text": "I come from the city of Larkspur.", "atMs": 0 },
+            { "id": "ctr-05-s2-t02", "speaker": "character", "text": "Larkspur? I have only read about it.", "atMs": 4000 },
+            { "id": "ctr-05-s2-t03", "speaker": "audience", "text": "Where did you hear about the city I mentioned?", "atMs": 8000 }
+          ]
+        }
+      ],
+      "probes": [
+        { "question": "What movie did you recommend?", "expected": ["ctr-05-s1-t04"], "kind": "recall" }
+      ]
+    },
+    {
+      "id": "ctr-06",
+      "sessions": [
+        {
+          "sessionId": "ctr-s1",
+          "turns": [
+            { "id": "ctr-06-s1-t01", "speaker": "audience", "text": "The weather is turning.", "atMs": 0 },
+            { "id": "ctr-06-s1-t02", "speaker": "character", "text": "The leaves agree with you.", "atMs": 3000 },
+            { "id": "ctr-06-s1-t03", "speaker": "audience", "text": "I have been thinking about the garden.", "atMs": 6000 }
+          ]
+        },
+        {
+          "sessionId": "ctr-s2",
+          "turns": [
+            { "id": "ctr-06-s2-t01", "speaker": "character", "text": "Morning. Did the roses survive the wind?", "atMs": 0 },
+            { "id": "ctr-06-s2-t02", "speaker": "audience", "text": "Most of them did.", "atMs": 3000 },
+            { "id": "ctr-06-s2-t03", "speaker": "audience", "text": "The garden needs a new fence in the east corner.", "atMs": 6000 },
+            { "id": "ctr-06-s2-t04", "speaker": "audience", "text": "What did I just say about the garden?", "atMs": 9000 }
+          ]
+        }
+      ],
+      "probes": [
+        { "question": "What did I just say about the garden?", "expected": ["ctr-06-s2-t03"], "kind": "recall" }
+      ]
+    }
+  ]
+}

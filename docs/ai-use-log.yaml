@@ -5282,3 +5282,98 @@ entries:
       Git-metadata test. The delivery candidate uses the same source and test
       files but excludes the temporary probe workflow and its extra records.
       See https://github.com/inscripoem/isla/actions/runs/42970448971.
+  - date: "2026-11-13"
+    task: M4-X02X07-offmain
+    change: >-
+      Deliver M4's own halves of X02 (derived-memory semantics) and X07
+      (memory corpora), per inscripoem/isla#147 and M4's 2026-11-11 answers
+      there, on task branch feat/m4-x02-x07 off origin/main @ c8605e2; the
+      application code is committed at
+      c17d53de18b7a6d6d203938d484bf2c7b15d070e and this entry records that
+      code commit. X02: the new module
+      src/dialogue/derived-memory.ts implements the semantics with no SQL, no
+      src/storage import and no provider call on any path (NFR-04) -- the
+      DerivedEpisode, DerivedTopic and DerivedMemoryPort types (verbatim from
+      #147), the DeriveSourceTurn input, deriveEpisode, deriveEpisodes and
+      deriveTopics with extractive verbatim topic and summary rules, the
+      importance formula min(1, 0.25 * turnCount + totalChars / 4000) rounded
+      to three decimals, the exported DERIVED_EXTRACTOR_VERSION
+      ("derived-memory/1") and monotonicAppliedSeq(persisted, rebuild)
+      returning max(persisted, rebuild); src/dialogue/index.ts gains the
+      single export line `export * from './derived-memory'` (line 22, the +1
+      shown by git diff --stat). X07: three memory corpora as JSON fixtures
+      under test/fixtures/memory/ -- cross-turn-reference (recall probes),
+      temporal-reasoning (temporal probes) and contradiction-update
+      (contradiction probes) -- six cases each with two held out
+      (heldOutCaseIds: ctr-03/ctr-06, tr-02/tr-05, cu-01/cu-04), English
+      fictional content and stable case-scoped turn ids, plus the loader
+      test/support/memory-corpus.ts. Tests: test/offline/
+      m4-derived-memory.test.ts covers the blueprint section 2 assertion
+      list and test/offline/m4-memory-corpus.test.ts validates the corpus
+      schema and the section 3.3 rules. The review-round-1 rework session
+      then applied the review findings: turn ids renamed to the case-scoped
+      <prefix>-<caseNumber>-s<sessionNumber>-t<turnNumber> scheme in all
+      three fixtures with every probe expected id updated, the redundant
+      !last half of the deriveEpisode guard removed (line 130 now checks
+      !first only), rule 5 tightened to assert 3-8 turns per session and
+      rule 6 restored to corpus-wide turn-id uniqueness. The eight
+      implementation files of the blueprint section 4 checklist are the
+      module, the index.ts export line, the three corpora, the two offline
+      tests and the loader. Per blueprint section 7, the PR round added the
+      two new test names to the test:m4 manifest line in package.json and
+      appended this AI-use entry; those two are not application code and
+      were written directly by the supervisor. The owner's uncommitted
+      AGENTS.md edit was excluded from both commits and remains untouched in
+      the working tree.
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: "2.0.20"
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    sessions: [ses_e2efed1a2ffe4QPHPHUZdtsOB8, ses_e2ef42e46ffe8xNZ3jJZcIqaCy, ses_e2eecb2b4ffe2MiRSSAoDuYlUj, ses_e2ee1738fffesM0yM2jX1fz8qe]
+    requirements: [NFR-04]
+    invariants: []
+    commits: [c17d53de18b7a6d6d203938d484bf2c7b15d070e]
+    supervision: >-
+      The M4 supervision workflow produced the baseline blueprint
+      (m4-impl/X02X07/blueprint.md, 2026-11-13), ran the plan consult
+      (ses_e2efed1a2ffe4QPHPHUZdtsOB8, title m4-x02x07-consult) and the
+      comparison, and wrote the English task books for the implementation
+      sessions. OpenCode build sessions wrote all application code:
+      ses_e2ef42e46ffe8xNZ3jJZcIqaCy (m4-x02x07-impl-x02) implemented X02 and
+      ses_e2eecb2b4ffe2MiRSSAoDuYlUj (m4-x02x07-impl-x07) implemented X07.
+      The supervisor reviewed the resulting diffs against the task books
+      rather than accepting the sessions' own reports. After the independent
+      review, the rework session ses_e2ee1738fffesM0yM2jX1fz8qe
+      (m4-x02x07-fix-review-1) applied the review findings, and the
+      deterministic gates and the independent review then passed. Per
+      blueprint section 7 the manifest line and this AI-use entry are
+      PR-round changes, not application code, so the supervisor wrote them
+      directly and no session claims to have produced them. The supervisor
+      fast-forwarded the branch to origin/main c8605e2, ran six deterministic
+      gates on that base (typecheck, lint, the two new test files, test:m4,
+      the full suite and build) with every exit code 0, then made two
+      consecutive commits -- code first, then this log -- so commits can cite
+      the real code SHA; no squash and no amend was used. No gate-fix session
+      (titles m4-x02x07-fix-gate-*) was launched in this round.
+    transcript_record: >-
+      The four sessions listed in sessions retain their conversations in the
+      local OpenCode session store; their per-session record (session title,
+      task book, session id, created time and role) is written outside the
+      repository at D:/isla-m4-05/m4-impl/X02X07/opencode-sessions.md. No
+      export is stored in the repository.
+    verification:
+      base: c8605e2
+      typecheck: 0
+      lint: 0
+      newTests: 0
+      "test:m4": 0
+      build: 0
+      full-exit: 0
+      newFailures: []
+    scope: >-
+      M4 derived-memory semantics and memory corpora, the test:m4 manifest
+      line and this AI-use entry; no shared contract, storage, SQL, runtime
+      or provider change, no quality or live-output claim, and no AGENTS.md
+      change.
