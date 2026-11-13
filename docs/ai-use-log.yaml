@@ -18,7 +18,7 @@ entries:
       path and the retained genuine pair.
     requirements: [NFR-03]
     invariants: []
-    commits: [4273673]
+    commits: ["4273673"]
     agent: zcode/glm-5.3-flash
     provider: zai-plan
     model: glm-5.3-flash
@@ -2047,7 +2047,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: [INV-16]
     cases: []
-    commits: [3512135]
+    commits: ["3512135"]
     agent: opencode/deepseek-v4-flash
     verification:
       focused: "test/offline/m6-02-recorded-run.test.ts: 11/1 passed."
@@ -3983,7 +3983,7 @@ entries:
       no boundary rule needed widening.
     requirements: []
     invariants: []
-    commits: [3014648]
+    commits: ["3014648"]
     agent: workbuddy/deepseek-v4.1-flash
     provider: deepseek
     model: deepseek-v4.1-flash
@@ -4628,7 +4628,7 @@ entries:
     requirements: [FR-03]
     invariants: []
     cases: [C-06, C-11]
-    commits: [6780977]
+    commits: ["6780977"]
     agent: opencode/deepseek-v4-flash
     provider: personal-deepseek
     model: deepseek-v4-flash
@@ -5282,3 +5282,51 @@ entries:
       Git-metadata test. The delivery candidate uses the same source and test
       files but excludes the temporary probe workflow and its extra records.
       See https://github.com/inscripoem/isla/actions/runs/42970448971.
+
+  - date: "2026-11-13"
+    task: "M6 Tier 1 gate enforcement"
+    branch: m6-gate-enforcement
+    change: >-
+      Make five gate claims verifiable rather than asserted. G1 gains an evidence
+      mode: docs/code-governance/test-approvals.yaml must cover every changed code
+      path, name existing tests, and be committed before the first code commit.
+      G4 fails a claim row without a value or conditions, and an unqualified
+      measured claim in README/Report without an evaluation table. G6 checks that
+      every cited commit exists as an object and that cited case and invariant ids
+      exist, failing closed when a register or the object database is unreadable;
+      ancestry was measured and rejected because this repository squash-merges
+      (54 of 58 cited commits exist, 0 are reachable). The trace gate checks exact
+      file::title citations and requires an ADR number or an explicit em dash in
+      the ADR cell, with expiry-dated row exemptions. Also quotes four all-digit
+      commit ids that YAML had parsed as integers in four historical entries.
+    requirements: [FR-06, NFR-04]
+    invariants: [INV-13, INV-14]
+    cases: []
+    commits: [23a20fd]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      M6 approved the Tier 1 plan (sections 1-9) before implementation and asked
+      for a local branch with no remote action. The approval record TA-001 was
+      committed first (bf9c39f) so G1's ordering evidence is real for this branch.
+    human_review: >-
+      M6 approved the plan and the implementation scope. No independent review,
+      merge or checkpoint acceptance is claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id is
+      claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main)
+      focused: "test:gates 119/119 in 4 files."
+      role: "test:m6 186/186; test:trace 48/48; readiness 47/47."
+      full_suite: "pnpm verify exit 0: 1591/1591 in 74 files; typecheck and lint clean."
+      mutation: >-
+        Five mutations each turned their own tests red and were restored: G6
+        missing-commit check disabled (3 failed), trace title check disabled
+        (1 failed), trace ADR check disabled (3 failed), G1 ordering disabled
+        (2 failed), G4 claim scan disabled (1 failed).
+      not_run: >-
+        No branch-protection change, no push, no PR, no live provider or evaluation
+        run. G4 still reports not run without an evaluation set.
