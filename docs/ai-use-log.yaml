@@ -5404,3 +5404,37 @@ entries:
         zero owner timestamp turned the owner/timestamp tests red; both restored.
       not_run: >-
         No push, merge, runtime wiring, checkpoint acceptance or live data.
+
+  - date: "2026-11-13"
+    task: "M6-X08 retention proof"
+    branch: m6-memory-foundation
+    change: >-
+      Prove X08 at the storage boundary: `deleteAudience` cascades owner/derived/
+      topic/state/audience rows and `deleteOlderThan` expires derived/owner/state/
+      audience rows, while `events` and `deliveries` remain unchanged. Add a
+      construction-time no-deletion test and an audience-scoped export assertion;
+      update ADR D5. No runtime, contract, scoring or threshold change.
+    requirements: [FR-06, NFR-05]
+    invariants: [INV-06, INV-10]
+    cases: []
+    commits: [5d79fca]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      The human M6 owner approved the M6-X08-1 slice. The agent edited the
+      M6-owned storage tests and ADR; no push or merge is claimed.
+    human_review: >-
+      Captain (M6) approved the slice; M4/M5 review pending. No checkpoint
+      acceptance is claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id
+      is claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main); d4c6bf5 (branch before this slice)
+      focused: "m6-memory-store 15/15."
+      role: "test:m6 207/207 in 16 files; trace 41/1; readiness 47/3."
+      full_suite: "pnpm verify exit 0: 1570/1570 in 76 files; typecheck clean; lint clean."
+      not_run: >-
+        No push, merge, runtime wiring, checkpoint acceptance or live data.
