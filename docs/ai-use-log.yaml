@@ -5282,3 +5282,53 @@ entries:
       Git-metadata test. The delivery candidate uses the same source and test
       files but excludes the temporary probe workflow and its extra records.
       See https://github.com/inscripoem/isla/actions/runs/42970448971.
+
+  - date: "2026-11-14"
+    task: M5-101-admission-acknowledgement-export-and-timings
+    change: >-
+      The M5 evaluation adapter now exports one admission record per prepared
+      input with the acknowledgement's request message id, event id, status and
+      admission clock, plus explicit not-submitted and no-acknowledgement
+      states. It derives only the stage timings whose endpoints the runtime
+      persists: submitMs (input.accepted to turn.started) and dialogueMs
+      (selection.plan to dialogue.result). planMs is reported null because the
+      coordinator currently persists selection.plan before turn.started, so
+      the interval is reversed; synthesisMs, firstAudibleMs and
+      stopToSilenceMs stay null because no start/end pair or browser/acoustic
+      evidence exists. sourceId and inputId stay null with a recorded reason
+      rather than being inferred from the runtime source channel.
+    requirements: [NFR-01, NFR-03]
+    invariants: []
+    commits: [960bdbdcc09867e8589018dc680bbc1b98cc8377]
+    agent: build
+    provider: self-api
+    model: deepseek-v4-flash
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    sessions: [ses_e2a38207affeQcB6p3jfyqLn3t]
+    supervision: >-
+      Codex supervised the OpenCode build session in a temporary per-worktree
+      configuration that disables oh-my-opencode-slim and enables the build
+      agent. The session had no shell tool, so Codex ran every test command
+      outside the session and the results below are measured locally.
+    human_review: >-
+      The change is local only; push and pull-request creation await Captain
+      approval. No agent merges.
+    transcript_record: >-
+      The genuine OpenCode session ses_e2a38207affeQcB6p3jfyqLn3t remains in
+      the local OpenCode store; the raw export has not yet been copied outside
+      the checkout.
+    verification:
+      base: c8605e217283d9af12fb0545671d89aa507fa211
+      results: >-
+        Linux: the focused m5-evaluation-adapter test passed 37/37; test:m5
+        passed 263/263; typecheck and lint exited 0; pnpm verify exited 0 with
+        1555/1555 tests in 74 files and a successful build.
+      limits: >-
+        No live provider, browser playback or acoustic measurement was run.
+        planMs remains null until a coordinator event-order change is reviewed,
+        and a batch with zero accepted inputs still has no inputs channel
+        because the observation callback fires only for attempts.
+    scope: >-
+      src/runtime/evaluation-adapter.ts and
+      test/offline/m5-evaluation-adapter.test.ts only. No src/contracts file,
+      RecordedRunV1, storage, provider or companion schema changed.
