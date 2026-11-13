@@ -148,6 +148,21 @@ describe('evaluation:report --provenance', () => {
     expect(table).not.toContain('no-provenance-record')
   })
 
+  it('refuses --output equal to --provenance and leaves the companion intact', () => {
+    const { input, provenance } = workspace()
+    const companionText = JSON.stringify(companion())
+    writeFileSync(provenance, companionText, 'utf8')
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
+    expect(
+      runReportCommand(['--input', input, '--output', provenance, '--provenance', provenance]),
+    ).toBe(1)
+    expect(readFileSync(provenance, 'utf8')).toBe(companionText)
+    expect(stderr.mock.calls.flat().join('')).toContain(
+      '--output must not be the --provenance input',
+    )
+  })
+
   it('writes the no-companion note when the flag is absent', () => {
     const { input, output } = workspace()
     expect(runReportCommand(['--input', input, '--output', output])).toBe(0)

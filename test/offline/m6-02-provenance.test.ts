@@ -143,6 +143,60 @@ describe('provenance companion (ADR-008)', () => {
     expect(result.companion.attempts[0]?.inputs[0]?.status).toBe('accepted')
   })
 
+  it('refuses two accepted inputs with the same requestMessageId in one attempt', () => {
+    const violations = refused(
+      parseProvenance(
+        companion({
+          attempts: [
+            attempt({ inputs: [INPUT, { ...INPUT, eventId: 'event-2' }] }),
+            attempt({ attempt: 2 }),
+          ],
+        }),
+        RUN,
+        RUN_TEXT,
+      ),
+    )
+    expect(
+      violations.some((violation) =>
+        violation.includes('requestMessageId repeats an accepted acknowledgement'),
+      ),
+    ).toBe(true)
+  })
+
+  it('refuses two accepted inputs with the same eventId in one attempt', () => {
+    const violations = refused(
+      parseProvenance(
+        companion({
+          attempts: [
+            attempt({ inputs: [INPUT, { ...INPUT, requestMessageId: 'req-2' }] }),
+            attempt({ attempt: 2 }),
+          ],
+        }),
+        RUN,
+        RUN_TEXT,
+      ),
+    )
+    expect(
+      violations.some((violation) =>
+        violation.includes('eventId repeats an accepted acknowledgement'),
+      ),
+    ).toBe(true)
+  })
+
+  it('keeps an accepted followed by a duplicate with the same ids', () => {
+    const result = parseProvenance(
+      companion({
+        attempts: [
+          attempt({ inputs: [INPUT, { ...INPUT, status: 'duplicate' }] }),
+          attempt({ attempt: 2 }),
+        ],
+      }),
+      RUN,
+      RUN_TEXT,
+    )
+    expect(result.ok).toBe(true)
+  })
+
   it('refuses an unknown root field instead of ignoring it', () => {
     const violations = refused(parseProvenance(companion({ extra: 'x' }), RUN, RUN_TEXT))
     expect(violations).toContain('extra is not a recognised field')

@@ -282,6 +282,8 @@ function parseInputs(
     violations.push(`${path} may hold at most ${MAX_INPUTS} entries`)
   }
   const parsed: ProvenanceInputEntry[] = []
+  const acceptedRequestIds = new Set<string>()
+  const acceptedEventIds = new Set<string>()
   let stopped = false
   value.forEach((entry, index) => {
     const at = `${path}[${index}]`
@@ -329,6 +331,34 @@ function parseInputs(
       entry.eventId !== null
     ) {
       violations.push(`${at}.eventId must be null when status is ${entry.status}`)
+    }
+    // M5 re-review (2026-11-13): an accepted acknowledgement is unique within one
+    // input list. The producer reuses a request message id only as `duplicate`
+    // (or reports a conflict), and an admission event id is created once. Two
+    // `accepted` entries sharing either id are a contradictory observation, not
+    // two admissions. `accepted -> duplicate` remains valid.
+    if (entry.status === 'accepted') {
+      const requestMessageId =
+        typeof entry.requestMessageId === 'string' ? entry.requestMessageId : null
+      const eventId = typeof entry.eventId === 'string' ? entry.eventId : null
+      if (requestMessageId !== null) {
+        if (acceptedRequestIds.has(requestMessageId)) {
+          violations.push(
+            `${at}.requestMessageId repeats an accepted acknowledgement in the same input list; a re-used request message id is a duplicate, not a second acceptance`,
+          )
+        } else {
+          acceptedRequestIds.add(requestMessageId)
+        }
+      }
+      if (eventId !== null) {
+        if (acceptedEventIds.has(eventId)) {
+          violations.push(
+            `${at}.eventId repeats an accepted acknowledgement in the same input list; an admission event id cannot be accepted twice`,
+          )
+        } else {
+          acceptedEventIds.add(eventId)
+        }
+      }
     }
     // Submission order (ADR-008 D3): `rejected`, `no-acknowledgement` and
     // `not-submitted` are terminal. A later *submitted* status would claim an

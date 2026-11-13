@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseProvenance } from './provenance'
 import { parseRecordedRun } from './recorded-run'
@@ -92,6 +93,19 @@ export function runReportCommand(argv: readonly string[]): number {
   if (!parsed.ok) {
     process.stderr.write(`${parsed.message}\n`)
     return 2
+  }
+
+  // M5 re-review (2026-11-13): the report must never replace its own provenance
+  // input. Refuse the same destination before reading or writing; the companion
+  // is the evidence, not a scratch file.
+  if (
+    parsed.value.provenance !== undefined &&
+    resolve(parsed.value.output) === resolve(parsed.value.provenance)
+  ) {
+    process.stderr.write(
+      'evaluation:report: --output must not be the --provenance input; the companion is evidence and must remain intact\n',
+    )
+    return 1
   }
 
   let runBytes: Buffer

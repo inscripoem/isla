@@ -157,6 +157,15 @@ more than five prepared inputs, a `recordSetRevision` that is `null` under `exac
 not-run occurrences only: a pair may also have an attempt, because repeated case ids are supported. A missing or extra entry is a refusal with a reason, never a partial join. Without a companion, every quality result for that run is `unscored` with reason
 `no-provenance-record`.
 
+**Producer-boundary note (2026-11-13).** The companion parser does not infer the producing variant or its
+attempt boundary from a status or a free-text reason. A generic `notRun` occurrence may carry an accepted
+input while the run's reason describes a rejection; that is a producer-specific inconsistency, not proof
+of a parser defect. The M5 prepared-input adapter/proposal owns that boundary. Before CP05 scoring, the
+separate named batch-completeness condition (#143) must be recorded. #140 does not score, adopt ADR-008 or
+claim the producer boundary. Within one input list the parser refuses a repeated accepted acknowledgement:
+a re-used request message id is a duplicate, and an admission event id is created once. `accepted
+-> duplicate` remains valid.
+
 ### D9 — No schema or port change in this decision
 
 No public port, contract or run schema changes. A `schemaVersion: 2` would be a separate decision with its
