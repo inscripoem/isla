@@ -169,6 +169,9 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
   const readState = database.prepare(
     'SELECT mood, stress, energy, attachment, confidence, version FROM session_state WHERE session_id = ?',
   )
+  const readStateAudience = database.prepare(
+    'SELECT audience_id FROM session_state WHERE session_id = ?',
+  )
   const insertState = database.prepare(`
     INSERT INTO session_state
       (session_id, audience_id, mood, stress, energy, attachment, confidence, version, updated_at_ms)
@@ -333,6 +336,13 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
         for (const [sessionId, sessionEvents] of sessions) {
           const derivedEpisodes = deriveEpisodes(sessionEvents)
           for (const episode of derivedEpisodes) {
+            if (episode.extractorVersion !== extractorVersion) {
+              // A row and its cursor must never carry different versions; the
+              // transaction rolls back, so no partial rebuild is exposed.
+              throw new Error(
+                `derived episode ${episode.id} carries extractor version ${episode.extractorVersion}, not ${extractorVersion}`,
+              )
+            }
             insertEpisode.run(
               episode.id,
               episode.sessionId,
@@ -455,6 +465,20 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
         return Number(inserted.changes) === 1
           ? { ok: true, version: 1 }
           : { ok: false, reason: 'conflict' }
+      }
+      // The audience is a property of the session (M4 review, 2026-11-13): a
+      // first non-null write may establish it, a later null keeps it, but a
+      // different non-null audience is a conflict, not a silent keep.
+      const current = readStateAudience.get(sessionId) as
+        | { audience_id: string | null }
+        | undefined
+      if (
+        current !== undefined &&
+        current.audience_id !== null &&
+        audienceId !== null &&
+        current.audience_id !== audienceId
+      ) {
+        return { ok: false, reason: 'conflict' }
       }
       const result = updateState.run(
         audienceId,

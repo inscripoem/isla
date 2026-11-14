@@ -45,7 +45,9 @@ columns.
 extractor version writes `max(persisted, rebuild_result)`, so a smaller event set cannot lower the
 cursor. A rebuild under a new extractor version rebuilds the derived rows and the cursor together under
 that version; carrying the old cursor across a semantic change would break “rebuild equals
-incremental” in the other direction. Evidence tables are unchanged. The `MemoryProjectionPort` itself
+incremental” in the other direction. A derived episode whose `extractorVersion` differs from the
+rebuild argument throws inside the transaction, so a row and its cursor can never disagree. Evidence
+tables are unchanged. The `MemoryProjectionPort` itself
 remains in-process; the durable cursor is a storage helper for callers that need restart continuity.
 
 ### D3 — Owner identity only on an explicit consenting write
@@ -60,8 +62,9 @@ that v1 insert-once limit is deliberate.
 
 ### D4 — State is per session and never re-attributed
 
-`session_state` is keyed by session; `audience_id` is metadata and is set only when absent
-(`COALESCE`). Writes carry an `expectedVersion`; a stale version returns `conflict` and never
+`session_state` is keyed by session. The audience binding is a property of the session (M4 review,
+2026-11-13): a first non-null write may establish it, a later null write keeps it, and a write naming
+a **different non-null** audience returns `conflict` and writes nothing. Writes carry an `expectedVersion`; a stale version returns `conflict` and never
 overwrites. M5 decides whether to drop the conflicting write.
 
 ### D5 — Deletion and retention are explicit, never automatic
@@ -80,8 +83,8 @@ with evidence retained) stays separate from deletion (physical removal).
 `rebuildDerived` clears the derived tables and replays events through M4-supplied `deriveEpisodes`
 and optional `deriveTopics` functions. Under the same `extractor_version` it writes
 `max(persisted, lastSeq)`, so a smaller event set cannot lower the cursor; under a new version it
-rebuilds the rows and resets the cursor under that version. M6 does not invent episode or topic
-semantics.
+rebuilds the rows and resets the cursor under that version. Every derived episode's `extractorVersion` must equal the rebuild
+argument; a mismatch throws and rolls back. M6 does not invent episode or topic semantics.
 
 ### D7 — Evaluation is a separate artifact
 
@@ -129,9 +132,11 @@ distinct; no zero substitution.
 - **Source-level cascade** — not built; derived rows are deleted by audience, not by deleted source.
   Trigger: the formal NFR-05 deletion policy.
 - **Retention scheduling** — deliberately absent; the operator call is the only path.
-- **Audience on a state conflict (open question, M4/M5)** — `writeState` keeps the first audience when a
-  later write names a different one and still returns success. Should a different audience be an
-  explicit `conflict` instead of a silent drop? No behaviour changes until M4/M5 answer.
+- **M4 derive adapter (open)** — #159 publishes `deriveEpisode`/`deriveEpisodes`/`deriveTopics` and
+  the corpora, but the functions are not directly pluggable into `rebuildDerived`: they take admitted
+  `DeriveSourceTurn` records and an `audienceId`, do not carry `createdAtMs`/`updatedAtMs`, and stamp
+  their own `DERIVED_EXTRACTOR_VERSION`. An M4-owned adapter at M5's composition boundary is required;
+  X02 "rebuild equals incremental" remains unaccepted until it exists.
 
 ## Re-open triggers
 

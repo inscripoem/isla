@@ -225,6 +225,25 @@ describe('M6 memory store — schema and derived memory', () => {
     ])
   })
 
+  it('refuses a rebuild whose episode carries a different extractor version', () => {
+    const store = storeAt()
+    expect(store.writeProjection('s1', 5, 1000, 'v1')).toBe('written')
+    const events = [
+      fixtureRuntimeEvent({ eventId: 'e1', seq: 2, sessionId: 's1', timestampMs: 20 }),
+    ]
+    expect(() =>
+      store.rebuildDerived(
+        events,
+        () => [{ ...episode('derived-s1', null, 20), extractorVersion: 'v2' }],
+        () => [],
+        'v1',
+      ),
+    ).toThrow(/extractor version/)
+    expect(store.readEpisodes({ sessionId: 's1', limit: 10 })).toEqual([])
+    expect(store.readProjection('s1')).toBe(5)
+    expect(store.readProjectionVersion('s1')).toBe('v1')
+  })
+
   it('upserts topics idempotently and clears derived rows', () => {
     const store = storeAt()
     store.upsertTopic(topic('t1', 'aud-1'))
@@ -299,16 +318,46 @@ describe('M6 memory store — audience, owner and state', () => {
       { ok: true, version: 1 },
     )
     expect(
-      store.writeState({ sessionId: 's1', audienceId: 'aud-2', state, expectedVersion: 1, nowMs: 2 }),
+      store.writeState({ sessionId: 's1', audienceId: 'aud-1', state, expectedVersion: 1, nowMs: 2 }),
     ).toEqual({ ok: true, version: 2 })
     expect(
       store.writeState({ sessionId: 's1', audienceId: 'aud-1', state, expectedVersion: 1, nowMs: 3 }),
     ).toEqual({ ok: false, reason: 'conflict' })
     expect(store.readState('s1')).toEqual({ state, version: 2 })
+  })
+
+  it('refuses a different audience instead of silently keeping the first', () => {
+    const store = storeAt()
+    const state = { mood: 1, stress: 0, energy: 2, attachment: 0.5, confidence: 1 }
+    expect(store.writeState({ sessionId: 's1', audienceId: 'aud-1', state, expectedVersion: 0, nowMs: 1 })).toEqual(
+      { ok: true, version: 1 },
+    )
+    expect(
+      store.writeState({ sessionId: 's1', audienceId: 'aud-2', state, expectedVersion: 1, nowMs: 2 }),
+    ).toEqual({ ok: false, reason: 'conflict' })
+    expect(store.readState('s1')).toEqual({ state, version: 1 })
     const row = open[0]!
       .prepare('SELECT audience_id FROM session_state WHERE session_id = ?')
       .get('s1') as { audience_id: string | null }
     expect(row.audience_id).toBe('aud-1')
+  })
+
+  it('lets a null audience keep the binding and a null first write accept one later', () => {
+    const store = storeAt()
+    const state = { mood: 1, stress: 0, energy: 2, attachment: 0.5, confidence: 1 }
+    expect(store.writeState({ sessionId: 's1', audienceId: null, state, expectedVersion: 0, nowMs: 1 })).toEqual(
+      { ok: true, version: 1 },
+    )
+    expect(
+      store.writeState({ sessionId: 's1', audienceId: 'aud-1', state, expectedVersion: 1, nowMs: 2 }),
+    ).toEqual({ ok: true, version: 2 })
+    expect(
+      store.writeState({ sessionId: 's1', audienceId: null, state, expectedVersion: 2, nowMs: 3 }),
+    ).toEqual({ ok: true, version: 3 })
+    const actual = open[0]!
+      .prepare('SELECT audience_id FROM session_state WHERE session_id = ?')
+      .get('s1') as { audience_id: string | null }
+    expect(actual.audience_id).toBe('aud-1')
   })
 
   it('deletes one audience, cascades memory, and never deletes evidence', () => {
