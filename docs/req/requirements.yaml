@@ -425,7 +425,7 @@ requirements:
         description: Completed, cancelled and failed attempts are counted with a reason; missing usage remains unknown; an empty sample has no failure-rate claim; an explicit not-run result is not an executed attempt (NFR-01/NFR-04; C-52–C-55, C-69–C-71).
         cases: [C-52, C-53, C-54, C-55, C-69, C-70, C-71]
   - id: INV-17
-    title: The derived-memory store is version-scoped and rebuildable; owner attribution is written only under durable and consent; a session-state write for a different audience is a conflict; deletion and retention never touch events or deliveries
+    title: The derived-memory store is version-scoped and rebuildable; owner and derived rows are written only under a durable consenting binding; a session-state write for a different audience is a conflict; audience deletion and age-based retention never touch events or deliveries
     category: invariant
     priority: must
     owner: M6
@@ -434,8 +434,8 @@ requirements:
     status: under-review
     acceptance:
       - kind: deterministic
-        description: A session-state write for a different audience returns conflict, and deletion plus age-based retention leave events and deliveries untouched (FR-06, NFR-03, NFR-05; C-77, C-78).
-        cases: [C-77, C-78]
+        description: Owner and derived writes require a durable consenting binding; a session-state write for a different audience returns conflict; audience deletion and age-based retention leave events and deliveries untouched (FR-06, NFR-03, NFR-05; C-76, C-77, C-78).
+        cases: [C-76, C-77, C-78]
       - kind: pending-metric
-        description: Cursor rebuild-equality (C-75) needs M4's derive rules through the composition adapter; the durable-and-consent owner gate (C-76) waits on M5's ruling. Both cases are registered pending rather than claimed.
-        cases: [C-75, C-76]
+        description: Cursor rebuild-equality (C-75) needs M4's derive rules through the composition adapter. The case is registered pending rather than claimed.
+        cases: [C-75]

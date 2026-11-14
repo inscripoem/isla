@@ -165,9 +165,12 @@ can omit later standing facts from the audit because the existing input order is
 
 ## Retention and privacy
 
-- **Retention:** there is no automatic expiry and no default period. `createMemoryStore.deleteOlderThan`
-  runs only when an operator calls it, and only for the derived/owner/state tables; `events` and
-  `deliveries` are append-only. NFR-05 retention/deletion acceptance remains pending.
+- **Retention:** there is no automatic expiry and no default period.
+  `createMemoryStore.deleteOlderThan(audienceId, days, nowMs)` runs only when an operator calls it, only
+  for one audience, and only for that audience's derived/owner/state/audience rows; `events` and
+  `deliveries` are append-only. There is no global by-age delete, so one audience's configuration
+  cannot silently remove another audience's rows (M5 decision, 2026-11-14). NFR-05 retention/deletion
+  acceptance remains pending.
 - **Rendering budgets are not retention.** `maxTurns` and `maxCharacters` drop content from a rendered
   context; they do not delete stored evidence or make a turn unreachable later.
 - **Scope:** the stricter of session scope and any configured retention limit applies. A session-only
@@ -221,8 +224,8 @@ The memory-tables ADR (number pending in #25) adds six tables beyond `events`/`d
 | `derived_episode` | episode summary, importance, source turn ids | ids only; rebuilt from evidence through M4's derive |
 | `derived_topic` | topic summary, validity window, source episode ids | M4 maintains `valid_to`; rebuilt with episodes |
 | `projection_state` | durable per-session cursor | monotonic; `stale` on a non-increasing seq |
-| `session_audience` | session's audience, durable and consent flags | insert-once; a different binding conflicts |
-| `delivery_owner` | owner of a delivered segment | written only after the delivery commit; failure = unowned |
+| `session_audience` | session's audience, durable and consent flags | insert-once; a different binding conflicts; `durable` and `consent` gate owner/derived writes |
+| `delivery_owner` | owner of a delivered segment | written only for a durable consenting binding after the delivery commit; failure = unowned |
 | `session_state` | character state and version | per session; stale version conflicts; audience is metadata |
 
 Limits, recorded rather than hidden:

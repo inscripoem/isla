@@ -455,9 +455,11 @@ cases:
     verifier: null
 
   - id: C-76
-    status: pending
-    title: Owner and derived rows are written only under durable and consent; a missing owner binding refuses cross-session recall
-    verifier: null
+    status: implemented
+    title: Owner and derived rows are written only under a durable consenting binding; a missing or non-durable binding refuses the write
+    verifier:
+      file: test/offline/m6-memory-store.test.ts
+      test: "refuses owner and derived writes when durable is false even if consent is true"
 
   - id: C-77
     status: implemented

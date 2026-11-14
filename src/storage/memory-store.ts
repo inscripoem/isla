@@ -61,13 +61,14 @@ export interface OwnerKey {
 }
 
 export type OwnerWrite = 'recorded' | 'conflict' | 'unowned' | 'refused'
+export type DerivedWrite = 'recorded' | 'refused'
 export type StateWrite =
   | { readonly ok: true; readonly version: number }
   | { readonly ok: false; readonly reason: 'conflict' }
 
 export interface MemoryStore {
-  upsertEpisode(episode: DerivedEpisode): void
-  upsertTopic(topic: DerivedTopic): void
+  upsertEpisode(episode: DerivedEpisode): DerivedWrite
+  upsertTopic(topic: DerivedTopic): DerivedWrite
   readEpisodes(query: { sessionId?: string; audienceId?: string; limit: number }): DerivedEpisode[]
   readTopics(query: { audienceId: string; limit: number }): DerivedTopic[]
   readProjection(sessionId: string): number
@@ -104,7 +105,7 @@ export interface MemoryStore {
     nowMs: number
   }): StateWrite
   deleteAudience(audienceId: string): Record<string, number>
-  deleteOlderThan(days: number, nowMs: number): Record<string, number>
+  deleteOlderThan(audienceId: string, days: number, nowMs: number): Record<string, number>
   exportAudience(audienceId: string): string
 }
 
@@ -158,6 +159,9 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
     VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(session_id) DO NOTHING
   `)
+  const anyAudienceBinding = database.prepare(
+    'SELECT 1 AS allowed FROM session_audience WHERE audience_id = ? AND durable = 1 AND consent = 1 LIMIT 1',
+  )
   const readOwner = database.prepare(
     'SELECT audience_id FROM delivery_owner WHERE session_id = ? AND turn_id = ? AND segment_id = ?',
   )
@@ -217,16 +221,16 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
   }
 
   function ownerWrite(key: OwnerKey, audienceId: string, nowMs: number): OwnerWrite {
-    // M6-X03-1 / M4 2026-11-13: consent is enforced at the storage boundary.
-    // No binding or an anonymous binding is `unowned`; a binding that exists but
-    // has not consented is `refused`; a different owner is a `conflict`. Only a
-    // consenting binding can create an owner row. The caller never retries a
-    // refusal into a different attribution.
+    // M6-X03-1 / M4 2026-11-13, M5 2026-11-14: durable and consent are enforced
+    // at the storage boundary. No binding or an anonymous binding is `unowned`; a
+    // binding that is not both durable and consenting is `refused`; a different
+    // owner is a `conflict`. Only a durable consenting binding can create an owner
+    // row. The caller never retries a refusal into a different attribution.
     const binding = readAudience.get(key.sessionId) as
       | { audience_id: string | null; durable: number; consent: number }
       | undefined
     if (binding === undefined || binding.audience_id === null) return 'unowned'
-    if (binding.consent === 0) return 'refused'
+    if (binding.consent === 0 || binding.durable === 0) return 'refused'
     if (binding.audience_id !== audienceId) return 'conflict'
     insertOwner.run(key.sessionId, key.turnId, key.segmentId, audienceId, nowMs)
     const existing = readOwner.get(key.sessionId, key.turnId, key.segmentId) as
@@ -237,6 +241,15 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
 
   return {
     upsertEpisode(episode) {
+      const binding = readAudience.get(episode.sessionId) as
+        | { audience_id: string | null; durable: number; consent: number }
+        | undefined
+      if (binding === undefined || binding.consent === 0 || binding.durable === 0) {
+        return 'refused'
+      }
+      if (episode.audienceId !== null && binding.audience_id !== episode.audienceId) {
+        return 'refused'
+      }
       insertEpisode.run(
         episode.id,
         episode.sessionId,
@@ -250,9 +263,11 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
         episode.extractorVersion,
         episode.createdAtMs,
       )
+      return 'recorded'
     },
 
     upsertTopic(topic) {
+      if (anyAudienceBinding.get(topic.audienceId) === undefined) return 'refused'
       insertTopic.run(
         topic.id,
         topic.audienceId,
@@ -265,6 +280,7 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
         topic.validToMs,
         topic.updatedAtMs,
       )
+      return 'recorded'
     },
 
     readEpisodes({ sessionId, audienceId, limit }) {
@@ -334,8 +350,19 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
         let episodes = 0
         let topics = 0
         for (const [sessionId, sessionEvents] of sessions) {
+          const binding = readAudience.get(sessionId) as
+            | { audience_id: string | null; durable: number; consent: number }
+            | undefined
+          if (binding === undefined || binding.consent === 0 || binding.durable === 0) {
+            throw new Error(`session ${sessionId} has no durable consenting binding; rebuild refused`)
+          }
           const derivedEpisodes = deriveEpisodes(sessionEvents)
           for (const episode of derivedEpisodes) {
+            if (episode.audienceId !== null && binding.audience_id !== episode.audienceId) {
+              throw new Error(
+                `derived episode ${episode.id} names audience ${episode.audienceId}, not the session binding`,
+              )
+            }
             if (episode.extractorVersion !== extractorVersion) {
               // A row and its cursor must never carry different versions; the
               // transaction rolls back, so no partial rebuild is exposed.
@@ -359,6 +386,9 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
             episodes += 1
           }
           for (const topic of deriveTopics?.(derivedEpisodes, sessionEvents) ?? []) {
+            if (anyAudienceBinding.get(topic.audienceId) === undefined) {
+              throw new Error(`audience ${topic.audienceId} has no durable consenting binding; rebuild refused`)
+            }
             insertTopic.run(
               topic.id,
               topic.audienceId,
@@ -519,26 +549,35 @@ export function createMemoryStore(database: DatabaseSync): MemoryStore {
       }
     },
 
-    deleteOlderThan(days, nowMs) {
+    deleteOlderThan(audienceId, days, nowMs) {
       const cutoff = nowMs - days * DAY_MS
       database.exec('BEGIN')
       try {
         const counts: Record<string, number> = {}
         counts.derived_episode = Number(
-          database.prepare('DELETE FROM derived_episode WHERE created_at_ms < ?').run(cutoff).changes,
+          database
+            .prepare('DELETE FROM derived_episode WHERE audience_id = ? AND created_at_ms < ?')
+            .run(audienceId, cutoff).changes,
         )
         counts.derived_topic = Number(
-          database.prepare('DELETE FROM derived_topic WHERE updated_at_ms < ?').run(cutoff).changes,
+          database
+            .prepare('DELETE FROM derived_topic WHERE audience_id = ? AND updated_at_ms < ?')
+            .run(audienceId, cutoff).changes,
         )
         counts.session_state = Number(
-          database.prepare('DELETE FROM session_state WHERE updated_at_ms < ?').run(cutoff).changes,
+          database
+            .prepare('DELETE FROM session_state WHERE audience_id = ? AND updated_at_ms < ?')
+            .run(audienceId, cutoff).changes,
         )
         counts.delivery_owner = Number(
-          database.prepare('DELETE FROM delivery_owner WHERE created_at_ms < ?').run(cutoff).changes,
+          database
+            .prepare('DELETE FROM delivery_owner WHERE audience_id = ? AND created_at_ms < ?')
+            .run(audienceId, cutoff).changes,
         )
         counts.session_audience = Number(
-          database.prepare('DELETE FROM session_audience WHERE created_at_ms < ?').run(cutoff)
-            .changes,
+          database
+            .prepare('DELETE FROM session_audience WHERE audience_id = ? AND created_at_ms < ?')
+            .run(audienceId, cutoff).changes,
         )
         database.exec('COMMIT')
         return counts

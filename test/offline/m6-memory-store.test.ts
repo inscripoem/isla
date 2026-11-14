@@ -24,10 +24,15 @@ function storeAt(): ReturnType<typeof createMemoryStore> {
   return createMemoryStore(database)
 }
 
-function episode(id: string, audienceId: string | null, createdAtMs = 0) {
+function episode(
+  id: string,
+  audienceId: string | null,
+  createdAtMs = 0,
+  sessionId = 's1',
+) {
   return {
     id,
-    sessionId: 's1',
+    sessionId,
     audienceId,
     startMs: 0,
     endMs: 100,
@@ -53,6 +58,23 @@ function topic(id: string, audienceId: string, updatedAtMs = 0) {
     validToMs: null,
     updatedAtMs,
   }
+}
+
+function bind(
+  store: ReturnType<typeof createMemoryStore>,
+  sessionId: string,
+  audienceId: string,
+  options: { durable?: boolean; consent?: boolean; nowMs?: number } = {},
+) {
+  return store.recordSessionAudience(
+    sessionId,
+    {
+      audienceId,
+      durable: options.durable ?? true,
+      consent: options.consent ?? true,
+    },
+    options.nowMs ?? 0,
+  )
 }
 
 afterEach(() => {
@@ -87,6 +109,7 @@ describe('M6 memory store — schema and derived memory', () => {
 
   it('upserts an episode idempotently and preserves ids only', () => {
     const store = storeAt()
+    bind(store, 's1', 'aud-1')
     store.upsertEpisode(episode('e1', 'aud-1'))
     store.upsertEpisode({ ...episode('e1', 'aud-1'), summary: 'updated' })
     const rows = store.readEpisodes({ sessionId: 's1', limit: 10 })
@@ -167,6 +190,7 @@ describe('M6 memory store — schema and derived memory', () => {
 
   it('rebuilds derived episodes and the cursor from events', () => {
     const store = storeAt()
+    bind(store, 's1', 'aud-1')
     const events = [
       fixtureRuntimeEvent({ eventId: 'e1', seq: 1, sessionId: 's1', timestampMs: 10 }),
       fixtureRuntimeEvent({ eventId: 'e2', seq: 2, sessionId: 's1', timestampMs: 20 }),
@@ -192,6 +216,7 @@ describe('M6 memory store — schema and derived memory', () => {
 
   it('does not lower the cursor when a same-version rebuild sees fewer events', () => {
     const store = storeAt()
+    bind(store, 's1', 'aud-1')
     expect(store.writeProjection('s1', 5, 1000, 'v1')).toBe('written')
     const events = [
       fixtureRuntimeEvent({ eventId: 'e1', seq: 2, sessionId: 's1', timestampMs: 20 }),
@@ -208,6 +233,7 @@ describe('M6 memory store — schema and derived memory', () => {
 
   it('rebuilds rows and cursor under a new extractor version', () => {
     const store = storeAt()
+    bind(store, 's1', 'aud-1')
     expect(store.writeProjection('s1', 5, 1000, 'v1')).toBe('written')
     const events = [
       fixtureRuntimeEvent({ eventId: 'e1', seq: 2, sessionId: 's1', timestampMs: 20 }),
@@ -227,6 +253,7 @@ describe('M6 memory store — schema and derived memory', () => {
 
   it('refuses a rebuild whose episode carries a different extractor version', () => {
     const store = storeAt()
+    bind(store, 's1', 'aud-1')
     expect(store.writeProjection('s1', 5, 1000, 'v1')).toBe('written')
     const events = [
       fixtureRuntimeEvent({ eventId: 'e1', seq: 2, sessionId: 's1', timestampMs: 20 }),
@@ -246,6 +273,7 @@ describe('M6 memory store — schema and derived memory', () => {
 
   it('upserts topics idempotently and clears derived rows', () => {
     const store = storeAt()
+    bind(store, 's1', 'aud-1')
     store.upsertTopic(topic('t1', 'aud-1'))
     store.upsertTopic({ ...topic('t1', 'aud-1'), summary: 'updated' })
     expect(store.readTopics({ audienceId: 'aud-1', limit: 10 })).toHaveLength(1)
@@ -362,8 +390,10 @@ describe('M6 memory store — audience, owner and state', () => {
 
   it('deletes one audience, cascades memory, and never deletes evidence', () => {
     const store = storeAt()
+    bind(store, 's1', 'aud-1')
+    bind(store, 's2', 'aud-2')
     store.upsertEpisode(episode('e1', 'aud-1'))
-    store.upsertEpisode(episode('e2', 'aud-2'))
+    store.upsertEpisode(episode('e2', 'aud-2', 0, 's2'))
     store.upsertTopic(topic('t1', 'aud-1'))
     store.upsertTopic(topic('t2', 'aud-2'))
     store.writeState({
@@ -373,7 +403,6 @@ describe('M6 memory store — audience, owner and state', () => {
       expectedVersion: 0,
       nowMs: 1,
     })
-    store.recordSessionAudience('s1', { audienceId: 'aud-1', durable: true, consent: true }, 1)
     store.recordDeliveryOwner({ sessionId: 's1', turnId: 't1', segmentId: 'seg1' }, 'aud-1', 2)
     open[0]!
       .prepare(`
@@ -414,6 +443,7 @@ describe('M6 memory store — audience, owner and state', () => {
 
   it('does not delete memory rows when the store is re-created', () => {
     const store = storeAt()
+    bind(store, 's1', 'aud-1')
     store.upsertEpisode(episode('e1', 'aud-1'))
     store.recordSessionAudience('s1', { audienceId: 'aud-1', durable: true, consent: true }, 1)
     const recreated = createMemoryStore(open[0]!)
@@ -421,22 +451,22 @@ describe('M6 memory store — audience, owner and state', () => {
     expect(recreated.exportAudience('aud-1')).toContain('"kind":"episode"')
   })
 
-  it('deletes only rows older than the cutoff', () => {
+  it('deletes only the target audience rows older than the cutoff', () => {
     const store = storeAt()
     const day = 24 * 60 * 60 * 1000
-    store.upsertEpisode(episode('old', 'aud-1', 0))
-    store.upsertEpisode(episode('new', 'aud-1', 10 * day))
-    store.upsertEpisode(episode('other', 'aud-2', 10 * day))
-    store.upsertTopic(topic('other-topic', 'aud-2', 10 * day))
-    store.recordSessionAudience('old-s', { audienceId: 'aud-1', durable: true, consent: true }, 0)
-    store.recordSessionAudience('new-s', { audienceId: 'aud-1', durable: true, consent: true }, 10 * day)
-    store.recordSessionAudience('other-s', { audienceId: 'aud-2', durable: true, consent: true }, 10 * day)
+    bind(store, 'old-s', 'aud-1', { nowMs: 0 })
+    bind(store, 'new-s', 'aud-1', { nowMs: 10 * day })
+    bind(store, 'other-s', 'aud-2', { nowMs: 0 })
+    store.upsertEpisode(episode('old', 'aud-1', 0, 'old-s'))
+    store.upsertEpisode(episode('new', 'aud-1', 10 * day, 'new-s'))
+    store.upsertEpisode(episode('other', 'aud-2', 0, 'other-s'))
+    store.upsertTopic(topic('other-topic', 'aud-2', 0))
     store.recordDeliveryOwner({ sessionId: 'old-s', turnId: 't', segmentId: 's' }, 'aud-1', 0)
     store.recordDeliveryOwner({ sessionId: 'new-s', turnId: 't', segmentId: 's' }, 'aud-1', 10 * day)
-    store.recordDeliveryOwner({ sessionId: 'other-s', turnId: 't', segmentId: 's' }, 'aud-2', 10 * day)
+    store.recordDeliveryOwner({ sessionId: 'other-s', turnId: 't', segmentId: 's' }, 'aud-2', 0)
     const state = { mood: 0, stress: 0, energy: 0, attachment: 0, confidence: 0 }
     store.writeState({ sessionId: 'old-s', audienceId: 'aud-1', state, expectedVersion: 0, nowMs: 0 })
-    store.writeState({ sessionId: 'other-s', audienceId: 'aud-2', state, expectedVersion: 0, nowMs: 10 * day })
+    store.writeState({ sessionId: 'other-s', audienceId: 'aud-2', state, expectedVersion: 0, nowMs: 0 })
     open[0]!
       .prepare(`
         INSERT INTO events
@@ -455,7 +485,7 @@ describe('M6 memory store — audience, owner and state', () => {
                 'fully-delivered', 'completed', 1, 0, 'p', '1')
       `)
       .run()
-    const counts = store.deleteOlderThan(1, 10 * day)
+    const counts = store.deleteOlderThan('aud-1', 1, 10 * day)
     expect(counts.derived_episode).toBe(1)
     expect(counts.session_audience).toBe(1)
     expect(counts.delivery_owner).toBe(1)
@@ -482,8 +512,10 @@ describe('M6 memory store — audience, owner and state', () => {
 
   it('exports only the target audience', () => {
     const store = storeAt()
+    bind(store, 's1', 'aud-1')
+    bind(store, 's2', 'aud-2')
     store.upsertEpisode(episode('e1', 'aud-1'))
-    store.upsertEpisode(episode('e2', 'aud-2'))
+    store.upsertEpisode(episode('e2', 'aud-2', 0, 's2'))
     store.upsertTopic(topic('t1', 'aud-1'))
     store.writeState({
       sessionId: 's1',
@@ -492,7 +524,6 @@ describe('M6 memory store — audience, owner and state', () => {
       expectedVersion: 0,
       nowMs: 1,
     })
-    store.recordSessionAudience('s1', { audienceId: 'aud-1', durable: true, consent: true }, 1)
     store.recordDeliveryOwner({ sessionId: 's1', turnId: 't1', segmentId: 'seg1' }, 'aud-1', 2)
     open[0]!
       .prepare(`
@@ -512,5 +543,79 @@ describe('M6 memory store — audience, owner and state', () => {
       ),
     ).toBe(true)
     expect(lines.some((line) => line.id === 'e2')).toBe(false)
+  })
+})
+
+
+describe('M6 memory store — durable/consent boundary for owner and derived writes', () => {
+  const state = { mood: 0, stress: 0, energy: 0, attachment: 0, confidence: 0 }
+
+  it('refuses owner and derived writes when durable is false even if consent is true', () => {
+    const store = storeAt()
+    bind(store, 's1', 'aud-1', { durable: false, consent: true })
+
+    expect(
+      store.recordDeliveryOwner({ sessionId: 's1', turnId: 't', segmentId: 's' }, 'aud-1', 1),
+    ).toBe('refused')
+    expect(store.upsertEpisode(episode('e1', 'aud-1'))).toBe('refused')
+    expect(store.upsertTopic(topic('t1', 'aud-1'))).toBe('refused')
+    expect(store.readEpisodes({ audienceId: 'aud-1', limit: 10 })).toEqual([])
+    expect(store.readTopics({ audienceId: 'aud-1', limit: 10 })).toEqual([])
+    // Session-scoped state is exempt from the cross-session gate.
+    expect(
+      store.writeState({ sessionId: 's1', audienceId: 'aud-1', state, expectedVersion: 0, nowMs: 1 }),
+    ).toEqual({ ok: true, version: 1 })
+  })
+
+  it('refuses derived rows without any binding', () => {
+    const store = storeAt()
+    expect(store.upsertEpisode(episode('e1', 'aud-1'))).toBe('refused')
+    expect(store.upsertEpisode(episode('e2', null))).toBe('refused')
+    expect(store.upsertTopic(topic('t1', 'aud-1'))).toBe('refused')
+  })
+
+  it('records derived rows under a durable consenting binding', () => {
+    const store = storeAt()
+    bind(store, 's1', 'aud-1')
+    expect(store.upsertEpisode(episode('e1', 'aud-1'))).toBe('recorded')
+    expect(store.upsertEpisode(episode('e2', null))).toBe('recorded')
+    expect(store.upsertTopic(topic('t1', 'aud-1'))).toBe('recorded')
+  })
+
+  it('refuses a derived episode whose audience differs from the binding', () => {
+    const store = storeAt()
+    bind(store, 's1', 'aud-1')
+    expect(store.upsertEpisode(episode('e1', 'aud-2'))).toBe('refused')
+    expect(store.readEpisodes({ audienceId: 'aud-2', limit: 10 })).toEqual([])
+  })
+
+  it('refuses a rebuild when a session has no durable consenting binding', () => {
+    const store = storeAt()
+    const events = [
+      fixtureRuntimeEvent({ eventId: 'e1', seq: 1, sessionId: 's1', timestampMs: 10 }),
+    ]
+    expect(() =>
+      store.rebuildDerived(events, () => [episode('e1', null, 10)], () => [], 'v1'),
+    ).toThrow(/no durable consenting binding/)
+    expect(store.readEpisodes({ sessionId: 's1', limit: 10 })).toEqual([])
+    expect(store.readProjection('s1')).toBe(0)
+  })
+
+  it('refuses a rebuild when a topic audience has no durable consenting binding', () => {
+    const store = storeAt()
+    bind(store, 's1', 'aud-1')
+    const events = [
+      fixtureRuntimeEvent({ eventId: 'e1', seq: 1, sessionId: 's1', timestampMs: 10 }),
+    ]
+    expect(() =>
+      store.rebuildDerived(
+        events,
+        () => [episode('e1', null, 10)],
+        () => [topic('t1', 'aud-2')],
+        'v1',
+      ),
+    ).toThrow(/audience aud-2 has no durable consenting binding/)
+    expect(store.readEpisodes({ sessionId: 's1', limit: 10 })).toEqual([])
+    expect(store.readTopics({ audienceId: 'aud-2', limit: 10 })).toEqual([])
   })
 })
