@@ -56,3 +56,6 @@ calls**, replacing the earlier “not in v0.2” wording.
   binding), `C-77` (state audience conflict) and `C-78` (audience deletion and retention leave events
   and deliveries untouched) are implemented. `C-75` stays pending because its rebuild-equality half
   needs M4's derive rules through the composition adapter.
+- A derived episode stored with `audience_id = NULL` is gated by its session binding but is not matched
+  by the audience-scoped delete/retention filters. Recorded as a limit, not silently widened: M4 must
+  decide whether such rows inherit the session audience.
