@@ -1,18 +1,23 @@
-# ADR-0XX — Memory-tables foundation (X02/X03/X07/X08)
+# ADR-009 — Memory-tables foundation (X02/X03/X07/X08)
 
-Status: **proposal — number pending allocation in #25; do not merge under this name. A draft PR
-carries it for M4/M5 review.**
+Status: **under review (M6). ADR-009 was reserved by M5 in #25 on 2026-11-14; the design review stays
+with M6 and M4. Do not merge under another number. X04's audience-level seed stays excluded.**
 Date: 2026-11-10. Owner: M6 (storage/evaluation). Affected reviewers: **M4** (derived/state
 semantics), **M5** (consent, durability, operator surface).
 
-Related: #147, #148 · `docs/architecture/memory-design.md` · ADR-003/004/005 · NFR-03, NFR-05 ·
+Related: #147, #148 · #159 · `docs/architecture/memory-design.md` · ADR-003/004/005 · NFR-03, NFR-05 ·
 #25, #107.
 
-Invariants: **no invariant row governs this mechanism.** `INV-06` enforces the in-process projection
-bookmark in `src/storage/memory-projection.ts`, `INV-10` enforces config validation, `INV-11` the
-migration runner and `INV-16` evaluation accounting. Citing them here for the durable cursor would
-over-claim, so this ADR does not. A memory-store invariant is requested in #25; until it exists, the
-cursor and owner rules are enforced only by the tests named in the trace rows.
+Invariants: **INV-17** (M6, allocated by M5 in #25 on 2026-11-14) covers this mechanism: the cursor is
+version-scoped and non-decreasing, derived rows and the cursor share the extractor version, owner
+attribution is gated, a different state audience is a conflict, and deletion/retention never touch
+evidence. Cases **C-75…C-78** are allocated to the store. `INV-06`, `INV-10`, `INV-11` and `INV-16`
+cover other components and are not claimed here.
+
+One conflict is recorded rather than resolved: INV-17's wording says owner attribution is written only
+under `durable` and `consent`, while M5's §3 in the same reply keeps `durable` as M4's cross-session
+recall gate and the store enforces `consent` at the boundary. `C-76` is therefore **pending** in the
+registry until M5 says which rule governs; the store does not silently choose.
 
 ## Context
 
@@ -109,7 +114,9 @@ distinct; no zero substitution.
   Until those corpora exist, X07 is fixture-only and must not be reported as a quality result.
 - The evidence tables remain append-only; a source-level cascade is **deferred** until the NFR-05
   deletion policy exists.
-- No case or invariant ID is allocated; trace rows use “ids pending” until #25 allocates them.
+- `C-75` remains **pending** because its rebuild-equality half needs M4's derive rules through the
+  composition adapter; `C-76` remains pending on the `durable`/`consent` question above. `C-77` and
+  `C-78` are implemented and registered.
 
 ## Alternatives considered
 
@@ -147,9 +154,8 @@ distinct; no zero substitution.
 
 ## Traceability
 
-FR-06 · NFR-03 · NFR-05 · ADR-003/004/005 · #147/#148 · #25/#107.
+FR-06 · NFR-03 · NFR-05 · INV-17 · C-75…C-78 · ADR-003/004/005 · ADR-009 · #147/#148 · #159 · #25/#107.
 
-No invariant row governs `src/storage/memory-store.ts` or `src/evaluation/memory-bench.ts`. INV-06,
-INV-10, INV-11 and INV-16 cover `memory-projection.ts`, `config.ts`, the migration runner and
-evaluation accounting respectively; they are not claimed here. A dedicated invariant and the case IDs
-are pending #25.
+INV-17 and the four cases are registered in `docs/architecture/invariants.md` and
+`docs/req/case-registry.yaml`. `C-75` and `C-76` are registered as **pending**, not implemented;
+`C-77` and `C-78` are implemented.

@@ -448,3 +448,27 @@ cases:
     verifier:
       file: test/offline/m5-process-restart.test.ts
       test: "production process restart acceptance"
+
+  - id: C-75
+    status: pending
+    title: The projection cursor is monotonic within one extractor version, and derived rows and cursor share that version
+    verifier: null
+
+  - id: C-76
+    status: pending
+    title: Owner and derived rows are written only under durable and consent; a missing owner binding refuses cross-session recall
+    verifier: null
+
+  - id: C-77
+    status: implemented
+    title: A session-state write for a different audience returns conflict
+    verifier:
+      file: test/offline/m6-memory-store.test.ts
+      test: "refuses a different audience instead of silently keeping the first"
+
+  - id: C-78
+    status: implemented
+    title: Audience deletion and age-based retention leave events and deliveries untouched
+    verifier:
+      file: test/offline/m6-memory-store.test.ts
+      test: "deletes one audience, cascades memory, and never deletes evidence"

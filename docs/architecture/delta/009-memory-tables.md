@@ -1,7 +1,6 @@
-# Delta-0XX — Memory-tables foundation (X02/X03/X07/X08)
+# Delta-009 — Memory-tables foundation (X02/X03/X07/X08)
 
-Change record for the memory-tables ADR (number pending allocation in #25; do not merge under this
-name). Date: 2026-11-10. Branch `m6-memory-foundation`, draft PR only, not merged.
+Change record for ADR-009 (reserved by M5 in #25 on 2026-11-14; do not merge under another number). Date: 2026-11-10. Branch `m6-memory-foundation`, draft PR only, not merged.
 
 ## Change (against `main` `e9e7e7b`; rebased onto `f99e2f5`)
 
@@ -20,7 +19,7 @@ name). Date: 2026-11-10. Branch `m6-memory-foundation`, draft PR only, not merge
 - **MODIFIED** `docs/ai-use-log.yaml` — seven supervised-session entries for this branch.
 - **MODIFIED** `docs/architecture/memory-design.md` — cursor/version, owner/consent, derived memory,
   state, retention/deletion, evaluation identity; the recorded limits.
-- **MODIFIED** `docs/architecture/trace-matrix.md` — five rows, **ids pending**.
+- **MODIFIED** `docs/architecture/trace-matrix.md` — five rows citing **ADR-009**, **INV-17** and **C-75…C-78**.
 - **FROZEN and unchanged:** `RecordedRunV1`, `src/contracts/app/**`, the `events` and `deliveries`
   schemas (append-only evidence).
 - **OBSOLETED:** none.
@@ -41,8 +40,8 @@ calls**, replacing the earlier “not in v0.2” wording.
 
 ## Open items
 
-- The ADR number is **not allocated**; #25 has the request. The ADR and this Delta use `0XX` and must
-  be renamed when M5 allocates the number.
+- **ADR-009 is reserved** (M5, #25, 2026-11-14) and the ADR and this Delta carry the number; the
+  registration lands in one commit with INV-17 and C-75…C-78.
 - The design and trace updates are local; they must merge with the ADR number.
 - Operator rebuild entry and source-level cascade are recorded limits, not implemented.
 - Retention scope is still open: `deleteAudience` is audience-targeted, but `deleteOlderThan` is
@@ -51,4 +50,7 @@ calls**, replacing the earlier “not in v0.2” wording.
 - X02 integration waits on M4 `deriveEpisode`/`deriveTopics`; X07 real acceptance waits on M4’s
   `test/fixtures/memory/` corpora. The current X07 tests are fixture-level only and claim no quality
   result.
-- No case or invariant ID is allocated; no threshold or acceptance claim is added.
+- **INV-17 and C-75…C-78 are allocated.** `C-77` (state audience conflict) and `C-78` (deletion and
+  retention leave evidence untouched) are implemented. `C-75` stays pending because its
+  rebuild-equality half needs M4's derive rules through the composition adapter. `C-76` stays pending
+  on the `durable`/`consent` conflict recorded in the ADR and reported in #25.
