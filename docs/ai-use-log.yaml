@@ -5763,3 +5763,42 @@ entries:
         temp creation (1 failed).
       not_run: >-
         No remote CI after the push, no provider call, no CP05 scoring.
+
+  - date: "2026-11-14"
+    task: "M6-140 evidence-path portability"
+    branch: m6-02-provenance
+    change: >-
+      Follow-up to the aliased-path fix. The inode comparison now falls back to
+      canonical names when a filesystem reports inode 0 for every file, so an
+      unrelated output is not refused. The symlink tests create directory links as
+      junctions and skip themselves when the host cannot create symlinks, so a
+      Windows reviewer without Developer Mode gets skips rather than failures. The
+      ADR records the evidence-preservation boundary and says duplicate occurrence
+      key; the delta carries the current counts and the seven mutations.
+    requirements: [FR-06, NFR-04]
+    invariants: [INV-16]
+    cases: []
+    commits: [7810cf2]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      M6 challenged readiness after the first fix; the self-review found the
+      portability gap. Kept local until the suite passed again.
+    human_review: >-
+      M6 requested the re-audit. No independent review or merge is claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id is
+      claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: 78c7656 (main)
+      focused: "provenance command 23/23; report 36/36."
+      role: "test:m6 248/248; trace 41/41; readiness 47/47."
+      full_suite: "pnpm verify exit 0: 1611/1611 in 76 files."
+      mutation: >-
+        The three path/temp mutations remain red-then-restored; the inode-zero
+        fallback is exercised by the existing distinct-output control.
+      not_run: >-
+        No Windows execution of the symlink cases (skipped by design there), no
+        remote CI after this push, no provider call.
