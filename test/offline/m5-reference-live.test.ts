@@ -15,7 +15,10 @@ import type {
   ReferenceRendererHandle,
   ReferenceSynthesisHandle,
 } from '../../src/runtime/deployments/reference-live'
-import { buildReferenceDeployment } from '../../src/runtime/deployments/reference-live'
+import {
+  buildReferenceDeployment,
+  createProductionDeployment,
+} from '../../src/runtime/deployments/reference-live'
 import { parseReferenceLiveConfig } from '../../src/runtime/deployments/reference-live-config'
 
 /**
@@ -224,5 +227,15 @@ describe('reference live deployment', () => {
     expect(disposed.filter((name) => name === 'renderer')).toHaveLength(1)
     expect(disposed.filter((name) => name === 'registry')).toHaveLength(1)
     gate.dispose()
+  })
+
+  it('fails through the production factory when configuration is missing', async () => {
+    await expect(
+      createProductionDeployment({
+        clock: fixedClock(),
+        databasePath: '/tmp/isla-reference-live.db',
+        env: {},
+      }),
+    ).rejects.toThrow(/missing or invalid environment variables: .*ISLA_VTS_HOTKEY_MAP/)
   })
 })
