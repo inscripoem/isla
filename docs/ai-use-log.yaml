@@ -7075,3 +7075,137 @@ entries:
       The M4-151 rebase round: branch rebuild onto main, evidence repointing,
       the working-memory expiry-input guard and the contract statements; no
       contract, storage, runtime or provider change.
+  - date: "2026-11-14"
+    task: M4-X01-listener-history-port-v2
+    branch: feat/m4-x01-port-v2-final
+    change: >-
+      Revise M4's own half of X01 in response to the two integration defects
+      recorded by M5 on issue #147: an explicit stateless generation boundary
+      and a value-channel failure signal for the optional listener-history
+      read, so a failed optional read never blocks a reply and is never
+      reported as a successful full-history read. In
+      src/dialogue/listener-history.ts, ListenerHistoryPort.recent now takes
+      ListenerHistoryQuery { sessionId, limit, beforeEventId } and returns
+      ListenerHistoryRead { turns, unavailable: 'timeout' | 'rejected' | null };
+      ListenerTurn is unchanged and the file remains the single definition
+      site. dialogueRequestSchema carries no admission timestamp or sequence
+      number (src/contracts/app/pipeline.ts is frozen), so the boundary is the
+      selected input's event id: M5's adapter resolves "strictly earlier"
+      using its own admission ordering, while M4 only passes the boundary and
+      never infers a time or sequence. In src/dialogue/dialogue-port.ts the
+      read is performed at most once per generate, inside context assembly;
+      only the awaited recent() call is contained, and a synchronous throw or
+      rejected promise becomes { turns: [], unavailable: 'rejected' } rather
+      than terminal('failed', 'failed'). Three states stay strictly separated:
+      port absent contributes no turns; a successful read may legitimately be
+      empty; an unavailable read contributes no turns at all even when the
+      source returned some. A new always-present diagnostic field
+      DialogueOutcomeReport.historyUnavailable is carried through terminal()
+      and report() by one per-generate variable; it never changes endStatus or
+      usageStatus, is not a delivery or playback claim, and does not touch
+      FR-02 semantics. observe() never receives the selected input's own event
+      or any turn from an unavailable read. The outer assemble() catch is
+      unchanged. There is no new provider call, retry or I/O (NFR-04). Tests:
+      test/offline/m4-transcript.test.ts rewrites the two existing cases (a
+      rejected port now keeps the reply on its normal path with
+      historyUnavailable 'rejected'; the recent() argument assertion now covers
+      the whole query), adds eight cases for cutoff, boundary shape, source
+      timeout, synchronous throw, unavailable reads carrying stray turns,
+      legitimate empty reads, the absent-port byte-for-byte baseline and
+      working-memory interaction, and keeps the existing stable re-sort case
+      working under the new shape; test/offline/m4-working-memory.test.ts
+      adapts its two fixture ports and adds a closed-loop observe() case;
+      test/offline/m5-dialogue-outcome.test.ts extends the whole-report
+      builder with historyUnavailable: null. A ride-along build session also
+      lands four supervisor polish items inside the already-touched files
+      (three-state comment wording, a narrowing hoist that removes a
+      defensive optional chain, cutoff-case cap pressure maxTurns 8 to 3 with
+      its own query assertion updated, an ASCII test title and one blank
+      line) and exactly one new case in test/offline/m4-audience-scope.test.ts
+      pinning the M4 recall rule recorded on issue #148: once the owner
+      evidence behind a cross-session candidate is retracted, recall stays
+      empty while the crossSessionDrops audit counter still explains the
+      loss, with evidence append-only and no physical-deletion claim. No new
+      test file was created, so the test:m4 manifest line in package.json is
+      unchanged. The real M5 adapter, runtime wiring, storage, shared
+      contracts and AGENTS.md are out of scope: all application code was
+      written by the genuine OpenCode build sessions
+      ses_e2a77ce49ffe2j3Pbg9NstlN8d and ses_e26d6379fffeZFybAo2i4I9u50.
+    agent: opencode/build
+    sessions: [ses_e2a783b19ffeowLSgSDqZY6W1f, ses_e2a77ce49ffe2j3Pbg9NstlN8d, ses_e26d6379fffeZFybAo2i4I9u50]
+    requirements: [FR-02, NFR-04]
+    invariants: []
+    cases: []
+    commits: [6c44dd3ada510bd380587823668a12f2d268e321]
+    supervision: >-
+      The M4 supervisor wrote two English task books outside the repository
+      (m4-impl/X01-port-v2/taskbook.md for the port round and
+      taskbook-ridealong.md for the ride-along), which fixed the exact port
+      shapes, the behaviour rules, the mandatory assertion rewrites, the
+      allowed-file lists and the hard constraints. A diagnostic smoke session
+      ses_e2a783b19ffeowLSgSDqZY6W1f established that opencode run --server
+      requires the password printed by the serve instance at startup (the
+      background-service password in service.json does not apply); it changed
+      no file. The implementation session ses_e2a77ce49ffe2j3Pbg9NstlN8d
+      wrote the five port files on the stacked worktree at the 2026-11-13
+      d597d88 base. After PR #151 merged on 2026-11-14, the supervisor
+      migrated that diff by patch (x01-code.patch, git apply with zero
+      conflicts) onto a fresh worktree and branch feat/m4-x01-port-v2-final
+      based on merged origin/main b863fa9; no commit SHA was rewritten and
+      the old stacked worktree is preserved untouched. The ride-along
+      session ses_e26d6379fffeZFybAo2i4I9u50 then wrote the four polish
+      items and the X08 case per taskbook-ridealong.md, changing exactly the
+      three allowed files. The supervisor did NOT accept either session's
+      own report: it re-ran the gates independently before and after the
+      ride-along and reviewed every diff line against the task books. One
+      disclosure is recorded: the task book's own Item 1 example text
+      contained em dashes while its hard rule said ASCII-only, so two added
+      comment lines in listener-history.ts carry em dashes; this matches the
+      existing repository comment style (dialogue-port.ts baseline lines in
+      the same diff) and the em-dash lines were kept after disclosure.
+      Model, provider and exact launch-flag fields are omitted because they
+      could not be verified from the session streams; nothing was invented.
+      The owner's uncommitted AGENTS.md edit lives in a different worktree
+      and is excluded from both commits. The PR round makes two consecutive
+      commits, code first and then this log, with no squash and no amend, so
+      commits can cite the real code SHA.
+    transcript_record: >-
+      The three sessions retain their conversations in the local OpenCode
+      session store. Their per-session records (title, session id, role) are
+      kept outside the repository at
+      D:/isla-m4-05/m4-impl/X01-port-v2/opencode-sessions.md; the raw JSONL
+      streams are D:/isla-m4-05/m4-impl/X01-port-v2/impl-session-raw.json
+      (735,178 bytes, empty stderr) and
+      D:/isla-m4-05/m4-impl/X01-port-v2/ridealong-session-raw.json
+      (230,449 bytes, empty stderr). No export is stored in the repository
+      and no credential appears in repository files.
+    verification:
+      base: b863fa9
+      reproduction: >-
+        Run from the worktree containing this round's changes
+        (feat/m4-x01-port-v2-final on b863fa9). pnpm typecheck -> exit 0;
+        pnpm lint -> 0 warnings and 0 errors on 291 files; targeted vitest on
+        the four changed test files -> 129 passed in 4 files; pnpm test:m4 ->
+        390 passed in 16 files (clean b863fa9 baseline 381, +8 port cases and
+        +1 X08 case); pnpm test -> one Windows-host baseline failure in
+        m6-02-provenance-command (the symlink case, reproduced on clean main
+        in earlier rounds and untouched by this branch), all other files and
+        tests passing; pnpm build -> exit 0; the pnpm verify composite cannot
+        run its nested pnpm invocation on this host, so its four components
+        were verified individually and the remote verify run is the final
+        authority; pnpm test:readiness and pnpm test:trace -> exit 0; git
+        diff --check -> exit 0. Gate G6 fails on the code-only state with
+        "a code or prompt change must also update docs/ai-use-log.yaml" and
+        passes only after this entry is appended with the real code SHA. The
+        full suite and the remote verify run are the final authority.
+    scope: >-
+      M4 listener-history port v2, its dialogue-port reporter diagnostic, the
+      four polish items inside already-touched files, one X08 recall-refusal
+      assertion in an existing test file, three offline test files and this
+      AI-use entry. No shared contract, storage, SQL, runtime, prompt,
+      package.json or AGENTS.md change; no new dependency; no new test file;
+      no quality, latency, cost, live-provider or physical-output claim; no
+      merge, approval, dismissal or checkpoint acceptance is claimed. M5's
+      readSession adapter and composition wiring remain M5's half, to be
+      brought against the port revision this PR lands, after #151 (merged)
+      and checkpoint 03 close.

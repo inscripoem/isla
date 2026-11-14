@@ -25,6 +25,8 @@ import type {
   DialogueOutcomeReport,
   DialogueTextSource,
   ListenerHistoryPort,
+  ListenerHistoryQuery,
+  ListenerHistoryRead,
   ListenerTurn,
   PersonaRecallPort,
 } from '../../src/dialogue'
@@ -87,16 +89,19 @@ function fixtureListenerTurn(
 }
 
 /** A recording listener-history port that returns a fixed set of turns. */
-function recordingListenerHistory(turns: readonly ListenerTurn[]): {
+function recordingListenerHistory(
+  turns: readonly ListenerTurn[],
+  unavailable: ListenerHistoryRead['unavailable'] = null,
+): {
   port: ListenerHistoryPort
-  calls: { sessionId: string; limit: number }[]
+  calls: ListenerHistoryQuery[]
 } {
-  const calls: { sessionId: string; limit: number }[] = []
+  const calls: ListenerHistoryQuery[] = []
   return {
     port: {
-      recent: async (sessionId, limit) => {
-        calls.push({ sessionId, limit })
-        return turns
+      recent: async (query) => {
+        calls.push(query)
+        return { turns, unavailable }
       },
     },
     calls,
@@ -141,7 +146,9 @@ async function assembleThroughPort(options: {
   request?: DialogueRequest
   state?: CharacterState
   budgetPlan?: typeof DEFAULT_BUDGET_PLAN
+  reports?: DialogueOutcomeReport[]
 }): Promise<AssembledDialogueContext> {
+  const reports = options.reports
   const capture: { view: AssembledDialogueContext | null } = { view: null }
   const port = createDialoguePort({
     clock: FIXTURE_CLOCK,
@@ -153,6 +160,7 @@ async function assembleThroughPort(options: {
     ...(options.personaRecall === undefined ? {} : { personaRecall: options.personaRecall }),
     ...(options.state === undefined ? {} : { state: options.state }),
     ...(options.budgetPlan === undefined ? {} : { budgetPlan: options.budgetPlan }),
+    ...(reports === undefined ? {} : { onOutcome: (report) => { reports.push(report) } }),
   })
   await port.generate(
     options.request ?? fixtureDialogueRequest(),
@@ -205,6 +213,19 @@ describe('M4 listener transcript', () => {
     const prompts = views.map((view) => renderDialoguePrompt(view))
     for (const prompt of prompts.slice(1)) expect(prompt).toBe(prompts[0])
 
+    // Every budget figure stays byte-identical across the four views, including
+    // the absent port and the legitimate empty read.
+    const figures = views.map((view) =>
+      JSON.stringify([
+        view.estimatedCharacters,
+        view.estimatedTokens,
+        view.rollup,
+        view.budgetBreakdown ?? null,
+        view.listenerExclusions,
+      ]),
+    )
+    for (const figure of figures.slice(1)) expect(figure).toBe(figures[0])
+
     for (const view of views) {
       expect(view.transcript).toEqual([])
       expect(view.listenerExclusions).toEqual([])
@@ -213,6 +234,20 @@ describe('M4 listener transcript', () => {
     }
     expect(prompts[0]).toContain('Already said (confirmed spoken):')
     expect(prompts[0]).not.toContain(TRANSCRIPT_HEADER)
+
+    // The absent port is off (null); the empty read succeeded (also null).
+    const absentReports: DialogueOutcomeReport[] = []
+    const emptyReports: DialogueOutcomeReport[] = []
+    await assembleThroughPort({ memory, reports: absentReports })
+    await assembleThroughPort({
+      memory,
+      listenerHistory: recordingListenerHistory([]).port,
+      reports: emptyReports,
+    })
+    expect(absentReports).toHaveLength(1)
+    expect(emptyReports).toHaveLength(1)
+    expect(absentReports[0]?.historyUnavailable).toBeNull()
+    expect(emptyReports[0]?.historyUnavailable).toBeNull()
   })
 
   it('renders an alternating listener/character transcript when both histories exist', async () => {
@@ -228,8 +263,11 @@ describe('M4 listener transcript', () => {
     ])
     const view = await assembleThroughPort({ memory, listenerHistory: listener.port })
 
-    // At most one listener-history read per generation, with the caller's limit.
-    expect(listener.calls).toEqual([{ sessionId: FIXTURE_SESSION_ID, limit: 8 }])
+    // At most one listener-history read per generation, with the caller's limit
+    // and the selected input as the exclusive boundary.
+    expect(listener.calls).toEqual([
+      { sessionId: FIXTURE_SESSION_ID, limit: 8, beforeEventId: FIXTURE_EVENT_ID },
+    ])
 
     expect(view.transcript).toHaveLength(6)
     expect(view.transcript.map((entry) => entry.role)).toEqual([
@@ -400,7 +438,9 @@ describe('M4 listener transcript', () => {
     const view = await assembleThroughPort({ memory, listenerHistory: listener.port, request })
     const baseline = await assembleThroughPort({ memory, request })
 
-    expect(listener.calls).toEqual([{ sessionId: FIXTURE_SESSION_ID, limit: 0 }])
+    expect(listener.calls).toEqual([
+      { sessionId: FIXTURE_SESSION_ID, limit: 0, beforeEventId: FIXTURE_EVENT_ID },
+    ])
     expect(view.listenerExclusions).toEqual([
       { eventId: 'listener-1', reason: 'listener-limit' },
       { eventId: 'listener-2', reason: 'listener-limit' },
@@ -513,9 +553,10 @@ describe('M4 listener transcript', () => {
     expect(mergeTranscript([], [])).toEqual([])
   })
 
-  it('reports a failed outcome when the listener history port rejects', async () => {
+  it('keeps the reply on its normal path and reports historyUnavailable when the port rejects', async () => {
     const failure = new Error('listener history down')
     const reports: DialogueOutcomeReport[] = []
+    const segments: string[] = []
     const port = createDialoguePort({
       clock: FIXTURE_CLOCK,
       textSource: capturingTextSource({ view: null }),
@@ -526,28 +567,237 @@ describe('M4 listener transcript', () => {
       },
       onOutcome: (report) => reports.push(report),
     })
-    await expect(
-      port.generate(fixtureDialogueRequest(), createCallContext(), { segment: async () => {} }),
-    ).rejects.toBe(failure)
+    const end = await port.generate(fixtureDialogueRequest(), createCallContext(), {
+      segment: async (segment) => {
+        segments.push(segment.text)
+      },
+    })
+
+    // An optional read failure never blocks the reply: the end status is the
+    // ordinary completed/ok pair, not 'failed'.
+    expect(end.status).toBe('completed')
+    expect(end.usage.status).toBe('ok')
+    expect(segments).toEqual(['Captured reply.'])
     expect(reports).toHaveLength(1)
     expect(reports[0]).toMatchObject({
-      endStatus: 'failed',
-      usageStatus: 'failed',
-      generated: 0,
-      emitted: 0,
+      endStatus: 'completed',
+      usageStatus: 'ok',
+      generated: 1,
+      emitted: 1,
       discarded: 0,
+      historyUnavailable: 'rejected',
     })
   })
 
-  it('passes the session id and maxTurns limit to recent', async () => {
+  it('passes the full query, including the selected event id, to recent', async () => {
     const request = fixtureDialogueRequest({ contextLimits: { maxTurns: 5, maxCharacters: 2000 } })
     const listener = recordingListenerHistory([])
     await assembleThroughPort({ listenerHistory: listener.port, request })
 
     expect(listener.calls).toEqual([
-      { sessionId: FIXTURE_SESSION_ID, limit: request.contextLimits.maxTurns },
+      {
+        sessionId: FIXTURE_SESSION_ID,
+        limit: request.contextLimits.maxTurns,
+        beforeEventId: request.selectedInput.eventId,
+      },
     ])
     expect(listener.calls).toHaveLength(1)
+  })
+
+  it('drops the current input a source spent one slot on and keeps the earlier turns', async () => {
+    const memory = createDeliveryMemoryStore()
+    await commitTurn(memory, 'turn-a', 'Reply a.')
+
+    // The source ignores the boundary and spends one of eight slots on the input
+    // being answered. Assembly still renders exactly the three earlier turns.
+    const listener = recordingListenerHistory([
+      fixtureListenerTurn('listener-1', 100, 'Audience asks one.'),
+      fixtureListenerTurn('listener-2', 300, 'Audience asks two.'),
+      fixtureListenerTurn('listener-3', 500, 'Audience asks three.'),
+      fixtureListenerTurn(FIXTURE_EVENT_ID, 700, 'What did you say about the concert?'),
+    ])
+    const request = fixtureDialogueRequest({ contextLimits: { maxTurns: 3, maxCharacters: 2000 } })
+    const reports: DialogueOutcomeReport[] = []
+    const view = await assembleThroughPort({
+      memory,
+      listenerHistory: listener.port,
+      request,
+      reports,
+    })
+
+    expect(listener.calls).toEqual([
+      {
+        sessionId: FIXTURE_SESSION_ID,
+        limit: 3,
+        beforeEventId: FIXTURE_EVENT_ID,
+      },
+    ])
+    const listenerIds = view.transcript.flatMap((entry) =>
+      entry.role === 'listener' ? [entry.turn.eventId] : [],
+    )
+    expect(listenerIds).toEqual(['listener-1', 'listener-2', 'listener-3'])
+    expect(view.listenerExclusions).toEqual([])
+    // The current input appears once, on its own `Listener said:` line, and never
+    // as a history row.
+    const prompt = renderDialoguePrompt(view)
+    const currentLine = prompt
+      .split('\n')
+      .filter((line) => line === 'Listener said: What did you say about the concert?')
+    expect(currentLine).toHaveLength(1)
+    const historyRows = prompt
+      .split('\n')
+      .filter((line) => line.startsWith(`- ${LISTENER_LINE_PREFIX}`))
+    expect(historyRows).toEqual([
+      '- [audience, untrusted] Audience asks one.',
+      '- [audience, untrusted] Audience asks two.',
+      '- [audience, untrusted] Audience asks three.',
+    ])
+    expect(reports[0]?.historyUnavailable).toBeNull()
+  })
+
+  it('sends the selected event id as the only boundary and no inferred time or sequence', async () => {
+    const request = fixtureDialogueRequest({
+      selectedInput: { eventId: 'event-selected-42', text: 'Tell me more.' },
+    })
+    const listener = recordingListenerHistory([])
+    await assembleThroughPort({ listenerHistory: listener.port, request })
+
+    expect(listener.calls).toHaveLength(1)
+    expect(listener.calls[0]).toEqual({
+      sessionId: request.sessionId,
+      limit: request.contextLimits.maxTurns,
+      beforeEventId: 'event-selected-42',
+    })
+    // The request carries no admission field; the query must not invent one.
+    expect(Object.keys(listener.calls[0] ?? {}).sort()).toEqual([
+      'beforeEventId',
+      'limit',
+      'sessionId',
+    ])
+  })
+
+  it("treats a source-reported timeout as unavailable: no rows, reply unchanged", async () => {
+    const memory = createDeliveryMemoryStore()
+    await commitTurn(memory, 'turn-a', 'Reply a.')
+    const listener = recordingListenerHistory(
+      [fixtureListenerTurn('listener-1', 100, 'Audience asks one.')],
+      'timeout',
+    )
+    const reports: DialogueOutcomeReport[] = []
+    const view = await assembleThroughPort({ memory, listenerHistory: listener.port, reports })
+    const baseline = await assembleThroughPort({ memory })
+
+    expect(view.transcript).toEqual([])
+    expect(view.listenerExclusions).toEqual([])
+    expect(renderDialoguePrompt(view)).toBe(renderDialoguePrompt(baseline))
+    expect(view.estimatedCharacters).toBe(baseline.estimatedCharacters)
+    expect(reports[0]).toMatchObject({
+      historyUnavailable: 'timeout',
+      endStatus: 'completed',
+      usageStatus: 'ok',
+    })
+  })
+
+  it("treats a synchronous throw as 'rejected', not 'timeout', and still replies", async () => {
+    const failure = new Error('listener history unavailable')
+    const reports: DialogueOutcomeReport[] = []
+    const segments: string[] = []
+    const capture: { view: AssembledDialogueContext | null } = { view: null }
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      textSource: capturingTextSource(capture),
+      listenerHistory: {
+        // A detached adapter method that throws before returning a promise, the
+        // way a real adapter can fail on its first statement.
+        recent: (() => {
+          throw failure
+        }) as ListenerHistoryPort['recent'],
+      },
+      onOutcome: (report) => reports.push(report),
+    })
+    const end = await port.generate(fixtureDialogueRequest(), createCallContext(), {
+      segment: async (segment) => {
+        segments.push(segment.text)
+      },
+    })
+
+    expect(end.status).toBe('completed')
+    expect(end.usage.status).toBe('ok')
+    expect(segments).toEqual(['Captured reply.'])
+    const view = capture.view
+    if (view === null) throw new Error('context was not assembled')
+    expect(view.transcript).toEqual([])
+    expect(renderDialoguePrompt(view)).not.toContain(TRANSCRIPT_HEADER)
+    expect(reports[0]).toMatchObject({
+      historyUnavailable: 'rejected',
+      endStatus: 'completed',
+      usageStatus: 'ok',
+    })
+  })
+
+  it('ignores turns a source returns alongside an unavailable read', async () => {
+    const unavailable = recordingListenerHistory(
+      [fixtureListenerTurn('listener-1', 100, 'Stray audience line.')],
+      'rejected',
+    )
+    const reports: DialogueOutcomeReport[] = []
+    const view = await assembleThroughPort({ listenerHistory: unavailable.port, reports })
+    const baseline = await assembleThroughPort({})
+
+    expect(view.transcript).toEqual([])
+    expect(renderDialoguePrompt(view)).toBe(renderDialoguePrompt(baseline))
+    expect(renderDialoguePrompt(view)).not.toContain('Stray audience line.')
+    expect(reports[0]?.historyUnavailable).toBe('rejected')
+  })
+
+  it('renders and reports nothing extra for a legitimate empty read', async () => {
+    const reports: DialogueOutcomeReport[] = []
+    const empty = recordingListenerHistory([])
+    const absentReports: DialogueOutcomeReport[] = []
+    const view = await assembleThroughPort({ listenerHistory: empty.port, reports })
+    const absent = await assembleThroughPort({ reports: absentReports })
+
+    expect(view.transcript).toEqual([])
+    expect(renderDialoguePrompt(view)).toBe(renderDialoguePrompt(absent))
+    expect(reports[0]).toMatchObject({ historyUnavailable: null })
+    expect(absentReports[0]).toMatchObject({ historyUnavailable: null })
+  })
+
+  it('passes only the selected-input event filter to working memory, none when unavailable', async () => {
+    const observed: (readonly string[])[] = []
+    const workingMemory = {
+      observe: (turns: readonly ListenerTurn[]) => {
+        observed.push(turns.map((turn) => turn.eventId))
+      },
+      pending: () => [],
+      record: () => {
+        throw new Error('record is not exercised here')
+      },
+      entries: () => [],
+    }
+    const success = recordingListenerHistory([
+      fixtureListenerTurn('listener-1', 100, 'Audience asks one.'),
+      fixtureListenerTurn(FIXTURE_EVENT_ID, 200, 'Current input.'),
+    ])
+    const unavailable = recordingListenerHistory(
+      [fixtureListenerTurn('listener-2', 300, 'Stray line.')],
+      'timeout',
+    )
+
+    const capture: { view: AssembledDialogueContext | null } = { view: null }
+    const run = async (listenerHistory: ListenerHistoryPort): Promise<void> => {
+      const port = createDialoguePort({
+        clock: FIXTURE_CLOCK,
+        textSource: capturingTextSource(capture),
+        listenerHistory,
+        workingMemory,
+      })
+      await port.generate(fixtureDialogueRequest(), createCallContext(), { segment: async () => {} })
+    }
+    await run(success.port)
+    await run(unavailable.port)
+
+    expect(observed).toEqual([['listener-1'], []])
   })
 
   it('keeps the assembled transcript identical when the port returns turns newest-first', async () => {

@@ -45,6 +45,7 @@ function report(over: Partial<DialogueOutcomeReport> = {}): DialogueOutcomeRepor
     emitted: 2,
     discarded: 0,
     discards: {},
+    historyUnavailable: null,
     endStatus: 'completed',
     usageStatus: 'ok',
     ...over,
