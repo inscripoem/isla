@@ -5300,6 +5300,7 @@ entries:
     commits:
       - 252aea198a7d0378c44df963e77cf288c37e1f39
       - 5e4daff8ac049fca34717fc08fd54c1b1c2a7753
+      - 1fccda9cec9c2ad559e0270116db7eb44d29801c
     agent: build
     provider: self-api
     model: deepseek-v4-flash
@@ -5311,7 +5312,9 @@ entries:
       TypeScript disposer-signature error in the new test, authored the README,
       .env.example and package test-list edits directly, and added strict
       text/WebSocket URL, canonical-origin and host-entry validation so a bad
-      value fails at startup by variable name instead of being dropped.
+      value fails at startup by variable name instead of being dropped, and a
+      regression test that exercises the exported production factory with an
+      empty environment.
     human_review: >-
       Local only. Push and pull-request creation await Captain approval; no
       agent merges and no product acceptance is claimed.
@@ -5321,8 +5324,8 @@ entries:
     verification:
       base: 78c7656c10229b25ceb1e8ecc566feb2f556f116
       results: >-
-        Linux: the two new test files pass 21/21; test:m5 passes 15 files /
-        278 tests; pnpm verify exits 0 with 1570/1570 tests in 76 files and a
+        Linux: the two new test files pass 22/22; test:m5 passes 15 files /
+        279 tests; pnpm verify exits 0 with 1571/1571 tests in 76 files and a
         successful build; typecheck and lint pass.
       limits: >-
         No live text provider, VTube Studio session, Kokoro model load or
