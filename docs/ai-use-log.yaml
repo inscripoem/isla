@@ -5332,6 +5332,67 @@ entries:
       Git-metadata test. The delivery candidate uses the same source and test
       files but excludes the temporary probe workflow and its extra records.
       See https://github.com/inscripoem/isla/actions/runs/42970448971.
+
+  - date: "2026-11-14"
+    task: M3-issue104-fault-fallback-verification
+    branch: feat/m3-104-fault-and-fallback
+    member: shallight (M3)
+    change: >-
+      Verify M3 x M5 runtime coordinator selection timeout, late-result
+      suppression, ordinary rejection vs resolved invalid-proposal accounting,
+      deterministic reply-intent passthrough, bounded fallback refusals, and
+      single-attempt defer wait-accounting for Issue #104, and resolve the
+      pre-CP07 runtime-policy-catalog wording debt recorded in Issue #88
+      comment 6516767275. Update Row 23 of
+      docs/architecture/runtime-policy-catalog.md so a thrown selection call is
+      recorded failed and a resolved schema-invalid, mis-correlated, unoffered,
+      or disallowed-intent proposal is recorded invalid without inspecting
+      adapter error codes. Add 10 coordinator-level integration tests in
+      test/offline/m3-decision.test.ts covering C-05, C-14, C-15, and C-16
+      without modifying any file under src/.
+    requirements: [FR-01, FR-03, FR-05, NFR-04]
+    invariants: [INV-01, INV-13, INV-14, INV-16]
+    cases: [C-05, C-14, C-15, C-16]
+    commits: [4260152a6284d9a093df58e3144e33d679edb7a9]
+    agent: opencode/deepseek-v4-flash
+    opencode_version: 1.19.5
+    model_cli_id: "personal-deepseek/deepseek-v4-flash"
+    model: deepseek-v4-flash
+    resolved_model: deepseek-flash
+    provider: personal-deepseek
+    variant: xhigh
+    launch_flags: ["--pure", "--agent", "build", "-m", "personal-deepseek/deepseek-v4-flash", "--variant", "xhigh", "--format", "json"]
+    sessions:
+      - ses_e2e484c8fffe29HihO5CMbzUmc
+    supervision: >-
+      Captain authorized OpenCode build execution and review updates for Issue
+      #104 using transient in-memory environment authentication without
+      modifying global OpenCode configuration or writing credentials to disk.
+      The provider resolved deepseek-v4-flash to server model id deepseek-flash
+      (DeepSeek-V4.1-Flash). All authored edits were inspected line-by-line by
+      the supervisor before commit.
+    human_review: >-
+      Rebased onto main 78c7656c10229b25ceb1e8ecc566feb2f556f116 and updated
+      Row 23 wording in response to M6/M5/M4 peer review on PR #156 (sequenced
+      to land ahead of PR #155); merge remains human-gated.
+    transcript_record: >-
+      Exported OpenCode session record ses_e2e484c8fffe29HihO5CMbzUmc and JSONL
+      stream logs are stored outside the repository checkout in the supervisor
+      scratch evidence directory; zero secret tokens appear in repository files
+      or exported evidence.
+    verification:
+      platform: macOS arm64 (Darwin)
+      base: 78c7656c10229b25ceb1e8ecc566feb2f556f116
+      results: >-
+        gate:ai-use-log passed, test:m3 85/85, test:trace 41/41, and full pnpm
+        verify passed (typecheck, lint, vitest 1559/1559 across 74 files, vite
+        build).
+    scope: >-
+      Coordinator-level M3 x M5 integration verification and
+      runtime-policy-catalog Row 23 alignment only; reaction invalid/stale
+      dispositions remain covered by existing regression suites rather than
+      re-verified here, zero files under src/ were modified, and no live
+      provider or physical audio/VTS claim is made.
   - date: "2026-11-06"
     task: "M6-02 / #100"
     branch: m6-02-provenance
@@ -6325,6 +6386,123 @@ entries:
       not_run: >-
         No M4 adapter, no M5 runtime wiring, no push before the local run, no
         CP08 acceptance.
+  - date: "2026-11-06"
+    task: "M6-02 / #103"
+    branch: m6-eligibility
+    change: >-
+      Add scoring eligibility per attempt (protocol §3): `eligible`, or `unscored`
+      with a named reason (`no-provenance-record`, `missing/ambiguous-acknowledgement-link`,
+      `missing-input-identity`, `missing-history-observation`). Checks run in
+      protocol order and stop at the first failure. The report gains an
+      `Eligibility` column and states that no attempt is scored and that
+      `condition-mismatch` is not evaluated (no per-attempt conditions). The
+      positional occurrence-key rule is exported from `provenance.ts` and shared,
+      not duplicated. No scoring rule, provider call, label join or threshold.
+    requirements: [NFR-01, NFR-04]
+    invariants: []
+    cases: []
+    commits: [d930a0e]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
+      the Captain approved the Wave 1 slice. The companion shape remains
+      unconfirmed; eligibility consumes the same reading as the parser.
+    human_review: >-
+      Captain (M6) approved the local slice; no independent reviewer has read it
+      and no merge is claimed.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export was produced.
+    verification:
+      platform: macOS, Node 24, pnpm 12
+      base: 99df88b (stacked on the #140 branch)
+      role: "test:m6 222/222 in 17 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0: 1465/1465 in 74 files; typecheck clean; lint 0/0."
+      mutation: >-
+        Four mutations each turned a case red and were restored: the
+        no-companion branch, the correlation rules, the identity rule and the
+        record-set rule.
+      not_run: >-
+        No labels, no scoring and no condition-mismatch evaluation. The shape
+        remains unconfirmed.
+
+  - date: "2026-11-09"
+    task: "M6-02 / #103"
+    branch: m6-eligibility
+    change: >-
+      Address M4's review at `a4b0595`: rename the `eligible` state to
+      `provenance-eligible` and state that a scored attempt also needs a
+      human-reviewed label, whose gate stays outside this module; add one exported
+      occurrence-key builder/parser in `provenance.ts` used by `runOccurrenceKeys`,
+      `companionOccurrenceKey`, `attemptOf` and the binding checks, refusing a
+      malformed key instead of yielding `NaN`; record that `exact` with a null
+      `recordSetRevision` is refused at parse time. The report column becomes
+      "Provenance eligibility" and its footnote says provenance-eligible is not
+      scored. No scoring rule, label join, provider call or threshold.
+    requirements: [NFR-01, NFR-04]
+    invariants: []
+    cases: []
+    commits: [5e5a8b1]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
+      the Captain approved the review-fix slice (D1=A, D2, D3, D4). M4's review is
+      the specification; no approval is claimed and the label gate remains with
+      #145.
+    human_review: >-
+      Captain (M6) approved the fix plan; M4 re-review requested at `5e5a8b1`.
+      No merge, scoring or checkpoint acceptance is claimed.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export was produced.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: a4b0595 (PR #143 branch, stacked on m6-02-provenance)
+      role: "test:m6 225/225 in 17 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0: 1561/1561 in 75 files; typecheck clean; lint clean."
+      mutation: >-
+        Reverting the state name turned two eligibility tests red; changing the
+        occurrence-key delimiter turned the key tests red; both restored.
+      not_run: >-
+        No labels, scoring or condition-mismatch evaluation. Remote CI had not run
+        at the time of this entry; the PR's verify run is the gate.
+
+  - date: "2026-11-10"
+    task: "M6-02 / #103 key alignment"
+    branch: m6-eligibility
+    change: >-
+      Adopts #140's unambiguous occurrence key: `buildOccurrenceKey` is
+      `JSON.stringify([caseId, variantId, attempt])` and `parseOccurrenceKey`
+      validates the tuple; the NUL builder and splitter are removed. The
+      eligibility imports are unchanged. The actual retarget onto `main`
+      remains after #140 merges.
+    requirements: [NFR-01, NFR-04]
+    invariants: []
+    cases: []
+    commits: [09fbe12]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
+      the Captain approved E (JSON-key adoption). M4's review is the motivation.
+    human_review: >-
+      Captain (M6) approved; final review after retarget. No merge or acceptance
+      is claimed.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export was produced.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: 348e098 (PR #143 branch, stacked on m6-02-provenance)
+      role: "eligibility + provenance 32; test:m6 225/225 in 17 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0: 1561/1561 in 75 files; typecheck clean; lint clean."
+      mutation: >-
+        The key round-trip and malformed-key tests cover the encoding; the
+        retarget will re-run them against #140's implementation.
+      not_run: >-
+        Retarget onto main after #140; final review. No push.
   - date: "2026-11-10"
     task: M4-146-A01-listener-transcript
     change: >-

@@ -10,6 +10,7 @@ import {
   type UsageSummary,
   type WindowSummary,
 } from './metrics'
+import { evaluateEligibility, type AttemptEligibility } from './eligibility'
 import type { ProvenanceCompanionV1, ProvenanceInputEntry } from './provenance'
 import {
   INPUT_STATUSES,
@@ -298,6 +299,13 @@ function revision(revisionDigest: string | null): string {
   return revisionDigest === null ? 'null (unobserved)' : `\`${revisionDigest.slice(0, 12)}…\``
 }
 
+/** `provenance-eligible`, or the named reason it cannot be scored (protocol §3). */
+function eligibilityCell(eligibility: AttemptEligibility['eligibility']): string {
+  return eligibility.state === 'provenance-eligible'
+    ? 'provenance-eligible'
+    : `unscored (${eligibility.reason})`
+}
+
 const STAGE_LABEL: Record<(typeof TIMING_STAGES)[number], string> = {
   submitMs: 'submit (M5)',
   planMs: 'plan (M3)',
@@ -374,8 +382,8 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
   }
   if (provenance === null) {
     lines.push(
-      '> No companion was supplied. Quality results for this run would be `unscored` with reason',
-      '> `no-provenance-record` (ADR-008 D8); this table reports latency, cost and outcome only.',
+      '> No companion was supplied, so **every attempt is `unscored (no-provenance-record)`**',
+      '> (ADR-008 D8). This table reports latency, cost and outcome only; no attempt is scored.',
     )
   } else {
     lines.push(
@@ -388,21 +396,33 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
       '> artifact. The command validates the digest, the occurrence-key set and the input order before',
       '> this table is written; this section repeats the accepted observations.',
       '',
-      '| Case | Variant | Attempt | Correlation | Record-set revision | Prepared inputs |',
-      '| --- | --- | --- | --- | --- | --- |',
+      '| Case | Variant | Attempt | Correlation | Record-set revision | Prepared inputs | Provenance eligibility |',
+      '| --- | --- | --- | --- | --- | --- | --- |',
+    )
+    const eligibility = new Map(
+      evaluateEligibility(provenance, run.records).map((entry) => [
+        buildOccurrenceKey(entry.caseId, entry.variantId, entry.attempt),
+        entry.eligibility,
+      ]),
     )
     for (const attempt of provenance.attempts) {
+      const key = buildOccurrenceKey(attempt.caseId, attempt.variantId, attempt.attempt)
+      const cellEligibility = eligibility.get(key)
       lines.push(
-        `| ${cell(attempt.caseId)} | ${cell(attempt.variantId)} | ${attempt.attempt} | ${attempt.correlation} | ${revision(attempt.recordSetRevision)} | ${preparedInputs(attempt.inputs)} |`,
+        `| ${cell(attempt.caseId)} | ${cell(attempt.variantId)} | ${attempt.attempt} | ${attempt.correlation} | ${revision(attempt.recordSetRevision)} | ${preparedInputs(attempt.inputs)} | ${
+          cellEligibility === undefined ? '—' : eligibilityCell(cellEligibility)
+        } |`,
       )
     }
     lines.push(
       '',
       '> `null (unobserved)` means the admitted record set was not captured, or was not observed;',
       '> `exact` correlation is refused in that case. `identity not-yet-observable` marks an input',
-      '> whose fixture identity M5 has not exported (ADR-008 D5); a scored result would be',
-      '> `unscored` with `missing-input-identity`. Eligibility and scoring are not evaluated here —',
-      '> they require human labels (protocol §3).',
+      '> whose fixture identity M5 has not exported (ADR-008 D5), so the attempt is',
+      '> `unscored (missing-input-identity)`. **`provenance-eligible` does not mean scored:** a scored',
+      '> attempt also needs a human-reviewed label, which this report does not have. Condition',
+      '> eligibility (`condition-mismatch`) is not evaluated because the run records conditions per',
+      '> run, not per attempt (protocol §3 rule 5).',
     )
     if (provenance.notRun.length > 0) {
       lines.push(
