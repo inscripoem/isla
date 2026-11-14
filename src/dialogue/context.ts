@@ -1141,6 +1141,9 @@ export async function assembleDialogueContext(
    * supplied - already pending, already ordered oldest first, already filtered
    * for expiry by the store. Rendering is pure: `renderWorkingMemoryBlock` drops
    * 'suppressed' entries and returns null when nothing remains renderable.
+   * The renderer renders caller text as given and validates none of it: the
+   * line-break refusal is the store's contract (`record` refuses `\n` and
+   * `\r`), so a one-line block is guaranteed by admission, not here.
    *
    * The DROP decision is one unconditional rule, identical in both modes: the
    * block is kept only when BOTH hold -

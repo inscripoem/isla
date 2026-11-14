@@ -414,6 +414,97 @@ describe('M4 working memory admission', () => {
     // entry here.
     expect(store.pending(T0, STORE_SESSION)).toEqual([])
   })
+
+  /*
+   * Expiry-input guard (M6 review 5901342801, P3). `record` computes
+   * `expiresAtMs = nowMs + ttlMs`; a non-finite or non-positive ttl would make
+   * the entry never expire. Each case below reddens if the guard is dropped:
+   * the entry would be recorded instead of refused.
+   */
+
+  it('refuses ttlMs NaN as invalid-expiry', () => {
+    const store = newStore()
+
+    expect(
+      store.record(
+        {
+          sessionId: STORE_SESSION,
+          kind: 'commitment',
+          text: 'Bring the notes.',
+          actorId: 'aud-1',
+          nowMs: T0,
+          ttlMs: Number.NaN,
+        },
+        APPLIED,
+        DELIVERY,
+      ),
+    ).toEqual({ status: 'refused', reason: 'invalid-expiry' })
+    expect(store.pending(T0, STORE_SESSION)).toEqual([])
+    expect(store.entries(T0, STORE_SESSION)).toEqual([])
+  })
+
+  it('refuses ttlMs Infinity as invalid-expiry', () => {
+    const store = newStore()
+
+    expect(
+      store.record(
+        {
+          sessionId: STORE_SESSION,
+          kind: 'commitment',
+          text: 'Bring the notes.',
+          actorId: 'aud-1',
+          nowMs: T0,
+          ttlMs: Number.POSITIVE_INFINITY,
+        },
+        APPLIED,
+        DELIVERY,
+      ),
+    ).toEqual({ status: 'refused', reason: 'invalid-expiry' })
+    expect(store.pending(T0, STORE_SESSION)).toEqual([])
+    expect(store.entries(T0, STORE_SESSION)).toEqual([])
+  })
+
+  it('refuses ttlMs 0 as invalid-expiry', () => {
+    const store = newStore()
+
+    expect(
+      store.record(
+        {
+          sessionId: STORE_SESSION,
+          kind: 'commitment',
+          text: 'Bring the notes.',
+          actorId: 'aud-1',
+          nowMs: T0,
+          ttlMs: 0,
+        },
+        APPLIED,
+        DELIVERY,
+      ),
+    ).toEqual({ status: 'refused', reason: 'invalid-expiry' })
+    expect(store.pending(T0, STORE_SESSION)).toEqual([])
+    expect(store.entries(T0, STORE_SESSION)).toEqual([])
+  })
+
+  it('refuses nowMs NaN as invalid-expiry', () => {
+    const store = newStore()
+
+    expect(
+      store.record(
+        {
+          sessionId: STORE_SESSION,
+          kind: 'commitment',
+          text: 'Bring the notes.',
+          actorId: 'aud-1',
+          nowMs: Number.NaN,
+          ttlMs: 1_000,
+        },
+        APPLIED,
+        DELIVERY,
+      ),
+    ).toEqual({ status: 'refused', reason: 'invalid-expiry' })
+    expect(store.pending(T0, STORE_SESSION)).toEqual([])
+    expect(store.entries(T0, STORE_SESSION)).toEqual([])
+  })
 })
 
 describe('M4 working memory admission evidence', () => {
