@@ -153,6 +153,10 @@ distinct; no zero substitution.
 - **Source-level cascade** — not built; derived rows are deleted by audience, not by deleted source.
   Trigger: the formal NFR-05 deletion policy.
 - **Retention scheduling** — deliberately absent; the operator call is the only path.
+- **Null-audience derived rows** — `upsertEpisode` accepts `audienceId: null` under a durable
+  consenting session binding; both delete paths filter on `audience_id`, so such a row is reachable by
+  session but is not removed by an audience delete or retention call. Trigger: M4 decides whether a
+  derived episode must inherit the session audience, and the delete path follows that decision.
 - **M4 derive adapter (open)** — #159 publishes `deriveEpisode`/`deriveEpisodes`/`deriveTopics` and
   the corpora, but the functions are not directly pluggable into `rebuildDerived`: they take admitted
   `DeriveSourceTurn` records and an `audienceId`, do not carry `createdAtMs`/`updatedAtMs`, and stamp
