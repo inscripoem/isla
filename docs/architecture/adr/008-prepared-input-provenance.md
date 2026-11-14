@@ -157,6 +157,11 @@ more than five prepared inputs, a `recordSetRevision` that is `null` under `exac
 not-run occurrences only: a pair may also have an attempt, because repeated case ids are supported. A missing or extra entry is a refusal with a reason, never a partial join. Without a companion, every quality result for that run is `unscored` with reason
 `no-provenance-record`.
 
+**Evidence-preservation boundary (2026-11-14).** The command refuses an `--output` that is the companion
+or the run file — directly, through a symlinked parent, or through a hard link — before reading or
+writing. The writer creates its predictable temporary file with `O_EXCL`, so a file at that name is
+neither truncated nor deleted by cleanup. This protects the evidence artifacts, not only the join.
+
 **Producer-boundary note (2026-11-13).** The companion parser does not infer the producing variant or its
 attempt boundary from a status or a free-text reason. A generic `notRun` occurrence may carry an accepted
 input while the run's reason describes a rejection; that is a producer-specific inconsistency, not proof

@@ -42,7 +42,9 @@ function sameTarget(left: string, right: string): boolean {
   try {
     const a = statSync(resolve(left))
     const b = statSync(resolve(right))
-    return a.dev === b.dev && a.ino === b.ino
+    // Some filesystems report inode 0 for every file; comparing them would refuse
+    // unrelated outputs. Fall back to canonical names there.
+    if (a.ino !== 0 && b.ino !== 0) return a.dev === b.dev && a.ino === b.ino
   } catch {
     // At least one side does not exist yet; compare canonical names instead.
   }

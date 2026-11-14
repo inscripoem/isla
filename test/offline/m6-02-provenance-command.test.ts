@@ -134,6 +134,25 @@ function workspace(): { dir: string; input: string; output: string; provenance: 
   return { dir, input, output, provenance }
 }
 
+/**
+ * Directory symlinks need Developer Mode or elevation on Windows. The refusal is
+ * still exercised on Linux CI; the Windows run skips the symlink cases instead of
+ * failing for an environment privilege it cannot grant.
+ */
+function symlinksSupported(): boolean {
+  const dir = mkdtempSync(join(tmpdir(), 'isla-symlink-probe-'))
+  try {
+    symlinkSync(dir, join(dir, 'probe'), 'junction')
+    return true
+  } catch {
+    return false
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+const SYMLINKS = symlinksSupported()
+
 afterEach(() => {
   for (const dir of directories.splice(0)) rmSync(dir, { recursive: true, force: true })
   vi.restoreAllMocks()
@@ -542,12 +561,12 @@ describe('repeated case id: attempt and not-run for the same pair (M5, 2026-11-1
 })
 
 describe('evidence-preservation collisions beyond the direct path', () => {
-  it('refuses an output that reaches the provenance through a symlinked parent', () => {
+  it.skipIf(!SYMLINKS)('refuses an output that reaches the provenance through a symlinked parent', () => {
     const { dir, input, provenance } = workspace()
     const companionText = JSON.stringify(companion())
     writeFileSync(provenance, companionText, 'utf8')
     const linked = join(dir, 'linked')
-    symlinkSync(dir, linked)
+    symlinkSync(dir, linked, 'junction')
     const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
 
     expect(
@@ -564,12 +583,12 @@ describe('evidence-preservation collisions beyond the direct path', () => {
     expect(stderr.mock.calls.flat().join('')).toContain('--provenance input')
   })
 
-  it('refuses an output that is a symlink to the provenance file', () => {
+  it.skipIf(!SYMLINKS)('refuses an output that is a symlink to the provenance file', () => {
     const { dir, input, provenance } = workspace()
     const companionText = JSON.stringify(companion())
     writeFileSync(provenance, companionText, 'utf8')
     const alias = join(dir, 'alias.json')
-    symlinkSync(provenance, alias)
+    symlinkSync(provenance, alias, 'file')
 
     expect(
       runReportCommand(['--input', input, '--output', alias, '--provenance', provenance]),
@@ -600,11 +619,11 @@ describe('evidence-preservation collisions beyond the direct path', () => {
     expect(stderr.mock.calls.flat().join('')).toContain('--input run file')
   })
 
-  it('still writes to a distinct output inside a symlinked directory', () => {
+  it.skipIf(!SYMLINKS)('still writes to a distinct output inside a symlinked directory', () => {
     const { dir, input, output, provenance } = workspace()
     writeFileSync(provenance, JSON.stringify(companion()), 'utf8')
     const linked = join(dir, 'linked')
-    symlinkSync(dir, linked)
+    symlinkSync(dir, linked, 'junction')
     void output
 
     expect(

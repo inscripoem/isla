@@ -117,8 +117,16 @@ readiness 45/45; full **1586/1586** in 76 files; `pnpm verify` exit 0.
   admission; a request id may already exist). The positive stopped-batch fixture uses `eventId: null`
   for those inputs, and negative coverage exists for both the executed-attempt and not-run paths.
 
-Verification at the head named in the PR body: provenance **52** tests across the two files; `test:m6` **238/238** in 16
-files; trace 41/41; readiness 47/47; full **1601/1601** in 76 files; `pnpm verify` exit 0. Four mutations
-turned their own tests red and were restored: reinstating the executed-pair refusal, removing the
-rejected-event-id refusal, removing the occurrence column, and removing the `not-submitted`
-event-id clause.
+- **Aliased evidence paths are refused (2026-11-14).** The command compares device+inode for existing
+  paths and the real parent path for a file that does not exist yet, so an `--output` that reaches the
+  companion through a symlinked parent, a symlink or a hard link is refused; so is an output equal to
+  the input run file. The writer creates its predictable temporary file with `O_EXCL`, so an artifact
+  at that name is neither truncated nor deleted by cleanup. Tests skip the symlink cases on a host that
+  cannot create symlinks; Linux CI exercises them.
+
+Verification at the head named in the PR body: provenance **61** tests across the two files; `test:m6`
+**248/248** in 16 files; trace 41/41; readiness 47/47; full **1611/1611** in 76 files; `pnpm verify`
+exit 0. Seven mutations turned their own tests red and were restored: reinstating the executed-pair
+refusal, removing the rejected-event-id refusal, removing the occurrence column, removing the
+`not-submitted` event-id clause, reverting the canonical path comparison, disabling the input
+collision check, and removing exclusive temporary creation.
