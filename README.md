@@ -94,7 +94,16 @@ ISLA_DEPLOYMENT_MODULE=/absolute/path/to/deployment.ts pnpm runtime:production
 | `ISLA_STORAGE_DB_PATH` | SQLite database path; default `.cache/isla/isla.db`, kept outside OneDrive. |
 | `ISLA_RUNTIME_HOST`, `ISLA_RUNTIME_PORT` | Loopback bind address; default `127.0.0.1:4317`. |
 
-A complete live product deployment module has not yet been accepted. The retained synthesis factory uses the merged M1 PR33/34 interfaces; see the [physical synthesis handoff](docs/team/HANDOFF-M5-PHYSICAL-SYNTHESIS.en.md) for the shared adapter, originating gate and owned-release contract. The controlled deployment combines M3 rule selection and reaction with fixed WAV assets; live M4 text and selected model adapters remain owner deliverables. M5 owns dynamic audio HTTP/resource assembly and physical
+The reference live deployment is `src/runtime/deployments/reference-live.ts`. It reads its configuration from the same injected environment, fails startup when any required value is missing or invalid (naming the variables only, never their values), and wires the live text provider, Kokoro synthesis, the VTube Studio renderer and the audio registry. Its product acceptance is still pending; the module is the reviewable candidate, not an accepted live run.
+
+```sh
+ISLA_DEPLOYMENT_MODULE=src/runtime/deployments/reference-live.ts \
+ISLA_STORAGE_DB_PATH=.cache/isla/isla.db \
+ISLA_RUNTIME_HOST=127.0.0.1 ISLA_RUNTIME_PORT=4317 \
+pnpm runtime:production
+```
+
+`ISLA_VTS_HOTKEY_MAP` is a JSON object such as `{"smile":"<hotkey-id>"}`; every advertised action must have exactly one binding. The retained synthesis factory uses the merged M1 PR33/34 interfaces; see the [physical synthesis handoff](docs/team/HANDOFF-M5-PHYSICAL-SYNTHESIS.en.md) for the shared adapter, originating gate and owned-release contract. The controlled deployment combines M3 rule selection and reaction with fixed WAV assets; live M4 text and selected model adapters remain owner deliverables. M5 owns dynamic audio HTTP/resource assembly and physical
 provider lifecycle; M2 is the browser consumer. The module under
 `test/support/` is test-only and is used by the automated CLI suite, not by the
 product entry. SIGINT/SIGTERM perform the controlled shutdown: stop the transport,

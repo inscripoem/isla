@@ -1,0 +1,583 @@
+/**
+ * Reference live production deployment.
+ *
+ * This module is the composition root for the reference live deployment: it
+ * parses the deployment environment through `parseReferenceLiveConfig` and
+ * supplies the real M3/M4/M1 peers the production application expects. The
+ * environment parser is the only configuration entry point; this module adds no
+ * fallback environment reads and silently defaults no required value.
+ *
+ * The heavy peers are reached through `ReferenceLiveFactories`. The exported
+ * `buildReferenceDeployment` seam lets an offline test supply deterministic
+ * fakes and a controlled clock, so no network, VTube Studio session, model load
+ * or SQLite handle is created by the test suite. `createProductionDeployment`
+ * uses the real factories: rule selection/reaction over the supplied clock, the
+ * OpenAI-compatible dialogue text source, a VTube Studio renderer, Kokoro
+ * synthesis over the audio-resource registry, and the real registry itself.
+ *
+ * The VTube Studio path acquires one authenticated connection at deployment
+ * creation and wraps its hotkey driver with `createMappedRenderer`. Every
+ * advertised capability action is exactly one hotkey-map key and every binding
+ * maps that action id to its configured hotkey. Any renderer whose advertised
+ * action set differs from the hotkey map fails at creation rather than
+ * silently advertising an action the deployment cannot dispatch.
+ */
+
+import { randomUUID } from 'node:crypto'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { WebSocket } from 'ws'
+import type {
+  CapabilitySnapshot,
+  ClockPort,
+  ReactionPort,
+  RendererPort,
+  SelectionPort,
+  SynthesisPort,
+} from '../../contracts'
+import { NO_OP_ACTION } from '../../contracts'
+import { createRuleReactionPort } from '../../decision/reaction'
+import { createRuleSelectionPort } from '../../decision/selection'
+import type { DialogueTextSource } from '../../dialogue/dialogue-port'
+import { createOpenAiCompatibleTextSource } from '../../dialogue/provider-text-source'
+import type { AudioResourceRegistry } from '../../performance/audio-resources'
+import { createAudioResourceRegistry } from '../../performance/audio-resources'
+import type { ReceiptTools } from '../../performance/browser/types'
+import type { KokoroProviderConfig } from '../../performance/kokoro-provider'
+import { createKokoroProvider } from '../../performance/kokoro-provider'
+import { createKokoroSynthesis } from '../../performance/kokoro-synthesis'
+import type { KokoroVoiceProfile } from '../../performance/kokoro-types'
+import { createMappedRenderer } from '../../performance/mapped-renderer'
+import type { VtsAcquisition, VtsCredentialStore } from '../vts-acquisition'
+import {
+  createVtsAcquisition,
+  createVtsCredentialCoordinator,
+} from '../vts-acquisition'
+import type { VtsConnectionHandle, VtsConnectionSocket } from '../../performance/vts-connection'
+import { createVtsConnectionHandle } from '../../performance/vts-connection'
+import type { VtsActionMapping, VtsRenderer } from '../../performance/vts-driver'
+import { createVtsRenderer } from '../../performance/vts-driver'
+import type { RuntimeDeadlineGate } from '../deadline'
+import type {
+  ProductionDeployment,
+  ProductionDeploymentContext,
+  ProductionPeers,
+} from '../production'
+import type { ReferenceLiveConfig } from './reference-live-config'
+import { parseReferenceLiveConfig } from './reference-live-config'
+
+/**
+ * The reference deployment's fixed live identities. These are deployment
+ * choices, not environment defaults: every configurable value still comes from
+ * `parseReferenceLiveConfig`, and a missing value fails there.
+ */
+const REFERENCE_CHARACTER_PROFILE = {
+  profileId: 'isla-reference-character',
+  profileVersion: '1',
+} as const
+
+const REFERENCE_VOICE_PROFILE: KokoroVoiceProfile = {
+  voiceProfileId: 'voice-reference',
+  voiceProfileVersion: '1',
+  providerVoiceId: 'af_heart',
+  speed: 1,
+}
+
+const REFERENCE_KOKORO: Omit<KokoroProviderConfig, 'environment'> = {
+  modelRoot: 'onnx-community/Kokoro-82M-v1.0-ONNX',
+  revision: '1939ad2a8e416c0acfeecc08a694d14ef25f2231',
+  maxTokens: 512,
+  voiceId: REFERENCE_VOICE_PROFILE.providerVoiceId,
+  speed: REFERENCE_VOICE_PROFILE.speed,
+}
+
+const REFERENCE_VTS_MODEL_ID = 'isla-reference-model'
+const REFERENCE_VTS_RENDERER_ID = 'isla-reference-renderer'
+const REFERENCE_VTS_CHARACTER_ID = 'isla-reference-character'
+const REFERENCE_VTS_CAPABILITY_REVISION = 1
+
+const VTS_REQUEST_TIMEOUT_MS = 5_000
+const VTS_MAX_PENDING = 8
+const VTS_CLOSE_TIMEOUT_MS = 5_000
+const VTS_ACQUISITION_TIMEOUT_MS = 30_000
+const VTS_HUMAN_APPROVAL_TIMEOUT_MS = 60_000
+
+const AUDIO_BYTE_BUDGET = 16 * 1024 * 1024
+const AUDIO_RETENTION_MS = 5 * 60 * 1000
+
+/** A renderer plus the deployment-owned cleanup for the connection it uses. */
+export interface ReferenceRendererHandle {
+  readonly renderer: RendererPort
+  dispose(): void
+}
+
+export interface ReferenceRendererFactoryInput {
+  readonly gate: RuntimeDeadlineGate
+  readonly config: ReferenceLiveConfig
+  readonly clock: ClockPort
+  /** Ordered action-id/hotkey mappings derived from the config hotkey map. */
+  readonly mappings: readonly VtsActionMapping[]
+}
+
+/** A synthesis adapter plus any provider cleanup the factory acquired. */
+export interface ReferenceSynthesisHandle {
+  readonly synthesis: SynthesisPort
+  dispose?(): void | Promise<void>
+}
+
+export interface ReferenceSynthesisFactoryInput {
+  readonly gate: RuntimeDeadlineGate
+  readonly config: ReferenceLiveConfig
+  readonly clock: ClockPort
+  readonly registry: AudioResourceRegistry
+}
+
+/**
+ * Injectable seam over every external peer. Omitted entries use the real
+ * production factory; an offline test supplies fakes so no live connection,
+ * model load or registry bytes are created.
+ */
+export interface ReferenceLiveFactories {
+  readonly createSelection?: (clock: ClockPort) => SelectionPort
+  readonly createReaction?: (clock: ClockPort) => ReactionPort
+  readonly createTextSource?: (text: ReferenceLiveConfig['text']) => DialogueTextSource
+  readonly createAudioResources?: (clock: ClockPort) => AudioResourceRegistry
+  readonly createRenderer?: (input: ReferenceRendererFactoryInput) => ReferenceRendererHandle
+  readonly createSynthesis?: (input: ReferenceSynthesisFactoryInput) => ReferenceSynthesisHandle
+}
+
+type Disposer = () => void | Promise<void>
+
+interface RebindableGate extends RuntimeDeadlineGate {
+  retarget(gate: RuntimeDeadlineGate): void
+}
+
+/**
+ * A gate proxy that forwards each bind to the composition gate most recently
+ * installed by `createRenderer`/`createSynthesis`. The reference deployment owns
+ * one long-lived VTS connection and one long-lived Kokoro adapter, so the
+ * per-composition gate is supplied at composition build time rather than at
+ * deployment creation.
+ */
+function createRebindableGate(): RebindableGate {
+  let target: RuntimeDeadlineGate | null = null
+  return {
+    retarget(gate) {
+      target = gate
+    },
+    bind(context) {
+      if (target === null) {
+        throw new Error('reference-live: no composition deadline gate has been installed')
+      }
+      return target.bind(context)
+    },
+    dispose() {
+      target = null
+    },
+  }
+}
+
+/**
+ * Derive the exact ordered mappings from the configured hotkey map. The config
+ * parser already trims and validates each key and value; this check keeps the
+ * build seam honest when it is called with a hand-built config and refuses an
+ * empty or ambiguous map before any provider is contacted.
+ */
+function toMappings(hotkeyMap: Readonly<Record<string, string>>): readonly VtsActionMapping[] {
+  const entries = Object.entries(hotkeyMap)
+  if (entries.length === 0) {
+    throw new Error('reference-live: hotkey map must configure at least one action')
+  }
+  const seenHotkeys = new Set<string>()
+  const mappings: VtsActionMapping[] = []
+  for (const [actionId, hotkeyId] of entries) {
+    if (actionId.trim().length === 0) {
+      throw new Error('reference-live: hotkey map contains an empty action id')
+    }
+    if (hotkeyId.trim().length === 0) {
+      throw new Error(`reference-live: hotkey map has no hotkey for action ${actionId}`)
+    }
+    if (actionId === NO_OP_ACTION) {
+      throw new Error('reference-live: the no-op action must not be mapped to a hotkey')
+    }
+    if (seenHotkeys.has(hotkeyId)) {
+      throw new Error(`reference-live: hotkey ${hotkeyId} is mapped more than once`)
+    }
+    seenHotkeys.add(hotkeyId)
+    mappings.push({ actionId, hotkeyId })
+  }
+  return mappings
+}
+
+/**
+ * Refuse a renderer whose advertised action set is not exactly the configured
+ * hotkey-map keys. A driver cannot silently advertise an unconfigured action,
+ * and a configured action always remains dispatchable.
+ */
+function assertRendererAdvertisesExactly(
+  renderer: RendererPort,
+  mappings: readonly VtsActionMapping[],
+): void {
+  const advertised = renderer.capabilities().actions.map((action) => action.actionId)
+  const expected = mappings.map((mapping) => mapping.actionId)
+  const expectedSet = new Set(expected)
+  const advertisedSet = new Set(advertised)
+  for (const actionId of advertised) {
+    if (!expectedSet.has(actionId)) {
+      throw new Error(`reference-live: renderer advertises unconfigured action ${actionId}`)
+    }
+  }
+  for (const actionId of expected) {
+    if (!advertisedSet.has(actionId)) {
+      throw new Error(`reference-live: renderer does not advertise configured action ${actionId}`)
+    }
+  }
+  if (advertised.length !== expected.length) {
+    throw new Error('reference-live: renderer advertises a different action set than the hotkey map')
+  }
+}
+
+function buildCapabilitySnapshot(mappings: readonly VtsActionMapping[]): CapabilitySnapshot {
+  return {
+    rendererId: REFERENCE_VTS_RENDERER_ID,
+    characterId: REFERENCE_VTS_CHARACTER_ID,
+    capabilityRevision: REFERENCE_VTS_CAPABILITY_REVISION,
+    actions: mappings.map((mapping) => ({
+      actionId: mapping.actionId,
+      description: `VTube Studio hotkey action ${mapping.actionId}`,
+      observability: 'acceptance-only' as const,
+      parameterBounds: [],
+    })),
+  }
+}
+
+function kokoroProviderConfig(config: ReferenceLiveConfig): KokoroProviderConfig {
+  return {
+    ...REFERENCE_KOKORO,
+    environment: {
+      localModelPath: config.kokoroModelDir,
+      cacheDir: config.kokoroModelDir,
+    },
+  }
+}
+
+/**
+ * A credential store backed by the configured token file. The acquisition
+ * lifecycle owns serialization and binds the frozen plugin identity/target
+ * record; this store only reads and writes the deployment's token path.
+ */
+function createTokenFileCredentialStore(tokenPath: string): VtsCredentialStore {
+  return {
+    async load(_record, signal) {
+      if (signal.aborted) {
+        throw new Error('reference-live: VTS credential load was aborted')
+      }
+      try {
+        const value = readFileSync(tokenPath, 'utf8').trim()
+        return value.length > 0 ? value : null
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+        throw new Error('reference-live: VTS credential could not be read')
+      }
+    },
+    async save(_record, value, signal) {
+      if (signal.aborted) {
+        throw new Error('reference-live: VTS credential save was aborted')
+      }
+      writeFileSync(tokenPath, `${value}\n`, { encoding: 'utf8', mode: 0o600 })
+    },
+  }
+}
+
+/** Open one WebSocket and adapt it to the offline D1 connection handle. */
+function openVtsSocket(wsUrl: string, _signal: AbortSignal): Promise<VtsConnectionHandle> {
+  return new Promise<VtsConnectionHandle>((resolve, reject) => {
+    const socket = new WebSocket(wsUrl)
+    let settled = false
+    const cleanup = (): void => {
+      socket.off('open', onOpen)
+      socket.off('error', onError)
+      socket.off('close', onClose)
+    }
+    const onOpen = (): void => {
+      if (settled) return
+      settled = true
+      cleanup()
+      try {
+        resolve(
+          createVtsConnectionHandle({
+            socket: socket as unknown as VtsConnectionSocket,
+            closeTimeoutMs: VTS_CLOSE_TIMEOUT_MS,
+          }),
+        )
+      } catch (error) {
+        try {
+          socket.close()
+        } catch {
+          // The socket is already unusable; the creation error is the report.
+        }
+        reject(error)
+      }
+    }
+    const onError = (error: Error): void => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(new Error(`reference-live: VTS socket failed before open: ${error.message}`))
+    }
+    const onClose = (): void => {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(new Error('reference-live: VTS socket closed before open'))
+    }
+    socket.once('open', onOpen)
+    socket.once('error', onError)
+    socket.once('close', onClose)
+  })
+}
+
+interface AcquiredVts {
+  readonly acquisition: VtsAcquisition
+  readonly handle: VtsConnectionHandle
+}
+
+/** Perform one bounded VTS acquisition attempt over the configured endpoint. */
+async function acquireReferenceVts(config: ReferenceLiveConfig): Promise<AcquiredVts> {
+  const acquisition = createVtsAcquisition({
+    connect: (signal) => openVtsSocket(config.vts.wsUrl, signal),
+    credentials: createVtsCredentialCoordinator(
+      createTokenFileCredentialStore(config.vts.tokenPath),
+    ),
+    identity: {
+      pluginName: config.vts.pluginName,
+      pluginDeveloper: config.vts.pluginDeveloper,
+    },
+    target: config.vts.wsUrl,
+    mode: 'allow-prompt',
+    acquisitionTimeoutMs: VTS_ACQUISITION_TIMEOUT_MS,
+    requestTimeoutMs: VTS_REQUEST_TIMEOUT_MS,
+    humanApprovalTimeoutMs: VTS_HUMAN_APPROVAL_TIMEOUT_MS,
+  })
+  const result = await acquisition.acquire()
+  if (result.kind === 'acquired') {
+    return { acquisition, handle: result.handle }
+  }
+  const outcome = await acquisition.release()
+  if (result.kind === 'failed') {
+    throw new Error(
+      `reference-live: VTS acquisition failed at ${result.stage}: ${result.reason} (release ${outcome})`,
+    )
+  }
+  throw new Error(`reference-live: VTS acquisition was refused: ${result.reason}`)
+}
+
+/**
+ * Build the deployment from an already parsed configuration. The factories are
+ * an explicit test seam; production calls this with `{}` and the real peers.
+ * A failed build releases every resource acquired up to that point before the
+ * original failure is rethrown.
+ */
+export async function buildReferenceDeployment(
+  config: ReferenceLiveConfig,
+  factories: ReferenceLiveFactories,
+  clock: ClockPort,
+): Promise<ProductionDeployment> {
+  const mappings = toMappings(config.hotkeyMap)
+  const disposers: Disposer[] = []
+  let releaseStarted: Promise<void> | null = null
+
+  const release = (): Promise<void> => {
+    if (releaseStarted !== null) {
+      // A repeated call never re-runs cleanup and never throws: the first call
+      // already reported any fault through the owned lifecycle contract.
+      return releaseStarted.then(
+        () => undefined,
+        () => undefined,
+      )
+    }
+    releaseStarted = (async () => {
+      const failures: unknown[] = []
+      for (const dispose of [...disposers].reverse()) {
+        try {
+          await dispose()
+        } catch (error) {
+          failures.push(error)
+        }
+      }
+      if (failures.length === 1) throw failures[0]
+      if (failures.length > 1) {
+        throw new AggregateError(failures, 'reference-live: release failed')
+      }
+    })()
+    return releaseStarted
+  }
+
+  try {
+    const selection =
+      factories.createSelection !== undefined
+        ? factories.createSelection(clock)
+        : createRuleSelectionPort({ clock })
+    const reaction =
+      factories.createReaction !== undefined
+        ? factories.createReaction(clock)
+        : createRuleReactionPort({ clock })
+    const textSource =
+      factories.createTextSource !== undefined
+        ? factories.createTextSource(config.text)
+        : createOpenAiCompatibleTextSource(config.text)
+    const audioResources = (
+      factories.createAudioResources ??
+      ((runtimeClock: ClockPort) =>
+        createAudioResourceRegistry({
+          clock: runtimeClock,
+          byteBudget: AUDIO_BYTE_BUDGET,
+          retentionMs: AUDIO_RETENTION_MS,
+        }))
+    )(clock)
+    disposers.push(() => audioResources.dispose())
+
+    let createSynthesis: (gate: RuntimeDeadlineGate) => SynthesisPort
+    if (factories.createSynthesis !== undefined) {
+      const synthesisFactory = factories.createSynthesis
+      createSynthesis = (gate) => {
+        const handle = synthesisFactory({
+          gate,
+          config,
+          clock,
+          registry: audioResources,
+        })
+        if (handle.dispose !== undefined) {
+          disposers.push(() => handle.dispose?.())
+        }
+        return handle.synthesis
+      }
+    } else {
+      const provider = await createKokoroProvider(kokoroProviderConfig(config))
+      const synthesisGate = createRebindableGate()
+      const synthesis = createKokoroSynthesis({
+        provider,
+        profiles: [REFERENCE_VOICE_PROFILE],
+        registry: audioResources,
+        clock,
+        deadlineGate: synthesisGate,
+      })
+      createSynthesis = (gate) => {
+        synthesisGate.retarget(gate)
+        return synthesis
+      }
+      disposers.push(async () => {
+        await synthesis.whenIdle()
+      })
+    }
+
+    let createRenderer: (gate: RuntimeDeadlineGate) => RendererPort
+    if (factories.createRenderer !== undefined) {
+      const rendererFactory = factories.createRenderer
+      createRenderer = (gate) => {
+        const handle = rendererFactory({ gate, config, clock, mappings })
+        disposers.push(() => handle.dispose())
+        assertRendererAdvertisesExactly(handle.renderer, mappings)
+        return handle.renderer
+      }
+    } else {
+      const acquired = await acquireReferenceVts(config)
+      let vtsRenderer: VtsRenderer | null = null
+      disposers.push(async () => {
+        vtsRenderer?.dispose()
+        const outcome = await acquired.acquisition.release()
+        if (outcome !== 'stopped') {
+          throw new Error(`reference-live: VTS connection release finished as ${outcome}`)
+        }
+      })
+
+      const vtsGate = createRebindableGate()
+      let receiptSequence = 0
+      const receipts: ReceiptTools = {
+        newReceiptId: () => `vts-receipt-${(receiptSequence += 1)}`,
+        localNowMs: () => clock.nowMs(),
+      }
+      vtsRenderer = createVtsRenderer({
+        transport: acquired.handle.transport,
+        modelId: REFERENCE_VTS_MODEL_ID,
+        rendererId: REFERENCE_VTS_RENDERER_ID,
+        characterId: REFERENCE_VTS_CHARACTER_ID,
+        capabilityRevision: REFERENCE_VTS_CAPABILITY_REVISION,
+        mappings,
+        timeoutMs: VTS_REQUEST_TIMEOUT_MS,
+        maxPending: VTS_MAX_PENDING,
+        deadlineGate: vtsGate,
+        receipts,
+      })
+      // `createVtsRenderer` already composes a mapped renderer around its VTS
+      // driver. Rebuild that composition here so the advertised actions and
+      // bindings are visibly derived from the same config hotkey map.
+      const renderer = createMappedRenderer({
+        snapshot: buildCapabilitySnapshot(mappings),
+        bindings: mappings.map((mapping) => ({
+          actionId: mapping.actionId,
+          driverAction: mapping.hotkeyId,
+        })),
+        driver: vtsRenderer.driver,
+        deadlineGate: vtsGate,
+        receipts,
+      })
+      assertRendererAdvertisesExactly(renderer, mappings)
+      createRenderer = (gate) => {
+        vtsGate.retarget(gate)
+        return renderer
+      }
+    }
+
+    const peers: ProductionPeers = {
+      selection,
+      reaction,
+      textSource,
+      createRenderer,
+      createSynthesis,
+      audioResources,
+      profile: {
+        characterProfileId: REFERENCE_CHARACTER_PROFILE.profileId,
+        characterProfileVersion: REFERENCE_CHARACTER_PROFILE.profileVersion,
+        voiceProfileId: REFERENCE_VOICE_PROFILE.voiceProfileId,
+        voiceProfileVersion: REFERENCE_VOICE_PROFILE.voiceProfileVersion,
+      },
+    }
+
+    return {
+      peers,
+      initialSelection: {
+        // A fresh live session: no archive source reuses this id and the
+        // catalogue starts empty. Archive reconstruction remains operator
+        // configuration, not a silent deployment default.
+        liveSessionId: `session-${randomUUID()}`,
+        liveProfile: {
+          profileId: REFERENCE_CHARACTER_PROFILE.profileId,
+          profileVersion: REFERENCE_CHARACTER_PROFILE.profileVersion,
+        },
+        selectedSources: [],
+        catalogue: new Map(),
+      },
+      allowedOrigins: config.allowedOrigins,
+      allowedHosts: config.allowedHosts,
+      release,
+    }
+  } catch (error) {
+    try {
+      await release()
+    } catch {
+      // The build failure is the reportable error; cleanup faults do not
+      // replace it.
+    }
+    throw error
+  }
+}
+
+/** Production deployment module entry loaded by the runtime CLI. */
+export async function createProductionDeployment(
+  context: ProductionDeploymentContext,
+): Promise<ProductionDeployment> {
+  const config = parseReferenceLiveConfig(context.env)
+  return buildReferenceDeployment(config, {}, context.clock)
+}
+
+export default createProductionDeployment
