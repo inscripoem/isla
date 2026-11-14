@@ -5845,6 +5845,486 @@ entries:
       limits: >-
         The selector defaults off. Live VTS blending and runtime composition
         are later acceptance work.
+  - date: "2026-11-10"
+    task: "M6 memory foundation / #147, #148"
+    branch: m6-memory-foundation
+    change: >-
+      Schema v3 adds six M6-owned tables (derived_episode, derived_topic,
+      projection_state, session_audience, delivery_owner, session_state) and
+      `createMemoryStore`: idempotent upserts, filtered reads, durable projection
+      cursor, rebuild through M4's derive callback, audience/owner attribution,
+      optimistic state writes, explicit audience deletion, opt-in retention and
+      audience-scoped export. `runMemoryBench` adds a separate memory report with
+      recall@k, precision@k, labelled answer accuracy, tokens per turn, p95
+      latency and excluded count; unassessed and not-run stay distinct. No runtime
+      wiring, scheduler, dependency or contract change. The commit was rewritten by the rebase onto `f99e2f5` (was `a9ea79b`).
+    requirements: [FR-06, NFR-03, NFR-05]
+    invariants: [INV-10, INV-11, INV-16]
+    cases: []
+    commits: [e666cba]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
+      M6 approved the memory-foundation plan for #147/#148. The ADR/Delta
+      and design/trace updates await the number reservation in #25.
+    human_review: >-
+      M6 approved the slice; M4/M5 review pending. No checkpoint
+      acceptance or merge is claimed.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export was produced.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: e9e7e7b (main)
+      role: "memory store 9; memory bench 6; test:m6 198/198 in 16 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0: 1556/1556 in 76 files; typecheck clean; lint clean."
+      mutation: >-
+        Owner conflict, stale state, precision math and rebuild clearing each
+        turned their own test red; all restored.
+      not_run: >-
+        ADR/Delta and design/trace updates pending the #25 reservation. No runtime
+        wiring, labels, live data or checkpoint claim.
+
+  - date: "2026-11-10"
+    task: "M6 memory foundation review fixes / #147, #148"
+    branch: m6-memory-foundation
+    change: >-
+      Closes the self-review findings: the projection cursor refuses a
+      non-increasing seq; `rebuildDerived` clears and rebuilds topics through an
+      optional M4 callback and uses the last event time; `session_state` never
+      re-attributes a known audience; `session_audience` is insert-once and
+      returns conflict for a different binding; `deleteOlderThan` also expires
+      session bindings; `exportAudience` names the audience on state/event lines;
+      the memory bench reports precision as unknown for an empty expected set.
+      Tests cover topics, clearDerived, audience binding, projection rewind,
+      state attribution, retention bindings and export scope. The commit was rewritten by the rebase onto `f99e2f5` (was `18ea5be`).
+    requirements: [FR-06, NFR-03, NFR-05]
+    invariants: [INV-06, INV-10, INV-11, INV-16]
+    cases: []
+    commits: [15bfcea]
+    agent: opencode/deepseek-v4.1-flash
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
+      M6 approved the self-review findings. The ADR/Delta and design/trace
+      updates remain pending the number reservation in #25.
+    human_review: >-
+      M6 approved the fix plan; M4/M5 review pending. No checkpoint
+      acceptance or merge is claimed.
+    transcript_record: >-
+      The OpenCode session record is retained locally; no export was produced.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: e9e7e7b (main)
+      role: "memory store 11; memory bench 6; test:m6 200/200 in 16 files; trace 41/1; readiness 45/3."
+      full_suite: "pnpm verify exit 0: 1558/1558 in 76 files; typecheck clean; lint clean."
+      mutation: >-
+        Projection guard, topic clear, state attribution, audience binding and
+        precision math each turned their own test red; all restored.
+      not_run: >-
+        ADR/Delta and design/trace updates pending the #25 reservation. No push,
+        runtime wiring or checkpoint claim.
+
+  - date: "2026-11-13"
+    task: "M6-X03 storage consent fix"
+    branch: m6-memory-foundation
+    change: >-
+      Enforce X03 owner consent at the storage boundary: `recordDeliveryOwner`
+      reads the session audience binding, returns `unowned` when there is no
+      binding or the binding is anonymous, `refused` when consent is 0,
+      `conflict` when the bound owner differs, and writes only a consenting
+      owner. Add `delivery_owner.created_at_ms` as retention metadata and use it
+      for `deleteOlderThan`; keep `recordSessionAudience` insert-once and the v1
+      anonymous-upgrade limit. Update ADR D3. No runtime, contract, scoring or
+      threshold change.
+    requirements: [FR-06, NFR-05]
+    invariants: [INV-06, INV-10]
+    cases: []
+    commits: [19c3204]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      The human M6 owner approved the M6-MEM-0 + M6-X03-1 plan and the local
+      implementation. The agent edited the M6-owned storage files; no push or
+      merge is claimed.
+    human_review: >-
+      M6 approved the plan; M4/M5 review pending. No checkpoint
+      acceptance is claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id
+      is claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main); aedf3d2 (rebased branch before the fix)
+      focused: "m6-memory-store 14/14."
+      role: "test:m6 206/206 in 16 files; trace 41/1; readiness 47/3."
+      full_suite: "pnpm verify exit 0: 1569/1569 in 76 files; typecheck clean; lint clean."
+      mutation: >-
+        Disabling the consent refusal turned the refused case red; writing a
+        zero owner timestamp turned the owner/timestamp tests red; both restored.
+      not_run: >-
+        No push, merge, runtime wiring, checkpoint acceptance or live data.
+
+  - date: "2026-11-13"
+    task: "M6-X08 retention proof"
+    branch: m6-memory-foundation
+    change: >-
+      Prove X08 at the storage boundary: `deleteAudience` cascades owner/derived/
+      topic/state/audience rows and `deleteOlderThan` expires derived/owner/state/
+      audience rows, while `events` and `deliveries` remain unchanged. Add a
+      construction-time no-deletion test and an audience-scoped export assertion;
+      update ADR D5. No runtime, contract, scoring or threshold change.
+    requirements: [FR-06, NFR-05]
+    invariants: [INV-06, INV-10]
+    cases: []
+    commits: [5d79fca]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      The human M6 owner approved the M6-X08-1 slice. The agent edited the
+      M6-owned storage tests and ADR; no push or merge is claimed.
+    human_review: >-
+      M6 approved the slice; M4/M5 review pending. No checkpoint
+      acceptance is claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id
+      is claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main); d4c6bf5 (branch before this slice)
+      focused: "m6-memory-store 15/15."
+      role: "test:m6 207/207 in 16 files; trace 41/1; readiness 47/3."
+      full_suite: "pnpm verify exit 0: 1570/1570 in 76 files; typecheck clean; lint clean."
+      not_run: >-
+        No push, merge, runtime wiring, checkpoint acceptance or live data.
+
+  - date: "2026-11-13"
+    task: "M6-X02 cursor extractor version"
+    branch: m6-memory-foundation
+    change: >-
+      Scope the durable projection cursor to the extractor version. Add
+      `projection_state.extractor_version`; an incremental write with a different
+      version returns `version-mismatch`; a same-version rebuild writes
+      `max(persisted, rebuild_result)`, so a smaller event set cannot lower the
+      cursor; a new-version rebuild clears the derived rows and resets the cursor
+      under the new version. Keep the M4 derive callbacks and leave the evidence
+      tables unchanged. Update ADR D2. No runtime, contract, scoring or threshold
+      change.
+    requirements: [FR-06, NFR-03]
+    invariants: [INV-06, INV-10]
+    cases: []
+    commits: [ca012bf]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      The human M6 owner approved the M6-X02-1 slice. The agent edited the
+      M6-owned storage files and ADR; no push or merge is claimed.
+    human_review: >-
+      M6 approved the slice; M4/M5 review pending. No checkpoint
+      acceptance is claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id
+      is claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main); f5d367f (branch before this slice)
+      focused: "m6-memory-store 18/18."
+      role: "test:m6 210/210 in 16 files; trace 41/1; readiness 47/3."
+      full_suite: "pnpm verify exit 0: 1573/1573 in 76 files; typecheck clean; lint clean."
+      mutation: >-
+        Disabling the version-mismatch check reddened its test; replacing the
+        same-version max with the rebuild result reddened the smaller-event test;
+        both restored.
+      not_run: >-
+        No push, merge, M4 derive integration, runtime wiring, checkpoint
+        acceptance or live data.
+
+  - date: "2026-11-13"
+    task: "M6-X07 memory bench corrections"
+    branch: m6-memory-foundation
+    change: >-
+      Correct the memory benchmark: `precisionAtK` divides by
+      `min(k, retrievedCount)` and each probe records `retrievedCount`; empty
+      retrieval reports precision `null`, not a fabricated zero. Add report
+      identity fields (QA set id + SHA-256, snapshot, chunking, embedding,
+      retrieval, LLM) so runs are comparable only under named conditions.
+      `compareMemoryReports` now gates recall, precision and labelled answer
+      accuracy; tokens per turn and p95 remain informational. Summary prints the
+      identity; ADR D7 records the rules. No contract, runtime, scoring or
+      threshold change; M4 corpora remain pending.
+    requirements: [NFR-03]
+    invariants: [INV-16]
+    cases: []
+    commits: [8877d39]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      The human M6 owner approved the M6-X07-1 slice. The agent edited the
+      M6-owned evaluation files and ADR; no push or merge is claimed.
+    human_review: >-
+      M6 approved the slice; M4/M5 review pending. No checkpoint
+      acceptance is claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id
+      is claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main); 0a63ab4 (branch before this slice)
+      focused: "m6-memory-bench 8/8."
+      role: "test:m6 212/212 in 16 files; trace 41/1; readiness 47/3."
+      full_suite: "pnpm verify exit 0: 1575/1575 in 76 files; typecheck clean; lint clean."
+      mutation: >-
+        Dividing precision by k reddened the sparse-precision and aggregate
+        tests; recalling only the recall comparison reddened the
+        precision/accuracy regression test; both restored.
+      not_run: >-
+        No push, merge, M4 corpora, live data, quality verdict or checkpoint
+        acceptance.
+
+  - date: "2026-11-13"
+    task: "M6 memory documentation and acceptance closure"
+    branch: m6-memory-foundation
+    change: >-
+      Align the memory ADR/Delta/memory-design/trace with the implemented rules:
+      extractor-version-scoped cursor, consent-gated owner writes, and X07
+      identity/precision/accuracy comparison. Add a v2→v3 migration test, an X08
+      age-retention test with a younger other audience, and X07 strategy/restart
+      fixture tests. Record that real X07 corpora are M4-owned and that
+      `deleteOlderThan` is global by age, with per-audience retention still an
+      M5/M4 decision. No code, runtime or contract change.
+    requirements: [FR-06, NFR-03, NFR-05]
+    invariants: [INV-06, INV-10, INV-16]
+    cases: []
+    commits: [ad8eb7f]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      The human M6 owner approved the local documentation/acceptance closure. The
+      agent edited the M6-owned docs, tests and corpus-status note; no push or
+      merge is claimed.
+    human_review: >-
+      M6 approved the local fixes; M4/M5 review pending. No checkpoint
+      acceptance is claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id
+      is claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main); 825eaab (branch before this closure)
+      focused: "m6-memory-store 19/19; m6-memory-bench 10/10."
+      role: "test:m6 215/215 in 16 files; trace 41/1; readiness 47/3."
+      full_suite: "pnpm verify exit 0: 1578/1578 in 76 files; typecheck clean; lint clean."
+      mutation: "No new production code path; existing X02/X03/X07/X08 mutations remain red-then-restored."
+      not_run: >-
+        No M4 derive/corpora, M5 runtime wiring, push, merge, live data or
+        checkpoint acceptance.
+
+  - date: "2026-11-13"
+    task: "M6 memory trace corrections and draft-PR publication"
+    branch: m6-memory-foundation
+    change: >-
+      Close the traceability gaps found in the read-only audit: repoint the two
+      AI-use commit links to their rebased commits, replace "Runtime monitor"
+      cells that implied a live caller with the measured fact that no production
+      caller exists, split owner cells into enforcement (M6) and acceptance
+      (M3/M5), state that no invariant row governs the memory store and that
+      INV-06/10/11/16 cover other components, drop X04 from the ADR and Delta
+      titles while the seed remains pending #151, refresh the Delta base and
+      AI-use entry count, and replace the "unpublished / local only / do not
+      publish" wording with the draft-PR position. No production code, contract
+      or behaviour change.
+    requirements: [FR-06, NFR-03, NFR-05]
+    invariants: [INV-06, INV-10, INV-11, INV-16]
+    cases: []
+    commits: [379e292]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      The human M6 owner approved the seven audit fixes, then separately approved
+      creating two commits, pushing the branch and opening a draft PR. The
+      publication is a draft only: no merge and no checkpoint acceptance is
+      claimed, and the ADR number still awaits M5's allocation in #25.
+    human_review: >-
+      M6 approved the local corrections and the draft publication. M4/M5
+      review of the draft PR is pending; no merge approval is claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id is
+      claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main)
+      focused: "memory store 19/19; memory bench 10/10 (unchanged by this docs-only correction)."
+      role: "test:trace 41/41; readiness 47/47; test:m6 215/215 in 16 files."
+      full_suite: "pnpm verify exit 0: 1578/1578 in 76 files; typecheck clean; lint clean."
+      mutation: "No production behaviour changed, so no new mutation applies; the existing mutation record stands."
+      not_run: >-
+        No M4 derive/corpora, M5 runtime wiring, merge, live data or checkpoint
+        acceptance. M5 has not answered the ADR-009 reservation request.
+
+  - date: "2026-11-13"
+    task: "M6 memory AI-use wording correction"
+    branch: m6-memory-foundation
+    change: >-
+      Replace "Captain" with "M6" in the ten places the memory-foundation entries
+      used it, so the supervising human is named consistently with the owner. Only
+      the eight memory-branch entries changed; other owners' historical entries and
+      the team documents keep their wording. No code, test, requirements or
+      behaviour change.
+    requirements: [FR-06, NFR-03, NFR-05]
+    invariants: []
+    cases: []
+    commits: [f3806f0]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      M6 asked for the wording correction and approved this commit and its push to
+      the existing draft PR #157. The correction is limited to M6's own entries.
+    human_review: >-
+      M6 approved the wording correction. No review, merge or checkpoint acceptance
+      is claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id is
+      claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main)
+      focused: "G6 with origin/main as the base; no test count changes because the change is text-only."
+      role: "test:trace 41/41; readiness 47/47; test:m6 215/215."
+      full_suite: "pnpm verify exit 0: 1578/1578 in 76 files."
+      mutation: "Not applicable: no executable behaviour changed."
+      not_run: >-
+        No AGENTS.md amendment (M6 deferred it), no rewrite of other owners'
+        entries, no merge.
+
+  - date: "2026-11-14"
+    task: "M6 memory semantics reply"
+    branch: m6-memory-foundation
+    change: >-
+      Apply M4's 2026-11-13 semantics reply. writeState returns conflict when the
+      stored audience and an incoming non-null audience differ; a first non-null
+      write may establish the binding and a later null keeps it. rebuildDerived
+      throws inside its transaction when a derived episode carries an extractor
+      version different from the rebuild argument, so a row and its cursor cannot
+      disagree. The ADR, trace rows, Delta and fixtures note record the decisions
+      and the remaining M4 derive adapter gap; #159 publishes the functions and
+      corpora but they are not directly pluggable, so X02 stays open and X07 stays
+      fixture-only in this branch.
+    requirements: [FR-06, NFR-03]
+    invariants: [INV-06, INV-16]
+    cases: []
+    commits: [5d4afa7]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      M6 approved the six-item response to M4's review and required it to stay
+      local until the suite passed.
+    human_review: >-
+      M6 approved the scope. No independent review, merge or CP08 claim.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id is
+      claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main at branch point)
+      focused: "memory store 22/22."
+      role: "test:m6 218/218; trace 41/41; readiness 47/47."
+      full_suite: "pnpm verify exit 0: 1581/1581 in 76 files."
+      mutation: >-
+        Two mutations turned their tests red and were restored: the audience
+        conflict check and the extractor-version assertion.
+      not_run: >-
+        No M4 adapter (not M6-owned), no M5 runtime wiring, no push before the
+        local run, no CP08 acceptance.
+
+  - date: "2026-11-14"
+    task: "M6 memory ID registration"
+    branch: m6-memory-foundation
+    change: >-
+      Register M5's allocation: ADR-009, INV-17 and C-75..C-78. The ADR and Delta
+      are renamed to 009, INV-17 is added to requirements.yaml and invariants.md,
+      the four cases are added to the case registry, and the five memory trace
+      rows cite the IDs instead of "ids pending". C-77 and C-78 are implemented;
+      C-75 stays pending on its rebuild-equality half (M4 adapter), and C-76 stays
+      pending on the durable/consent conflict recorded in the ADR.
+    requirements: [FR-06, NFR-03, NFR-05]
+    invariants: [INV-17]
+    cases: [C-75, C-76, C-77, C-78]
+    commits: [9688899]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      M6 applied M5's registrar decision and kept the pending cases pending rather
+      than claiming them. The durable/consent conflict is reported, not resolved.
+    human_review: >-
+      M6 approved the registration. No design approval, merge or checkpoint claim.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id is
+      claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (branch point)
+      focused: "memory store 22/22."
+      role: "test:m6 218/218; trace 41/41; readiness 47/47."
+      full_suite: "pnpm verify exit 0: 1581/1581 in 76 files."
+      mutation: "No behaviour change in this slice; the earlier audience/version mutations stand."
+      not_run: >-
+        No M4 adapter, no M5 runtime wiring, no push before the local run, no CP08.
+
+  - date: "2026-11-14"
+    task: "M6 memory durable/consent gate and per-audience retention"
+    branch: m6-memory-foundation
+    change: >-
+      Apply M5's 2026-11-14 decision. recordDeliveryOwner, upsertEpisode and
+      upsertTopic now refuse unless the session binding is both durable and
+      consenting (a topic needs one such binding for its audience); rebuildDerived
+      throws and rolls back when a session or topic audience lacks one; a derived
+      episode naming a different audience is refused. deleteOlderThan takes an
+      audienceId and filters every table by audience, so no global by-age delete
+      remains. Session state stays session-scoped and exempt. INV-17, C-76, C-78,
+      ADR-009, the design note and the trace rows record the decision; C-76 moves
+      to implemented.
+    requirements: [FR-06, NFR-03, NFR-05]
+    invariants: [INV-17]
+    cases: [C-76, C-78]
+    commits: [21a49d7]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      M6 approved the plan, including the strict reading that null-audience
+      derived rows are also gated, and required the two M5 semantics to land with
+      tests and mutation checks.
+    human_review: >-
+      M6 approved the scope and the local verification. No independent review,
+      merge or checkpoint acceptance is claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id is
+      claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main at branch point)
+      focused: "memory store 28/28."
+      role: "test:m6 224/224 in 16 files; trace 41/41; readiness 47/47."
+      full_suite: "pnpm verify exit 0: 1587/1587 in 76 files."
+      mutation: >-
+        Five mutations each turned a test red and were restored: dropping the
+        owner durable check, dropping the retention audience filter, dropping the
+        rebuild session gate, dropping the derived-write gate, and dropping the
+        episode audience equality check.
+      not_run: >-
+        No M4 adapter, no M5 runtime wiring, no push before the local run, no
+        CP08 acceptance.
   - date: "2026-11-06"
     task: "M6-02 / #103"
     branch: m6-eligibility

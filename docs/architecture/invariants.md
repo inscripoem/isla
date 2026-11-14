@@ -1,7 +1,7 @@
 # Invariant register
 
 Status: under review. Every invariant carries an explicit **Owner**: M5 owns INV-01..03, INV-09 and INV-15;
-M6 owns INV-04..08, INV-10..14 and INV-16. Shared document, coordinated by M5. Updated: 2026-10-20.
+M6 owns INV-04..08, INV-10..14, INV-16 and INV-17. Shared document, coordinated by M5. Updated: 2026-10-20.
 
 An invariant is a rule that must NEVER be violated. Each entry states its owner, source requirement,
 the deterministic component that enforces it, how it is verified, and the operational fallback if it is
@@ -25,5 +25,6 @@ ever violated (a concrete action, not "fix the bug").
 | INV-14 | A code or prompt change must update the AI-use log | Gate G6 | `src/evaluation/ai-use-log-gate.ts` | C-36 → `ai-use-log-gate.test.ts` | A code/prompt change without a log update fails gate G6 (see ADR-006) | M6 |
 | INV-15 | Within one (sessionId, turnId), known segmentIndex values sort ascending before unknowns; ties and unknowns retain input order, with null indices preserved and other sessions/turns excluded. The input history is unchanged | FR-06; issue #25 | M5 `src/runtime/delivery-order.ts` (`orderTurnDeliveries`) | C-47 → `m5-attribution.test.ts`, turn reconstruction ordering suite | Keep unknown indices null and use the stable input order for ties; do not infer positions or mix turns | M5 |
 | INV-16 | Every executed attempt is accounted for, including completed, cancelled and failed attempts; missing usage remains unknown, and an empty sample has no failure-rate claim. An explicit not-run result is not an executed attempt | NFR-01, NFR-04 | `src/evaluation/metrics.ts` (`summarise`) + `comparison.ts` + `report.ts` | C-52, C-53, C-54, C-55, C-69, C-70, C-71 → `m6-02-metrics.test.ts`, `m6-02-comparison.test.ts`, `m6-02-report.test.ts`, `m6-02-recorded-run.test.ts`, `m6-02-bench.test.ts` | Report `unknown`/`—`; never count a not-run case as an attempt or convert missing usage to `0` | M6 |
+| INV-17 | The derived-memory store is version-scoped and rebuildable: under one extractor version the cursor never decreases and derived rows and cursor share that version; owner and derived rows are written only under a durable consenting binding; a session-state write naming a different audience returns conflict; audience deletion and age-based retention are audience-scoped and remove only that audience's derived/owner/state data, never events or deliveries | FR-06, NFR-03, NFR-05 | `src/storage/memory-store.ts` | C-76, C-77, C-78 → `m6-memory-store.test.ts`; C-75 pending | Refuse the write or the rebuild; keep the prior rows and cursor; never retry into a wrong attribution | M6 |
 
 The matching requirement obligations are recorded in `docs/team/REQUIREMENTS.en.md` and `docs/req/requirements.yaml`. INV-09 remains M5-owned with M6 record-conversion collaboration; adding the Owner column does not reassign it.
