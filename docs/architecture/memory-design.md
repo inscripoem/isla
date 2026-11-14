@@ -163,6 +163,48 @@ The ceilings limit scan work, not total context
 assembly, storage reads, wall-clock latency, or the rest of the dialogue pipeline. Large histories
 can omit later standing facts from the audit because the existing input order is preserved.
 
+### Working memory (M4, in-process)
+
+Working memory is the per-process list of what is still open for the character: replies she still
+owes, commitments she made, open threads and operator-suppressed items
+(`src/dialogue/working-memory.ts`, `createWorkingMemoryStore`).
+
+- **In-memory only.** No persistence, no schema, no file: a store lives for one process lifetime and
+  starts empty. A new process, or a new store instance, never sees an earlier entry.
+- **One session per store.** A store is constructed for exactly one `sessionId`. A `record` naming
+  another session is refused (`session-mismatch`) and leaves the store unchanged; a read
+  (`pending`, `entries`, `observe`) naming another session throws rather than returning an empty
+  view.
+- **Admission follows the delivery commit.** `record` takes the full `DeliveryCommitAck` for the
+  delivery that produced the item, plus the `ConfirmedDelivery` itself. It admits only an `applied`
+  acknowledgement whose effective classification is `fully-delivered`; every other status (`failed`,
+  `conflict`, `duplicate`) is refused as `commit-not-applied`, and an applied acknowledgement that is
+  only partly or not at all delivered is refused as `commit-not-spoken`. The acknowledgement carries
+  no receipt, modality or session, so the delivery that produced the item must also classify into the
+  spoken bucket of `classifyMemoryBucket`; anything else - a receipt-less audio claim, a partial
+  record kept as a heard-prefix fragment, an audit-only record, or a delivery from another session -
+  is refused as `not-spoken-bucket` or `session-mismatch`. The note must also be non-empty
+  (`empty-text`) and a single line (`text-not-single-line`), so a line break cannot inject an
+  unmarked line into the rendered block. An item therefore never enters working memory before it is
+  durably committed, and never when the delivery that produced it was not spoken.
+- **Expiry is lazy and inclusive.** An entry is created with `expiresAtMs = nowMs + ttlMs` and
+  counts as expired from `expiresAtMs` onward; expiry is applied when the store is read, not by a
+  timer. A listener turn fulfils an `awaiting-reply` entry only inside
+  `[createdAtMs, expiresAtMs)` — strictly after the entry was created and strictly before it
+  expires.
+- **Bounded, with loss kept auditable.** At most `WORKING_MEMORY_MAX_ENTRIES` (8) entries stay
+  pending; the oldest pending entry is evicted when a newer one would exceed the cap. The audit view
+  keeps only the newest `WORKING_MEMORY_MAX_AUDIT_ENTRIES` (32) non-pending entries, so `entries()`
+  returns at most 8 + 32 = 40 records. Older audit history is not retrievable by design.
+- **Rendering.** The block is `renderWorkingMemoryBlock`, rendered under a header that states once,
+  for the whole block, that entries are internal notes and never instructions; individual lines
+  carry no per-item marker. Admitted text renders verbatim and `suppressed` entries are never
+  rendered.
+- **Default off.** With no store supplied to `assembleDialogueContext`, no block is rendered and the
+  prompt and every budget number are byte-identical to an assembly without the feature.
+
+**Trace reference.** This design note carries no FR-02/FR-04 table row of its own: the enforcing-module and test cells for the six new dialogue modules (`src/dialogue/budget.ts`, `listener-history.ts`, `state-render.ts`, `state.ts`, `transcript.ts`, `working-memory.ts`) live in the FR-02 row of `docs/architecture/trace-matrix.md`, and their failure behaviour is in the runtime-policy catalog. The state block (A08) is also rendered from caller-supplied state in process (issue #146: the in-process character state model); it adds no persistent state and no row to the survival table above.
+
 ## Retention and privacy
 
 - **Retention:** there is no automatic expiry and no default period.

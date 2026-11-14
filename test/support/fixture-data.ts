@@ -1,6 +1,7 @@
 import type {
   CapabilitySnapshot,
   CommitDelivery,
+  ConfirmedDelivery,
   TrustedControlContext,
   DecisionRequest,
   DecisionResult,
@@ -313,6 +314,31 @@ export function fixtureCommitDelivery(
     receiptId: 'receipt-fixture-1',
     classification: 'fully-delivered',
     terminalOutcome: 'completed',
+    modality: 'audio',
+    segmentIndex: 0,
+    personaProfileId: 'character-fixture',
+    personaProfileVersion: '1',
+    ...overrides,
+  }
+}
+
+/**
+ * The confirmed-history view of `fixtureCommitDelivery`: the same delivery with
+ * its `terminalOutcome` dropped. A fully-delivered audio record with a receipt,
+ * so `classifyMemoryBucket` places it in the spoken bucket.
+ */
+export function fixtureConfirmedDelivery(
+  overrides: Partial<ConfirmedDelivery> = {},
+): ConfirmedDelivery {
+  return {
+    sessionId: FIXTURE_SESSION_ID,
+    turnId: FIXTURE_TURN_ID,
+    segmentId: FIXTURE_SEGMENT_ID,
+    textHash: 'hash-fixture-0',
+    text: 'We talked about the concert.',
+    outputId: 'output-fixture-1',
+    receiptId: 'receipt-fixture-1',
+    classification: 'fully-delivered',
     modality: 'audio',
     segmentIndex: 0,
     personaProfileId: 'character-fixture',

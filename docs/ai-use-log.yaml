@@ -6503,3 +6503,575 @@ entries:
         retarget will re-run them against #140's implementation.
       not_run: >-
         Retarget onto main after #140; final review. No push.
+  - date: "2026-11-10"
+    task: M4-146-A01-listener-transcript
+    change: >-
+      Add an optional, default-off listener-history port and a merged
+      listener/character transcript for the dialogue context: ListenerTurn and
+      ListenerHistoryPort (listener-history.ts), the pure mergeTranscript
+      (transcript.ts), an optional listenerTurns input plus transcript and
+      listenerExclusions on the assembled context, the transcript prompt path
+      replacing the Already said block only when a listener turn survives, a
+      stable (receivedAtMs, eventId) sort before any cap or budget decision
+      (permutation invariant for out-of-order sources), listener lines charged
+      as rendered and yielded oldest-first before any character trim (the loop
+      also bounds listener-only overflow against the hard cap), the
+      heard-prefix formula extended by exactly one subtraction, the history
+      diagnostics row reporting used = history + rollup + listeners against
+      limit = available, and 16 offline tests. No shared contract change;
+      the prompt and every budget number are byte-identical when no listener
+      turns exist.
+    requirements: [NFR-04]
+    invariants: []
+    commits: [557c9fc]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: 2.0.20
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    sessions: [ses_e3bf07f1dffe0JBkCaYXcae1IW, ses_e3bdd24d6ffe572WskHNZdKERw]
+    supervision: >-
+      The member (M4) approved the plan and pre-authorized local application.
+      A supervised workflow produced the blueprint (five rounds of independent
+      reflection, then a fresh-eyes reviewer finding an additional hard-cap
+      overflow and a floor-check interaction the author had missed), OpenCode
+      authored the implementation, and orchestrator gates decided every round.
+      The authoring session id was not recoverable from the captured tail;
+      m4-impl/A01/opencode-sessions.md records the partial evidence. A repair
+      session (M4-test-list-repair) restored two test:m4 entries a later
+      session had dropped.
+    human_review: >-
+      The member directed the batch and authorized local publication; this PR
+      is published for their review. Final merge and semantic acceptance
+      remain human-owned; no other member's approval is asserted.
+    transcript_record: >-
+      The OpenCode session store retains both sessions; their tails and the
+      working-tree evidence are recorded outside this repository in
+      m4-impl/A01/opencode-sessions.md. No sanitized export was created.
+    verification:
+      base: e9e7e7b
+      reproduction: >-
+        pnpm typecheck exit 0; pnpm lint 0 warnings and 0 errors;
+        vitest run test/offline/m4-transcript.test.ts 16/16; pnpm test:m4
+        13 files / 281 tests; pnpm build exit 0; full pnpm test shows 18
+        failures in the seven Windows-only baseline files, identical on a
+        clean HEAD baseline, so none is attributed to this change.
+    scope: >-
+      M4 dialogue context and its offline tests; shared contracts, storage,
+      runtime scheduling and M5 manifests unchanged. Does not establish
+      live-provider behaviour or quality.
+  - date: "2026-11-10"
+    task: M4-146-A02-heard-prefix-bucket
+    change: >-
+      Admit a partial-unknown delivery record that carries a receipt as a new
+      heard-prefix memory bucket: classifyMemoryBucket gains 'heard-prefix'
+      with reason 'partial-with-receipt', renderHistoryLine marks it with the
+      single [cut off after start] marker (fixed priority against the
+      mid-sentence marker), the bucket renders in its own Started but cut off
+      section and joins the truncated trim class, charged to the character
+      budget; a partial delivery without a receipt stays refused exactly as
+      before. Default behaviour is unchanged when no partial+receipt record
+      exists.
+    requirements: [FR-02, NFR-04]
+    invariants: []
+    commits: [557c9fc]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: 2.0.20
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    sessions: [ses_e3e347536ffeHHb9LI60LDLJ8y]
+    supervision: >-
+      Blueprint produced and reviewed by independent subagents in a supervised
+      workflow, implementation authored by OpenCode, deterministic gates and a
+      code-reflection review with rework rounds applied by the orchestrator.
+      The member pre-authorized local application and directed publication.
+    human_review: >-
+      Published for the member's review; final merge and semantic acceptance
+      remain human-owned. No claim that the receipt policy was relaxed.
+    transcript_record: >-
+      The OpenCode session store retains the session; its tail is recorded
+      outside this repository in m4-impl/A02/opencode-sessions.md.
+    verification:
+      base: e9e7e7b
+      reproduction: >-
+        pnpm test:m4 13 files / 281 tests pass (m4-heard-prefix included);
+        typecheck and lint pass; full-suite failures stay within the
+        Windows-only baseline.
+    scope: >-
+      M4 memory semantics and tests; the FR-02 evidence admission rule is
+      preserved, not widened.
+  - date: "2026-11-10"
+    task: M4-146-A05-persona-recall
+    change: >-
+      Enable persona recall: implement the keyword persona-recall selector
+      over the expanded persona bible pool, expose it as an optional
+      personaRecall port (absent = feature off, prompt unchanged), and add the
+      m4-persona-recall offline suite. No shared contract change.
+    requirements: [NFR-04]
+    invariants: []
+    commits: [557c9fc]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: 2.0.20
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    sessions: [ses_e3dba34b6ffe0dWwr2YBaaAjJC, ses_e3dfe4af4ffeT9ELambQRbpIoS]
+    supervision: >-
+      Supervised workflow: independent blueprint review with rework, OpenCode
+      authoring, deterministic gates and a code-reflection rework loop,
+      including a fresh reviewer round. The member pre-authorized local
+      application and directed publication.
+    human_review: >-
+      Published for the member's review; final merge and semantic acceptance
+      remain human-owned.
+    transcript_record: >-
+      The OpenCode session store retains both sessions; their tails are
+      recorded outside this repository in m4-impl/A05/opencode-sessions.md.
+    verification:
+      base: e9e7e7b
+      reproduction: >-
+        pnpm test:m4 13 files / 281 tests pass (m4-persona-recall included);
+        typecheck and lint pass; full-suite failures stay within the
+        Windows-only baseline.
+    scope: >-
+      M4 persona recall and tests; persona content and dialogue port only.
+  - date: "2026-11-10"
+    task: M4-146-A08-state-block
+    change: >-
+      Add the M4-side emotional/relationship state block: the pure state model
+      (state.ts) with its projection invariants, deterministic rendering
+      (state-render.ts), an optional state input on the dialogue context with
+      stateBlockCharacters charged before the shared budget, and the
+      m4-state offline suite. Persistence and runtime wiring remain the
+      separate M4-X04 collaboration item; default-off when no state is
+      supplied.
+    requirements: [NFR-04]
+    invariants: []
+    commits: [557c9fc]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: 2.0.20
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    sessions: [ses_e3da52d7bffe11OJDHCMld4J1t, ses_e3df27282ffeRcOtAVJvt7p4KD]
+    supervision: >-
+      Supervised workflow: independent blueprint review with rework, OpenCode
+      authoring, deterministic gates and a code-reflection rework loop. The
+      member pre-authorized local application and directed publication.
+    human_review: >-
+      Published for the member's review; final merge and semantic acceptance
+      remain human-owned.
+    transcript_record: >-
+      The OpenCode session store retains both sessions; their tails are
+      recorded outside this repository in m4-impl/A08/opencode-sessions.md.
+    verification:
+      base: e9e7e7b
+      reproduction: >-
+        pnpm test:m4 13 files / 281 tests pass (m4-state included); typecheck
+        and lint pass; full-suite failures stay within the Windows-only
+        baseline.
+    scope: >-
+      M4 state block and tests; no storage, runtime scheduling or shared
+      contract change.
+  - date: "2026-11-10"
+    task: M4-146-A09-layered-budget
+    change: >-
+      Add layered budget planning and token estimation: BudgetPlan with
+      per-section limits (budget.ts), deterministic estimatedTokens computed
+      over exactly the charged lines, budgetBreakdown diagnostics that keep
+      the used <= limit invariant (the history row's limit is the
+      pre-subtraction available bound; a plan combined with a state block is
+      refused), wiring through the optional budgetPlan port, and the
+      m4-budget offline suite. Default-off when no plan is supplied.
+    requirements: [NFR-04]
+    invariants: []
+    commits: [557c9fc]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: 2.0.20
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    sessions: [ses_e3e1e461affegkcgh5henPsKxc]
+    supervision: >-
+      Supervised workflow: independent blueprint review with rework, OpenCode
+      authoring, deterministic gates and a five-round code-reflection loop
+      (fresh reviewer from round four) that caught inconsistent audit
+      statements and a missing guard; the audit record was corrected. The
+      member pre-authorized local application and directed publication.
+    human_review: >-
+      Published for the member's review; final merge and semantic acceptance
+      remain human-owned.
+    transcript_record: >-
+      The OpenCode session store retains the session; its tail is recorded
+      outside this repository in m4-impl/A09/opencode-sessions.md.
+    verification:
+      base: e9e7e7b
+      reproduction: >-
+        pnpm test:m4 13 files / 281 tests pass (m4-budget included); typecheck
+        and lint pass; full-suite failures stay within the Windows-only
+        baseline.
+    scope: >-
+      M4 layered budget, diagnostics and tests; budget.ts is an M4-owned new
+      module, and the closed BudgetSection union was not extended.
+  - date: "2026-11-11"
+    task: M4-146-A07-working-memory
+    change: >-
+      Add in-memory working memory for unresolved intent (#146 A07): the pure
+      store (working-memory.ts) with awaiting-reply, commitment, open-thread
+      and suppressed kinds, TTL-based expiry and a bounded recall projection
+      (WORKING_MEMORY_MAX_ENTRIES), rendered as a prompt block through the
+      optional workingMemory context input (context.ts) with the dialogue-port
+      surface, plus the m4-working-memory offline suite. Default off: no
+      production caller consults it and the block is null when no entries are
+      supplied; nothing persists and no storage, runtime scheduling or shared
+      contract changes.
+    requirements: [NFR-04]
+    invariants: []
+    commits: [5a8fabe]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: 2.0.20
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    sessions: [ses_e393954a5ffenWny5uQzX8g87k, ses_e3936d3b5ffeuROZHhFTHleETr, ses_e3931923effeR7lIrfKsDVBuGW, ses_e392858d1ffe7X337t28OvA7e2, ses_e39398c2fffeaIIOEdE0VMvqsu, ses_e3939bbe6ffeqktWeFVP9Iuoac]
+    supervision: >-
+      Daily inspection workflow: the planner selected the A07 slice (pure M4,
+      ready now) and the OpenCode supervisor decomposed it into four focused
+      briefs (.cache/m4-146-a07-step1..4.md), ran one build session per brief
+      plus two smoke sessions, reviewed each diff, and ran the deterministic
+      gates (single-file vitest, then the full m4 suite, typecheck and lint).
+      The member pre-authorized local application and directed publication.
+    human_review: >-
+      Published for the member's review on PR #151; final merge and semantic
+      acceptance remain human-owned. Registration note: the supervisor's
+      authorized self-push carried the code commit without this entry, so the
+      entry is recorded in a follow-up docs commit against the same session
+      record.
+    transcript_record: >-
+      The OpenCode session store (session_v2) retains all six sessions under
+      the m4-146-a07 titles; their tails are recorded outside this repository
+      in m4-impl/A07/opencode-sessions.md.
+    verification:
+      base: e10cb2f
+      reproduction: >-
+        pnpm test:m4 13 files / 281 tests pass (re-run on 14b92ee; the
+        package.json manifest line is under M5 coordination per #151 and does
+        not yet list the new suite); the new suite passes standalone via
+        pnpm exec vitest run test/offline/m4-working-memory.test.ts (24 tests);
+        the full vitest run (include test/offline/**) covers it, typecheck and
+        lint pass.
+    scope: >-
+      M4 working memory, context/port wiring and tests; no storage, runtime
+      scheduling or shared contract change.
+  - date: "2026-11-11"
+    task: M4-146-A02-label-correction
+    change: >-
+      Make the A02 heard-prefix label neutral about whether playback started,
+      after a consumer review on PR #151 found that it asserted a start it
+      cannot prove: HEARD_PREFIX_MARKER becomes
+      " [interrupted; start unconfirmed]" and the rendered section header
+      becomes "Interrupted before completion:". The bucket name
+      (heard-prefix), the admission rule (partial-unknown + non-empty receiptId
+      + substantive text), the budget accounting and the "never enters
+      confirmed history" semantics are unchanged. Doc comments in context.ts
+      and memory-semantics.ts now state that a receipt id is not start
+      evidence, that ConfirmedDelivery carries no receipt stage, that the
+      bucket means "incomplete, start unconfirmed", and that asserting a start
+      needs M5's started evidence (tracked as X05, not A02). The m4-heard-prefix
+      and m4-budget suites carry the new literals, a regression assertion that
+      the prompt contains neither "started but cut off" (case-insensitive) nor
+      "cut off after start", and the recalculated character counts (the
+      heard-prefix line is 64 characters; the cheaper-candidate case uses a
+      budget of 38 and expects 36). Commit tie: this label correction is carried by d4317f3, while the A02 bucket it rewords was introduced in af3c8e3.
+    requirements: [FR-02]
+    invariants: []
+    commits: [7d9c5fa]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: 2.0.20
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    supervision: >-
+      Authored in this OpenCode session from the attached A02-label-correction
+      brief, which fixed the target literals and the expected character
+      counts; each count was recomputed from the rendered strings before the
+      edits. Verification was run in the same session: the two targeted vitest
+      suites, the full test:m4 file list from package.json, tsc -b and oxlint.
+    transcript_record: >-
+      The OpenCode session retains the conversation; no separate export was
+      created in the repository.
+    verification:
+      base: 96361fa
+      reproduction: >-
+        vitest run test/offline/m4-heard-prefix.test.ts
+        test/offline/m4-budget.test.ts: 2 files / 25 tests pass. Full test:m4
+        file list: 13 files / 281 tests pass. tsc -b exit 0; oxlint exit 0 with
+        no reported findings. No Git command was run; changes are left in the
+        working tree.
+    scope: >-
+      src/dialogue/context.ts, src/dialogue/memory-semantics.ts,
+      test/offline/m4-heard-prefix.test.ts, test/offline/m4-budget.test.ts and
+      this log entry. No port, receipt-stage read, admission change, provider
+      call, contract, runtime, storage, manifest or AGENTS.md change; the
+      rendering default without a heard-prefix record is byte-identical.
+  - date: "2026-11-12"
+    task: M4-151-fix-round
+    change: >-
+      Address the two review verdicts on PR #151 (M6 advisory, M5 human review)
+      without widening any contract and without changing FR-02 admission
+      semantics; commit c47c51f changes 12 files (1331 insertions, 254
+      deletions). Context assembly (context.ts): the former state-plus-plan
+      refusal is removed - a plan combined with state input is now assembled,
+      and a kept state block is charged to the plan's own `state` section so
+      `state.used` reports its characters instead of 0; a supplied state block
+      and working-memory block without a plan are additionally held to one
+      combined character bound, because each fitting the cap alone is not enough
+      when both are charged to the same pool; the state block keeps precedence
+      (allocation order persona -> state -> workingMemory), so the
+      working-memory block is the one dropped whole; a state dimension that is
+      not a finite number drops the block as a validation loss with its own
+      warning, kept distinct from the budget-drop warning and never counted as
+      a budget drop. State renderer (state-render.ts): `renderStateBlock`
+      returns null instead of clamping a non-finite value into range. Working
+      memory (working-memory.ts): admission now requires the full
+      acknowledgement and an effective classification of `fully-delivered`,
+      keeps its existing empty-text refusal and adds the `text-not-single-line`
+      refusal (a single-line note requirement), the store binds to one
+      `sessionId`, fulfilment stops strictly before `expiresAtMs`, and the
+      audit view keeps the newest 32 non-pending entries. Dialogue port
+      (dialogue-port.ts): the selected input's own event is filtered out of the
+      list handed to `observe`, and both closed-loop calls pass
+      `request.sessionId`. Tests: the budget, state and working-memory suites
+      carry the new cases; the transcript suite gains only the
+      `renderStateBlock` null guard forced by its new `string | null` return
+      and keeps its 16 cases, so it adds no new case this round; `pnpm test:m4`
+      now also lists the transcript, state and working-memory suites under
+      M5's written consent on the PR. Docs in this commit: the trace-matrix FR-02 row, three
+      runtime-policy catalog rows and the memory-design working memory
+      subsection record the new failure paths. No src/contracts change, no new
+      stable id, no storage, runtime or provider-call change, and the
+      absent-input paths stay byte-identical.
+    requirements: [NFR-04]
+    invariants: []
+    commits: [be9520a]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: 2.0.20
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    sessions: [ses_e32482ed6ffe2PurXuGc0FmrSN, ses_e322b7d16ffekNbKfRSAk8S9zA, ses_e32263a6bffevx1zrkc29BOloa, ses_e322168abffevdFX5AtoPqO9Ha, ses_e3211735bffefTJ7CEo5bnnw31, ses_e320e02deffeicc0WHj7xLj48C, ses_e320287c7ffeyG0kkrnR30h3KM]
+    supervision: >-
+      The M4 fix workflow ran in a ZCode session (its model is whatever the run
+      record shows; this entry does not restate it). That workflow session
+      formulated the fix plan, wrote a reference implementation outside the
+      repository, opened the read-only first-inquiry OpenCode session
+      ses_e32482ed6ffe2PurXuGc0FmrSN, compared the proposal with the reference
+      and the review findings, and then ran the implementation with difference
+      feedback. Three OpenCode `build` sessions wrote all code and test
+      changes, one per slice: ses_e322b7d16ffekNbKfRSAk8S9zA (working-memory
+      store and dialogue port), ses_e32263a6bffevx1zrkc29BOloa (context
+      assembly, layered budget and state block) and
+      ses_e322168abffevdFX5AtoPqO9Ha (manifest and the three architecture
+      documents). The supervisor reviewed the resulting diff; after
+      `pnpm test:m4` and the `tsc -b` / `oxlint` gates passed, the code was
+      committed as c47c51f, and remote CI on the pull request is the final
+      review. The comparison and negotiation rounds ran in OpenCode sessions
+      ses_e3211735bffefTJ7CEo5bnnw31, ses_e320e02deffeicc0WHj7xLj48C and
+      ses_e320287c7ffeyG0kkrnR30h3KM. The local `AGENTS.md` edit in the working
+      tree is the owner's uncommitted edit: this round did not modify, correct,
+      revert or commit it, it is not in c47c51f, and it remains in the working
+      tree. This registration entry is written after the code commit by the
+      documentation step of the same workflow; it is not part of c47c51f, so
+      `commits` names the code commit this entry describes, not a commit that
+      contains the entry.
+    transcript_record: >-
+      The seven sessions listed in `sessions` retain their conversations. Their
+      per-session record (id, title, time and role) is written outside this
+      repository in `m4-impl/151-fix/opencode-sessions.md`; no export is stored
+      in the repository.
+    verification:
+      base: d4317f3
+      reproduction: >-
+        Run from the repository root in this session on the working tree that
+        contains c47c51f plus the documentation edits. pnpm test:m4 -> 16 files
+        / 370 tests passed. pnpm exec tsc -b -> exit 0. pnpm exec oxlint ->
+        exit 0; the default reporter prints "Found 0 warnings and 0 errors." on
+        280 files with 116 rules. Gate G6 (pnpm gate:ai-use-log with
+        AI_USE_LOG_BASE_FILE set to a copy of the log at d4317f3 and the
+        changed-file list) prints "G6: AI-use log gate passed" and exits 0,
+        with 152 head entries against 151 at the base. The code under test is
+        unchanged from c47c51f; no Git command wrote history.
+    scope: >-
+      M4 working-memory/state/budget/label fixes plus test:m4 additions
+      consented by M5; no contract change.
+  - date: "2026-11-12"
+    task: M4-151-p2-round
+    change: >-
+      Address the four P2 findings of the M6 review of PR #151 (review
+      5871717372, on 34c4ee2) and the zero-risk part of its P3 debt, without
+      widening any contract and without changing the rendered prompt or any
+      budget number when the new inputs are absent. Working memory
+      (src/dialogue/working-memory.ts): `record` now takes the producing
+      `ConfirmedDelivery` as a required third argument and admits an item only
+      when the acknowledgement is `applied` with effective classification
+      `fully-delivered` AND `classifyMemoryBucket` places the delivery in the
+      spoken bucket; a fully-delivered audio delivery with no receipt, a
+      partial record kept as a heard-prefix fragment and an audit-only record
+      are refused with the new module-local reason `not-spoken-bucket`, and a
+      delivery naming another session is refused as `session-mismatch`. The
+      acknowledgement carries no receipt, modality or session, so the delivery
+      is judged by the bucket rule and `SPOKEN_RECEIPT_POLICY` keeps a single
+      implementation point in memory-semantics.ts; the two refusal layers stay
+      distinct, with the classification layer ahead of the evidence layer and
+      the note-shape refusals (`empty-text`, `text-not-single-line`) ahead of
+      both. The module header now states that the module is imported by
+      context assembly and stays default-off until a caller supplies entries.
+      Context assembly (src/dialogue/context.ts): the stale comment that said a
+      kept block is charged to its own section "so the shared pool did not pay
+      for it" is corrected to match the implementation - a kept block is
+      charged to its own section row and subtracted from `sharedBudget` in both
+      modes - with no behaviour change; the existing pin of `history.limit` at
+      its floor remains the regression guard. The eight `commits` fields of the
+      earlier entries now name their reachable post-rebase equivalents
+      (af3c8e3 -> e16fe4e, 14b92ee -> 70be84b, d4317f3 -> c7e9aa6,
+      c47c51f -> d008e12); the narrative SHAs of the 2026-11-11/12 entries are
+      kept as written, because they record the commands and the tree as they
+      were at the time, and this entry states that they name pre-rebase heads
+      and are not ancestors of 34c4ee2. The architecture documents follow: the
+      FR-02 row of trace-matrix.md now states the spoken-bucket condition and
+      corrects the C-04 wording to runtime conformance, the working-memory
+      admission row of runtime-policy-catalog.md lists the new reason and the
+      bucket condition, and memory-design.md describes the admission in terms
+      of the delivery that produced the item. No port, receipt-stage read,
+      provider call, contract, runtime, storage, manifest or AGENTS.md change;
+      there is still no production caller of `record`, so the rendered prompt
+      and every budget number stay byte-identical when the new inputs are
+      absent.
+    requirements: [FR-02]
+    invariants: []
+    commits: [8a54960]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: 2.0.20
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    sessions: [ses_e304e14bbffenBrhHRTvxFVyPJ, ses_e303be5f0ffeRirUJrkTetvZy6]
+    supervision: >-
+      The M4 supervision workflow (ZCode session) verified every claim of the
+      M6 review against the repository before the sessions were launched, and
+      wrote the English task book for them. The task book fixed the admission
+      order, the new refusal reason, the two-layer distinction, the fixture
+      requirements and the exact documentation edits, and stated the hard
+      constraints: no frozen path, no new stable id, no change to any
+      production behaviour outside src/dialogue, and no git mutation. All
+      application code was written by genuine OpenCode `build` sessions using
+      the configured DeepSeek-V4-Flash provider; the supervisor reviewed the
+      resulting diff and verified it against the task book rather than
+      accepting the sessions' own report. The first session
+      (ses_e304e14bbffenBrhHRTvxFVyPJ) was interrupted after it had added the
+      imports, the module header comment and the new refusal reason; the
+      second session (ses_e303be5f0ffeRirUJrkTetvZy6) continued from that
+      working-tree state and completed every remaining item. The supervisor
+      then re-ran the gates itself: `pnpm test:m4` -> 16 files / 377 tests
+      passed; `pnpm test:trace` -> 1 file / 41 tests passed; `pnpm typecheck`
+      (`tsc -b`) -> exit 0; `pnpm lint` (`oxlint`) -> exit 0, 0 warnings and 0
+      errors on 281 files; `pnpm test` -> 80 files, 1680 passed and 9 skipped;
+      `pnpm build` -> exit 0. The local `AGENTS.md` edit in the working tree
+      is the owner's uncommitted edit: this round did not modify, correct,
+      revert or commit it, and it remains in the working tree.
+    transcript_record: >-
+      The two sessions listed in `sessions` retain their conversations. Their
+      per-session record (id, title, time and role) is written outside this
+      repository in `m4-impl/151-p2/opencode-sessions.md`; no export is stored
+      in the repository.
+    verification:
+      base: 34c4ee2
+      reproduction: >-
+        Run from the repository root on the working tree that contains this
+        round's code changes. pnpm test:m4 -> 16 files / 377 tests passed.
+        pnpm test:trace -> 1 file / 41 tests passed. pnpm typecheck (tsc -b) ->
+        exit 0. pnpm lint (oxlint) -> exit 0; the default reporter prints
+        "Found 0 warnings and 0 errors." on 281 files with 116 rules. pnpm
+        test -> 80 files passed, 1680 passed and 9 skipped. pnpm build ->
+        exit 0. Gate G6 (pnpm gate:ai-use-log with AI_USE_LOG_BASE_FILE set to
+        a copy of the log at 34c4ee2 and the changed-file list) is run by CI;
+        this entry raises the head count to 160, against 159 at that base, so
+        the entry-count rule holds. The full suite and the remote `verify` run
+        are the final authority.
+    scope: >-
+      M4 working-memory admission evidence, the shared-budget comment
+      correction and the matching architecture documentation; no contract
+      change, no new stable id, no production behaviour change.
+  - date: "2026-11-14"
+    task: M4-151-rebase-round
+    change: >-
+      Rebuild the branch onto main d86dbc1 by sequential cherry-picks and land
+      this round's code edits. The rebase resolved three conflicts - two
+      ai-use-log tail appends and one trace-matrix date line - reworded three
+      docs commit messages so they cite current SHAs, and repointed the nine
+      `commits` fields of the earlier entries to their reachable equivalents
+      (af3c8e3 -> 557c9fc, 14b92ee -> 5a8fabe, d4317f3 -> 7d9c5fa,
+      c47c51f -> be9520a, ed970c2 -> 8a54960). Code edits, commit
+      51b3397f7374eab02b8e129f6d9b4fe50a684102: a stale header comment in
+      src/dialogue/working-memory.ts is corrected; the store gains the new
+      input-shape refusal `invalid-expiry`, which rejects an `expiresAtMs`
+      that is not a finite number before any admission or fulfilment
+      decision, addressing item 3 and P3 of M6 review 5901342801; the observe
+      and renderer contract statements in src/dialogue/dialogue-port.ts and
+      src/dialogue/state-render.ts are restated to match the implementation;
+      the runtime-policy-catalog row and the FR-02 trace row cite #146; four
+      negative tests are added. No rendered prompt or budget number changes;
+      absent-input paths stay byte-identical.
+    requirements: [NFR-04]
+    invariants: []
+    commits: [51b3397f7374eab02b8e129f6d9b4fe50a684102]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: 2.0.20
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    sessions: [ses_e2745b5d4ffe26BUUw3ldK0ing]
+    supervision: >-
+      The M4 supervision workflow rebuilt the branch onto main d86dbc1
+      (sequential cherry-picks, conflict resolution, three message rewords and
+      nine field repoints). OpenCode `build` session
+      ses_e2745b5d4ffe26BUUw3ldK0ing wrote the code and documentation edits in
+      its first turn and this entry per the round owner's instruction, and the
+      supervisor reviewed the diff and re-ran all gates. Nothing has been
+      pushed. The P2 entry's mapping names the 2026-11-12 rebase equivalents
+      and is superseded by the mapping in this entry; the twelve historical
+      narrative SHA occurrences are kept as written under the 2026-11-12
+      convention. The m6-02-provenance-command symlink case fails identically
+      on clean main d86dbc1 on this Windows host (1 failed / 22 passed there),
+      so it is a pre-existing local baseline, not introduced by this round.
+    transcript_record: >-
+      The session listed in `sessions` retains its conversation. Its record
+      (id, title, time and role) is written outside this repository in
+      `m4-impl/151-rebase/opencode-sessions.md`; no export is stored in the
+      repository.
+    verification:
+      base: d597d88
+      reproduction: >-
+        Run from the repository root on the working tree that contains this
+        round's changes. pnpm typecheck (tsc -b) -> exit 0. pnpm lint (oxlint)
+        -> exit 0, 0 warnings and 0 errors on 289 files. pnpm test:m4 -> 16
+        files / 381 tests passed. pnpm test:trace -> 41/41 passed. Readiness
+        check -> 47/47 passed. pnpm test -> 84 files, 1 failed / 83 passed,
+        the single failure being the pre-existing main baseline described
+        above. pnpm build -> exit 0. The full suite and the remote `verify` run
+        are the final authority.
+    scope: >-
+      The M4-151 rebase round: branch rebuild onto main, evidence repointing,
+      the working-memory expiry-input guard and the contract statements; no
+      contract, storage, runtime or provider change.
