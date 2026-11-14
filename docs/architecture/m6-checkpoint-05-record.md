@@ -11,9 +11,9 @@ requirement or case ID.
 
 | Delivery | Artifact | State |
 | --- | --- | --- |
-| #100 run provenance | PR **#140** | `848c9ac`, **mergeable**, CI pass; ADR-008 remains **proposed**; M5's existing request changes remains active, with [interface coordination](https://github.com/inscripoem/isla/pull/140#issuecomment-6740447695) in progress |
+| #100 run provenance | PR **#140** | **merged** as `80e115b`; M5 approved `0dc4ec0`, M4 approved the merge-forward head and merged; ADR-008 remains **proposed**; the acknowledgement export is still unpinned |
 | #103 method | PR **#142** | proposal at `d9d627b` (threshold register added); M4's three corrections and two answers applied; **not approved** |
-| #103 eligibility | PR **#143** | rules 1–4 implemented; stacked on `m6-02-provenance`; retarget after #140; rule 5 not evaluated |
+| #103 eligibility | PR **#143** | rules 1–4 implemented; **retargeted to `main`** after #140 and #157 merged; ready at `8e32848`; rule 5 not evaluated |
 | #103 label interface | PR **#145** | proposal; M4 answered the five questions as proposed positions, while the interface and remaining affected-owner decisions are not yet agreed |
 | #103 thresholds | `docs/architecture/evaluation-thresholds.md` (in #142 at `d9d627b`) | every value `pending`; no baseline |
 | #117 QA record | PR **#144** | docs-only records for CP5/CP6/CP8; ready for review |
@@ -38,7 +38,7 @@ requirement or case ID.
 - **Acknowledgement and timing export** — M5, #101.
 - **Physical input/playback/Stop observation** — M1/M2, #102.
 - **CP05 provider access and credentials** — M5/operator; pilot readiness is unconfirmed.
-- **ADR-008 coordination** — M3/M4/M5 are affected reviewers for #100. M3 answered the identity scope and M4 answered D7 on #66 at `9bd5bcf`; neither is an approval of ADR-008 as a whole. M5 coordinates the still-unpinned acknowledgement export. ADR-008 decision 3 blocks CP05 scoring, not the companion merge by itself. Separate team design decisions, outstanding #140 code review and GitHub branch rules remain distinct.
+- **ADR-008 coordination** — M3/M4/M5 are affected reviewers for #100. M3 answered the identity scope and M4 answered D7 on #66 at `9bd5bcf`; neither is an approval of ADR-008 as a whole. M5 coordinates the still-unpinned acknowledgement export. ADR-008 decision 3 blocks CP05 scoring, not the companion merge by itself. The #140 code review is resolved and merged; separate team design decisions and GitHub branch rules remain distinct.
 - **Threshold baseline** — M6, only after a measured pilot.
 
 ## Verdict
@@ -52,10 +52,14 @@ is fixed; the 2026-11-10 target is a planning target, not a measured result.
 No pilot, no threshold value, no evaluation table, no G4 pass, no quality/latency/cost result, and no CP5
 acceptance. #140's local tests are not a provider run.
 
+**Status refresh (2026-11-14).** #140 merged as `80e115b`; #157 merged as `d86dbc1`; #143 is retargeted
+and ready at `8e32848`. The verdict above remains a snapshot of the records that justified CP5 at the
+time; it is not an acceptance.
+
 ## Next actions
 
-1. Resolve #140 code-review findings with the affected owners; retarget #143 after #140 lands.
-2. Review #142 method and #144 QA records in parallel with #140. Keep #142's description of report behavior consistent with the code available when it is merged.
+1. #140 and #157 are merged; #143 is retargeted and ready at `8e32848`. Complete its final M4 review.
+2. Review #142 method and #144 QA records. Keep #142's description of report behavior consistent with the merged code.
 3. Complete the remaining #145 decisions with affected owners; produce the label file when the corpus exists.
 4. Run the pilot only when the corpus, labels, export and credentials exist.
 5. Fix thresholds only from that pilot's baseline, with head, date and approver.

@@ -19,6 +19,7 @@ agent-induced bloat, evaluation debt, guardrail debt, human/cognitive debt.
 | DEBT-11 | guardrail debt | No refusal of the required `verify` check has ever been observed | enforcement is configured but untested against a failing merge | M6 | controlled failing PR; record the run URL and the blocked state |
 | DEBT-12 | hidden dependency | The append-only `docs/ai-use-log.yaml` conflicts on every code merge | the I1 PRs are blocked by a bookkeeping file, not by code; repeated rebases | M5/M6 | standing rebase rule; an ADR to split the log only if it recurs after the I1 batch |
 | DEBT-13 | evaluation debt | `condition-mismatch` cannot be evaluated: conditions are recorded per run, not per attempt | protocol §3 rule 5 is unimplemented | M4/M6 | per-attempt conditions, or an explicit recorded limitation |
+| DEBT-14 | evaluation debt | the recorded run carries no corpus identity (`FixedConditions` has no `corpusVersion`/`casesSha256`), so the label file's corpus tuple is checked only against the supplied manifest | a label file for one corpus can be joined to a run produced from another whenever the manifest matches the labels (#145) | M6/M3 | add a corpus field in a versioned run-schema decision (trigger: the first formal run, or a second corpus version); until then the operator supplies the run and the manifest together |
 
 ## PR53 IPC literal follow-up
 

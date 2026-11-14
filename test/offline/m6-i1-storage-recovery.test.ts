@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { CommitDelivery } from '../../src/contracts'
+import type { CommitDelivery, SelectionPort } from '../../src/contracts'
 import {
   createEventStore,
   createHistoryQuery,
@@ -19,6 +19,7 @@ import {
 import type { RunnerDeps } from '../support/contract-runner'
 import { createCoordinatorContractRunner } from '../support/coordinator-runner'
 import * as correct from '../support/correct-ports'
+import { createGate } from '../support/context'
 import { FIXTURE_SESSION_ID } from '../support/fixture-data'
 import { createVirtualClock } from '../support/virtual-clock'
 
@@ -93,6 +94,7 @@ function makeRunner(
   options: {
     dialogue?: ReturnType<typeof correct.createFixtureDialoguePort>
     player?: ReturnType<typeof correct.createFixturePlayer>
+    selection?: SelectionPort
   } = {},
 ): RunnerKit {
   const store = createEventStore(backend)
@@ -100,7 +102,7 @@ function makeRunner(
   const replay = createReplayReader(store)
   const player = options.player ?? correct.createFixturePlayer()
   const deps: RunnerDeps = {
-    selection: correct.createFixtureSelectionPort(),
+    selection: options.selection ?? correct.createFixtureSelectionPort(),
     reaction: correct.createFixtureReactionPort(),
     dialogue: options.dialogue ?? correct.createFixtureDialoguePort(),
     synthesis: correct.createFixtureSynthesisPort(),
@@ -135,6 +137,25 @@ function deliveryFor(
   segmentIndex: number,
 ): CommitDelivery | undefined {
   return deliveries.find((delivery) => delivery.segmentIndex === segmentIndex)
+}
+
+/**
+ * The first and third selection calls use the fixture result; the second is held
+ * until the gate opens, so a late result can be forced after Stop.
+ */
+function selectionWithHeldSecondCall(gate: Promise<void>, onEnter: () => void): SelectionPort {
+  const fixture = correct.createFixtureSelectionPort()
+  let calls = 0
+  return {
+    async select(request, context) {
+      calls += 1
+      if (calls === 2) {
+        onEnter()
+        await gate
+      }
+      return fixture.select(request, context)
+    },
+  }
 }
 
 describe('M6-01 coordinator SQLite recovery (C-32/C-33, C-68, INV-12)', () => {
@@ -296,6 +317,97 @@ describe('M6-01 coordinator SQLite recovery (C-32/C-33, C-68, INV-12)', () => {
     const backend2 = createSqliteBackend(db2)
     expect(await createHistoryQuery(backend2).confirmedHistory(sessionId)).toEqual([])
     expect(createRecoveryView(backend2).unresolved(sessionId)).toEqual([])
+    closeDatabase(db2)
+  })
+
+  it('records two turns with Stop and refuses a late result and a duplicate (C-32/C-68, INV-12)', async () => {
+    const config = tempConfig()
+    const db1 = openFresh(config)
+    const backend1 = createSqliteBackend(db1)
+    const gate = createGate()
+    const entered = createGate()
+    const selection = selectionWithHeldSecondCall(gate.promise, () => entered.release())
+    const player = correct.createFixturePlayer({ hold: true, holdAfter: 1 })
+    const { runner, store, history, sessionId } = makeRunner(backend1, { player, selection })
+
+    expect((await runner.resume()).status).toBe('applied')
+
+    // Turn 1: completes and is recorded as completed.
+    expect((await runner.accept('first recorded turn', 'm6-first-input')).status).toBe('accepted')
+    const first = await runner.runTurn()
+    expect(first.status).toBe('completed')
+    expect(first.turnId).not.toBeNull()
+
+    // Turn 2: the selection is held; Stop arrives before it returns. The late
+    // result must not produce a delivery or a second completed record.
+    expect((await runner.accept('second recorded turn')).status).toBe('accepted')
+    const second = runner.runTurn()
+    await entered.promise
+    expect((await runner.stop()).status).toBe('applied')
+    gate.release()
+    const late = await second
+    expect(late.status).toBe('stale')
+
+    // A stopped lifecycle must be resumed before another turn can start.
+    expect((await runner.resume()).status).toBe('applied')
+
+    // Turn 3: Stop during playback produces the terminal cancelled record.
+    expect((await runner.accept('third recorded turn')).status).toBe('accepted')
+    const third = runner.runTurn()
+    await waitUntil(() => player.status().lastStage === 'started')
+    expect((await runner.stop()).status).toBe('applied')
+    const stopped = await third
+    expect(stopped.status).not.toBe('completed')
+
+    // Duplicate input: same content and message id is idempotent.
+    const beforeDuplicate = runner.deliveries().length
+    expect((await runner.accept('first recorded turn', 'm6-first-input')).status).toBe('duplicate')
+    expect(runner.deliveries()).toHaveLength(beforeDuplicate)
+
+    // The durable log has exactly two terminal records: one completed, one cancelled.
+    const events = await store.readSession(sessionId)
+    const ends = events.filter((event) => event.type === 'turn.ended')
+    expect(ends).toHaveLength(2)
+    expect(ends.map((event) => event.payload.status)).toEqual(['completed', 'cancelled'])
+    // The terminal record belongs to the turn it describes, not merely carries the right status.
+    expect(ends[0]?.turnId).toBe(first.turnId)
+    expect(ends[1]?.turnId).toBe(stopped.turnId)
+
+    // The stopped turn is never recorded as delivered.
+    const stoppedDeliveries = runner
+      .deliveries()
+      .filter((delivery) => delivery.turnId === stopped.turnId)
+    expect(
+      stoppedDeliveries.filter((delivery) => delivery.classification === 'fully-delivered'),
+    ).toHaveLength(0)
+
+    // A selection-stage stale return carries no turn id, so it cannot be delivered.
+    // This is current coordinator behaviour, not a contract: if the combined
+    // revision (#131) gives the stale selection return a turn id, update this
+    // assertion with that change rather than dropping the case.
+    expect(late.turnId).toBeNull()
+
+    // Only the first turn reaches confirmed history.
+    expect((await history.confirmedHistory(sessionId)).map((record) => record.turnId)).toEqual([
+      first.turnId,
+    ])
+
+    // The two-turn log must survive a reopen, not only the current connection.
+    closeDatabase(db1)
+    const db2 = openFresh(config)
+    const backend2 = createSqliteBackend(db2)
+    const reopened = (await createEventStore(backend2).readSession(sessionId)).filter(
+      (event) => event.type === 'turn.ended',
+    )
+    expect(reopened).toHaveLength(2)
+    expect(reopened.map((event) => event.payload.status)).toEqual(['completed', 'cancelled'])
+    expect(reopened[0]?.turnId).toBe(first.turnId)
+    expect(reopened[1]?.turnId).toBe(stopped.turnId)
+    expect(
+      (await createHistoryQuery(backend2).confirmedHistory(sessionId)).map(
+        (record) => record.turnId,
+      ),
+    ).toEqual([first.turnId])
     closeDatabase(db2)
   })
 })

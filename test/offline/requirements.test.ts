@@ -137,8 +137,15 @@ describe('machine-checkable fit criteria', () => {
 
 describe('schema drift and PRD', () => {
   it('keeps the committed JSON schemas in sync', () => {
-    expect(readFileSync(join(REQ_DIR, 'req-schema.json'), 'utf8')).toBe(emitRequirementsSchema())
-    expect(readFileSync(join(REQ_DIR, 'case-schema.json'), 'utf8')).toBe(emitCaseSchema())
+    // A Windows checkout may materialise CRLF. Compare content, not checkout
+    // line endings, while still rejecting any other difference or a lone CR.
+    const normalizeCrlf = (text: string): string => text.replace(/\r\n/g, '\n')
+    const requirementsSchema = readFileSync(join(REQ_DIR, 'req-schema.json'), 'utf8')
+    const caseSchema = readFileSync(join(REQ_DIR, 'case-schema.json'), 'utf8')
+    expect(normalizeCrlf(requirementsSchema)).toBe(emitRequirementsSchema())
+    expect(normalizeCrlf(caseSchema)).toBe(emitCaseSchema())
+    expect(requirementsSchema.replace(/\r\n/g, '')).not.toContain('\r')
+    expect(caseSchema.replace(/\r\n/g, '')).not.toContain('\r')
   })
 
   it('parses the YAML PRD without errors', () => {

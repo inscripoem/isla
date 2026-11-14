@@ -2,7 +2,7 @@
 
 Status: under review. M6 contributes the persistence portion; memory semantics are owned by M4 and
 live authority by M5. Step A record-shape coordination is under review. D2.5 clarifies persistence,
-retention and the M6/M4 visibility boundary. Updated: 2026-10-27.
+retention and the M6/M4 visibility boundary. Updated: 2026-11-10.
 Anchors: FR-06 (persist and replay); NFR-05 (privacy, owner M5; M4/M6 collaborate).
 
 ## Scope and ownership
@@ -33,7 +33,7 @@ restart acceptance remains M5's (#25).
 | Committed events (`RuntimeEvent`) | Yes | `event-store` / SQLite `events` | Append-only; `seq` strictly increasing |
 | Delivery outcomes (`CommitDelivery`) | Yes | SQLite `deliveries` (`StoredDelivery`) | The full record, including `terminal_outcome`, is persisted; `ConfirmedDelivery` is the narrower read shape |
 | Confirmed spoken history | Yes | `deliveries` (`fully-delivered` only) | Returned by `HistoryQueryPort` |
-| Memory projection position | No — in-process only; a new projection starts at 0 on restart | in-process `appliedSeq` | One bookmark per session internally; advances one event at a time; never across a gap or across sessions. The shared scalar getter reports the last attempted session, including a gap or duplicate that did not advance; `apply` returns the event session’s position. The bookmark is not persisted, so restart does not restore it; a durable cursor is deferred. A public per-session getter (`appliedSeq(sessionId)`) is a proposal only, not the frozen `MemoryProjectionPort` contract. The component has no production caller today; it is exercised by tests only. |
+| Memory projection position | Yes for store callers — persisted per session in `projection_state`; the `MemoryProjectionPort` itself remains in-process | `projection_state` / in-process `appliedSeq` | One bookmark per session internally; advances one event at a time; never across a gap or across sessions. The shared scalar getter reports the last attempted session, including a gap or duplicate that did not advance; `apply` returns the event session’s position. The durable cursor is a storage helper (`createMemoryStore`): it stores `applied_seq` and `extractor_version`, refuses a non-increasing sequence (`stale`) and a different version (`version-mismatch`), uses `max(persisted, rebuild)` for a same-version rebuild, resets under a new version, and resumes after restart. The port's in-process bookmark is unchanged, and a public per-session getter remains a proposal. Neither the port nor the store has a production caller today. |
 | Persona attribution and segment order | Yes — persisted in SQLite and present in memory | `personaProfileId`, `personaProfileVersion`, `segmentIndex` | Captured from the original request/segment; written by `src/storage/sqlite/backend.ts` and restored by `codec.ts`; legacy unknowns stay null. `ConfirmedDelivery` is the narrow read shape; `StoredDelivery` is the recovery shape. |
 | Active turn / pending outputs | No (by design) | — | Restart begins stopped; unresolved outputs stay `unknown` |
 | Raw audio | Separate local files | DB reference only | Never inside event payloads |
@@ -80,9 +80,10 @@ restart acceptance remains M5's (#25).
   `seq` ascending (enforced by INV-08 / case C-25; each delivery retains its supporting `event_seq`),
   independent of insertion order; partial/unknown and generated-only text excluded.
 - Turn reconstruction uses explicit `segmentIndex` within `(sessionId, turnId)`; it does not reorder the single-session history port or infer ordering from identifier spelling. Unknown indices remain unknown.
-- **Automatic** cross-session memory is out of v0.2: no audience-linked recall across sessions until
-  M3/M4/M5 define identity, consent and retention. M4 maintains a per-memory scope and recall *policy*;
-  it is not an aggregation path.
+- **Automatic** cross-session recall remains gated: storage records an audience/owner only when M5
+  supplies a durable, consenting binding (`session_audience`/`delivery_owner`, memory-tables ADR). The
+  recall decision stays with M4's `mayRecallAcrossSessions`; anonymous or non-consenting listeners are
+  session-only. M4 maintains the scope/recall policy; storage is not an aggregation path.
 - **Explicit archive reconstruction is implemented and retained.** `src/runtime/session-archives.ts:307-330`
   combines only the explicitly selected archive histories with the live session (archives in selection
   order, then live); `src/runtime/production.ts:342-371` wires it into the SQLite-backed composition.
@@ -164,9 +165,12 @@ can omit later standing facts from the audit because the existing input order is
 
 ## Retention and privacy
 
-- **Retention:** automatic expiry/deletion is **deferred for v0.2**. Do not claim an enforced seven-day
-  default; no default retention period is adopted. Local archives persist until an explicit supported
-  storage operation is agreed and implemented. NFR-05 retention/deletion acceptance remains pending.
+- **Retention:** there is no automatic expiry and no default period.
+  `createMemoryStore.deleteOlderThan(audienceId, days, nowMs)` runs only when an operator calls it, only
+  for one audience, and only for that audience's derived/owner/state/audience rows; `events` and
+  `deliveries` are append-only. There is no global by-age delete, so one audience's configuration
+  cannot silently remove another audience's rows (M5 decision, 2026-11-14). NFR-05 retention/deletion
+  acceptance remains pending.
 - **Rendering budgets are not retention.** `maxTurns` and `maxCharacters` drop content from a rendered
   context; they do not delete stored evidence or make a turn unreachable later.
 - **Scope:** the stricter of session scope and any configured retention limit applies. A session-only
@@ -208,8 +212,29 @@ audit surface. Neither filter is changed to match the other.
   its own policy and audit consequences. "Delete the whole session" is this operation, not a
   projection-row delete.
 
-v0.2 builds no user-facing forget action and no evidence deletion; the two words must never be
-conflated.
+v0.2 has no user-facing forget action. Evidence (`events`, `deliveries`) is never deleted; the memory
+tables can be deleted by an explicit operator call. The two words must never be conflated.
+
+## Derived memory, audience/owner and state (memory-tables foundation)
+
+The memory-tables ADR (number pending in #25) adds six tables beyond `events`/`deliveries`:
+
+| Table | Purpose | Rule |
+| --- | --- | --- |
+| `derived_episode` | episode summary, importance, source turn ids | ids only; rebuilt from evidence through M4's derive |
+| `derived_topic` | topic summary, validity window, source episode ids | M4 maintains `valid_to`; rebuilt with episodes |
+| `projection_state` | durable per-session cursor | monotonic; `stale` on a non-increasing seq |
+| `session_audience` | session's audience, durable and consent flags | insert-once; a different binding conflicts; `durable` and `consent` gate owner/derived writes |
+| `delivery_owner` | owner of a delivered segment | written only for a durable consenting binding after the delivery commit; failure = unowned |
+| `session_state` | character state and version | per session; stale version conflicts; audience is metadata |
+
+Limits, recorded rather than hidden:
+
+- **No operator rebuild command yet.** The store exposes `rebuildDerived(events, deriveEpisodes,
+  deriveTopics)`; an operator entry follows M4's derive functions and M5's surface.
+- **No source-level cascade.** Derived rows are deleted by audience, not by a deleted source; that
+  needs the NFR-05 deletion policy.
+- **No automatic retention.** Deletion is an explicit operator call; there is no default period.
 
 ## Restart behaviour
 
