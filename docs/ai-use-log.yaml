@@ -5119,7 +5119,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: []
     cases: []
-    commits: [beb4c91]
+    commits: [8155434]
     agent: opencode/deepseek-v4.1-flash
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -5349,7 +5349,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: []
     cases: []
-    commits: [1908a94]
+    commits: [2c7424b]
     agent: opencode/deepseek-v4.1-flash
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -5393,7 +5393,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: []
     cases: []
-    commits: [2d6a41d]
+    commits: [7de0731]
     agent: opencode/deepseek-v4.1-flash
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -5434,7 +5434,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: []
     cases: []
-    commits: [cb88568]
+    commits: [464f1da]
     agent: opencode/deepseek-v4.1-flash
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -5476,7 +5476,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: []
     cases: []
-    commits: [3d2640a]
+    commits: [fde9818]
     agent: opencode/deepseek-v4.1-flash
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -5513,7 +5513,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: [INV-16]
     cases: []
-    commits: [8541f62]
+    commits: [91f5b30]
     agent: opencode/deepseek-v4.1-flash
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -5546,7 +5546,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: [INV-16]
     cases: []
-    commits: [c672d5e]
+    commits: [4ff9f9f]
     agent: opencode/deepseek-v4.1-flash
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -5578,7 +5578,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: [INV-16]
     cases: []
-    commits: [ee1cf63]
+    commits: [8398830]
     agent: opencode/deepseek-v4.1-flash
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -5616,7 +5616,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: [INV-16]
     cases: []
-    commits: [06d92e1]
+    commits: [3a6fd66]
     agent: opencode/deepseek-v4.1-flash
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -5652,7 +5652,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: [INV-16]
     cases: []
-    commits: [e58eee0]
+    commits: [33ee39e]
     agent: opencode/deepseek-v4.1-flash
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -5697,7 +5697,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: [INV-16]
     cases: []
-    commits: [dad0dce]
+    commits: [813e935]
     agent: opencode/build
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -5739,7 +5739,7 @@ entries:
     requirements: [FR-06, NFR-04]
     invariants: [INV-16]
     cases: []
-    commits: [04cdea6]
+    commits: [815d6d3]
     agent: opencode/build
     provider: opencode-go
     model: deepseek-v4.1-flash
