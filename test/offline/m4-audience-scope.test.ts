@@ -412,6 +412,28 @@ describe('delivery-recall cross-session guard', () => {
     expect(result).toEqual([])
     expect(port.crossSessionDrops).toBe(1)
   })
+
+  it('recalls nothing once the owner evidence is retracted, while the audit still counts the loss', () => {
+    const port = createKeywordDeliveryRecall()
+    const request = {
+      inputText: 'the loud concert was bright',
+      replyIntent: 'answer',
+      candidates: [turn({ sessionId: 'other', turnId: 't1' })],
+      sessionId: 's1',
+      scope: 'audience-bound' as const,
+      audience: IDENTIFIED,
+      ownerAudienceIdOf: () => 'aud-7',
+    }
+    // Before the retraction the recorded owner proves the candidate belongs to
+    // this listener, so the cross-session turn is recalled.
+    expect(port.recall(request).length).toBe(1)
+    // After "forget me" the owner rows are gone: the store can no longer prove
+    // ownership, so the same candidate is refused and recall stays empty.
+    expect(port.recall({ ...request, ownerAudienceIdOf: () => null })).toEqual([])
+    // The audit explains the loss: the most recent read counted exactly the
+    // retracted-source refusal instead of failing silently.
+    expect(port.crossSessionDrops).toBe(1)
+  })
 })
 
 describe('provenance rendering', () => {
