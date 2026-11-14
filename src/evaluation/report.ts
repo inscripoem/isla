@@ -530,11 +530,18 @@ export function writeEvaluationReport(
   if (!rendered.ok) return { ok: false, violations: rendered.violations }
 
   const temporary = join(dirname(path), `.${basename(path)}.${process.pid}.tmp`)
+  let created = false
   try {
-    writeFileSync(temporary, rendered.markdown, 'utf8')
+    // `wx` refuses to overwrite an existing file. The temporary name is
+    // predictable, so without it a file that happens to sit at that name (for
+    // example an evidence artifact) would be truncated before the rename, and
+    // the cleanup below would delete it.
+    writeFileSync(temporary, rendered.markdown, { encoding: 'utf8', flag: 'wx' })
+    created = true
     renameSync(temporary, path)
   } catch (error) {
-    rmSync(temporary, { force: true })
+    // Only remove the file this call created; never touch a pre-existing one.
+    if (created) rmSync(temporary, { force: true })
     throw error
   }
   return { ok: true, path }

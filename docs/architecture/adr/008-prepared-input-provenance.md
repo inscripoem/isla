@@ -215,7 +215,12 @@ batch may therefore carry `exact` for the link that was observed, provided the p
 unadmitted tail as it does now. `exact` must not by itself make an attempt quality-eligible; before
 CP05 scoring, eligibility needs a separate, named batch-completeness condition, aligned with M4's
 completed-only decision recorded in #142 §3 and absent from #143's `UNSCORED_REASONS`. No parser
-change is requested in #140. ADR-008 remains `proposed`; M5 confirmation on row 4 is still pending.
+change is requested in #140. ADR-008 remains `proposed`.
+
+**Row 4 — M5 confirmation recorded 2026-11-13.** M5 agreed with M4's distinction in the review at
+`216dda8` (pull/140#pullrequestreview-5885930048): `exact` describes the observed input/acknowledgement
+link, and a separate named batch-completeness condition is needed before CP05 scoring. This records
+agreement on row 4 only. It does not adopt ADR-008, score a run, or accept #100/CP05.
 
 ## Re-open triggers
 

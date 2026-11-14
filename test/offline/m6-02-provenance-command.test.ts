@@ -1,4 +1,12 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  linkSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -530,5 +538,85 @@ describe('repeated case id: attempt and not-run for the same pair (M5, 2026-11-1
     expect(table).toContain('| case-1 | v1 | 1 | exact |')
     expect(table).toContain('| case-1 | v1 | 1 | rejected |')
     expect(table).toContain('rejected 1')
+  })
+})
+
+describe('evidence-preservation collisions beyond the direct path', () => {
+  it('refuses an output that reaches the provenance through a symlinked parent', () => {
+    const { dir, input, provenance } = workspace()
+    const companionText = JSON.stringify(companion())
+    writeFileSync(provenance, companionText, 'utf8')
+    const linked = join(dir, 'linked')
+    symlinkSync(dir, linked)
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
+    expect(
+      runReportCommand([
+        '--input',
+        input,
+        '--output',
+        join(linked, 'provenance.json'),
+        '--provenance',
+        provenance,
+      ]),
+    ).toBe(1)
+    expect(readFileSync(provenance, 'utf8')).toBe(companionText)
+    expect(stderr.mock.calls.flat().join('')).toContain('--provenance input')
+  })
+
+  it('refuses an output that is a symlink to the provenance file', () => {
+    const { dir, input, provenance } = workspace()
+    const companionText = JSON.stringify(companion())
+    writeFileSync(provenance, companionText, 'utf8')
+    const alias = join(dir, 'alias.json')
+    symlinkSync(provenance, alias)
+
+    expect(
+      runReportCommand(['--input', input, '--output', alias, '--provenance', provenance]),
+    ).toBe(1)
+    expect(readFileSync(provenance, 'utf8')).toBe(companionText)
+  })
+
+  it('refuses an output that is a hard link to the provenance file', () => {
+    const { dir, input, provenance } = workspace()
+    const companionText = JSON.stringify(companion())
+    writeFileSync(provenance, companionText, 'utf8')
+    const hard = join(dir, 'hard.json')
+    linkSync(provenance, hard)
+
+    expect(
+      runReportCommand(['--input', input, '--output', hard, '--provenance', provenance]),
+    ).toBe(1)
+    expect(readFileSync(provenance, 'utf8')).toBe(companionText)
+  })
+
+  it('refuses an output equal to the input run file and leaves the run intact', () => {
+    const { input } = workspace()
+    const runText = readFileSync(input, 'utf8')
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
+    expect(runReportCommand(['--input', input, '--output', input])).toBe(1)
+    expect(readFileSync(input, 'utf8')).toBe(runText)
+    expect(stderr.mock.calls.flat().join('')).toContain('--input run file')
+  })
+
+  it('still writes to a distinct output inside a symlinked directory', () => {
+    const { dir, input, output, provenance } = workspace()
+    writeFileSync(provenance, JSON.stringify(companion()), 'utf8')
+    const linked = join(dir, 'linked')
+    symlinkSync(dir, linked)
+    void output
+
+    expect(
+      runReportCommand([
+        '--input',
+        input,
+        '--output',
+        join(linked, 'table.md'),
+        '--provenance',
+        provenance,
+      ]),
+    ).toBe(0)
+    expect(readFileSync(join(dir, 'table.md'), 'utf8')).toContain('Prepared-input provenance')
   })
 })

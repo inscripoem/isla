@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { readFileSync, realpathSync, statSync } from 'node:fs'
+import { basename, dirname, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseProvenance } from './provenance'
 import { parseRecordedRun } from './recorded-run'
@@ -28,6 +28,38 @@ export interface ReportCommandArgs {
 export type ReportCommandParseResult =
   | { readonly ok: true; readonly value: ReportCommandArgs }
   | { readonly ok: false; readonly message: string }
+
+/**
+ * Canonical identity of a path, for evidence-preservation checks.
+ *
+ * `resolve()` alone is not enough: it neither follows symbolic links nor notices a
+ * hard link, so two different-looking paths can name the same file. Existing paths
+ * are compared by device + inode (which covers symlinks, hard links and
+ * case-insensitive aliases); a path that does not exist yet is compared by the
+ * real path of its parent plus its own name (which covers a symlinked directory).
+ */
+function sameTarget(left: string, right: string): boolean {
+  try {
+    const a = statSync(resolve(left))
+    const b = statSync(resolve(right))
+    return a.dev === b.dev && a.ino === b.ino
+  } catch {
+    // At least one side does not exist yet; compare canonical names instead.
+  }
+  const canonical = (path: string): string => {
+    const absolute = resolve(path)
+    try {
+      return realpathSync(absolute)
+    } catch {
+      try {
+        return resolve(realpathSync(dirname(absolute)), basename(absolute))
+      } catch {
+        return absolute
+      }
+    }
+  }
+  return canonical(left) === canonical(right)
+}
 
 const USAGE =
   'usage: pnpm evaluation:report --input <recorded-run.json> --output <evaluation-table.md> [--provenance <provenance.json>]'
@@ -97,13 +129,23 @@ export function runReportCommand(argv: readonly string[]): number {
 
   // M5 re-review (2026-11-13): the report must never replace its own provenance
   // input. Refuse the same destination before reading or writing; the companion
-  // is the evidence, not a scratch file.
+  // is the evidence, not a scratch file. The comparison is canonical (inode, or
+  // real parent path for a file that does not exist yet), so a symlinked or hard
+  // link alias is refused as well.
   if (
     parsed.value.provenance !== undefined &&
-    resolve(parsed.value.output) === resolve(parsed.value.provenance)
+    sameTarget(parsed.value.output, parsed.value.provenance)
   ) {
     process.stderr.write(
       'evaluation:report: --output must not be the --provenance input; the companion is evidence and must remain intact\n',
+    )
+    return 1
+  }
+  // M4 residual (2026-11-13): the older run-file path had the same overwrite
+  // shape. The run artifact is also evidence, so the same rule applies.
+  if (sameTarget(parsed.value.output, parsed.value.input)) {
+    process.stderr.write(
+      'evaluation:report: --output must not be the --input run file; the run is evidence and must remain intact\n',
     )
     return 1
   }
