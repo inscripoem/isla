@@ -5297,7 +5297,9 @@ entries:
       README/.env.example document the startup command and variable names.
     requirements: [FR-01, FR-03]
     invariants: []
-    commits: [252aea198a7d0378c44df963e77cf288c37e1f39]
+    commits:
+      - 252aea198a7d0378c44df963e77cf288c37e1f39
+      - 5e4daff8ac049fca34717fc08fd54c1b1c2a7753
     agent: build
     provider: self-api
     model: deepseek-v4-flash
@@ -5306,8 +5308,10 @@ entries:
     supervision: >-
       OpenCode authored the configuration parser, deployment module and tests
       in the two recorded sessions. Codex supervised both sessions, fixed one
-      TypeScript disposer-signature error in the new test, and authored the
-      README, .env.example and package test-list edits directly.
+      TypeScript disposer-signature error in the new test, authored the README,
+      .env.example and package test-list edits directly, and added strict
+      text/WebSocket URL, canonical-origin and host-entry validation so a bad
+      value fails at startup by variable name instead of being dropped.
     human_review: >-
       Local only. Push and pull-request creation await Captain approval; no
       agent merges and no product acceptance is claimed.
@@ -5317,8 +5321,8 @@ entries:
     verification:
       base: 78c7656c10229b25ceb1e8ecc566feb2f556f116
       results: >-
-        Linux: the two new test files pass 16/16; test:m5 passes 15 files /
-        273 tests; pnpm verify exits 0 with 1565/1565 tests in 76 files and a
+        Linux: the two new test files pass 21/21; test:m5 passes 15 files /
+        278 tests; pnpm verify exits 0 with 1570/1570 tests in 76 files and a
         successful build; typecheck and lint pass.
       limits: >-
         No live text provider, VTube Studio session, Kokoro model load or
