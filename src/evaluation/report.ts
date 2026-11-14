@@ -10,6 +10,13 @@ import {
   type UsageSummary,
   type WindowSummary,
 } from './metrics'
+import type { ProvenanceCompanionV1, ProvenanceInputEntry } from './provenance'
+import {
+  INPUT_STATUSES,
+  buildOccurrenceKey,
+  notRunReasonIndex,
+  provenanceBindingViolations,
+} from './provenance'
 
 /**
  * M6-02 — the evaluation report.
@@ -72,6 +79,18 @@ export interface ReportInput {
   readonly variants: readonly Variant[]
   readonly conditions: FixedConditions
   readonly meta: RunMeta
+  /**
+   * ADR-008 companion, already validated against this run by the caller.
+   *
+   * The digest can only be recomputed from the run artifact bytes, which the
+   * command holds and the renderer does not. `parseProvenance` is therefore the
+   * single place that validates it; this field is evidence, not a claim. The
+   * renderer still re-applies the binding rules it can check (run id and key
+   * set), so the exported API cannot publish another run's companion.
+   */
+  readonly provenance?: ProvenanceCompanionV1 | null
+  /** Where the companion was read from, so the artifact names its own source. */
+  readonly provenanceSource?: string
 }
 
 export type ReportResult =
@@ -259,6 +278,26 @@ function usage(summary: UsageSummary): string {
   return `${count(summary.inputTokens)} in / ${count(summary.outputTokens)} out / $${cost(summary.costUsd)}`
 }
 
+/** One-line summary of an attempt's prepared inputs: counts by status, `none` when nothing was submitted. */
+function preparedInputs(inputs: readonly ProvenanceInputEntry[]): string {
+  if (inputs.length === 0) return 'none'
+  // Derived from INPUT_STATUSES so a new status cannot silently vanish here.
+  const counts = INPUT_STATUSES.map(
+    (status) => [status, inputs.filter((entry) => entry.status === status).length] as const,
+  ).filter(([, howMany]) => howMany > 0)
+  const parts = counts.map(([status, howMany]) => `${status} ${howMany}`)
+  const named = counts.reduce((total, [, howMany]) => total + howMany, 0)
+  if (named !== inputs.length) parts.push(`unrecognised ${inputs.length - named}`)
+  // ADR-008 D5: an unexported identity is a state, not a missing value.
+  if (inputs.some((entry) => entry.inputId === null)) parts.push('identity not-yet-observable')
+  return parts.join(', ')
+}
+
+/** A digest shown short enough to read; `null` is the unobserved case, never a sentinel digest. */
+function revision(revisionDigest: string | null): string {
+  return revisionDigest === null ? 'null (unobserved)' : `\`${revisionDigest.slice(0, 12)}…\``
+}
+
 const STAGE_LABEL: Record<(typeof TIMING_STAGES)[number], string> = {
   submitMs: 'submit (M5)',
   planMs: 'plan (M3)',
@@ -317,11 +356,90 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
     `| maxTurns | ${count(conditions.recall.maxTurns)} |`,
     `| Recall port | ${conditions.recall.supplied ? 'supplied' : 'not supplied'} |`,
     '',
+    '## Prepared-input provenance',
+    '',
+  ]
+
+  const provenance = input.provenance ?? null
+  if (provenance !== null) {
+    // The command has already validated the digest and key set; this re-applies
+    // the binding the renderer can check, so the exported API cannot publish a
+    // companion that belongs to a different run.
+    const binding = provenanceBindingViolations(provenance, {
+      runId: meta.runId,
+      records: run.records,
+      notRun: run.notRun,
+    })
+    if (binding.length > 0) return { ok: false, violations: binding }
+  }
+  if (provenance === null) {
+    lines.push(
+      '> No companion was supplied. Quality results for this run would be `unscored` with reason',
+      '> `no-provenance-record` (ADR-008 D8); this table reports latency, cost and outcome only.',
+    )
+  } else {
+    lines.push(
+      `> Companion source: ${
+        input.provenanceSource === undefined
+          ? 'not recorded in this call'
+          : `\`${cell(input.provenanceSource)}\``
+      }; run \`${cell(provenance.runId)}\`; digest \`${provenance.runDigest}\`.`,
+      '> The same section is bound to this run by `runId` and by a SHA-256 digest over the exact run',
+      '> artifact. The command validates the digest, the occurrence-key set and the input order before',
+      '> this table is written; this section repeats the accepted observations.',
+      '',
+      '| Case | Variant | Attempt | Correlation | Record-set revision | Prepared inputs |',
+      '| --- | --- | --- | --- | --- | --- |',
+    )
+    for (const attempt of provenance.attempts) {
+      lines.push(
+        `| ${cell(attempt.caseId)} | ${cell(attempt.variantId)} | ${attempt.attempt} | ${attempt.correlation} | ${revision(attempt.recordSetRevision)} | ${preparedInputs(attempt.inputs)} |`,
+      )
+    }
+    lines.push(
+      '',
+      '> `null (unobserved)` means the admitted record set was not captured, or was not observed;',
+      '> `exact` correlation is refused in that case. `identity not-yet-observable` marks an input',
+      '> whose fixture identity M5 has not exported (ADR-008 D5); a scored result would be',
+      '> `unscored` with `missing-input-identity`. Eligibility and scoring are not evaluated here —',
+      '> they require human labels (protocol §3).',
+    )
+    if (provenance.notRun.length > 0) {
+      lines.push(
+        '',
+        '### Not-run observations',
+        '',
+        '| Case | Variant | Occurrence | Reason | Prepared inputs |',
+        '| --- | --- | --- | --- | --- |',
+      )
+      // The run's reason is the single authority (ADR-008 D4); the index is built by
+      // the same helper the parser uses, so a repeated pair cannot pick up the
+      // wrong occurrence's reason.
+      const notRunReasons = notRunReasonIndex(run)
+      for (const entry of provenance.notRun) {
+        const reason =
+          notRunReasons.get(
+            buildOccurrenceKey(entry.caseId, entry.variantId, entry.occurrence),
+          ) ?? '—'
+        lines.push(
+          `| ${cell(entry.caseId)} | ${cell(entry.variantId)} | ${entry.occurrence} | ${cell(reason)} | ${preparedInputs(entry.inputs)} |`,
+        )
+      }
+      lines.push(
+        '',
+        '> These inputs were submitted or observed for a case the run did not execute. They are not',
+        '> attempts and are never scored (ADR-008 D4).',
+      )
+    }
+  }
+
+  lines.push(
+    '',
     '## Results by variant',
     '',
     '| Variant | Kind | Combined | Bench attempts | Completed | Cancelled | Failed | Failure rate | Usage |',
     '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
-  ]
+  )
 
   for (const variant of variants) {
     const records = run.records.filter((record) => record.variantId === variant.id)
@@ -412,11 +530,18 @@ export function writeEvaluationReport(
   if (!rendered.ok) return { ok: false, violations: rendered.violations }
 
   const temporary = join(dirname(path), `.${basename(path)}.${process.pid}.tmp`)
+  let created = false
   try {
-    writeFileSync(temporary, rendered.markdown, 'utf8')
+    // `wx` refuses to overwrite an existing file. The temporary name is
+    // predictable, so without it a file that happens to sit at that name (for
+    // example an evidence artifact) would be truncated before the rename, and
+    // the cleanup below would delete it.
+    writeFileSync(temporary, rendered.markdown, { encoding: 'utf8', flag: 'wx' })
+    created = true
     renameSync(temporary, path)
   } catch (error) {
-    rmSync(temporary, { force: true })
+    // Only remove the file this call created; never touch a pre-existing one.
+    if (created) rmSync(temporary, { force: true })
     throw error
   }
   return { ok: true, path }
