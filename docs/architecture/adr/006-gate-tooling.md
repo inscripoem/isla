@@ -1,7 +1,7 @@
 # ADR-006 — Governance gate tooling and traceability fitness functions
 
 Status: under review (M6). Shared-architecture coordination with M5 pending.
-Date: 2026-10-14 · Owner: M6 · Invariants: INV-13 · Cases: C-34, C-35, C-37.
+Date: 2026-10-14 · Updated: 2026-11-14 · Owner: M6 · Invariants: INV-13 · Cases: C-34, C-35, C-37.
 Relates to: ADR-001..005. Revision type: ADD (new capability, R3 / #17).
 
 ## Context
@@ -45,7 +45,12 @@ inside `pnpm test`, but are not named gates; G1/G4/G6 are absent). The course di
   with the head, so editing an existing entry does not satisfy it.
 - **G1** is an **advisory step inside the `verify` job**: it reads the `tests-approved` label on a
   pull request that changes code or prompts. It becomes blocking when the team agrees and branch
-  protection requires `verify` — the check is the job, not a separately named check. **G4** is
+  protection requires `verify` — the check is the job, not a separately named check.
+  `docs/code-governance/test-approvals.yaml` adds an `evidence` mode: once that file is on `main`,
+  every later pull-request base carries it and G1 evaluates approval records instead of the label.
+  That switch is a **separate team adoption decision under D2**, to be recorded before or with the
+  merge; the tooling does not make it. On `push` events G1 is skipped by design and the aggregate
+  records `g1: skipped-by-design`, never a pass. **G4** is
   `src/evaluation/eval-gate.ts`, wired as the `G4` step (`pnpm gate:eval`): it reports **not run** without
   an evaluation set + provider access (team-gated) — never a pass — and fails an evaluation table that
   omits the fixed conditions NFR-01 requires.

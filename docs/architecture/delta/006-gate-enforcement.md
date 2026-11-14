@@ -1,8 +1,8 @@
 # Delta-006 — Gate enforcement (G1, G4, G6, trace)
 
-Status: under review (M6). Date: 2026-11-13. ADR: ADR-006. Branch `m6-gate-enforcement`,
-local only. Revision type: **ADD-R** (enforcement added to existing gates; no interface, contract
-or schema change).
+Status: under review (M6). Date: 2026-11-13; review fixes 2026-11-14. ADR: ADR-006. Branch
+`m6-gate-enforcement`, pull request #158 (not merged). Revision type: **ADD-R** (enforcement added
+to existing gates; no interface, contract or schema change).
 
 ## Change
 
@@ -50,7 +50,9 @@ A gate verdict now carries the decision that follows it. `src/evaluation/gate-re
 source for 20 policies (`POL-PIPE-*`, `POL-G1-*`, `POL-G4-*`, `POL-G6-*`, `POL-TR-*`, `POL-G2/3/5-*`),
 each declaring its decision, its action and exactly the evidence fields it promises. The same table is
 rendered into `docs/architecture/runtime-policy-catalog.md` under **Pipeline gates (M6)**, and an
-agreement test compares the two sets.
+agreement test compares the policy set plus each row's decision, action and evidence fields. The
+catalog's Action cell is the `POLICY_SPECS.action` text exactly, so a paraphrase or a drifted action
+turns the test red.
 
 - **Records.** Every failing gate writes `.cache/gate-failures/<policy>-<commit>-<utc>.json`; CI uploads
   the directory for 14 days and the summary names each file. One record per policy per run, so a
@@ -58,7 +60,10 @@ agreement test compares the two sets.
 - **Completeness.** `buildGateRecord` throws when the evidence keys differ from the declared fields.
   A policy cannot promise seven fields and emit six; the test fails first.
 - **Pipeline.** Every gate step is `if: always()`, so one failure no longer hides the rest; the
-  aggregate step records any gate that did not succeed as `not-verified` (POL-PIPE-01).
+  aggregate step records any gate that did not succeed as `not-verified` (POL-PIPE-01). A G1 skip on a
+  `push` event is labeled `skipped-by-design`: it remains not-verified and is never a pass. The policy
+  text now says “record the outcome map”; the earlier “fail the aggregate step” contradicted the
+  deliberate return 0, where the failed gate already fails the job (M5 review, 2026-11-14).
 - **Honesty.** G2/G3/G5 have policies but no dedicated record: their failing step is the record, and
   the catalog marks them `convention`. There is no pager; the escalation column says `none` and names
   the human role that reads the check.
@@ -101,6 +106,13 @@ need an exemption.
 `docs/code-governance/test-approvals.yaml` is committed before the implementation in this branch
 (`bf9c39f`). A pull request whose **base already carries** that file is gated on evidence; an older
 base keeps the label rule. No open pull request is retroactively failed.
+
+**Adoption precondition (M5 review, 2026-11-14).** Merging this branch puts
+`docs/code-governance/test-approvals.yaml` on `main`. Every later pull request's base then carries it,
+so G1 switches from the label rule to `evidence` mode for the whole team. The ADR-006 D2 adoption
+decision must be recorded before or with that merge; this branch records the precondition and does not
+make the decision. On `push` events G1 is skipped by design, and the aggregate records
+`g1: skipped-by-design` — not-verified, never a pass.
 
 ## Limits
 

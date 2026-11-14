@@ -33,7 +33,7 @@ export const POLICY_SPECS: Readonly<Record<string, PolicySpec>> = {
     gate: 'PIPE',
     decision: 'fail-closed',
     action:
-      'report every gate that did not run as not-verified, never as pass; fail the aggregate step',
+      'report every gate that did not run as not-verified, never as pass; record the outcome map',
     fields: ['gate_outcomes'],
   },
   'POL-PIPE-02': {

@@ -106,6 +106,27 @@ describe('POL-PIPE-01: a gate that did not run is not a pass', () => {
     expect(result.notVerified.g1).toBe('absent')
   })
 
+  it('marks a G1 skip on a non-pull-request event as by design, not a pass', () => {
+    const result = aggregateOutcomes({ g1: 'skipped', g2: 'success' }, { event: 'push' })
+    expect(result.failed).toBe(true)
+    expect(result.notVerified.g1).toBe('skipped-by-design')
+    expect(result.notVerified.g2).toBeUndefined()
+  })
+
+  it('keeps a G1 skip on a pull request as not-verified', () => {
+    expect(aggregateOutcomes({ g1: 'skipped' }, { event: 'pull_request' }).notVerified.g1).toBe(
+      'skipped',
+    )
+  })
+
+  it('does not excuse another skipped gate on a push event', () => {
+    expect(aggregateOutcomes({ g2: 'skipped' }, { event: 'push' }).notVerified.g2).toBe('skipped')
+  })
+
+  it('does not excuse a G1 skip when no event is supplied', () => {
+    expect(aggregateOutcomes({ g1: 'skipped' }).notVerified.g1).toBe('skipped')
+  })
+
   it('builds a record whose evidence is the outcome map', () => {
     const record = gateOutcomesRecord({ g6: 'skipped' })
     expect(record.policy).toBe('POL-PIPE-01')
@@ -191,11 +212,41 @@ describe('each gate reports the policy that owns the failure', () => {
   })
 })
 
+interface CatalogPolicy {
+  readonly action: string
+  readonly decision: string
+  readonly fields: readonly string[]
+}
+
+function catalogPolicies(): ReadonlyMap<string, CatalogPolicy> {
+  const catalog = readFileSync('docs/architecture/runtime-policy-catalog.md', 'utf8')
+  const section = catalog.slice(catalog.indexOf('## Pipeline gates (M6)'))
+  const rows = new Map<string, CatalogPolicy>()
+  for (const line of section.split('\n')) {
+    if (!line.startsWith('| POL-')) continue
+    const cells = line.split('|').map((cell) => cell.trim())
+    rows.set(cells[1]!, {
+      action: cells[3]!,
+      decision: cells[4]!,
+      fields: [...cells[5]!.matchAll(/`([^`]+)`/g)].map((match) => match[1]!),
+    })
+  }
+  return rows
+}
+
 describe('catalog and code agree on the policy set', () => {
   it('lists exactly the policies the builder implements', () => {
-    const catalog = readFileSync('docs/architecture/runtime-policy-catalog.md', 'utf8')
-    const section = catalog.slice(catalog.indexOf('## Pipeline gates (M6)'))
-    const ids = new Set(section.match(/POL-[A-Z0-9-]+/g) ?? [])
-    expect([...ids].sort()).toEqual(Object.keys(POLICY_SPECS).sort())
+    expect([...catalogPolicies().keys()].sort()).toEqual(Object.keys(POLICY_SPECS).sort())
+  })
+
+  it('matches the decision, action and evidence fields for every policy', () => {
+    const rows = catalogPolicies()
+    for (const [id, spec] of Object.entries(POLICY_SPECS)) {
+      const row = rows.get(id)
+      expect(row, id).toBeDefined()
+      expect(row!.decision, id).toBe(spec.decision)
+      expect(row!.action, id).toBe(spec.action)
+      expect([...row!.fields].sort(), id).toEqual([...spec.fields].sort())
+    }
   })
 })

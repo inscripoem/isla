@@ -183,6 +183,7 @@ jobs:
           GATE_G6: ${{ steps.g6.outcome }}
           GATE_G4: ${{ steps.g4.outcome }}
           GATE_BUILD: ${{ steps.build.outcome }}
+          GATE_EVENT: ${{ github.event_name }}
           GATE_BASE_SHA: ${{ steps.changed.outputs.base }}
         run: pnpm gate:aggregate
 
@@ -206,7 +207,7 @@ jobs:
             echo "| Gate | Outcome |"
             echo "| --- | --- |"
             echo "| diff acquisition | ${{ steps.changed.outcome }} — ${{ steps.changed.outputs.count }} file(s) |"
-            echo "| G1 test approval (evidence when the base carries the record) | ${{ steps.g1.outcome }} |"
+            echo "| G1 test approval (evidence when the base carries the record) | ${{ steps.g1.outcome }}${{ github.event_name == 'push' && steps.g1.outcome == 'skipped' && ' — by design, not a pass' || '' }} |"
             echo "| G2 static analysis + boundary | ${{ steps.g2.outcome }} |"
             echo "| G3 requirements schema | ${{ steps.g3.outcome }} |"
             echo "| trace traceability fitness | ${{ steps.trace.outcome }} |"

@@ -18,11 +18,30 @@ export interface AggregateResult {
   readonly failed: boolean
 }
 
-export function aggregateOutcomes(outcomes: Readonly<Record<string, string>>): AggregateResult {
+export interface AggregateOptions {
+  /** GitHub event name. Only an explicit non-PR event excuses a skipped G1. */
+  readonly event?: string | null
+}
+
+export function aggregateOutcomes(
+  outcomes: Readonly<Record<string, string>>,
+  options: AggregateOptions = {},
+): AggregateResult {
   const notVerified: Record<string, string> = {}
   for (const step of GATE_STEPS) {
     const outcome = outcomes[step] ?? 'absent'
-    if (outcome !== 'success') notVerified[step] = outcome
+    if (outcome !== 'success') {
+      // G1 runs only for pull requests. On a push to main its skip is by design,
+      // but it is still not a pass: the record says so instead of hiding it.
+      notVerified[step] =
+        step === 'g1' &&
+        outcome === 'skipped' &&
+        options.event !== undefined &&
+        options.event !== null &&
+        options.event !== 'pull_request'
+          ? 'skipped-by-design'
+          : outcome
+    }
   }
   return { notVerified, failed: Object.keys(notVerified).length > 0 }
 }
@@ -38,7 +57,8 @@ function main(): number {
     g4: process.env.GATE_G4 ?? 'absent',
     build: process.env.GATE_BUILD ?? 'absent',
   }
-  const result = aggregateOutcomes(outcomes)
+  const event = process.env.GATE_EVENT ?? null
+  const result = aggregateOutcomes(outcomes, { event })
   if (!result.failed) {
     process.stdout.write('PIPE: every gate ran and passed\n')
     return 0
@@ -57,7 +77,13 @@ function main(): number {
     )
   }
   for (const [step, outcome] of Object.entries(result.notVerified)) {
-    process.stderr.write(`PIPE: ${step} is ${outcome}, not a pass\n`)
+    if (outcome === 'skipped-by-design') {
+      process.stdout.write(
+        `PIPE: ${step} is skipped by design on ${event ?? 'this event'}, recorded as not-verified\n`,
+      )
+    } else {
+      process.stderr.write(`PIPE: ${step} is ${outcome}, not a pass\n`)
+    }
   }
   return 0 // the failed gate already fails the job; this step only records
 }
