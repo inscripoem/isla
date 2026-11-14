@@ -1,6 +1,9 @@
 # Proposal — gate G1: tests approved before implementation
 
-Status: **proposal — needs the team's agreement (at least half: 3 of 6).** Owner: M6 (R3 tooling).
+Status: **partially adopted 2026-11-13 — the `evidence` mode and
+`docs/code-governance/test-approvals.yaml` now check ordering in-repo; the label remains the
+advisory fallback for bases without the record, and the team's activation decision is still open.**
+Owner: M6 (R3 tooling).
 Revision 2026-10-16.1. Related: `docs/architecture/adr/006-gate-tooling.md`, `.github/PULL_REQUEST_TEMPLATE.md`,
 `docs/debt-register.md` (DEBT-02), `docs/code-governance/structural-constraints.md`.
 

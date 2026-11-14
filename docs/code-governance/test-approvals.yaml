@@ -1,0 +1,24 @@
+# Recorded test approvals for gate G1 (Tier 1).
+#
+# An approval is the durable form of the `tests-approved` label: it names the
+# tests that were agreed, the paths they cover, and when they were agreed. G1 in
+# evidence mode requires the commit that added this file to be an ancestor of the
+# first code commit in the pull request, so the record must be committed before
+# implementation begins.
+#
+# What the gate proves: ordering. What it does not prove: that a human read the
+# tests. That remains a review obligation (ADR-006 delta, 2026-11-13).
+version: "1"
+approvals:
+  - id: TA-001
+    task: "Tier 1 gate enforcement (G1 evidence, G4 claims, G6 references, trace citations and ADR cells)"
+    approved_at: "2026-11-13T08:26:49Z"
+    approved_by: M6
+    scope:
+      - "src/evaluation/"
+      - "test/offline/"
+    tests:
+      - test/offline/test-approval-gate.test.ts
+      - test/offline/eval-gate.test.ts
+      - test/offline/ai-use-log-gate.test.ts
+      - test/offline/trace-fitness.test.ts

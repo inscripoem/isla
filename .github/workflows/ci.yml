@@ -42,7 +42,9 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - name: install
+        id: install
+        run: pnpm install --frozen-lockfile
 
       - name: changed files (the gate diff, acquired once)
         id: changed
@@ -81,6 +83,7 @@ jobs:
             : > .cache/ai-use-log.base.yaml
           fi
           COUNT="$(tr -cd '\0' < .cache/changed-files.nul | wc -c | tr -d ' ')"
+          echo "base=$BASE" >> "$GITHUB_OUTPUT"
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
           # Pin the trusted default-branch revision once, only for a feature-branch
           # push. Every other event leaves it empty, so the trace gate stays strict.
@@ -96,24 +99,38 @@ jobs:
           echo "trusted default-branch baseline: ${BASELINE:-none}"
           echo "changed files: $COUNT"
 
-      - name: G1 - test approval (advisory until the team enables it)
+      - name: G1 - test approval (evidence once the record exists at the base)
         id: g1
-        if: github.event_name == 'pull_request'
+        if: always() && steps.install.outcome == 'success' && github.event_name == 'pull_request'
         env:
           PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
           CHANGED_FILES_FILE: .cache/changed-files.nul
-        run: pnpm gate:test-approval advise
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          GATE_BASE_SHA: ${{ steps.changed.outputs.base }}
+        run: |
+          set -euo pipefail
+          # A pull request whose base already carries the approval record is gated
+          # on ordering evidence; an older base keeps the label rule, so enabling
+          # the record does not retroactively fail pull requests opened before it.
+          if git cat-file -e "$PR_BASE_SHA:docs/code-governance/test-approvals.yaml" 2>/dev/null; then
+            pnpm gate:test-approval evidence
+          else
+            pnpm gate:test-approval advise
+          fi
 
       - name: G2 - static analysis (typecheck + lint)
         id: g2
+        if: always() && steps.install.outcome == 'success'
         run: pnpm typecheck && pnpm lint
 
       - name: G3 - requirements schema + import/permission boundaries
         id: g3
+        if: always() && steps.install.outcome == 'success'
         run: pnpm test:readiness
 
       - name: trace - traceability fitness functions
         id: trace
+        if: always() && steps.install.outcome == 'success'
         env:
           # The frozen-path check runs against the diff acquired above. The pinned
           # baseline is offered only for a feature-branch push; the gate verifies its
@@ -126,12 +143,19 @@ jobs:
           GITHUB_REF_NAME: ${{ github.ref_name }}
         run: pnpm test:trace
 
+      - name: trace - failure records
+        id: trace-records
+        if: always() && steps.install.outcome == 'success'
+        run: pnpm gate:trace
+
       - name: G5 - regression (all offline suites)
         id: g5
+        if: always() && steps.install.outcome == 'success'
         run: pnpm test
 
       - name: G6 - AI-use log updated for code/prompt changes
         id: g6
+        if: always() && steps.install.outcome == 'success'
         env:
           CHANGED_FILES_FILE: .cache/changed-files.nul
           AI_USE_LOG_BASE_FILE: .cache/ai-use-log.base.yaml
@@ -139,11 +163,37 @@ jobs:
 
       - name: G4 - semantic evaluation (reported not run without an evaluation set)
         id: g4
+        if: always() && steps.install.outcome == 'success'
         run: pnpm gate:eval
 
       - name: build
         id: build
+        if: always() && steps.install.outcome == 'success'
         run: pnpm build
+
+      - name: PIPE - record gates that did not run
+        id: pipe
+        if: always()
+        env:
+          GATE_G1: ${{ steps.g1.outcome }}
+          GATE_G2: ${{ steps.g2.outcome }}
+          GATE_G3: ${{ steps.g3.outcome }}
+          GATE_TRACE: ${{ steps.trace.outcome }}
+          GATE_G5: ${{ steps.g5.outcome }}
+          GATE_G6: ${{ steps.g6.outcome }}
+          GATE_G4: ${{ steps.g4.outcome }}
+          GATE_BUILD: ${{ steps.build.outcome }}
+          GATE_BASE_SHA: ${{ steps.changed.outputs.base }}
+        run: pnpm gate:aggregate
+
+      - name: upload gate failure records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-failures
+          path: .cache/gate-failures/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: gate summary
         if: always()
@@ -156,7 +206,7 @@ jobs:
             echo "| Gate | Outcome |"
             echo "| --- | --- |"
             echo "| diff acquisition | ${{ steps.changed.outcome }} — ${{ steps.changed.outputs.count }} file(s) |"
-            echo "| G1 test approval (advisory) | ${{ steps.g1.outcome }} |"
+            echo "| G1 test approval (evidence when the base carries the record) | ${{ steps.g1.outcome }} |"
             echo "| G2 static analysis + boundary | ${{ steps.g2.outcome }} |"
             echo "| G3 requirements schema | ${{ steps.g3.outcome }} |"
             echo "| trace traceability fitness | ${{ steps.trace.outcome }} |"
@@ -164,4 +214,14 @@ jobs:
             echo "| G6 AI-use log | ${{ steps.g6.outcome }} |"
             echo "| G4 semantic eval (not run without an evaluation set) | ${{ steps.g4.outcome }} |"
             echo "| build | ${{ steps.build.outcome }} |"
+            echo ""
+            count=0
+            if [ -d .cache/gate-failures ]; then
+              count=$(find .cache/gate-failures -name '*.json' | wc -l | tr -d ' ')
+            fi
+            echo "Failure records: ${count}"
+            for record in .cache/gate-failures/*.json; do
+              [ -e "$record" ] || continue
+              echo "- $(basename "$record")"
+            done
           } >> "$GITHUB_STEP_SUMMARY"
