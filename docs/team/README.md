@@ -36,7 +36,7 @@ The [delivery plan](DELIVERY-PLAN.en.md) contains the full schedule and acceptan
 
 Use the [project README](../../README.md) for setup and run commands. Ask an agent to read [AGENTS.md](../../AGENTS.md), identify your role and inspect the next unfinished slice. Confirm its plan before code changes. Members do not need to repeat the project instructions or read every handoff before starting. [PLAN](PLAN.en.md) preserves the allocation and working directories; [READINESS-KITS](READINESS-KITS.en.md) gives the role commands and fixture-replacement instructions. [INTERFACES](INTERFACES.en.md) defines shared changes and consumer handoffs.
 
-Use the short PR template for routine changes and include interface/state details when they change. Required checks and affected-consumer review still apply. Agents may publish only when explicitly authorized; a human performs the final PR merge and coursework upload.
+Use the short PR template for routine changes and include interface/state details when they change. Required checks and affected-consumer review still apply. Agents may publish only when explicitly authorized; a human performs the final PR merge and coursework upload. Git-mutation authorization and credential-handling limits are user-level agent rules; repository text governs publication and merge. The detailed secret-handling policy remains in [the MCP/tool manifest](../code-governance/mcp-tool-manifest.md) §4.
 
 ## Reference material
 
