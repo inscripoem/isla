@@ -192,3 +192,13 @@ bug: **symptom, reproduction, classification, root cause, fix, and the invariant
 - Invariant gap: no registered invariant covers prose claims about live configuration, and an
   offline test cannot read a live ruleset, so the guard is review plus the recorded rule — not a
   test. Recorded as DEBT-08.
+
+## BUG-018 — Provenance renderer trusted its caller (pre-merge)
+- Symptom: `renderEvaluationReport` would print a companion whose `runId` or occurrence-key set belonged to another run.
+- Reproduction: pass a companion built for a different run to the renderer directly.
+- Classification: evidence integrity (ADR-008 D8).
+- Root cause: the binding was validated only in the command, not at the exported renderer boundary.
+- Fix: the binding rule moved to `provenanceBindingViolations` and is applied by both the parser and the renderer (`c210260` on #140).
+- Status: found in the M6 CORE review before merge; fixed on the branch; never on `main`.
+- Invariant gap: evidence attribution had no check at the renderer API.
+
