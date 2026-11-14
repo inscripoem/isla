@@ -5722,3 +5722,44 @@ entries:
         disabling the same-path check turned the command test red; both restored.
       not_run: >-
         No Windows host; no live provider; M5 re-review and merge remain.
+
+  - date: "2026-11-14"
+    task: "M6-140 aliased evidence-path fix and rebase"
+    branch: m6-02-provenance
+    change: >-
+      Close M5's remaining evidence-preservation case and M4's recorded residual.
+      The report command now compares device+inode for existing paths and the real
+      parent path for a file that does not exist, so a symlinked parent, a symlink
+      or a hard link to the provenance is refused; the same rule refuses an output
+      equal to the input run file. The writer creates its predictable temporary
+      file with O_EXCL, so a file at that name is neither truncated nor deleted by
+      cleanup. ADR-008 row 4 records M5's confirmation without claiming adoption or
+      scoring. The branch was rebased onto main and its own AI-use commit links were
+      repointed to the rebased commits.
+    requirements: [FR-06, NFR-04]
+    invariants: [INV-16]
+    cases: []
+    commits: [04cdea6]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      M6 approved the realpath/inode fix, the regression tests, the ADR status and
+      the rebase. Kept local until the full suite and own adversarial checks passed.
+    human_review: >-
+      M6 approved the fix scope. No independent review or merge is claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id is
+      claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: c8605e2 (main)
+      focused: "provenance suites 61/61; report + command 59/59."
+      role: "test:m6 248/248; test:trace 41/41; readiness 47/47."
+      full_suite: "pnpm verify exit 0: 1611/1611 in 76 files."
+      mutation: >-
+        Three mutations turned their tests red and were restored: the resolve()
+        comparison (3 failed), the input-collision check (1 failed), and exclusive
+        temp creation (1 failed).
+      not_run: >-
+        No remote CI after the push, no provider call, no CP05 scoring.
