@@ -5119,7 +5119,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: []
     cases: []
-    commits: [8155434]
+    commits: ["8155434"]
     agent: opencode/deepseek-v4.1-flash
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -5578,7 +5578,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: [INV-16]
     cases: []
-    commits: [8398830]
+    commits: ["8398830"]
     agent: opencode/deepseek-v4.1-flash
     provider: opencode-go
     model: deepseek-v4.1-flash
