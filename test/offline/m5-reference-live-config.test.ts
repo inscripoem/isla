@@ -230,4 +230,39 @@ describe('parseReferenceLiveConfig', () => {
     );
     expect(error.message).not.toContain('sk-live-example-value');
   });
+
+  it('rejects a non-https, non-loopback text base URL by name', () => {
+    const env = { ...validEnv(), ISLA_LIVE_TEXT_BASE_URL: 'http://text.example.test/v1' };
+    expect(() => parseReferenceLiveConfig(env)).toThrow('ISLA_LIVE_TEXT_BASE_URL');
+  });
+
+  it('accepts loopback http for text and a wss VTS endpoint', () => {
+    const env = {
+      ...validEnv(),
+      ISLA_LIVE_TEXT_BASE_URL: 'http://127.0.0.1:8080/v1',
+      ISLA_VTS_WS_URL: 'wss://127.0.0.1:8001',
+    };
+    expect(parseReferenceLiveConfig(env).text.baseUrl).toBe('http://127.0.0.1:8080/v1');
+  });
+
+  it('rejects a non-websocket VTS URL by name', () => {
+    const env = { ...validEnv(), ISLA_VTS_WS_URL: 'https://vts.example.test' };
+    expect(() => parseReferenceLiveConfig(env)).toThrow('ISLA_VTS_WS_URL');
+  });
+
+  it('rejects an origin with a path instead of silently dropping it', () => {
+    const env = { ...validEnv(), ISLA_ALLOWED_ORIGINS: 'https://app.example.test/path' };
+    expect(() => parseReferenceLiveConfig(env)).toThrow('ISLA_ALLOWED_ORIGINS');
+  });
+
+  it('canonicalizes origins and rejects an invalid host entry', () => {
+    const config = parseReferenceLiveConfig({
+      ...validEnv(),
+      ISLA_ALLOWED_ORIGINS: 'https://app.example.test/,https://app.example.test',
+    });
+    expect(config.allowedOrigins).toEqual(['https://app.example.test']);
+    expect(() =>
+      parseReferenceLiveConfig({ ...validEnv(), ISLA_ALLOWED_HOSTS: 'bad host!' }),
+    ).toThrow('ISLA_ALLOWED_HOSTS');
+  });
 });

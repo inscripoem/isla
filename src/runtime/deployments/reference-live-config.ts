@@ -69,6 +69,47 @@ function isStringRecord(value: unknown): value is Record<string, string> {
   return true;
 }
 
+function isHttpsOrLoopbackHttp(raw: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (url.protocol === 'https:') return true;
+  if (url.protocol !== 'http:') return false;
+  const hostname = url.hostname.replace(/^\[|\]$/g, '');
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+}
+
+function isWebSocketUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw);
+    return url.protocol === 'ws:' || url.protocol === 'wss:';
+  } catch {
+    return false;
+  }
+}
+
+/** Returns the canonical `scheme://host` origin, or null for anything else. */
+function canonicalOrigin(raw: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+  if (url.pathname !== '/' || url.search.length > 0 || url.hash.length > 0) return null;
+  if (url.username.length > 0 || url.password.length > 0) return null;
+  return `${url.protocol}//${url.host}`;
+}
+
+/** Host header entries are a hostname or bracketed IPv6, optionally with a port. */
+function isValidHostEntry(raw: string): boolean {
+  return /^(?:\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+)(?::\d{1,5})?$/.test(raw);
+}
+
 export function parseReferenceLiveConfig(env: Env): ReferenceLiveConfig {
   const invalid = new Set<string>();
 
@@ -82,9 +123,15 @@ export function parseReferenceLiveConfig(env: Env): ReferenceLiveConfig {
   };
 
   const textBaseUrl = required(TEXT_BASE_URL);
+  if (textBaseUrl.length > 0 && !isHttpsOrLoopbackHttp(textBaseUrl)) {
+    invalid.add(TEXT_BASE_URL);
+  }
   const textModel = required(TEXT_MODEL);
   const textApiKey = required(TEXT_API_KEY);
   const vtsWsUrl = required(VTS_WS_URL);
+  if (vtsWsUrl.length > 0 && !isWebSocketUrl(vtsWsUrl)) {
+    invalid.add(VTS_WS_URL);
+  }
   const vtsPluginName = required(VTS_PLUGIN_NAME);
   const vtsPluginDeveloper = required(VTS_PLUGIN_DEVELOPER);
   const vtsTokenPath = required(VTS_TOKEN_PATH);
@@ -113,14 +160,25 @@ export function parseReferenceLiveConfig(env: Env): ReferenceLiveConfig {
   if (originsRaw === undefined) {
     invalid.add(ALLOWED_ORIGINS);
   } else {
-    allowedOrigins = splitList(originsRaw);
-    if (allowedOrigins.length === 0) {
+    const entries = splitList(originsRaw);
+    const canonical = entries.map(canonicalOrigin);
+    if (entries.length === 0 || canonical.some((origin) => origin === null)) {
       invalid.add(ALLOWED_ORIGINS);
+    } else {
+      allowedOrigins = [...new Set(canonical as string[])];
     }
   }
 
   const hostsRaw = readTrimmed(env, ALLOWED_HOSTS);
-  const allowedHosts = hostsRaw === undefined ? [] : splitList(hostsRaw);
+  let allowedHosts: string[] = [];
+  if (hostsRaw !== undefined) {
+    const hosts = splitList(hostsRaw);
+    if (hosts.some((host) => !isValidHostEntry(host))) {
+      invalid.add(ALLOWED_HOSTS);
+    } else {
+      allowedHosts = hosts;
+    }
+  }
 
   if (invalid.size > 0) {
     throw new Error(
