@@ -31,7 +31,7 @@ requirement or case ID.
 ## Blockers and owners
 
 - **Corpus, held-out split** — M3, #98.
-- **Rubric, labels, condition eligibility** — M4, #99: the rubric remains a comment-first draft posted 2026-11-09, still without M3/M6 feedback, with repository-file integration planned for the 2026-11-13 week. M4
+- **Rubric, labels, condition eligibility** — M4, #99: the rubric is filed in-repo via #154 (`f99e2f5`, proposed v0.1); #99 acceptance remains open pending M3/M6 confirmation. M4
   [answered the five #145 questions](https://github.com/inscripoem/isla/pull/145#pullrequestreview-5822403599)
   as proposed positions, not an interface approval. At this snapshot the M3/M5 answers were not yet
   recorded; M5 answered on 2026-11-09 and M3 on 2026-11-10, after it.
