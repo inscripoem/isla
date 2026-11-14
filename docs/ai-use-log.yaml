@@ -5717,3 +5717,48 @@ entries:
       mutation: "No behaviour change in this slice; the earlier audience/version mutations stand."
       not_run: >-
         No M4 adapter, no M5 runtime wiring, no push before the local run, no CP08.
+
+  - date: "2026-11-14"
+    task: "M6 memory durable/consent gate and per-audience retention"
+    branch: m6-memory-foundation
+    change: >-
+      Apply M5's 2026-11-14 decision. recordDeliveryOwner, upsertEpisode and
+      upsertTopic now refuse unless the session binding is both durable and
+      consenting (a topic needs one such binding for its audience); rebuildDerived
+      throws and rolls back when a session or topic audience lacks one; a derived
+      episode naming a different audience is refused. deleteOlderThan takes an
+      audienceId and filters every table by audience, so no global by-age delete
+      remains. Session state stays session-scoped and exempt. INV-17, C-76, C-78,
+      ADR-009, the design note and the trace rows record the decision; C-76 moves
+      to implemented.
+    requirements: [FR-06, NFR-03, NFR-05]
+    invariants: [INV-17]
+    cases: [C-76, C-78]
+    commits: [21a49d7]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      M6 approved the plan, including the strict reading that null-audience
+      derived rows are also gated, and required the two M5 semantics to land with
+      tests and mutation checks.
+    human_review: >-
+      M6 approved the scope and the local verification. No independent review,
+      merge or checkpoint acceptance is claimed.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id is
+      claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main at branch point)
+      focused: "memory store 28/28."
+      role: "test:m6 224/224 in 16 files; trace 41/41; readiness 47/47."
+      full_suite: "pnpm verify exit 0: 1587/1587 in 76 files."
+      mutation: >-
+        Five mutations each turned a test red and were restored: dropping the
+        owner durable check, dropping the retention audience filter, dropping the
+        rebuild session gate, dropping the derived-write gate, and dropping the
+        episode audience equality check.
+      not_run: >-
+        No M4 adapter, no M5 runtime wiring, no push before the local run, no
+        CP08 acceptance.
