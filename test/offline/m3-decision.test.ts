@@ -16,6 +16,8 @@ import type {
   ReactionPort,
   SelectionPort,
   SelectionRequest,
+  SelectionResult,
+  SynthesisPort,
 } from '../../src/contracts'
 import { selectionResultSchema } from '../../src/contracts'
 import {
@@ -30,7 +32,7 @@ import { collectDecisionViolations } from '../conformance/decision.conformance'
 import * as correct from '../support/correct-ports'
 import * as faulty from '../support/faulty-ports'
 import { createCallContext, createGate } from '../support/context'
-import { createCountingPlayer } from '../support/gated-ports'
+import { createCapturingDialoguePort, createCountingPlayer } from '../support/gated-ports'
 import {
   DecisionCorpusError,
   decisionReferenceLabelSchema,
@@ -1506,5 +1508,498 @@ describe('M3 NFR-03 rubric artifact', () => {
     expect(rubric).toContain('not a fifth')
     expect(rubric).toContain('partial')
     expect(rubric).toContain('unassessed')
+  })
+})
+
+describe('M3 x M5 coordinator selection timeout, invalid-proposal and fallback verification (#104)', () => {
+  type Runner = ReturnType<typeof createCoordinatorRunner>
+
+  function selectionCalls(runner: Runner): Array<Record<string, unknown>> {
+    return runner
+      .events()
+      .filter((event) => event.type === 'provider.call')
+      .map((event) => event.payload as Record<string, unknown>)
+      .filter((entry) => entry.call === 'selection')
+  }
+
+  function selectionCall(runner: Runner): Record<string, unknown> | undefined {
+    return selectionCalls(runner)[0]
+  }
+
+  function selectionPlan(
+    runner: Runner,
+  ): { plan?: SelectionResult; synthetic?: boolean } | undefined {
+    const event = runner.events().find((candidate) => candidate.type === 'selection.plan')
+    return event?.payload as { plan?: SelectionResult; synthetic?: boolean } | undefined
+  }
+
+  function turnStarted(runner: Runner): Record<string, unknown> | undefined {
+    const event = runner.events().find((candidate) => candidate.type === 'turn.started')
+    return event?.payload as Record<string, unknown> | undefined
+  }
+
+  function staleStages(runner: Runner): Array<string | undefined> {
+    return runner
+      .events()
+      .filter((event) => event.type === 'result.stale')
+      .map((event) => (event.payload as { stage?: string }).stage)
+  }
+
+  function countingSynthesis(): { port: SynthesisPort; calls: () => number } {
+    const base = correct.createFixtureSynthesisPort()
+    let calls = 0
+    return {
+      calls: () => calls,
+      port: {
+        async prepare(request, context) {
+          calls += 1
+          return base.prepare(request, context)
+        },
+      },
+    }
+  }
+
+  function correlatedRespond(
+    request: SelectionRequest,
+    overrides: Partial<SelectionResult> = {},
+  ): SelectionResult {
+    return fixtureSelectionResult({
+      requestId: request.requestId,
+      sessionId: request.sessionId,
+      epoch: request.epoch,
+      snapshotRevision: request.snapshotRevision,
+      disposition: 'respond',
+      selectedEventIds: [request.candidates[0]!.eventId],
+      replyIntent: 'answer',
+      ...overrides,
+    })
+  }
+
+  interface HeldSelection {
+    readonly selection: SelectionPort
+    readonly entered: Promise<void>
+    request(): SelectionRequest | null
+    release(value: unknown): void
+    reject(error: unknown): void
+  }
+
+  function heldSelection(): HeldSelection {
+    const entered = createGate()
+    let request: SelectionRequest | null = null
+    let resolveHeld: ((value: SelectionResult) => void) | null = null
+    let rejectHeld: ((error: unknown) => void) | null = null
+    return {
+      selection: {
+        select(candidate) {
+          request = candidate
+          entered.release()
+          return new Promise<SelectionResult>((resolve, reject) => {
+            resolveHeld = resolve
+            rejectHeld = reject
+          })
+        },
+      },
+      entered: entered.promise,
+      request: () => request,
+      release: (value) => resolveHeld?.(value as SelectionResult),
+      reject: (error) => rejectHeld?.(error),
+    }
+  }
+
+  it('C-05 times out an in-flight selection and suppresses the late resolved result', async () => {
+    const held = heldSelection()
+    const dialogue = createCapturingDialoguePort(correct.createFixtureDialoguePort())
+    const synthesis = countingSynthesis()
+    const renderer = correct.createCountingRenderer(correct.createFixtureRendererPort())
+    const player = createCountingPlayer(correct.createFixturePlayer())
+    const runner = createCoordinatorRunner({
+      selection: held.selection,
+      dialogue,
+      synthesis: synthesis.port,
+      renderer,
+      player,
+      timings: { selectionMs: 20 },
+    })
+    await runner.resume()
+    await runner.accept('held selection')
+
+    const turn = await runner.runTurn()
+    expect(turn.status).toBe('stale')
+    expect(turn.plan).toBeNull()
+    expect(turn.deliveries).toEqual([])
+    expect(runner.rejectedLate()).toBe(1)
+    expect(runner.selectionCalls()).toBe(1)
+    expect(selectionCalls(runner)).toHaveLength(1)
+    expect(selectionCall(runner)?.disposition).toBe('timeout')
+    expect(staleStages(runner)).toContain('selection')
+    expect(dialogue.requests()).toEqual([])
+    expect(synthesis.calls()).toBe(0)
+    expect(renderer.calls()).toBe(0)
+    expect(player.executeCalls()).toBe(0)
+    expect(runner.deliveries()).toHaveLength(0)
+
+    const request = held.request()
+    expect(request).not.toBeNull()
+    held.release(correlatedRespond(request!))
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(dialogue.requests()).toEqual([])
+    expect(synthesis.calls()).toBe(0)
+    expect(renderer.calls()).toBe(0)
+    expect(player.executeCalls()).toBe(0)
+    expect(runner.deliveries()).toHaveLength(0)
+  })
+
+  it('C-05 rejects a schema-valid selection returned exactly at the deadline', async () => {
+    let boundClock: VirtualClock | undefined
+    const selection: SelectionPort = {
+      async select(request) {
+        boundClock!.set(request.deadline.atMs)
+        return correlatedRespond(request)
+      },
+    }
+    const dialogue = createCapturingDialoguePort(correct.createFixtureDialoguePort())
+    const player = createCountingPlayer(correct.createFixturePlayer())
+    const runner = createCoordinatorRunner({ selection, dialogue, player })
+    boundClock = runner.clock
+    await runner.resume()
+    await runner.accept('deadline exact selection')
+
+    const turn = await runner.runTurn()
+    expect(turn.status).toBe('stale')
+    expect(turn.plan).toBeNull()
+    expect(turn.deliveries).toEqual([])
+    expect(runner.selectionCalls()).toBe(1)
+    expect(selectionCall(runner)?.disposition).toBe('rejected')
+    expect(runner.rejectedLate()).toBe(1)
+    expect(staleStages(runner)).toContain('selection')
+    expect(dialogue.requests()).toEqual([])
+    expect(player.executeCalls()).toBe(0)
+    expect(runner.deliveries()).toHaveLength(0)
+  })
+
+  it('C-05 keeps non-blocking speech when the reaction times out to a no-op', async () => {
+    let selectionPort: SelectionPort | undefined
+    let reactionPort: ReactionPort | undefined
+    const selection: SelectionPort = {
+      select: (request, context) => selectionPort!.select(request, context),
+    }
+    const reaction: ReactionPort = {
+      decide: (request, context) => reactionPort!.decide(request, context),
+    }
+    const dialogue = createCapturingDialoguePort(correct.createFixtureDialoguePort())
+    const synthesis = countingSynthesis()
+    const renderer = correct.createCountingRenderer(correct.createFixtureRendererPort())
+    const player = createCountingPlayer(correct.createFixturePlayer())
+    const runner = createCoordinatorRunner({
+      selection,
+      reaction,
+      dialogue,
+      synthesis: synthesis.port,
+      renderer,
+      player,
+    })
+    selectionPort = createRuleSelectionPort({ clock: runner.clock })
+    const baseReaction = createRuleReactionPort({ clock: runner.clock })
+    reactionPort = {
+      async decide(request, context) {
+        const decision = await baseReaction.decide(request, context)
+        runner.clock.advance(request.deadline.atMs - runner.clock.nowMs() + 1)
+        return decision
+      },
+    }
+    await runner.resume()
+    await runner.accept('reaction timeout contrast')
+
+    const turn = await runner.runTurn()
+    expect(turn.status).toBe('completed')
+    expect(renderer.calls()).toBe(0)
+    expect(synthesis.calls()).toBe(1)
+    expect(player.executeCalls()).toBe(1)
+    expect(runner.deliveries()).toHaveLength(1)
+    expect(runner.deliveries()[0]?.classification).toBe('fully-delivered')
+    const reactionCall = runner
+      .events()
+      .filter((event) => event.type === 'provider.call')
+      .map((event) => event.payload as Record<string, unknown>)
+      .find((entry) => entry.call === 'reaction')
+    expect(reactionCall?.disposition).toBe('timeout')
+  })
+
+  it('C-14/#88 records an ordinary rejection as failed and applies the answer fallback', async () => {
+    const selection: SelectionPort = {
+      async select() {
+        throw new SelectionCallError('invalid-deadline', 'simulated fault')
+      },
+    }
+    const player = createCountingPlayer(correct.createFixturePlayer())
+    const runner = createCoordinatorRunner({ selection, player })
+    await runner.resume()
+    await runner.accept('ordinary rejection')
+
+    const turn = await runner.runTurn()
+    expect(turn.status).toBe('completed')
+    expect(selectionCall(runner)?.disposition).toBe('failed')
+    const plan = selectionPlan(runner)
+    expect(plan?.synthetic).toBe(true)
+    expect(plan?.plan?.reasonCode).toBe('m5-fallback')
+    expect(plan?.plan?.replyIntent).toBe('answer')
+    expect(turn.plan?.reasonCode).toBe('m5-fallback')
+    expect(player.executeCalls()).toBe(1)
+    expect(runner.deliveries()).toHaveLength(1)
+    expect(runner.deliveries()[0]?.classification).toBe('fully-delivered')
+  })
+
+  it('C-14/#88 records every resolved invalid proposal as invalid before falling back', async () => {
+    const variants: Array<{
+      name: string
+      selection: SelectionPort
+      profile?: { allowedIntents: Array<'answer'> }
+    }> = [
+      {
+        name: 'schema-invalid',
+        selection: {
+          async select() {
+            return { nope: true } as never
+          },
+        },
+      },
+      {
+        name: 'respond-zero-ids',
+        selection: {
+          async select(request) {
+            return correlatedRespond(request, { selectedEventIds: [] })
+          },
+        },
+      },
+      {
+        name: 'respond-two-ids',
+        selection: {
+          async select(request) {
+            return correlatedRespond(request, {
+              selectedEventIds: [request.candidates[0]!.eventId, 'event-unoffered'],
+            })
+          },
+        },
+      },
+      {
+        name: 'mis-correlated-request-id',
+        selection: {
+          async select(request) {
+            return correlatedRespond(request, { requestId: `${request.requestId}-mismatch` })
+          },
+        },
+      },
+      {
+        name: 'mis-correlated-snapshot-revision',
+        selection: {
+          async select(request) {
+            return correlatedRespond(request, {
+              snapshotRevision: request.snapshotRevision + 1,
+            })
+          },
+        },
+      },
+      {
+        name: 'unoffered-candidate',
+        selection: {
+          async select(request) {
+            return correlatedRespond(request, { selectedEventIds: ['event-not-offered'] })
+          },
+        },
+      },
+      {
+        name: 'disallowed-intent',
+        selection: {
+          async select(request) {
+            return correlatedRespond(request, { replyIntent: 'clarify' })
+          },
+        },
+        profile: { allowedIntents: ['answer'] },
+      },
+    ]
+
+    for (const variant of variants) {
+      const player = createCountingPlayer(correct.createFixturePlayer())
+      const runner = createCoordinatorRunner({
+        selection: variant.selection,
+        player,
+        ...(variant.profile !== undefined ? { profile: variant.profile } : {}),
+      })
+      await runner.resume()
+      await runner.accept(`invalid proposal ${variant.name}`)
+
+      const turn = await runner.runTurn()
+      expect(turn.status).toBe('completed')
+      expect(selectionCall(runner)?.disposition).toBe('invalid')
+      const plan = selectionPlan(runner)
+      expect(plan?.synthetic).toBe(true)
+      expect(plan?.plan?.reasonCode).toBe('m5-fallback')
+      expect(plan?.plan?.replyIntent).toBe('answer')
+      expect(player.executeCalls()).toBe(1)
+      expect(runner.deliveries()).toHaveLength(1)
+      expect(runner.deliveries()[0]?.classification).toBe('fully-delivered')
+    }
+  })
+
+  it('C-16 passes a non-default accepted reply intent through deterministically', async () => {
+    for (const intent of ['clarify', 'support'] as const) {
+      const dialogue = createCapturingDialoguePort(correct.createFixtureDialoguePort())
+      const selection: SelectionPort = {
+        async select(request) {
+          return correlatedRespond(request, { replyIntent: intent })
+        },
+      }
+      const runner = createCoordinatorRunner({ selection, dialogue })
+      await runner.resume()
+      await runner.accept(`${intent} intent`)
+
+      const turn = await runner.runTurn()
+      expect(turn.status).toBe('completed')
+      expect(selectionCall(runner)?.disposition).toBe('accepted')
+      expect(selectionPlan(runner)?.synthetic).toBe(false)
+      expect(selectionPlan(runner)?.plan?.replyIntent).toBe(intent)
+      expect(dialogue.requests()).toHaveLength(1)
+      expect(dialogue.requests()[0]?.responsePlan.replyIntent).toBe(intent)
+      expect(turnStarted(runner)?.replyIntent).toBe(intent)
+    }
+  })
+
+  it('C-16 defers instead of mislabelling a disallowed answer fallback', async () => {
+    const selection: SelectionPort = {
+      async select(request) {
+        return correlatedRespond(request, { selectedEventIds: ['event-not-offered'] })
+      },
+    }
+    const dialogue = createCapturingDialoguePort(correct.createFixtureDialoguePort())
+    const player = createCountingPlayer(correct.createFixturePlayer())
+    const runner = createCoordinatorRunner({
+      selection,
+      dialogue,
+      player,
+      profile: { allowedIntents: ['clarify', 'acknowledge'] },
+    })
+    await runner.resume()
+    await runner.accept('fallback disallowed')
+
+    const turn = await runner.runTurn()
+    expect(turn.status).toBe('deferred')
+    expect(turn.plan?.reasonCode).not.toBe('m5-fallback')
+    expect(selectionPlan(runner)).toBeUndefined()
+    expect(dialogue.requests()).toEqual([])
+    expect(player.executeCalls()).toBe(0)
+    expect(runner.deliveries()).toHaveLength(0)
+    expect(runner.events().some((event) => event.type === 'turn.started')).toBe(false)
+  })
+
+  it('C-16 defers when every candidate expires before the fallback can run', async () => {
+    let boundClock: VirtualClock | undefined
+    const selection: SelectionPort = {
+      async select(request) {
+        boundClock!.advance(60)
+        return correlatedRespond(request, { selectedEventIds: ['event-not-offered'] })
+      },
+    }
+    const dialogue = createCapturingDialoguePort(correct.createFixtureDialoguePort())
+    const player = createCountingPlayer(correct.createFixturePlayer())
+    const runner = createCoordinatorRunner({
+      selection,
+      dialogue,
+      player,
+      inputTtlMs: 50,
+      timings: { selectionMs: 200 },
+    })
+    boundClock = runner.clock
+    await runner.resume()
+    await runner.accept('candidate expired before fallback')
+
+    const turn = await runner.runTurn()
+    expect(turn.status).toBe('deferred')
+    expect(turn.deliveries).toEqual([])
+    expect(dialogue.requests()).toEqual([])
+    expect(player.executeCalls()).toBe(0)
+    expect(runner.deliveries()).toHaveLength(0)
+    expect(runner.events().some((event) => event.type === 'turn.started')).toBe(false)
+  })
+
+  it('C-16 never falls back after Stop or a superseded snapshot', async () => {
+    const stoppedHeld = heldSelection()
+    const stoppedDialogue = createCapturingDialoguePort(correct.createFixtureDialoguePort())
+    const stoppedPlayer = createCountingPlayer(correct.createFixturePlayer())
+    const stoppedRunner = createCoordinatorRunner({
+      selection: stoppedHeld.selection,
+      dialogue: stoppedDialogue,
+      player: stoppedPlayer,
+    })
+    await stoppedRunner.resume()
+    await stoppedRunner.accept('stop during selection')
+    const stoppedTurnPromise = stoppedRunner.runTurn()
+    await stoppedHeld.entered
+    await stoppedRunner.stop()
+    stoppedHeld.release({ nope: true })
+    const stoppedTurn = await stoppedTurnPromise
+    expect(stoppedTurn.status).toBe('stale')
+    expect(stoppedTurn.plan).toBeNull()
+    expect(stoppedTurn.deliveries).toEqual([])
+    expect(stoppedRunner.rejectedLate()).toBe(1)
+    expect(stoppedDialogue.requests()).toEqual([])
+    expect(stoppedPlayer.executeCalls()).toBe(0)
+    expect(stoppedRunner.deliveries()).toHaveLength(0)
+    expect(
+      stoppedRunner.events().some((event) => event.type === 'selection.plan'),
+    ).toBe(false)
+
+    const supersededHeld = heldSelection()
+    const supersededDialogue = createCapturingDialoguePort(correct.createFixtureDialoguePort())
+    const supersededPlayer = createCountingPlayer(correct.createFixturePlayer())
+    const supersededRunner = createCoordinatorRunner({
+      selection: supersededHeld.selection,
+      dialogue: supersededDialogue,
+      player: supersededPlayer,
+    })
+    await supersededRunner.resume()
+    await supersededRunner.accept('held snapshot')
+    const supersededTurnPromise = supersededRunner.runTurn()
+    await supersededHeld.entered
+    await supersededRunner.accept('new message arriving mid-selection')
+    supersededHeld.release({ nope: true })
+    const supersededTurn = await supersededTurnPromise
+    expect(supersededTurn.status).toBe('stale')
+    expect(supersededTurn.plan).toBeNull()
+    expect(supersededTurn.deliveries).toEqual([])
+    expect(selectionCall(supersededRunner)?.disposition).toBe('rejected')
+    expect(supersededRunner.rejectedLate()).toBe(1)
+    expect(supersededDialogue.requests()).toEqual([])
+    expect(supersededPlayer.executeCalls()).toBe(0)
+    expect(supersededRunner.deliveries()).toHaveLength(0)
+    expect(
+      supersededRunner.events().some((event) => event.type === 'selection.plan'),
+    ).toBe(false)
+  })
+
+  it('C-15 accounts one provider attempt for an accepted defer until new input arrives', async () => {
+    const runner = createCoordinatorRunner({
+      selection: correct.createDeferringSelectionPort(),
+    })
+    await runner.resume()
+    await runner.accept('deferred wait accounting')
+
+    const first = await runner.runTurn()
+    expect(first.status).toBe('deferred')
+    expect(selectionCall(runner)?.disposition).toBe('accepted')
+    expect(selectionPlan(runner)?.synthetic).toBe(false)
+    expect(selectionPlan(runner)?.plan?.disposition).toBe('defer')
+    expect(runner.selectionCalls()).toBe(1)
+
+    const repeated = await runner.runTurn()
+    expect(repeated.status).toBe('deferred')
+    expect(runner.selectionCalls()).toBe(1)
+    expect(selectionCalls(runner)).toHaveLength(1)
+
+    await runner.accept('follow-up question')
+    const followUp = await runner.runTurn()
+    expect(followUp.status).toBe('deferred')
+    expect(runner.selectionCalls()).toBe(2)
+    expect(selectionCalls(runner)).toHaveLength(2)
   })
 })

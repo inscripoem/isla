@@ -5332,6 +5332,67 @@ entries:
       Git-metadata test. The delivery candidate uses the same source and test
       files but excludes the temporary probe workflow and its extra records.
       See https://github.com/inscripoem/isla/actions/runs/42970448971.
+
+  - date: "2026-11-14"
+    task: M3-issue104-fault-fallback-verification
+    branch: feat/m3-104-fault-and-fallback
+    member: shallight (M3)
+    change: >-
+      Verify M3 x M5 runtime coordinator selection timeout, late-result
+      suppression, ordinary rejection vs resolved invalid-proposal accounting,
+      deterministic reply-intent passthrough, bounded fallback refusals, and
+      single-attempt defer wait-accounting for Issue #104, and resolve the
+      pre-CP07 runtime-policy-catalog wording debt recorded in Issue #88
+      comment 6516767275. Update Row 23 of
+      docs/architecture/runtime-policy-catalog.md so a thrown selection call is
+      recorded failed and a resolved schema-invalid, mis-correlated, unoffered,
+      or disallowed-intent proposal is recorded invalid without inspecting
+      adapter error codes. Add 10 coordinator-level integration tests in
+      test/offline/m3-decision.test.ts covering C-05, C-14, C-15, and C-16
+      without modifying any file under src/.
+    requirements: [FR-01, FR-03, FR-05, NFR-04]
+    invariants: [INV-01, INV-13, INV-14, INV-16]
+    cases: [C-05, C-14, C-15, C-16]
+    commits: [4260152a6284d9a093df58e3144e33d679edb7a9]
+    agent: opencode/deepseek-v4-flash
+    opencode_version: 1.19.5
+    model_cli_id: "personal-deepseek/deepseek-v4-flash"
+    model: deepseek-v4-flash
+    resolved_model: deepseek-flash
+    provider: personal-deepseek
+    variant: xhigh
+    launch_flags: ["--pure", "--agent", "build", "-m", "personal-deepseek/deepseek-v4-flash", "--variant", "xhigh", "--format", "json"]
+    sessions:
+      - ses_e2e484c8fffe29HihO5CMbzUmc
+    supervision: >-
+      Captain authorized OpenCode build execution and review updates for Issue
+      #104 using transient in-memory environment authentication without
+      modifying global OpenCode configuration or writing credentials to disk.
+      The provider resolved deepseek-v4-flash to server model id deepseek-flash
+      (DeepSeek-V4.1-Flash). All authored edits were inspected line-by-line by
+      the supervisor before commit.
+    human_review: >-
+      Rebased onto main 78c7656c10229b25ceb1e8ecc566feb2f556f116 and updated
+      Row 23 wording in response to M6/M5/M4 peer review on PR #156 (sequenced
+      to land ahead of PR #155); merge remains human-gated.
+    transcript_record: >-
+      Exported OpenCode session record ses_e2e484c8fffe29HihO5CMbzUmc and JSONL
+      stream logs are stored outside the repository checkout in the supervisor
+      scratch evidence directory; zero secret tokens appear in repository files
+      or exported evidence.
+    verification:
+      platform: macOS arm64 (Darwin)
+      base: 78c7656c10229b25ceb1e8ecc566feb2f556f116
+      results: >-
+        gate:ai-use-log passed, test:m3 85/85, test:trace 41/41, and full pnpm
+        verify passed (typecheck, lint, vitest 1559/1559 across 74 files, vite
+        build).
+    scope: >-
+      Coordinator-level M3 x M5 integration verification and
+      runtime-policy-catalog Row 23 alignment only; reaction invalid/stale
+      dispositions remain covered by existing regression suites rather than
+      re-verified here, zero files under src/ were modified, and no live
+      provider or physical audio/VTS claim is made.
   - date: "2026-11-06"
     task: "M6-02 / #100"
     branch: m6-02-provenance
