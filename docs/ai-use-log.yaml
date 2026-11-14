@@ -5641,3 +5641,44 @@ entries:
       not_run: >-
         No AGENTS.md amendment (M6 deferred it), no rewrite of other owners'
         entries, no merge.
+
+  - date: "2026-11-14"
+    task: "M6 memory semantics reply"
+    branch: m6-memory-foundation
+    change: >-
+      Apply M4's 2026-11-13 semantics reply. writeState returns conflict when the
+      stored audience and an incoming non-null audience differ; a first non-null
+      write may establish the binding and a later null keeps it. rebuildDerived
+      throws inside its transaction when a derived episode carries an extractor
+      version different from the rebuild argument, so a row and its cursor cannot
+      disagree. The ADR, trace rows, Delta and fixtures note record the decisions
+      and the remaining M4 derive adapter gap; #159 publishes the functions and
+      corpora but they are not directly pluggable, so X02 stays open and X07 stays
+      fixture-only in this branch.
+    requirements: [FR-06, NFR-03]
+    invariants: [INV-06, INV-16]
+    cases: []
+    commits: [5d4afa7]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      M6 approved the six-item response to M4's review and required it to stay
+      local until the suite passed.
+    human_review: >-
+      M6 approved the scope. No independent review, merge or CP08 claim.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id is
+      claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (main at branch point)
+      focused: "memory store 22/22."
+      role: "test:m6 218/218; trace 41/41; readiness 47/47."
+      full_suite: "pnpm verify exit 0: 1581/1581 in 76 files."
+      mutation: >-
+        Two mutations turned their tests red and were restored: the audience
+        conflict check and the extractor-version assertion.
+      not_run: >-
+        No M4 adapter (not M6-owned), no M5 runtime wiring, no push before the
+        local run, no CP08 acceptance.
