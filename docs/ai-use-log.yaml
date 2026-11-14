@@ -5802,3 +5802,46 @@ entries:
       not_run: >-
         No Windows execution of the symlink cases (skipped by design there), no
         remote CI after this push, no provider call.
+
+  - date: "2026-11-14"
+    task: M1-X06-offline-expression-policy
+    change: >-
+      Implement the opt-in, per-session expression selector proposed in #149.
+      Select a mapped and advertised substitute using accepted dispatch history,
+      cooldown and a bounded recent-action window. Keep the requested action
+      when a suitable substitute is unavailable.
+    requirements: [FR-03]
+    invariants: [INV-02]
+    cases: []
+    commits: [b3d270ff3d7a76ee66a01f7ae7393921e556b926]
+    agent: opencode/build
+    opencode_version: "2.2.5"
+    model_cli_id: "deepseek/deepseek-flash#high"
+    provider: deepseek
+    model: deepseek-flash
+    variant: high
+    launch_flags: ["--standalone", "-m", "deepseek/deepseek-flash#high", "--agent", "build", "--format", "json"]
+    sessions: [ses_e29f2f208ffeC8LDVybOHi9H9o]
+    supervision: >-
+      The M1 member approved the v02 offline scope. The supervisor supplied the
+      existing fixture byte for byte, reviewed the changes and requested a
+      follow-up to reject unusable metadata. The same OpenCode session wrote
+      the implementation and the tests in both rounds. A separate read-only
+      OpenCode review using DeepSeek Flash at max (ses_e29de887fffeKdByrSK0CojcFl)
+      found no blocking issues. The supervisor checked the model metadata
+      and reran the focused tests.
+    human_review: >-
+      M1 approved the offline implementation scope. Consumer review is pending.
+    transcript_record: >-
+      The original implementation and review events and session exports are
+      retained in the private project records.
+    verification:
+      platform: Windows x64, Node.js 24.14.1, pnpm 12.20.0
+      base: 78c7656c10229b25ceb1e8ecc566feb2f556f116
+      results: >-
+        The 14 planned fixture cases and two additional checks passed.
+        test:m1 passed 305/305. pnpm verify passed typecheck, lint, 1556 tests
+        with nine skips, and the build.
+      limits: >-
+        The selector defaults off. Live VTS blending and runtime composition
+        are later acceptance work.
