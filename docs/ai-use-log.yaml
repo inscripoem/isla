@@ -6834,3 +6834,66 @@ entries:
       M4 working-memory admission evidence, the shared-budget comment
       correction and the matching architecture documentation; no contract
       change, no new stable id, no production behaviour change.
+  - date: "2026-11-14"
+    task: M4-151-rebase-round
+    change: >-
+      Rebuild the branch onto main d86dbc1 by sequential cherry-picks and land
+      this round's code edits. The rebase resolved three conflicts - two
+      ai-use-log tail appends and one trace-matrix date line - reworded three
+      docs commit messages so they cite current SHAs, and repointed the nine
+      `commits` fields of the earlier entries to their reachable equivalents
+      (af3c8e3 -> 557c9fc, 14b92ee -> 5a8fabe, d4317f3 -> 7d9c5fa,
+      c47c51f -> be9520a, ed970c2 -> 8a54960). Code edits, commit
+      51b3397f7374eab02b8e129f6d9b4fe50a684102: a stale header comment in
+      src/dialogue/working-memory.ts is corrected; the store gains the new
+      input-shape refusal `invalid-expiry`, which rejects an `expiresAtMs`
+      that is not a finite number before any admission or fulfilment
+      decision, addressing item 3 and P3 of M6 review 5901342801; the observe
+      and renderer contract statements in src/dialogue/dialogue-port.ts and
+      src/dialogue/state-render.ts are restated to match the implementation;
+      the runtime-policy-catalog row and the FR-02 trace row cite #146; four
+      negative tests are added. No rendered prompt or budget number changes;
+      absent-input paths stay byte-identical.
+    requirements: [NFR-04]
+    invariants: []
+    commits: [51b3397f7374eab02b8e129f6d9b4fe50a684102]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: 2.0.20
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    sessions: [ses_e2745b5d4ffe26BUUw3ldK0ing]
+    supervision: >-
+      The M4 supervision workflow rebuilt the branch onto main d86dbc1
+      (sequential cherry-picks, conflict resolution, three message rewords and
+      nine field repoints). OpenCode `build` session
+      ses_e2745b5d4ffe26BUUw3ldK0ing wrote the code and documentation edits in
+      its first turn and this entry per the round owner's instruction, and the
+      supervisor reviewed the diff and re-ran all gates. Nothing has been
+      pushed. The P2 entry's mapping names the 2026-11-12 rebase equivalents
+      and is superseded by the mapping in this entry; the twelve historical
+      narrative SHA occurrences are kept as written under the 2026-11-12
+      convention. The m6-02-provenance-command symlink case fails identically
+      on clean main d86dbc1 on this Windows host (1 failed / 22 passed there),
+      so it is a pre-existing local baseline, not introduced by this round.
+    transcript_record: >-
+      The session listed in `sessions` retains its conversation. Its record
+      (id, title, time and role) is written outside this repository in
+      `m4-impl/151-rebase/opencode-sessions.md`; no export is stored in the
+      repository.
+    verification:
+      base: d597d88
+      reproduction: >-
+        Run from the repository root on the working tree that contains this
+        round's changes. pnpm typecheck (tsc -b) -> exit 0. pnpm lint (oxlint)
+        -> exit 0, 0 warnings and 0 errors on 289 files. pnpm test:m4 -> 16
+        files / 381 tests passed. pnpm test:trace -> 41/41 passed. Readiness
+        check -> 47/47 passed. pnpm test -> 84 files, 1 failed / 83 passed,
+        the single failure being the pre-existing main baseline described
+        above. pnpm build -> exit 0. The full suite and the remote `verify` run
+        are the final authority.
+    scope: >-
+      The M4-151 rebase round: branch rebuild onto main, evidence repointing,
+      the working-memory expiry-input guard and the contract statements; no
+      contract, storage, runtime or provider change.
