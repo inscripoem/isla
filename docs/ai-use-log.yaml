@@ -5682,3 +5682,38 @@ entries:
       not_run: >-
         No M4 adapter (not M6-owned), no M5 runtime wiring, no push before the
         local run, no CP08 acceptance.
+
+  - date: "2026-11-14"
+    task: "M6 memory ID registration"
+    branch: m6-memory-foundation
+    change: >-
+      Register M5's allocation: ADR-009, INV-17 and C-75..C-78. The ADR and Delta
+      are renamed to 009, INV-17 is added to requirements.yaml and invariants.md,
+      the four cases are added to the case registry, and the five memory trace
+      rows cite the IDs instead of "ids pending". C-77 and C-78 are implemented;
+      C-75 stays pending on its rebuild-equality half (M4 adapter), and C-76 stays
+      pending on the durable/consent conflict recorded in the ADR.
+    requirements: [FR-06, NFR-03, NFR-05]
+    invariants: [INV-17]
+    cases: [C-75, C-76, C-77, C-78]
+    commits: [9688899]
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      M6 applied M5's registrar decision and kept the pending cases pending rather
+      than claiming them. The durable/consent conflict is reported, not resolved.
+    human_review: >-
+      M6 approved the registration. No design approval, merge or checkpoint claim.
+    transcript_record: >-
+      The local session record is retained outside the checkout; no session id is
+      claimed here.
+    verification:
+      platform: macOS, Node 23.5.0, pnpm 12.10.1
+      base: f99e2f5 (branch point)
+      focused: "memory store 22/22."
+      role: "test:m6 218/218; trace 41/41; readiness 47/47."
+      full_suite: "pnpm verify exit 0: 1581/1581 in 76 files."
+      mutation: "No behaviour change in this slice; the earlier audience/version mutations stand."
+      not_run: >-
+        No M4 adapter, no M5 runtime wiring, no push before the local run, no CP08.
