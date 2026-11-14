@@ -29,6 +29,8 @@ The dialogue module turns one validated `DialogueRequest` into at most two order
   - *Delivery recall* (`src/dialogue/memory-recall.ts`). **Opt-in, the only one of the three with a default-off state.** It runs only when a `deliveryRecall` port is supplied, and with no port the result is the empty list, so a caller that does not opt in gets exactly the pre-recall context. It searches the turns the recency window dropped, charges to the same budget, and renders in its own `Earlier, confirmed:` section with per-turn provenance so it never blends into the recent chronology.
 - **`maxTurns` is a combined bound, not just a window size.** Recalled turns are still history, so they displace recent turns instead of adding to them: with `maxTurns: 0` nothing is rendered at all, and at any limit `turns + recalledTurns` never exceeds it. Displacement starts with the oldest unpinned turn so a pinned turn keeps its protection; displaced turns are recorded as `turn-limit` exclusions, and the recall allowance itself is capped at `min(MAX_RECALLED_TURNS, maxTurns)`. Displacement identifies a record by the `(sessionId, turnId)` pair, never by `turnId` alone: the turn counter is session-scoped, so a restored session reuses ids, and keying by the bare id made an unrelated turn in another session disappear with the intended one — and took a pinned record with it. This follows M5's C2 finding — an earlier version let recall exceed the caller's request limit.
 - Usage is honest. When no model was called the module reports `inputTokens`/`outputTokens` as `null` with `usageMissing: true`, matching the M5 fallback convention. A fixture answer is never presented as a real provider call.
+- Since PR #134 the text-source seam carries the real provider: `createOpenAiCompatibleTextSource` in `src/dialogue/provider-text-source.ts` speaks to an OpenAI-compatible chat-completions endpoint with `baseUrl`/`model`/`apiKey` injected at the composition root — nothing in `src/dialogue` reads the environment, and the credential is used only as an Authorization header, never logged or echoed. The silent fixture fallback is gone (coordination issue #44 §2.4): with no `textSource` supplied the port constructs an unconfigured source whose first compose fails visibly, so a missing configuration can no longer quietly serve fixture text. Every provider fault throws and is reported by the port as `failed`; the single exception is an already-revoked signal, which ends as `cancelled`.
+- PR #137 moved the `memory.inspect` wire declarations into `src/contracts/diagnostics.ts`: the read-only protocol-1 payload shape is now declared in the shared wire contract, re-exported by `src/dialogue/index.ts`, and `src/dialogue/memory-inspect.ts` only builds the payload, so the browser consumer can share the shape without importing assembly internals.
 
 ## Entry points and local configuration
 
@@ -39,7 +41,7 @@ Import `createDialoguePort` and `DialoguePortOptions` from `src/dialogue/dialogu
 | Option | Purpose / default |
 | --- | --- |
 | `clock` | Injected time source. Required; no default. Must share the domain of `CallContext.deadline.atMs`. |
-| `textSource` | Dialogue text source. Defaults to the fixture source; M4-02 supplies a real provider implementation. |
+| `textSource` | Dialogue text source. Omitted, the port constructs an unconfigured source whose first compose fails visibly — the silent fixture default was abolished with PR #134 (coordination issue #44 §2.4). The real provider implementation is `createOpenAiCompatibleTextSource`; deterministic offline sources remain available when the caller names them. |
 | `history` | Durable history source (M6). When supplied it is **authoritative** and defines the record set. |
 | `memory` | Local record source, offered to `MemoryEntrySource`. Used only when no durable history was supplied; persona attribution still comes from each record's persisted fields, so this side cannot fill in a missing component. |
 | `personaRecall` | `PersonaRecallPort`. Omitted resolves to `createDisabledPersonaRecall()`. |
@@ -97,6 +99,55 @@ pnpm test:m4
 pnpm verify
 ```
 
+### Current state (2026-11-03, `docs/m4-116` at `606ccf5`)
+
+Windows 11, Node 24.21.0, pnpm 12.11.2, measured on this branch over the code tree of `606ccf5`:
+
+| Command | Result |
+| --- | --- |
+| `pnpm test:m4` | 237 passed (237), 10 files |
+| `pnpm typecheck` | clean, no diagnostics |
+| `pnpm lint` | 0 warnings, 0 errors, 254 files |
+| `pnpm test` | 1407 passed, 18 failed (1425 tests, 71 files) |
+| `pnpm verify` | starts through a POSIX shell, does not start through the Windows `pnpm.cmd` wrapper (see below); measured step by step either way: `typecheck` clean, `lint` 0/0, `test` stops on those 18 failures, so `pnpm build` is not reached |
+
+The 18 failures are the documented Windows classes and none is in `src/dialogue`:
+`boundaries.test.ts` x4, `cli.test.ts` x3, `production-cli.test.ts` x4, `m6-sqlite.test.ts` x3,
+`m6-02-boundary.test.ts` x2, `requirements.test.ts` x1, `m5-process-restart.test.ts` x1.
+
+`pnpm verify` needs a qualified statement rather than a single one, because it does not have a
+single answer on this host. The script chains `typecheck`, `lint`, `test` and `build`, and whether
+the chain starts depends on which `pnpm` entry point the nested invocation resolves to — not on the
+Node major version.
+
+- **Through the npm-global Windows wrapper, it does not reach its first step.** The last line of
+  `%APPDATA%\npm\pnpm.cmd` invokes `"%dp0%\node_modules\pnpm\pnpm"`, and `node_modules\pnpm\pnpm`
+  is the extensionless POSIX shell shim shipped inside the package (the real entry point is
+  `bin/pnpm.mjs`), so `cmd.exe` refuses it: `...npm\node_modules\pnpm\pnpm` is not recognized as a
+  command. That is the observation this section recorded on 2026-11-03.
+- **Through a POSIX shell with a working shim first on `PATH`, the chain starts and stops at
+  `test`** on the 18 failures above, so `build` is not reached. Measured on 2026-11-06 under
+  **both** Node 22.22.2 and Node 24.21.0 with pnpm 12.11.2, with identical results.
+
+An earlier revision of this paragraph attributed the failure to this host moving to Node 24.21.0.
+That attribution was wrong and is retracted here: the outcome is identical under both majors, and
+the distinguishing variable is the wrapper, not the runtime. This also retracts the wider form of
+the claim — `pnpm verify` is neither an unusable script nor an unconditionally working one, and a
+verifier on Windows should expect the failure mode above, not a missing capability. The conclusion
+for a verifier is the same either way and was measured step by step on the same tree: `typecheck`
+clean, `lint` 0/0, `test` with exactly the 18 failures listed above, so the `build` step is
+unexercised here rather than unreachable.
+
+The fourth `boundaries.test.ts` case is the one that arrived with the AST
+boundary checker merged as PR #70, and it fails on Windows on the same
+synthetic-fixture path-resolution control as the other three, so the failure
+class is unchanged and only the case count grew.
+
+`test:m4` lists ten files and does **not** include `test/offline/m4-loopback.test.ts`. The I1
+loopback evidence therefore runs under `pnpm test` or by invoking vitest on that file directly;
+whether the role command should include it is a manifest decision owned by M5, not something this
+handoff may change on its own.
+
 Coverage, stated precisely. **Production dialogue** is exercised by `test/offline/m4-dialogue.test.ts`, which also runs the shared dialogue conformance collector against `createDialoguePort`. **Cross-module consumption** is exercised by `test/offline/m4-storage-integration.test.ts`, which drives the production port against the production M6 store — `createEventStore` / `createHistoryQuery` over `createInMemoryBackend` — rather than against a stand-in. It asserts consumer-visible behaviour only: that M4 reads history and never appends to it; that the durable source defines both the record set and the attribution while a contradictory local store is ignored; that a receiptless record is listed as confirmed history by M6 yet kept out of spoken memory by M4; that a failed atomic commit leaves no memory at all; that history follows the supporting event `seq` rather than arrival order; that within a turn the persisted `segmentIndex` (known ascending, unknown last, ties in source order, unrelated identifier spelling) restores speaking order; that unknown and half-known persisted attribution never borrows a persona from local state; that two sessions stay apart when both reuse the same turn id; and that a restart over the same durable state rebuilds an identical prompt. Every atomic commit in these cases is asserted to have been `applied`/`stored`, so a silently rejected write cannot pass as coverage. A further guard runs M5's `orderTurnDeliveries` and M4's own comparison over the same persisted records and fails if the two disagree, because the within-turn ordering rule is currently implemented twice — see the open question below.
 
 The composition and regression suites still do **not** drive the production port: `test/support/runner-factories.ts` substitutes `createFixtureDialoguePort` when the caller supplies no dialogue port, and `test/offline/composition.test.ts` passes none. `createFixtureDialoguePort` in `test/support/correct-ports.ts` is an independent fixture implementation, not this module. M4 does not change that wiring, so the coordinator-driven cases remain M5's; they are listed below.
@@ -133,3 +184,30 @@ Two limitations this slice states rather than hides.
    What is still open is on the durable side. M6 has to carry `segmentIndex`, `personaProfileId` and `personaProfileVersion` through its SQLite codec/migration while preserving genuine legacy unknowns as `null`; no persisted record carries an owner, so the automatic cross-session path has no evidence source and refuses by design rather than attributing a memory by assumption. M4 orders and attributes only the records it is handed and never compares `seq` across sessions. The coordinated fields, strict decoders and correlation rule are shared contract work owned by M5; M4 adopts them and does not re-negotiate them here.
 
 Genuine OpenCode session exports, Chinese understanding copies and raw internal evidence are retained outside the checkout.
+
+## Retention, privacy and recovery: what M4 does and does not do
+
+This states the M4 side only. The storage-side policy is `docs/architecture/memory-design.md`
+section "Retention and privacy" and is owned by M6; nothing here restates or overrides it.
+
+- **What is retained.** Only speech that was actually heard enters spoken memory: a delivery is
+  admitted as `fully-delivered` with the required audio receipt (`SPOKEN_RECEIPT_POLICY =
+  'required-for-audio'`). `partial-unknown` and `not-delivered` are audit-only. Within the budget,
+  three mechanisms keep an aged turn alive — salience pinning and rollup run unconditionally, and
+  delivery recall is opt-in.
+- **Deletion and retraction.** M4 implements neither. There is no retraction, suppression or
+  delete entry point in `src/dialogue`; searching the module for such an interface returns nothing.
+  Automatic expiry and deletion are deferred for v0.2 by the storage policy named above, so no M4
+  document may claim an enforced retention period.
+- **Privacy scope.** A memory carries a persona attribution only from a complete persisted
+  `personaProfileId`/`personaProfileVersion` pair; a half-known pair stays unknown rather than
+  borrowing the current character. No persisted record carries an owner audience id, so the
+  automatic cross-session recall path has no evidence source and refuses by design; recalling an
+  archive session requires an explicit selection.
+- **Recovery.** M4 performs no recovery of its own: it complies with `confirmedHistory` as handed
+  to it, orders by the persisted `segmentIndex` inside a turn and by supporting-event `seq` across
+  a session, and never compares `seq` across sessions. The restart case in the integration suite
+  reopens a store over the same in-memory backend and is not a process-restart proof; the SQLite
+  restart acceptance is M6's and remains open on issue #106.
+
+Nothing in this section is a product acceptance claim, and no case identifier is added or reused.

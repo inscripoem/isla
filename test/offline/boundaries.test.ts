@@ -1,10 +1,15 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { join, posix, win32 } from 'node:path'
 import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
 const ROOT = process.cwd()
 const SRC = join(ROOT, 'src')
+
+/** The path operations the resolver needs, so Windows semantics can be exercised on any host. */
+type PathApi = Pick<typeof posix, 'resolve' | 'dirname' | 'join'>
+
+const platformPath: PathApi = process.platform === 'win32' ? win32 : posix
 
 export interface Edge {
   from: string
@@ -56,11 +61,17 @@ export function moduleSpecifiers(source: string, fileName = 'module.ts'): string
   return specs
 }
 
-export function makeResolver(exists: (path: string) => boolean) {
+export function makeResolver(exists: (path: string) => boolean, pathApi: PathApi = platformPath) {
   return (spec: string, fromFile: string): string | null => {
     if (!spec.startsWith('.')) return null
-    const base = resolve(dirname(fromFile), spec)
-    const candidates = [base, `${base}.ts`, `${base}.tsx`, join(base, 'index.ts'), join(base, 'index.tsx')]
+    const base = pathApi.resolve(pathApi.dirname(fromFile), spec)
+    const candidates = [
+      base,
+      `${base}.ts`,
+      `${base}.tsx`,
+      pathApi.join(base, 'index.ts'),
+      pathApi.join(base, 'index.tsx'),
+    ]
     return candidates.find((candidate) => exists(candidate)) ?? null
   }
 }
@@ -69,8 +80,9 @@ export function collectEdges(
   entry: string,
   read: (file: string) => string,
   exists: (path: string) => boolean,
+  pathApi: PathApi = platformPath,
 ): Edge[] {
-  const resolveSpec = makeResolver(exists)
+  const resolveSpec = makeResolver(exists, pathApi)
   const edges: Edge[] = []
   const visited = new Set<string>()
   const queue = [entry]
@@ -85,6 +97,20 @@ export function collectEdges(
     }
   }
   return edges
+}
+
+/**
+ * A virtual file map whose keys are resolved with the given path semantics.
+ * `collectEdges` reads the entry literally and then resolves descendants, so
+ * both forms must reach the same key on every platform.
+ */
+function virtualFiles(entries: Record<string, string>, pathApi: PathApi = platformPath) {
+  const key = (path: string): string => norm(pathApi.resolve(path))
+  const files = new Map(Object.entries(entries).map(([path, text]) => [key(path), text] as const))
+  return {
+    read: (path: string): string => files.get(key(path)) ?? '',
+    exists: (path: string): boolean => files.has(key(path)),
+  }
 }
 
 const isNodeSpec = (spec: string): boolean =>
@@ -162,11 +188,18 @@ describe('import graph boundary checker', () => {
       '/src/performance/browser/player.ts': "import type { PlayerPort } from '../../contracts'\nexport const player: unknown = null\n",
       '/src/contracts/index.ts': "export const contract = 1\n",
     }
-    const read = (file: string): string => files[file] ?? ''
-    const exists = (path: string): boolean => path in files
+    const { read, exists } = virtualFiles(files)
     const edges = collectEdges('/app/main.tsx', read, exists)
     const offenders = edges.filter((edge) => consoleEdgeBlocked(edge.spec, edge.resolved))
     expect(offenders).toEqual([])
+    // The positive must prove the graph was actually traversed, not merely that
+    // an unresolved specifier produced no offender.
+    expect(
+      edges.some(
+        (edge) =>
+          edge.spec === '../src/performance/browser/player' && edge.resolved !== null,
+      ),
+    ).toBe(true)
   })
 
   it('treats an exported constant array as data, not as module specifiers (positive)', () => {
@@ -177,14 +210,13 @@ describe('import graph boundary checker', () => {
       '/app/main.tsx': "import { OPERATOR_BOOTSTRAP_FAILURE_REASONS } from '../src/console/operator-bootstrap'\n",
       '/src/console/operator-bootstrap.ts': constant,
     }
-    const read = (file: string): string => files[file] ?? ''
-    const exists = (path: string): boolean => path in files
+    const { read, exists } = virtualFiles(files)
 
     expect(moduleSpecifiers(constant, 'operator-bootstrap.ts')).toEqual([])
-    const offenders = collectEdges('/app/main.tsx', read, exists).filter((edge) =>
-      consoleEdgeBlocked(edge.spec, edge.resolved),
-    )
+    const edges = collectEdges('/app/main.tsx', read, exists)
+    const offenders = edges.filter((edge) => consoleEdgeBlocked(edge.spec, edge.resolved))
     expect(offenders).toEqual([])
+    expect(edges.some((edge) => edge.resolved !== null)).toBe(true)
   })
 
   it('still blocks a real re-export of a Node module (negative)', () => {
@@ -193,8 +225,7 @@ describe('import graph boundary checker', () => {
       '/app/main.tsx': "import { readFileSync } from '../src/console/operator-bootstrap'\n",
       '/src/console/operator-bootstrap.ts': source,
     }
-    const read = (file: string): string => files[file] ?? ''
-    const exists = (path: string): boolean => path in files
+    const { read, exists } = virtualFiles(files)
 
     expect(moduleSpecifiers(source, 'operator-bootstrap.ts')).toEqual(['node:fs'])
     const blocked = collectEdges('/app/main.tsx', read, exists).filter((edge) =>
@@ -262,21 +293,24 @@ describe('import graph boundary checker', () => {
       '/src/performance/browser/player.ts': "import { server } from '../../runtime/server'\n",
       '/src/runtime/server.ts': "import WebSocket from 'ws'\nexport const server = 1\n",
     }
-    const read = (file: string): string => backendGraph[file] ?? ''
-    const exists = (path: string): boolean => path in backendGraph
-    const blocked = collectEdges('/app/main.tsx', read, exists).filter((edge) =>
+    const backend = virtualFiles(backendGraph)
+    const blocked = collectEdges('/app/main.tsx', backend.read, backend.exists).filter((edge) =>
       consoleEdgeBlocked(edge.spec, edge.resolved),
     )
     expect(blocked.length).toBeGreaterThan(0)
+    expect(
+      blocked.some(
+        (edge) => edge.spec === '../../runtime/server' && edge.resolved !== null,
+      ),
+    ).toBe(true)
 
     const nodeGraph: Record<string, string> = {
       '/app/main.tsx': "import player from '../src/performance/browser/player'\n",
       '/src/performance/browser/player.ts': "import fs from 'node:fs'\n",
     }
     // actual node-graph traversal with its own resolver
-    const nodeRead = (file: string): string => nodeGraph[file] ?? ''
-    const nodeExists = (path: string): boolean => path in nodeGraph
-    const nodeEdges = collectEdges('/app/main.tsx', nodeRead, nodeExists)
+    const nodeFiles = virtualFiles(nodeGraph)
+    const nodeEdges = collectEdges('/app/main.tsx', nodeFiles.read, nodeFiles.exists)
     const nodeOffenders = nodeEdges.filter((edge) => consoleEdgeBlocked(edge.spec, edge.resolved))
     expect(nodeOffenders.some((edge) => edge.spec === 'node:fs')).toBe(true)
   })
@@ -286,12 +320,59 @@ describe('import graph boundary checker', () => {
       '/app/main.tsx': "import { server } from '../src/runtime/server'\n",
       '/src/runtime/server.ts': "import WebSocket from 'ws'\nexport const server = 1\n",
     }
-    const read = (file: string): string => files[file] ?? ''
-    const exists = (path: string): boolean => path in files
+    const { read, exists } = virtualFiles(files)
     const blocked = collectEdges('/app/main.tsx', read, exists).filter((edge) =>
       consoleEdgeBlocked(edge.spec, edge.resolved),
     )
     expect(blocked.length).toBeGreaterThan(0)
+    expect(
+      blocked.some((edge) => edge.spec === '../src/runtime/server' && edge.resolved !== null),
+    ).toBe(true)
+  })
+
+  it('traverses a forbidden transitive import under Windows path semantics (negative)', () => {
+    const { read, exists } = virtualFiles(
+      {
+        'C:/app/main.tsx': "import player from '../src/performance/browser/player'\n",
+        'C:/src/performance/browser/player.ts':
+          "import { server } from '../../runtime/server'\nexport const player = server\n",
+        'C:/src/runtime/server.ts': "import WebSocket from 'ws'\nexport const server = WebSocket\n",
+      },
+      win32,
+    )
+    const edges = collectEdges('C:/app/main.tsx', read, exists, win32)
+    // Both hops resolved, so the blocked edge below is a real traversal result,
+    // not a missing virtual key.
+    expect(
+      edges.some(
+        (edge) =>
+          edge.spec === '../src/performance/browser/player' && edge.resolved !== null,
+      ),
+    ).toBe(true)
+    expect(
+      edges.some((edge) => edge.spec === '../../runtime/server' && edge.resolved !== null),
+    ).toBe(true)
+    const blocked = edges.filter((edge) => consoleEdgeBlocked(edge.spec, edge.resolved))
+    expect(blocked.some((edge) => edge.spec === '../../runtime/server')).toBe(true)
+    expect(blocked.some((edge) => edge.spec === 'ws')).toBe(true)
+  })
+
+  it('does not mistake a Windows sibling performance module for the browser subtree (negative)', () => {
+    const { read, exists } = virtualFiles(
+      {
+        'C:/app/main.tsx': "import other from '../src/performance/browser-other/player'\n",
+        'C:/src/performance/browser-other/player.ts': 'export const other = 1\n',
+      },
+      win32,
+    )
+    const edges = collectEdges('C:/app/main.tsx', read, exists, win32)
+    const blocked = edges.filter((edge) => consoleEdgeBlocked(edge.spec, edge.resolved))
+    expect(
+      blocked.some(
+        (edge) =>
+          edge.spec === '../src/performance/browser-other/player' && edge.resolved !== null,
+      ),
+    ).toBe(true)
   })
 
   it('flags a production module importing test code through the same checker', () => {
@@ -299,8 +380,7 @@ describe('import graph boundary checker', () => {
       '/src/app.ts': "import { fixture } from '../test/support/fixture-data'\nexport const x = fixture\n",
       '/test/support/fixture-data.ts': 'export const fixture = 1\n',
     }
-    const read = (file: string): string => files[file] ?? ''
-    const exists = (path: string): boolean => path in files
+    const { read, exists } = virtualFiles(files)
     const edges = collectEdges('/src/app.ts', read, exists)
     expect(edges.some((edge) => edge.resolved !== null && isTestPath(edge.resolved))).toBe(true)
   })

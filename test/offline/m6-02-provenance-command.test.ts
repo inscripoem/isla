@@ -1,4 +1,12 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  linkSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -7,6 +15,8 @@ import {
   type ProvenanceAttempt,
   type ProvenanceCompanionV1,
 } from '../../src/evaluation/provenance'
+import { runComparison } from '../../src/evaluation/comparison'
+import type { AttemptRecord } from '../../src/evaluation/metrics'
 import { parseRecordedRun } from '../../src/evaluation/recorded-run'
 import { parseReportCommandArgs, runReportCommand } from '../../src/evaluation/report-command'
 import { renderEvaluationReport } from '../../src/evaluation/report'
@@ -44,7 +54,7 @@ const CONDITIONS = {
   recall: { supplied: false, maxTurns: null },
 } as const
 
-function record(caseId: string) {
+function record(caseId: string): AttemptRecord {
   return {
     caseId,
     variantId: 'v1',
@@ -124,6 +134,25 @@ function workspace(): { dir: string; input: string; output: string; provenance: 
   return { dir, input, output, provenance }
 }
 
+/**
+ * Directory symlinks need Developer Mode or elevation on Windows. The refusal is
+ * still exercised on Linux CI; the Windows run skips the symlink cases instead of
+ * failing for an environment privilege it cannot grant.
+ */
+function symlinksSupported(): boolean {
+  const dir = mkdtempSync(join(tmpdir(), 'isla-symlink-probe-'))
+  try {
+    symlinkSync(dir, join(dir, 'probe'), 'junction')
+    return true
+  } catch {
+    return false
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+const SYMLINKS = symlinksSupported()
+
 afterEach(() => {
   for (const dir of directories.splice(0)) rmSync(dir, { recursive: true, force: true })
   vi.restoreAllMocks()
@@ -144,6 +173,21 @@ describe('evaluation:report --provenance', () => {
     expect(table).toContain('Companion source:')
     expect(table).toContain(provenance)
     expect(table).not.toContain('no-provenance-record')
+  })
+
+  it('refuses --output equal to --provenance and leaves the companion intact', () => {
+    const { input, provenance } = workspace()
+    const companionText = JSON.stringify(companion())
+    writeFileSync(provenance, companionText, 'utf8')
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
+    expect(
+      runReportCommand(['--input', input, '--output', provenance, '--provenance', provenance]),
+    ).toBe(1)
+    expect(readFileSync(provenance, 'utf8')).toBe(companionText)
+    expect(stderr.mock.calls.flat().join('')).toContain(
+      '--output must not be the --provenance input',
+    )
   })
 
   it('writes the no-companion note when the flag is absent', () => {
@@ -249,6 +293,7 @@ describe('evaluation:report --provenance', () => {
       runId: 'another-run',
       runDigest: DIGEST,
       attempts: [typedAttempt('case-1'), typedAttempt('case-2')],
+      notRun: [],
     }
     const result = renderEvaluationReport({ ...parsed.input, provenance: foreign })
     expect(result.ok).toBe(false)
@@ -265,10 +310,332 @@ describe('evaluation:report --provenance', () => {
       runId: 'run-1',
       runDigest: DIGEST,
       attempts: [typedAttempt('case-1')],
+      notRun: [],
     }
     const result = renderEvaluationReport({ ...parsed.input, provenance: partial })
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.violations.some((violation) => violation.includes('missing an entry'))).toBe(true)
+  })
+})
+
+
+describe('M5 review rules at the report boundary (2026-11-09)', () => {
+  it('refuses exact when an accepted input has no observed acknowledgement', () => {
+    const { input, output, provenance } = workspace()
+    writeFileSync(
+      provenance,
+      JSON.stringify(
+        companion({
+          attempts: [
+            attempt('case-1', { inputs: [{ ...INPUT, requestMessageId: null, eventId: null }] }),
+            attempt('case-2'),
+          ],
+        }),
+      ),
+      'utf8',
+    )
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
+    expect(
+      runReportCommand(['--input', input, '--output', output, '--provenance', provenance]),
+    ).toBe(1)
+    expect(existsSync(output)).toBe(false)
+    expect(stderr.mock.calls.flat().join('')).toContain('no observed acknowledgement')
+  })
+
+  it('renders observed inputs for a not-run case', () => {
+    const run = {
+      ...RUN,
+      notRun: [{ variantId: 'v1', caseId: 'case-3', reason: 'declined' }],
+    }
+    const runText = JSON.stringify(run)
+    const digest = provenanceRunDigest(runText)
+    const { input, output, provenance } = workspace()
+    writeFileSync(input, runText, 'utf8')
+    writeFileSync(
+      provenance,
+      JSON.stringify({
+        provenanceVersion: 1,
+        runId: 'run-1',
+        runDigest: digest,
+        attempts: [attempt('case-1'), attempt('case-2')],
+        notRun: [
+          {
+            caseId: 'case-3',
+            variantId: 'v1',
+            inputs: [{ ...INPUT, status: 'rejected', eventId: null }],
+          },
+        ],
+      }),
+      'utf8',
+    )
+
+    expect(
+      runReportCommand(['--input', input, '--output', output, '--provenance', provenance]),
+    ).toBe(0)
+    const table = readFileSync(output, 'utf8')
+    expect(table).toContain('### Not-run observations')
+    expect(table).toContain('| case-3 | v1 | 1 | declined |')
+    expect(table).toContain('rejected 1')
+  })
+})
+
+
+describe('repeated not-run pairs (M5 contract, 2026-11-09)', () => {
+  it('binds each occurrence and renders the run reason', () => {
+    const run = {
+      ...RUN,
+      notRun: [
+        { variantId: 'v1', caseId: 'case-3', reason: 'rejected' },
+        { variantId: 'v1', caseId: 'case-3', reason: 'held' },
+      ],
+    }
+    const runText = JSON.stringify(run)
+    const digest = provenanceRunDigest(runText)
+    const { input, output, provenance } = workspace()
+    writeFileSync(input, runText, 'utf8')
+    writeFileSync(
+      provenance,
+      JSON.stringify({
+        provenanceVersion: 1,
+        runId: 'run-1',
+        runDigest: digest,
+        attempts: [attempt('case-1'), attempt('case-2')],
+        notRun: [
+          {
+            caseId: 'case-3',
+            variantId: 'v1',
+            occurrence: 1,
+            inputs: [{ ...INPUT, status: 'rejected', eventId: null }],
+          },
+          {
+            caseId: 'case-3',
+            variantId: 'v1',
+            occurrence: 2,
+            inputs: [{ ...INPUT, status: 'not-submitted', eventId: null }],
+          },
+        ],
+      }),
+      'utf8',
+    )
+    expect(
+      runReportCommand(['--input', input, '--output', output, '--provenance', provenance]),
+    ).toBe(0)
+    const table = readFileSync(output, 'utf8')
+    expect(table).toContain('| case-3 | v1 | 1 | rejected |')
+    expect(table).toContain('| case-3 | v1 | 2 | held |')
+  })
+
+  it('refuses an occurrence the run does not have', () => {
+    const run = {
+      ...RUN,
+      notRun: [{ variantId: 'v1', caseId: 'case-3', reason: 'rejected' }],
+    }
+    const runText = JSON.stringify(run)
+    const digest = provenanceRunDigest(runText)
+    const { input, output, provenance } = workspace()
+    writeFileSync(input, runText, 'utf8')
+    writeFileSync(
+      provenance,
+      JSON.stringify({
+        provenanceVersion: 1,
+        runId: 'run-1',
+        runDigest: digest,
+        attempts: [attempt('case-1'), attempt('case-2')],
+        notRun: [
+          {
+            caseId: 'case-3',
+            variantId: 'v1',
+            occurrence: 2,
+            inputs: [{ ...INPUT, status: 'rejected', eventId: null }],
+          },
+        ],
+      }),
+      'utf8',
+    )
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    expect(
+      runReportCommand(['--input', input, '--output', output, '--provenance', provenance]),
+    ).toBe(1)
+    expect(existsSync(output)).toBe(false)
+    expect(stderr.mock.calls.flat().join('')).toContain('not a not-run occurrence')
+  })
+
+  it('refuses a not-submitted not-run input that claims an event id', () => {
+    const run = {
+      ...RUN,
+      notRun: [{ variantId: 'v1', caseId: 'case-3', reason: 'declined' }],
+    }
+    const runText = JSON.stringify(run)
+    const digest = provenanceRunDigest(runText)
+    const { input, output, provenance } = workspace()
+    writeFileSync(input, runText, 'utf8')
+    writeFileSync(
+      provenance,
+      JSON.stringify({
+        provenanceVersion: 1,
+        runId: 'run-1',
+        runDigest: digest,
+        attempts: [attempt('case-1'), attempt('case-2')],
+        notRun: [
+          {
+            caseId: 'case-3',
+            variantId: 'v1',
+            occurrence: 1,
+            inputs: [
+              { ...INPUT, status: 'rejected', eventId: null },
+              { ...INPUT, status: 'not-submitted', requestMessageId: 'req-2', eventId: 'event-1' },
+            ],
+          },
+        ],
+      }),
+      'utf8',
+    )
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    expect(
+      runReportCommand(['--input', input, '--output', output, '--provenance', provenance]),
+    ).toBe(1)
+    expect(existsSync(output)).toBe(false)
+    expect(stderr.mock.calls.flat().join('')).toContain(
+      'eventId must be null when status is not-submitted',
+    )
+  })
+})
+
+describe('repeated case id: attempt and not-run for the same pair (M5, 2026-11-11)', () => {
+  it('writes the attempt and the not-run observation that the runner produced', async () => {
+    const cases = [
+      { id: 'case-1', input: 'first' },
+      { id: 'case-1', input: 'second' },
+    ]
+    const comparison = await runComparison(
+      { variants: [{ id: 'v1', kind: 'rules', combined: false }], cases },
+      {
+        runVariant: async (_variant, evalCase) =>
+          evalCase.input === 'first'
+            ? { ran: true, record: record('case-1') }
+            : { ran: false, reason: 'rejected' },
+      },
+    )
+    expect(comparison.records).toHaveLength(1)
+    expect(comparison.notRun).toHaveLength(1)
+
+    const run = {
+      ...RUN,
+      conditions: { ...CONDITIONS, sampleSize: 1 },
+      records: comparison.records,
+      notRun: comparison.notRun,
+    }
+    const runText = JSON.stringify(run)
+    const digest = provenanceRunDigest(runText)
+    const { input, output, provenance } = workspace()
+    writeFileSync(input, runText, 'utf8')
+    writeFileSync(
+      provenance,
+      JSON.stringify({
+        provenanceVersion: 1,
+        runId: 'run-1',
+        runDigest: digest,
+        attempts: [attempt('case-1')],
+        notRun: [
+          {
+            caseId: 'case-1',
+            variantId: 'v1',
+            occurrence: 1,
+            inputs: [{ ...INPUT, status: 'rejected', eventId: null }],
+          },
+        ],
+      }),
+      'utf8',
+    )
+
+    expect(
+      runReportCommand(['--input', input, '--output', output, '--provenance', provenance]),
+    ).toBe(0)
+    const table = readFileSync(output, 'utf8')
+    expect(table).toContain('| case-1 | v1 | 1 | exact |')
+    expect(table).toContain('| case-1 | v1 | 1 | rejected |')
+    expect(table).toContain('rejected 1')
+  })
+})
+
+describe('evidence-preservation collisions beyond the direct path', () => {
+  it.skipIf(!SYMLINKS)('refuses an output that reaches the provenance through a symlinked parent', () => {
+    const { dir, input, provenance } = workspace()
+    const companionText = JSON.stringify(companion())
+    writeFileSync(provenance, companionText, 'utf8')
+    const linked = join(dir, 'linked')
+    symlinkSync(dir, linked, 'junction')
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
+    expect(
+      runReportCommand([
+        '--input',
+        input,
+        '--output',
+        join(linked, 'provenance.json'),
+        '--provenance',
+        provenance,
+      ]),
+    ).toBe(1)
+    expect(readFileSync(provenance, 'utf8')).toBe(companionText)
+    expect(stderr.mock.calls.flat().join('')).toContain('--provenance input')
+  })
+
+  it.skipIf(!SYMLINKS)('refuses an output that is a symlink to the provenance file', () => {
+    const { dir, input, provenance } = workspace()
+    const companionText = JSON.stringify(companion())
+    writeFileSync(provenance, companionText, 'utf8')
+    const alias = join(dir, 'alias.json')
+    symlinkSync(provenance, alias, 'file')
+
+    expect(
+      runReportCommand(['--input', input, '--output', alias, '--provenance', provenance]),
+    ).toBe(1)
+    expect(readFileSync(provenance, 'utf8')).toBe(companionText)
+  })
+
+  it('refuses an output that is a hard link to the provenance file', () => {
+    const { dir, input, provenance } = workspace()
+    const companionText = JSON.stringify(companion())
+    writeFileSync(provenance, companionText, 'utf8')
+    const hard = join(dir, 'hard.json')
+    linkSync(provenance, hard)
+
+    expect(
+      runReportCommand(['--input', input, '--output', hard, '--provenance', provenance]),
+    ).toBe(1)
+    expect(readFileSync(provenance, 'utf8')).toBe(companionText)
+  })
+
+  it('refuses an output equal to the input run file and leaves the run intact', () => {
+    const { input } = workspace()
+    const runText = readFileSync(input, 'utf8')
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
+    expect(runReportCommand(['--input', input, '--output', input])).toBe(1)
+    expect(readFileSync(input, 'utf8')).toBe(runText)
+    expect(stderr.mock.calls.flat().join('')).toContain('--input run file')
+  })
+
+  it.skipIf(!SYMLINKS)('still writes to a distinct output inside a symlinked directory', () => {
+    const { dir, input, output, provenance } = workspace()
+    writeFileSync(provenance, JSON.stringify(companion()), 'utf8')
+    const linked = join(dir, 'linked')
+    symlinkSync(dir, linked, 'junction')
+    void output
+
+    expect(
+      runReportCommand([
+        '--input',
+        input,
+        '--output',
+        join(linked, 'table.md'),
+        '--provenance',
+        provenance,
+      ]),
+    ).toBe(0)
+    expect(readFileSync(join(dir, 'table.md'), 'utf8')).toContain('Prepared-input provenance')
   })
 })

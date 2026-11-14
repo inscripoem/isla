@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { MediaDriver, MediaEvent, MediaHandle } from '../../src/performance/browser/types'
 import { renderDialoguePrompt } from '../../src/dialogue'
 import type { AssembledDialogueContext, DialogueTextSource } from '../../src/dialogue'
-import { createRuleSelectionPort } from '../../src/decision'
+import { createRuleReactionPort, createRuleSelectionPort } from '../../src/decision'
 import { createMonotonicClock } from '../../src/runtime/clock'
 import { createLoopHarness } from '../support/i1-harness'
 import type { LoopHarness } from '../support/i1-harness'
@@ -19,9 +19,11 @@ import { createCatalogDialogueTextSource, createDeliveryFailingBackend } from '.
  * a genuine loopback WebSocket with a controlled media driver. Only one test
  * exercises the real M3 selection port, which is the deterministic rule over the
  * reviewed decision corpus; every other test still uses the fixture selection.
- * The M3 reaction and the provider text remain substitutes because issue #89 has
- * not delivered the rule `ReactionPort` yet. The media events are controlled
- * synthetic evidence, not acoustic proof.
+ * One test now exercises the real M3 rule `ReactionPort` (issue #89) alongside
+ * the real selection port; every other test still uses the fixture reaction
+ * substitute. The provider text remains the catalog substitute pending the
+ * live-provider half of issue #93. The media events are controlled synthetic
+ * evidence, not acoustic proof.
  */
 
 const harnesses: LoopHarness[] = []
@@ -249,9 +251,10 @@ describe('M4 loopback over the production composition', () => {
     // The failed turn exists only as audit memory (`m4Memory.records()`); it is
     // never admitted into the assembled context nor into confirmed history.
     // Admission is evidence-based: only a fully delivered segment with its
-    // receipt enters. The provider text is still the catalog substitute and
-    // issue #89 remains open for the reaction port; the store, the coordinator,
-    // the dialogue composition and this history consumption are real.
+    // receipt enters. The provider text is still the catalog substitute and this
+    // test still uses the fixture reaction (the real rule reaction port is
+    // exercised in the selection test below); the store, the coordinator, the
+    // dialogue composition and this history consumption are real.
     expect(view?.turns.map((turn) => turn.turnId)).not.toContain(failed.turnId)
     expect((await harness.confirmedHistory()).map((record) => record.turnId)).not.toContain(
       failed.turnId,
@@ -290,11 +293,12 @@ describe('M4 loopback over the production composition', () => {
       // The same clock instance serves the harness and the rule port, so the
       // request deadline, the call context and the coordinator share one domain.
       selection: createRuleSelectionPort({ clock }),
+      reaction: createRuleReactionPort({ clock }),
       profile: { allowedIntents: ['clarify'] },
     })
-    // The reaction port and the provider text are still the fixture/catalog
-    // substitutes pending issue #89; the selection is the only newly real
-    // component here.
+    // The real M3 selection and reaction rule ports are both exercised here over
+    // the same shared clock instance; the provider text remains the catalog
+    // substitute pending issue #93's live half.
     await boot(harness)
 
     const firstCandidate = corpusCase.request.candidates[0]

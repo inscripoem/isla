@@ -61,23 +61,38 @@ export interface ProvenanceAttempt {
   readonly correlation: Correlation
 }
 
+export interface ProvenanceNotRunEntry {
+  readonly caseId: string
+  readonly variantId: string
+  /** 1-based occurrence among the run's not-run entries for this pair. */
+  readonly occurrence: number
+  readonly inputs: readonly ProvenanceInputEntry[]
+}
+
 export interface ProvenanceCompanionV1 {
   readonly provenanceVersion: typeof PROVENANCE_VERSION
   readonly runId: string
   readonly runDigest: string
   readonly attempts: readonly ProvenanceAttempt[]
+  /** Observed inputs for cases the run did not execute (ADR-008 D4). */
+  readonly notRun: readonly ProvenanceNotRunEntry[]
 }
 
 export interface ProvenanceRun {
   readonly runId: string
   readonly records: readonly AttemptRecord[]
+  /** The run's not-run cases, so observations can be bound to them. */
+  readonly notRun?: readonly { readonly caseId: string; readonly variantId: string; readonly reason: string }[]
 }
 
 export type ProvenanceParse =
   | { readonly ok: true; readonly companion: ProvenanceCompanionV1 }
   | { readonly ok: false; readonly violations: readonly string[] }
 
-const ROOT_KEYS = ['provenanceVersion', 'runId', 'runDigest', 'attempts'] as const
+const ROOT_KEYS = ['provenanceVersion', 'runId', 'runDigest', 'attempts', 'notRun'] as const
+const ROOT_REQUIRED_KEYS = ['provenanceVersion', 'runId', 'runDigest', 'attempts'] as const
+const NOT_RUN_KEYS = ['caseId', 'variantId', 'occurrence', 'inputs'] as const
+const NOT_RUN_REQUIRED_KEYS = ['caseId', 'variantId', 'inputs'] as const
 const ATTEMPT_KEYS = [
   'caseId',
   'variantId',
@@ -115,7 +130,11 @@ export function provenanceRunDigest(runBytes: string | Buffer): string {
   return createHash('sha256').update(runBytes).digest('hex')
 }
 
-/** NUL never appears in a validated case or variant id, so it cannot collide. */
+/**
+ * Occurrence key per record: `(caseId, variantId, attempt)` where `attempt` is the
+ * 1-based occurrence of that `(caseId, variantId)` in the run file. Positional, so
+ * the file order is part of the key.
+ */
 export interface OccurrenceKeyParts {
   readonly caseId: string
   readonly variantId: string
@@ -123,18 +142,15 @@ export interface OccurrenceKeyParts {
 }
 
 /**
- * The single builder for `(caseId, variantId, attempt)` occurrence keys. JSON encoding
- * makes the boundary explicit, so a delimiter inside an identifier cannot collide.
+ * Unambiguous tuple encoding. JSON escaping makes the `caseId`/`variantId`
+ * boundary explicit, so two different pairs can never share a key even if an
+ * identifier contains the old NUL delimiter (M5 review, 2026-11-09).
  */
 export function buildOccurrenceKey(caseId: string, variantId: string, attempt: number): string {
   return JSON.stringify([caseId, variantId, attempt])
 }
 
-/**
- * The single parser for those keys. Returns `null` for a malformed key (wrong part
- * count, empty id, non-integer or non-positive attempt), so a delimiter change
- * cannot silently yield `NaN` in a field typed `number`.
- */
+/** The single parser for those keys; `null` for a malformed key. */
 export function parseOccurrenceKey(key: string): OccurrenceKeyParts | null {
   let value: unknown
   try {
@@ -151,20 +167,44 @@ export function parseOccurrenceKey(key: string): OccurrenceKeyParts | null {
 }
 
 /**
- * Occurrence key per record: `(caseId, variantId, attempt)` where `attempt` is the
- * 1-based occurrence of that `(caseId, variantId)` in the run file. Positional, so
- * the file order is part of the key.
+ * Unambiguous pair encoding, the prefix of an occurrence key. One helper so the
+ * record set, the not-run reason index and the executed-pair check cannot drift.
  */
+function pairKey(caseId: string, variantId: string): string {
+  return JSON.stringify([caseId, variantId])
+}
+
 export function runOccurrenceKeys(
   records: readonly { caseId: string; variantId: string }[],
 ): string[] {
   const seen = new Map<string, number>()
   return records.map((record) => {
-    const base = JSON.stringify([record.caseId, record.variantId])
+    const base = pairKey(record.caseId, record.variantId)
     const attempt = (seen.get(base) ?? 0) + 1
     seen.set(base, attempt)
     return buildOccurrenceKey(record.caseId, record.variantId, attempt)
   })
+}
+
+/**
+ * The run's `notRun[].reason`, keyed by occurrence key (ADR-008 D4).
+ *
+ * The run owns the reason and the companion carries observations only, so the
+ * parser and the report renderer must build this index the same way: one helper,
+ * or a repeated pair can pick up the wrong occurrence's reason.
+ */
+export function notRunReasonIndex(
+  run: Pick<ProvenanceRun, 'notRun'>,
+): ReadonlyMap<string, string> {
+  const occurrences = new Map<string, number>()
+  const index = new Map<string, string>()
+  for (const entry of run.notRun ?? []) {
+    const pair = pairKey(entry.caseId, entry.variantId)
+    const occurrence = (occurrences.get(pair) ?? 0) + 1
+    occurrences.set(pair, occurrence)
+    index.set(buildOccurrenceKey(entry.caseId, entry.variantId, occurrence), entry.reason)
+  }
+  return index
 }
 
 export function companionOccurrenceKey(ref: {
@@ -182,7 +222,7 @@ export function companionOccurrenceKey(ref: {
  * would refuse for binding reasons.
  */
 export function provenanceBindingViolations(
-  companion: Pick<ProvenanceCompanionV1, 'runId' | 'attempts'>,
+  companion: Pick<ProvenanceCompanionV1, 'runId' | 'attempts' | 'notRun'>,
   run: ProvenanceRun,
 ): string[] {
   const violations: string[] = []
@@ -210,6 +250,22 @@ export function provenanceBindingViolations(
       )
     }
   }
+
+  // ADR-008 D4: a not-run observation must name an occurrence the run recorded as
+  // not run. A pair may also have attempts: `runComparison` accepts repeated case
+  // ids, so the same (caseId, variantId) can be one completed attempt and one
+  // separate not-run occurrence (M5 re-review, 2026-11-11). The run's
+  // `notRun[].reason` is the single authority; the companion carries observations
+  // only. Occurrences make repeated pairs explicit.
+  const runNotRun = notRunReasonIndex(run)
+  for (const entry of companion.notRun) {
+    const key = buildOccurrenceKey(entry.caseId, entry.variantId, entry.occurrence)
+    if (!runNotRun.has(key)) {
+      violations.push(
+        `the companion records a not-run observation for ${entry.caseId}/${entry.variantId} occurrence ${entry.occurrence}, which is not a not-run occurrence in the run`,
+      )
+    }
+  }
   return violations
 }
 
@@ -226,6 +282,8 @@ function parseInputs(
     violations.push(`${path} may hold at most ${MAX_INPUTS} entries`)
   }
   const parsed: ProvenanceInputEntry[] = []
+  const acceptedRequestIds = new Set<string>()
+  const acceptedEventIds = new Set<string>()
   let stopped = false
   value.forEach((entry, index) => {
     const at = `${path}[${index}]`
@@ -264,20 +322,112 @@ function parseInputs(
     if (!(INPUT_STATUSES as readonly string[]).includes(entry.status as string)) {
       violations.push(`${at}.status must be one of ${INPUT_STATUSES.join(', ')}`)
     }
-    // Submission order (ADR-008 D3): once the batch stops, every later entry stays
-    // `not-submitted`. A submitted status after that point would claim an
-    // observation the order cannot support, so it is refused.
-    if (entry.status === 'not-submitted') {
-      stopped = true
-    } else if (stopped) {
-      violations.push(`${at}.status follows a not-submitted entry, so the order cannot be established`)
+    // ADR-008 D3: a rejected or never-submitted input has no event id. The event id
+    // is created on admission, so an id on either status claims an acknowledgement
+    // the status says never happened. The request message id may already have been
+    // allocated before submission, so it is not constrained here.
+    if (
+      (entry.status === 'rejected' || entry.status === 'not-submitted') &&
+      entry.eventId !== null
+    ) {
+      violations.push(`${at}.eventId must be null when status is ${entry.status}`)
     }
+    // M5 re-review (2026-11-13): an accepted acknowledgement is unique within one
+    // input list. The producer reuses a request message id only as `duplicate`
+    // (or reports a conflict), and an admission event id is created once. Two
+    // `accepted` entries sharing either id are a contradictory observation, not
+    // two admissions. `accepted -> duplicate` remains valid.
+    if (entry.status === 'accepted') {
+      const requestMessageId =
+        typeof entry.requestMessageId === 'string' ? entry.requestMessageId : null
+      const eventId = typeof entry.eventId === 'string' ? entry.eventId : null
+      if (requestMessageId !== null) {
+        if (acceptedRequestIds.has(requestMessageId)) {
+          violations.push(
+            `${at}.requestMessageId repeats an accepted acknowledgement in the same input list; a re-used request message id is a duplicate, not a second acceptance`,
+          )
+        } else {
+          acceptedRequestIds.add(requestMessageId)
+        }
+      }
+      if (eventId !== null) {
+        if (acceptedEventIds.has(eventId)) {
+          violations.push(
+            `${at}.eventId repeats an accepted acknowledgement in the same input list; an admission event id cannot be accepted twice`,
+          )
+        } else {
+          acceptedEventIds.add(eventId)
+        }
+      }
+    }
+    // Submission order (ADR-008 D3): `rejected`, `no-acknowledgement` and
+    // `not-submitted` are terminal. A later *submitted* status would claim an
+    // observation the order cannot support, so it is refused; later entries may
+    // only be `not-submitted`.
+    const status = entry.status as InputStatus
+    const terminal =
+      status === 'rejected' || status === 'no-acknowledgement' || status === 'not-submitted'
+    if (stopped && status !== 'not-submitted') {
+      violations.push(`${at}.status follows a terminal input, so the order cannot be established`)
+    }
+    if (terminal) stopped = true
     parsed.push({
       inputId,
       sourceId: entry.sourceId as string,
       requestMessageId: (entry.requestMessageId ?? null) as string | null,
       eventId: (entry.eventId ?? null) as string | null,
       status: entry.status as InputStatus,
+    })
+  })
+  return parsed
+}
+
+/**
+ * ADR-008 D4: a not-run case still retains the inputs that were actually
+ * submitted and observed. The observations live in the companion, keyed by the
+ * run's `(caseId, variantId)` not-run pairs; the run's `RecordedRunV1` shape is
+ * unchanged.
+ */
+function parseNotRun(
+  value: unknown,
+  violations: string[],
+): readonly ProvenanceNotRunEntry[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) {
+    violations.push('notRun must be an array')
+    return []
+  }
+  const parsed: ProvenanceNotRunEntry[] = []
+  const seen = new Set<string>()
+  value.forEach((entry, index) => {
+    const at = `notRun[${index}]`
+    if (!isObject(entry)) {
+      violations.push(`${at} must be an object`)
+      return
+    }
+    for (const key of Object.keys(entry)) {
+      if (!(NOT_RUN_KEYS as readonly string[]).includes(key)) {
+        violations.push(`${at}.${key} is not a recognised field`)
+      }
+    }
+    for (const key of NOT_RUN_REQUIRED_KEYS) {
+      if (!(key in entry)) violations.push(`${at}.${key} is required`)
+    }
+    if (!nonBlank(entry.caseId)) violations.push(`${at}.caseId must be a non-empty string`)
+    if (!nonBlank(entry.variantId)) violations.push(`${at}.variantId must be a non-empty string`)
+    const occurrence = entry.occurrence === undefined ? 1 : entry.occurrence
+    if (typeof occurrence !== 'number' || !Number.isInteger(occurrence) || occurrence < 1) {
+      violations.push(`${at}.occurrence must be an integer ≥ 1`)
+    }
+    const inputs = parseInputs(entry.inputs, `${at}.inputs`, violations)
+    const pair = JSON.stringify([entry.caseId, entry.variantId, occurrence])
+    if (seen.has(pair)) violations.push(`${at} repeats the case, variant and occurrence`)
+    seen.add(pair)
+    parsed.push({
+      caseId: entry.caseId as string,
+      variantId: entry.variantId as string,
+      occurrence: occurrence as number,
+      inputs,
     })
   })
   return parsed
@@ -296,7 +446,7 @@ export function parseProvenance(
       violations.push(`${key} is not a recognised field`)
     }
   }
-  for (const key of ROOT_KEYS) {
+  for (const key of ROOT_REQUIRED_KEYS) {
     if (!(key in input)) violations.push(`${key} is required`)
   }
 
@@ -354,7 +504,27 @@ export function parseProvenance(
       violations.push(`${at}.recordSetRevision cannot be null when correlation is exact`)
     }
 
-    const key = `${entry.caseId}\u0000${entry.variantId}\u0000${entry.attempt}`
+    const inputs = parseInputs(entry.inputs, `${at}.inputs`, violations)
+    if (entry.correlation === 'exact') {
+      const submitted = inputs.filter(
+        (input) => input.status === 'accepted' || input.status === 'duplicate',
+      )
+      if (submitted.length === 0) {
+        violations.push(`${at}.correlation is exact but no accepted or duplicate input is recorded`)
+      } else if (
+        submitted.some((input) => input.requestMessageId === null || input.eventId === null)
+      ) {
+        violations.push(
+          `${at}.correlation is exact but an accepted input has no observed acknowledgement; record "missing" instead`,
+        )
+      }
+    }
+
+    const key = buildOccurrenceKey(
+      entry.caseId as string,
+      entry.variantId as string,
+      entry.attempt as number,
+    )
     if (seenKeys.has(key)) violations.push(`${at} repeats the occurrence key`)
     seenKeys.add(key)
 
@@ -362,17 +532,19 @@ export function parseProvenance(
       caseId: entry.caseId as string,
       variantId: entry.variantId as string,
       attempt: entry.attempt as number,
-      inputs: parseInputs(entry.inputs, `${at}.inputs`, violations),
+      inputs,
       recordSetRevision: (revision ?? null) as string | null,
       correlation: entry.correlation as Correlation,
     })
   })
 
+  const parsedNotRun = parseNotRun(input.notRun, violations)
+
   // The binding rules live in one place so the renderer applies the same ones.
   if (nonBlank(input.runId)) {
     violations.push(
       ...provenanceBindingViolations(
-        { runId: input.runId, attempts: parsedAttempts },
+        { runId: input.runId, attempts: parsedAttempts, notRun: parsedNotRun },
         run,
       ),
     )
@@ -386,6 +558,7 @@ export function parseProvenance(
       runId: input.runId as string,
       runDigest: claimedDigest as string,
       attempts: parsedAttempts,
+      notRun: parsedNotRun,
     },
   }
 }

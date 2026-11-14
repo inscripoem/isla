@@ -69,6 +69,19 @@ describe('I1 loop demo composition identity', () => {
 
       await composition.coordinator.runTurn()
 
+      // The runnable demo uses the merged M3 rule selection port, not a fixture:
+      // its plan must name the actual accepted input and the M3 provider.
+      const planEvent = composition.coordinator
+        .events()
+        .find((event) => event.type === 'selection.plan')
+      const plan = planEvent?.payload.plan as
+        | { provider?: unknown; selectedEventIds?: unknown }
+        | undefined
+      expect(plan?.provider).toBe('m3-rules')
+      expect(plan?.selectedEventIds).toEqual([
+        (ack as { eventId: string }).eventId,
+      ])
+
       const dialogueResult = composition.coordinator
         .events()
         .filter((event) => event.type === 'dialogue.result')

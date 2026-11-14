@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import type {
   CapabilitySnapshot,
@@ -60,6 +62,12 @@ import type { RendererDriver, RendererObservation } from '../../src/performance/
 import type { DeadlineGate } from '../../src/performance/browser/types'
 import { PlayerDispatchError } from '../../src/performance/browser/types'
 import { createFixedSynthesis, type FixedAudioEntry } from '../../src/performance/fixed-synthesis'
+import {
+  createExpressionPolicy,
+  type ExpressionMetadata,
+  type ExpressionPolicy,
+  type ExpressionPolicyOptions,
+} from '../../src/performance/expression-policy'
 import { createMappedRenderer } from '../../src/performance/mapped-renderer'
 import { createPlaybackController } from '../../src/performance/browser/player'
 import { createPlayerPort } from '../../src/performance/browser/player-port'
@@ -7623,5 +7631,189 @@ describe('M1-02 increment D2 safe entry checks', () => {
       expect(kit.socket.closeCount()).toBe(1)
       await expect(kit.handle.closed).resolves.toEqual({ kind: 'closed' })
     }
+  })
+})
+
+/* ------------------------------------------------------------------------- *
+ * M1-02 increment X06: standalone expression policy for FR-03 / INV-02.
+ * The reviewed offline fixture is replayed on the real factory: one policy
+ * instance per session, and an accepted dispatch is recorded only when the
+ * case marks it accepted.
+ * ------------------------------------------------------------------------- */
+
+const EXPRESSION_POLICY_FIXTURE = JSON.parse(
+  readFileSync(
+    fileURLToPath(new URL('../fixtures/performance/expression-policy-cases.json', import.meta.url)),
+    'utf8',
+  ),
+) as ExpressionPolicyFixture
+
+interface ExpressionPolicyFixtureRequest {
+  readonly sessionId: string
+  readonly actionId: string
+  readonly nowMs: number
+}
+
+interface ExpressionPolicyFixtureAcceptance {
+  readonly sessionId: string
+  readonly actionId: string
+  readonly atMs: number
+}
+
+interface ExpressionPolicyFixtureSelectionCase {
+  readonly name: string
+  readonly advertisedActionIds: readonly string[]
+  readonly acceptedHistory: readonly ExpressionPolicyFixtureAcceptance[]
+  readonly request: ExpressionPolicyFixtureRequest
+  readonly expectedActionId: string
+}
+
+interface ExpressionPolicyFixtureStep {
+  readonly request: ExpressionPolicyFixtureRequest
+  readonly expectedActionId: string
+  readonly recordAcceptance: boolean
+}
+
+interface ExpressionPolicyFixtureSequence {
+  readonly name: string
+  readonly advertisedActionIds: readonly string[]
+  readonly steps: readonly ExpressionPolicyFixtureStep[]
+}
+
+interface ExpressionPolicyFixture {
+  readonly fixtureParameters: ExpressionPolicyOptions
+  readonly catalogue: readonly ExpressionMetadata[]
+  readonly selectionCases: readonly ExpressionPolicyFixtureSelectionCase[]
+  readonly sequences: readonly ExpressionPolicyFixtureSequence[]
+}
+
+type ExpressionPolicyBySession = Map<string, ExpressionPolicy>
+
+function createFixtureExpressionPolicy(
+  advertisedActionIds: readonly string[],
+): ExpressionPolicy {
+  return createExpressionPolicy({
+    enabled: true,
+    advertisedActionIds,
+    catalogue: EXPRESSION_POLICY_FIXTURE.catalogue,
+    options: EXPRESSION_POLICY_FIXTURE.fixtureParameters,
+  })
+}
+
+function policyForSession(
+  policies: ExpressionPolicyBySession,
+  sessionId: string,
+  advertisedActionIds: readonly string[],
+): ExpressionPolicy {
+  const existing = policies.get(sessionId)
+  if (existing !== undefined) return existing
+  const policy = createFixtureExpressionPolicy(advertisedActionIds)
+  policies.set(sessionId, policy)
+  return policy
+}
+
+describe('M1 expression policy selection cases (X06)', () => {
+  for (const selectionCase of EXPRESSION_POLICY_FIXTURE.selectionCases) {
+    it(selectionCase.name, () => {
+      const policies: ExpressionPolicyBySession = new Map()
+      for (const accepted of selectionCase.acceptedHistory) {
+        policyForSession(
+          policies,
+          accepted.sessionId,
+          selectionCase.advertisedActionIds,
+        ).recordAccepted(accepted.actionId, accepted.atMs)
+      }
+      const policy = policyForSession(
+        policies,
+        selectionCase.request.sessionId,
+        selectionCase.advertisedActionIds,
+      )
+      expect(policy.pick(selectionCase.request.actionId, selectionCase.request.nowMs)).toBe(
+        selectionCase.expectedActionId,
+      )
+    })
+  }
+})
+
+describe('M1 expression policy sequences (X06)', () => {
+  for (const sequence of EXPRESSION_POLICY_FIXTURE.sequences) {
+    it(sequence.name, () => {
+      const policies: ExpressionPolicyBySession = new Map()
+      for (const step of sequence.steps) {
+        const policy = policyForSession(
+          policies,
+          step.request.sessionId,
+          sequence.advertisedActionIds,
+        )
+        const selected = policy.pick(step.request.actionId, step.request.nowMs)
+        expect(selected).toBe(step.expectedActionId)
+        if (step.recordAcceptance) {
+          policy.recordAccepted(selected, step.request.nowMs)
+        }
+      }
+    })
+  }
+})
+
+describe('M1 expression policy defaults (X06)', () => {
+  it('stays off until explicitly enabled even when a substitute is available', () => {
+    const advertisedActionIds = ['smile', 'smile-soft']
+    const disabled = createExpressionPolicy({
+      advertisedActionIds,
+      catalogue: EXPRESSION_POLICY_FIXTURE.catalogue,
+    })
+    disabled.recordAccepted('smile', 1000)
+    expect(disabled.pick('smile', 1200)).toBe('smile')
+
+    const enabled = createFixtureExpressionPolicy(advertisedActionIds)
+    enabled.recordAccepted('smile', 1000)
+    expect(enabled.pick('smile', 1200)).toBe('smile-soft')
+  })
+})
+
+describe('M1 expression policy metadata validation (X06)', () => {
+  it('treats malformed metadata as unavailable and keeps the requested action', () => {
+    const options: ExpressionPolicyOptions = {
+      cooldownMs: 1000,
+      windowSize: 4,
+      maxSameInWindow: 2,
+      allowExtremeBypass: true,
+    }
+    const advertisedActionIds = [
+      'smile',
+      'smile-wide',
+      'blank-tag',
+      'not-boolean',
+      'smile-soft',
+      'blank-request',
+    ]
+    const catalogue: ExpressionMetadata[] = [
+      { actionId: 'smile', affectTag: 'joy', intensity: 3, extreme: false },
+      { actionId: 'smile-wide', affectTag: 'joy', intensity: Number.NaN, extreme: false },
+      { actionId: 'blank-tag', affectTag: '   ', intensity: 1, extreme: false },
+      {
+        actionId: 'not-boolean',
+        affectTag: 'joy',
+        intensity: 1,
+        extreme: 'no' as unknown as boolean,
+      },
+      { actionId: 'smile-soft', affectTag: 'joy', intensity: 1, extreme: false },
+      { actionId: 'smile-soft', affectTag: 'calm', intensity: 0, extreme: true },
+      { actionId: 'blank-request', affectTag: '', intensity: 3, extreme: false },
+    ]
+    const policy = createExpressionPolicy({
+      enabled: true,
+      advertisedActionIds,
+      catalogue,
+      options,
+    })
+
+    policy.recordAccepted('smile', 1000)
+    policy.recordAccepted('smile', 1500)
+    expect(policy.pick('smile', 3000)).toBe('smile-soft')
+
+    policy.recordAccepted('blank-request', 2000)
+    policy.recordAccepted('blank-request', 2100)
+    expect(policy.pick('blank-request', 5000)).toBe('blank-request')
   })
 })

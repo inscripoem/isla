@@ -12,7 +12,12 @@ import {
 } from './metrics'
 import { evaluateEligibility, type AttemptEligibility } from './eligibility'
 import type { ProvenanceCompanionV1, ProvenanceInputEntry } from './provenance'
-import { INPUT_STATUSES, provenanceBindingViolations } from './provenance'
+import {
+  INPUT_STATUSES,
+  buildOccurrenceKey,
+  notRunReasonIndex,
+  provenanceBindingViolations,
+} from './provenance'
 
 /**
  * M6-02 — the evaluation report.
@@ -371,6 +376,7 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
     const binding = provenanceBindingViolations(provenance, {
       runId: meta.runId,
       records: run.records,
+      notRun: run.notRun,
     })
     if (binding.length > 0) return { ok: false, violations: binding }
   }
@@ -395,16 +401,16 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
     )
     const eligibility = new Map(
       evaluateEligibility(provenance, run.records).map((entry) => [
-        `${entry.caseId}\u0000${entry.variantId}\u0000${entry.attempt}`,
+        buildOccurrenceKey(entry.caseId, entry.variantId, entry.attempt),
         entry.eligibility,
       ]),
     )
     for (const attempt of provenance.attempts) {
-      const key = `${attempt.caseId}\u0000${attempt.variantId}\u0000${attempt.attempt}`
+      const key = buildOccurrenceKey(attempt.caseId, attempt.variantId, attempt.attempt)
       const cellEligibility = eligibility.get(key)
       lines.push(
         `| ${cell(attempt.caseId)} | ${cell(attempt.variantId)} | ${attempt.attempt} | ${attempt.correlation} | ${revision(attempt.recordSetRevision)} | ${preparedInputs(attempt.inputs)} | ${
-          cellEligibility === undefined ? 'unscored (no-provenance-record)' : eligibilityCell(cellEligibility)
+          cellEligibility === undefined ? '—' : eligibilityCell(cellEligibility)
         } |`,
       )
     }
@@ -418,6 +424,33 @@ export function renderEvaluationReport(input: ReportInput): ReportResult {
       '> eligibility (`condition-mismatch`) is not evaluated because the run records conditions per',
       '> run, not per attempt (protocol §3 rule 5).',
     )
+    if (provenance.notRun.length > 0) {
+      lines.push(
+        '',
+        '### Not-run observations',
+        '',
+        '| Case | Variant | Occurrence | Reason | Prepared inputs |',
+        '| --- | --- | --- | --- | --- |',
+      )
+      // The run's reason is the single authority (ADR-008 D4); the index is built by
+      // the same helper the parser uses, so a repeated pair cannot pick up the
+      // wrong occurrence's reason.
+      const notRunReasons = notRunReasonIndex(run)
+      for (const entry of provenance.notRun) {
+        const reason =
+          notRunReasons.get(
+            buildOccurrenceKey(entry.caseId, entry.variantId, entry.occurrence),
+          ) ?? '—'
+        lines.push(
+          `| ${cell(entry.caseId)} | ${cell(entry.variantId)} | ${entry.occurrence} | ${cell(reason)} | ${preparedInputs(entry.inputs)} |`,
+        )
+      }
+      lines.push(
+        '',
+        '> These inputs were submitted or observed for a case the run did not execute. They are not',
+        '> attempts and are never scored (ADR-008 D4).',
+      )
+    }
   }
 
   lines.push(
@@ -517,11 +550,18 @@ export function writeEvaluationReport(
   if (!rendered.ok) return { ok: false, violations: rendered.violations }
 
   const temporary = join(dirname(path), `.${basename(path)}.${process.pid}.tmp`)
+  let created = false
   try {
-    writeFileSync(temporary, rendered.markdown, 'utf8')
+    // `wx` refuses to overwrite an existing file. The temporary name is
+    // predictable, so without it a file that happens to sit at that name (for
+    // example an evidence artifact) would be truncated before the rename, and
+    // the cleanup below would delete it.
+    writeFileSync(temporary, rendered.markdown, { encoding: 'utf8', flag: 'wx' })
+    created = true
     renameSync(temporary, path)
   } catch (error) {
-    rmSync(temporary, { force: true })
+    // Only remove the file this call created; never touch a pre-existing one.
+    if (created) rmSync(temporary, { force: true })
     throw error
   }
   return { ok: true, path }

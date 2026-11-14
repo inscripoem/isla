@@ -70,6 +70,7 @@ function companion(
     runId: 'run-1',
     runDigest: 'a'.repeat(64),
     attempts,
+    notRun: [],
   }
 }
 

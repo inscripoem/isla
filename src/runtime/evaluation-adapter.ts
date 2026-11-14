@@ -456,10 +456,14 @@ function describeDelivery(delivery: CommitDelivery): string {
 }
 
 /**
- * Maps one cycle outcome to the bench outcome. The coordinator reports several
- * failed dialogue and dispatch paths as `cancelled`, so a cancelled cycle is
- * only a cancellation when an operator Stop is recorded; otherwise the recorded
- * evidence decides and the reason names it.
+ * Maps one cycle outcome to the bench outcome. The coordinator's
+ * `CycleOutcome.status` reports several failed dialogue and dispatch paths as
+ * `cancelled`, so a cancelled cycle is only a cancellation when an operator Stop
+ * is recorded; otherwise the recorded evidence decides and the reason names it.
+ * A completed dialogue whose cycle failed (for example a synthesis or playback
+ * fault) records `turn.ended: failed`; that is a dependency/delivery failure, not
+ * a failed dialogue, so the dialogue end status is the dialogue classification
+ * source.
  */
 function mapOutcome(
   cycle: CycleOutcome | null,
@@ -515,7 +519,7 @@ function mapOutcome(
         failureReason: `the runtime cycle ended after recorded dependency failure: ${evidence.dependencyFailures.join('; ')}`,
       }
     }
-    if (evidence.turnEndStatus === 'failed' || evidence.dialogueEndStatus === 'failed') {
+    if (evidence.dialogueEndStatus === 'failed') {
       return {
         outcome: 'failed',
         failureReason:
