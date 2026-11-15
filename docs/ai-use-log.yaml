@@ -7159,3 +7159,40 @@ entries:
       M6 only: one new module under `src/evaluation/`, one offline suite, one test
       support harness, one trace row and the `test:m6` file list. The local
       `deployment/` harness and spec are untracked and not part of this change.
+  - date: "2026-11-15"
+    task: M6-CP05-run-command-self-validation
+    change: >-
+      Refuse a recorded run the recorded-run parser cannot read. `evaluation:run`
+      previously wrote an artifact from an incomplete `conditions` object and
+      reported success; the report command then refused the file. The exact bytes
+      are now parsed with `parseRecordedRun` before the atomic write, so producer
+      and consumer share one validator and a refusal creates no file. Also records
+      the harness seam as Delta-007a (an amendment to ADR-007 that does not rewrite
+      it and claims no new ADR number), adds the command to the module README and
+      extends the trace row to state the self-validation.
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    commits: ['bc60371']
+    agent: opencode/build
+    provider: opencode-go
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      The M6 member approved the three fixes (artifact validation, Delta-007a,
+      module README) and reviewed the diff. The agent wrote the validation, the
+      two refusal tests, the Delta, the README rows and the trace-row extension.
+      No live call was made in this round and no measurement is claimed.
+    verification:
+      base: 205424f
+      reproduction: >-
+        Run from the repository root. The command suite: 15 passed, including a
+        spec with an empty `conditions` object through both `executeRun` and the
+        CLI: exit 1, no file written. Six mutations were applied one at a time and
+        each turned its own test red (existing-output refusal, duplicate option,
+        missing option, empty case set, empty variant list, output validation);
+        the file was restored after each. pnpm typecheck -> exit 0. pnpm lint ->
+        exit 0. pnpm test:m6 -> 22 files, 339 passed. pnpm test:trace -> 41.
+        pnpm test:readiness -> 47. pnpm verify -> exit 0, 88 files, 1872 passed.
+    scope: >-
+      M6 only: `src/evaluation/run-command.ts`, its suite, the module README, one
+      Delta and one trace row. No schema, contract, runtime, storage, gate or
+      deployment change; no threshold value and no case id.
