@@ -94,7 +94,6 @@ offline suite pins the deterministic rule baseline's exact score sums
 (`dev = 3`, `heldOut = 9`) as regression invariants.
 
 This fixture alone cannot support a held-out generalisation claim or a
-variant-superiority claim. Offline mock runs remain non-certifying mechanics
-checks (`certifiesCorpus: false`). Independent multi-reviewer human scoring,
+variant-superiority claim. Any run over a non-authentic port — including mock-transport provider ports, unmarked inline stubs, or any port other than `createRuleSelectionPort` (for rules) or a live `createOpenAiCompatibleSelectionPort` without `fetchImpl` — is marked non-certifying (`certifiesCorpus: false`). Independent multi-reviewer human scoring,
 disagreement resolution and formal live variant comparison are deferred to
 Checkpoint 07 under Issue `#110` (M3/M4, reviewed by M6) and Issue `#109` (M6).

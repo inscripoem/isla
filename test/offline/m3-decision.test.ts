@@ -38,6 +38,7 @@ import {
   createOpenAiCompatibleSelectionPort,
   createRuleReactionPort,
   createRuleSelectionPort,
+  isRuleSelectionPort,
   renderReactionSystemPrompt,
   renderReactionUserPrompt,
   renderSelectionSystemPrompt,
@@ -1443,6 +1444,51 @@ describe('M3 direct selection runner', () => {
     expect(observation.candidateScore).toBe(2)
     expect(observation.intentSuitability).toBe('appropriate')
     expect(observation.certifiesCorpus).toBe(true)
+  })
+
+  it('treats an unmarked inline SelectionPort stub as non-certifying across the corpus', async () => {
+    const inlineStub: SelectionPort = {
+      async select(request) {
+        return fixtureSelectionResult({
+          requestId: request.requestId,
+          sessionId: request.sessionId,
+          epoch: request.epoch,
+          snapshotRevision: request.snapshotRevision,
+          disposition: 'defer',
+          selectedEventIds: [],
+          replyIntent: null,
+          usage: fixtureUsage({ requestId: request.requestId }),
+        })
+      },
+    }
+    expect(isRuleSelectionPort(inlineStub)).toBe(false)
+    expect(
+      isRuleSelectionPort(createRuleSelectionPort({ clock: createVirtualClock(1000) })),
+    ).toBe(true)
+
+    const result = await runSelectionCorpus(baseCorpus(), {
+      createSelection: () => inlineStub,
+    })
+    expect(result.status).toBe('ran')
+    if (result.status !== 'ran') return
+    expect(result.observations).toHaveLength(12)
+    for (const observation of result.observations) {
+      expect(observation.status).toBe('observed')
+      expect(observation.certifiesCorpus).toBe(false)
+      expect(observation.diagnostics.includes('synthetic-port')).toBe(true)
+    }
+
+    const forced = await runSelectionCorpus(baseCorpus(), {
+      ...ruleSelection(),
+      syntheticPort: true,
+    })
+    expect(forced.status).toBe('ran')
+    if (forced.status !== 'ran') return
+    expect(forced.observations).toHaveLength(12)
+    for (const observation of forced.observations) {
+      expect(observation.status).toBe('observed')
+      expect(observation.certifiesCorpus).toBe(false)
+    }
   })
 
   it('uses each case initialNowMs for the port clock and validation', async () => {
@@ -3178,6 +3224,21 @@ describe('M3 comparison variants and multi-variant corpus runner', () => {
     expect(
       stubObservations.every(
         (observation) =>
+          observation.certifiesCorpus === false &&
+          observation.diagnostics.includes('synthetic-port'),
+      ),
+    ).toBe(true)
+
+    const rulePortRun = await runSelectionVariantsOnCorpus(base, {
+      generalModel: (clock) => createRuleSelectionPort({ clock }),
+    })
+    const rulePortObservations =
+      rulePortRun.observationsByVariant['m3-general-model'] ?? []
+    expect(rulePortObservations).toHaveLength(12)
+    expect(
+      rulePortObservations.every(
+        (observation) =>
+          observation.status === 'observed' &&
           observation.certifiesCorpus === false &&
           observation.diagnostics.includes('synthetic-port'),
       ),

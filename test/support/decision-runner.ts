@@ -11,7 +11,7 @@ import {
   SelectionCallError,
   createRuleSelectionPort,
   isLiveProviderSelectionPort,
-  isMockProviderSelectionPort,
+  isRuleSelectionPort,
 } from '../../src/decision'
 import type {
   ComparisonRun,
@@ -722,8 +722,9 @@ export async function runSelectionCase(
     }
   }
 
-  const syntheticPort =
-    options.syntheticPort === true || isMockProviderSelectionPort(selection)
+  const authentic =
+    isLiveProviderSelectionPort(selection) || isRuleSelectionPort(selection)
+  const syntheticPort = options.syntheticPort === true || !authentic
   return observe(entry, validation.result, { syntheticPort })
 }
 
