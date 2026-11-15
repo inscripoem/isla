@@ -74,13 +74,27 @@ id, the companion also carries `runDigest`: the SHA-256 of the exact run artifac
 for one case and variant leaves the key set unchanged but changes the digest, so the companion is refused.
 Duplicate companion keys are refused; a digest mismatch is refused.
 
+The occurrence key is a **JSON-encoded tuple** (`[caseId, variantId, attempt]`), so an identifier that
+contains a delimiter cannot collide with a different `(caseId, variantId)` pair (M5 review, 2026-11-09).
+
+The digest is **producer-asserted**, not verified evidence about admission (M4 review, 2026-11-06). The
+parser can prove that the digest names the bytes on disk; it cannot prove that a non-null
+`recordSetRevision` is the set an attempt actually admitted, and an empty-set digest for a `none` or
+`local` run is indistinguishable from an invented one. The report does not claim that verification.
+
 ### D3 — Every input carries an explicit status
 
 `inputs[]` holds one entry per prepared input in submission order, each with
 `status ∈ { accepted, duplicate, rejected, not-submitted, no-acknowledgement }`; later entries stay
 `not-submitted` when the batch stops, and the list is empty only when nothing was submitted. Status is
 recorded, never inferred. `requestMessageId` and `eventId` are `null` when the observation does not support
-them — a rejected submission has a request id and no event id.
+them — a rejected submission has a request id and no event id, and a `not-submitted`
+input has no event id because it was never admitted (its request message id may already
+have been allocated before submission).
+
+`rejected`, `no-acknowledgement` and `not-submitted` are **terminal**: no later entry may be a submission
+(M5 review, 2026-11-09). `correlation: exact` requires at least one `accepted` or `duplicate` input and both
+`requestMessageId` and `eventId` on every such input; otherwise the companion records `missing`.
 
 ### D4 — Observed and unobserved are different facts
 
@@ -88,6 +102,11 @@ A `notRun` case still retains every input that was **actually submitted and obse
 or unacknowledged submission. Only a failure **before any submission** leaves no observed inputs. A batch
 that never submitted an input supplies zero observed inputs; a not-run entry never receives an invented
 acknowledgement.
+
+The observations are carried in the companion's root **`notRun[]`** array (`caseId`, `variantId`,
+`occurrence`, `inputs`), bound to the run's not-run pairs and occurrence order. The run's
+`notRun[].reason` is the single authority; the companion carries observations only, so the two cannot
+disagree. The frozen `RecordedRunV1` is unchanged (M5 review, 2026-11-09).
 
 ### D5 — Input identity is a tuple, and it is not observable yet
 
@@ -128,10 +147,29 @@ alone.
 ### D8 — Refusal, not a partial join
 
 The report command takes an explicit companion path. It refuses the companion when the `runId` differs, the
-digest differs, the `(caseId, variantId, attempt)` set differs from the run's, a duplicate key appears, or
-the input order cannot be established. A missing or extra entry is a refusal with a reason, never a partial
-join. Without a companion, every quality result for that run is `unscored` with reason
+digest differs, the `(caseId, variantId, attempt)` set differs from the run's, a duplicate key appears, the
+input order cannot be established, a `notRun` observation names a pair or occurrence the run did not
+record, or an `exact`
+correlation lacks an observed acknowledgement. Strict shape validation belongs to the same refusal set:
+an unknown or extra field, a missing required field, a `status` or `correlation` outside the declared set,
+more than five prepared inputs, a `recordSetRevision` that is `null` under `exact`, and a rejected or
+`not-submitted` input carrying an event id all refuse the companion. A not-run observation is validated against the run's
+not-run occurrences only: a pair may also have an attempt, because repeated case ids are supported. A missing or extra entry is a refusal with a reason, never a partial join. Without a companion, every quality result for that run is `unscored` with reason
 `no-provenance-record`.
+
+**Evidence-preservation boundary (2026-11-14).** The command refuses an `--output` that is the companion
+or the run file — directly, through a symlinked parent, or through a hard link — before reading or
+writing. The writer creates its predictable temporary file with `O_EXCL`, so a file at that name is
+neither truncated nor deleted by cleanup. This protects the evidence artifacts, not only the join.
+
+**Producer-boundary note (2026-11-13).** The companion parser does not infer the producing variant or its
+attempt boundary from a status or a free-text reason. A generic `notRun` occurrence may carry an accepted
+input while the run's reason describes a rejection; that is a producer-specific inconsistency, not proof
+of a parser defect. The M5 prepared-input adapter/proposal owns that boundary. Before CP05 scoring, the
+separate named batch-completeness condition (#143) must be recorded. #140 does not score, adopt ADR-008 or
+claim the producer boundary. Within one input list the parser refuses a repeated accepted acknowledgement:
+a re-used request message id is a duplicate, and an admission event id is created once. `accepted
+-> duplicate` remains valid.
 
 ### D9 — No schema or port change in this decision
 
@@ -170,9 +208,24 @@ own triggers; this ADR deliberately does not take it.
 | --- | --- | --- | --- |
 | 1 | ~~Is `(corpusVersion, casesSha256, caseId, candidate.eventId)` the stable corpus identity?~~ | M3 | **Closed 2026-10-29** — confirmed for v1; `inputId` still needs M5's export |
 | 2 | ~~Does `history.source: 'none'` carry the empty-set digest or `null`?~~ | M4 | **Closed 2026-10-28** — empty-set digest for `none`; `null` means unobserved |
-| 3 | Who exports the per-input acknowledgement, and in what shape? | M5 | `requestMessageId`/`eventId` may stay `null`; correlation is `missing` |
+| 3 | Who exports the per-input acknowledgement — `sourceId`, `requestMessageId`, `eventId` — and in what shape? | M5 | `requestMessageId`/`eventId` may stay `null`; correlation is `missing`. The producing export of all three must be pinned before any CP05 scoring that joins an attempt to dialogue-side records (M4, 2026-11-08); eligibility must cite names, not conventions. |
+| 4 | Does `correlation: exact` describe the admitted link or the complete submitted batch (e.g. `accepted → no-acknowledgement → not-submitted`)? | M5/M4 | A partial batch can currently be recorded as `exact`; eligibility must respect the agreed distinction before CP05 scoring |
 
-Rows 1 and 2 are closed by M3's and M4's answers; row 3 is the only blocking decision left.
+Rows 1 and 2 are closed by M3's and M4's answers. Row 3 blocks CP05 scoring, not the companion's merge.
+Row 4 must be agreed before the eligibility path fixes the `exact` distinction.
+
+**Row 4 — M4 position recorded 2026-11-12.** `correlation: exact` asserts the observed
+input/acknowledgement link, not completeness of the submitted batch. A partially admitted
+batch may therefore carry `exact` for the link that was observed, provided the parser preserves the
+unadmitted tail as it does now. `exact` must not by itself make an attempt quality-eligible; before
+CP05 scoring, eligibility needs a separate, named batch-completeness condition, aligned with M4's
+completed-only decision recorded in #142 §3 and absent from #143's `UNSCORED_REASONS`. No parser
+change is requested in #140. ADR-008 remains `proposed`.
+
+**Row 4 — M5 confirmation recorded 2026-11-13.** M5 agreed with M4's distinction in the review at
+`216dda8` (pull/140#pullrequestreview-5885930048): `exact` describes the observed input/acknowledgement
+link, and a separate named batch-completeness condition is needed before CP05 scoring. This records
+agreement on row 4 only. It does not adopt ADR-008, score a run, or accept #100/CP05.
 
 ## Re-open triggers
 

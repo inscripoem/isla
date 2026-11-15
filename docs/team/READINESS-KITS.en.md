@@ -62,13 +62,20 @@ I1-01 integrates one real offline loop using the confirmed module owners. Preser
 
 The role-based agent entry is defined in [AGENTS.md](../../AGENTS.md). A request such as "I am M3. Start my first task" selects the relevant task and planning workflow; no long reusable prompt is required. `Prompt.md` points to the same entry.
 
-For course implementation, use the configured OpenCode provider and the established model. From the checkout, the launch shape is:
+For course implementation, use the configured OpenCode provider and the established model. First check `opencode --version` and the installed command help. From the worktree root, the OpenCode V2 launch shape is:
 
 ```sh
-opencode run --dir . -m <configured-provider>/deepseek-v4-flash --pure --agent build --variant xhigh --format json --title "<task-id>" "<English task>"
+opencode run -m <configured-provider>/deepseek-v4-flash#xhigh --agent build --format json --title "<task-id>" "<English task>"
 ```
 
-The angle-bracket values are placeholders, not ready-to-run credentials/configuration. Provider setup is separate from offline onboarding. Preserve actual session IDs and export original records outside the checkout; never place credentials or raw private records in a PR.
+Resume and export that same session with:
+
+```sh
+opencode run -s <session-id> -m <configured-provider>/deepseek-v4-flash#xhigh --agent build --format json "<English follow-up>"
+opencode session export <session-id>
+```
+
+The angle-bracket values are placeholders, not ready-to-run credentials/configuration. Provider setup is separate from offline onboarding. The historical V1 `--dir`, `--pure` and separate `--variant` flags are not the verified V2 form. Preserve actual session IDs and export original records outside the checkout; never place credentials or raw private records in a PR.
 
 A small handoff includes task/requirement IDs, changed ports, actual commands/results, failure/Stop behavior, known gaps and the consuming owner's actual review. M5 coordinates shared contracts, entry points and dependency changes; each owner supplies their own tests and fixes.
 

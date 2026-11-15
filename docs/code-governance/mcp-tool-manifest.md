@@ -40,7 +40,7 @@ the repository can establish it is not evidence the gates read.
 | --- | --- | --- |
 | Language model provider (OpenCode + official DeepSeek) | generation | the session is recorded in `docs/ai-use-log.yaml`; raw exports stay outside the checkout (§5) |
 | Context7 documentation lookup | read-only reference | consulted before introducing an unestablished library/API or uncertain configuration (`AGENTS.md`) |
-| Repository filesystem, test runner, `git`/`gh` CLI | local tools | mutations only on explicit instruction; **agents never merge** (`AGENTS.md`) |
+| Repository filesystem, test runner, `git`/`gh` CLI | local tools | publication only on explicit instruction; **agents never merge** (`docs/team/README.md`; `AGENTS.md`) |
 
 ## Policy for adding an MCP server or tool
 
@@ -48,7 +48,7 @@ the repository can establish it is not evidence the gates read.
    thread with the resource(s) it exposes **before** any configuration lands.
 2. **Least privilege.** Read-only unless a specific, reviewed use requires a write; a write-capable tool must
    name the paths or state it may change.
-3. **Approval and ownership.** The configuration is reviewer-managed (`AGENTS.md`); the proposer owns the
+3. **Approval and ownership.** The configuration is reviewer-managed (`AGENTS.md`; this manifest); the proposer owns the
    manifest update in the same change.
 4. **Secrets.** Never read, display or log secret values (`.env`, `*secret*`, `*token*`, `*auth*`, `*key*`,
    `*password*`, `id_*`, `*.pem`, `*.p12`, `*.key`); credentials are never written to the repository. A tool

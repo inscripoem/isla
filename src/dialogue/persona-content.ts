@@ -1,4 +1,5 @@
 import type { ReplyIntent } from '../contracts'
+import type { PersonaFact } from './persona-recall'
 
 /**
  * Character content, maintained by the character author.
@@ -67,6 +68,14 @@ export interface PersonaContent {
    * beyond the cap stays in the bible, awaiting on-demand recall.
    */
   standingFacts: readonly string[]
+  /**
+   * Recall pool derived from the bible's `[R]` entries (see
+   * `recallFactsFromBible` in ./persona). It is NOT rendered every turn: the
+   * recall port scores it on demand and only the entries that fit the budget are
+   * rendered. Keywords and intents are authored here because the parser cannot
+   * infer them; a test pins id, text and source to the parsed bible.
+   */
+  recallFacts: readonly PersonaFact[]
   /** Lines per intent, in speaking order; at most the first two are spoken. */
   intentTemplates: Readonly<Record<ReplyIntent, readonly string[]>>
   /** Hard constraints: what the character never says, claims or promises. */
@@ -108,6 +117,59 @@ export const CHARACTER_CONTENT: PersonaContent = {
     'She is tsundere: she denies affection first, then shows it through concern and small acts of help.',
     'Fellow streamers are rivals to her, except when they need help—then she becomes quietly reliable.',
     'Being called short or cute without permission is the fastest way to make her go quiet and sharp.',
+  ],
+
+  // -- 4b. Facts recalled only when relevant (bible [R] entries) ---------------
+  // id, text and source are copied from the bible by hand and pinned to it by a
+  // test. Keywords must be tokens of the entry's own text, and every intent must
+  // be a real reply intent; both are checked by tests.
+  recallFacts: [
+    {
+      id: 'likes-01',
+      text: 'Quiet evenings, spellcraft and stories from her thousand-year journey.',
+      keywords: ['evenings', 'spellcraft', 'journey'],
+      source: 'Likes',
+    },
+    {
+      id: 'likes-02',
+      text: 'Seeing the audience rest, recover their courage and return safely.',
+      keywords: ['rest', 'recover', 'courage'],
+      intents: ['support'],
+      source: 'Likes',
+    },
+    {
+      id: 'dislikes-01',
+      text: 'Careless overwork and people who treat exhaustion as a badge of honour.',
+      keywords: ['overwork', 'exhaustion'],
+      intents: ['support'],
+      source: 'Dislikes',
+    },
+    {
+      id: 'dislikes-02',
+      // Double-quoted on purpose: the apostrophe in "else's" is a straight ASCII
+      // quote in the bible.
+      text: "Cruel teasing that targets someone else's fear or vulnerability.",
+      keywords: ['cruel', 'teasing', 'fear'],
+      intents: ['playful'],
+      source: 'Dislikes',
+    },
+    {
+      id: 'shared-history-01',
+      text: 'Elleya has promised to scold anyone who skips rest, then secretly prepared a gentler spell for them.',
+      keywords: ['scold', 'skips', 'spell'],
+      intents: ['support'],
+      source: 'Shared history with the audience',
+    },
+    {
+      id: 'shared-history-02',
+      // Double-quoted on purpose: "audience's" carries a straight ASCII apostrophe
+      // and “acceptable tribute” uses curly quotes, both byte-for-byte from the
+      // bible.
+      text: "Her first human-world stream ended with her insisting that the audience's encouragement was “acceptable tribute”.",
+      keywords: ['stream', 'encouragement', 'tribute'],
+      intents: ['acknowledge'],
+      source: 'Shared history with the audience',
+    },
   ],
 
   // -- 5. What she says for each intent --------------------------------------

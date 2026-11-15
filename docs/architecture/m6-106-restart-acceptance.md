@@ -1,0 +1,66 @@
+# #106 — product SQLite, restart and selected-history acceptance
+
+Status: **M6 evidence record; no checkpoint acceptance claimed.** Date: 2026-11-09.
+Measured at `main` **`e9e7e7b`**. Issue: #106 (checkpoint #76, CP6). Accepter: M2.
+Windows is out of scope (no Windows environment; DEBT-07).
+
+## Claims checked
+
+| Claim | Evidence | Verdict |
+| --- | --- | --- |
+| Confirmed history is restored; unresolved output stays unknown | C-33 (`m6-recovery`), C-68 (`m6-i1-storage-recovery`), C-74 (`m5-process-restart`) | **PASS** |
+| Unknown output is never promoted or replayed | C-74 second process; C-33 no-replay case | **PASS** |
+| Selected prior-session history reaches the assembled context | C-74: `ISLA_TEST_ARCHIVE_SESSIONS`; context history is `[LIVE_A, LIVE_A, ARCHIVE]` | **PASS** |
+| A crash leaves committed data recoverable | `m6-durability`: crash-state copy with a non-empty `-wal`; committed row visible without clean close | **PASS for committed data** |
+| An uncommitted WAL tail is recovered | — | **NOT RUN** (the suite says so; needs a cache-spill fixture or a killed subprocess) |
+| Shutdown awaits owned release and reports faults | C-73 (`production-cli`: pending release, failed release, startup-failure cleanup, output drain) | **PASS for owned release**; not acoustic silence |
+| Windows shutdown/recovery | — | **NOT RUN / out of scope** |
+
+## Evidence runs at `e9e7e7b`
+
+```
+pnpm exec vitest run \
+  test/offline/m6-recovery.test.ts \
+  test/offline/m6-i1-storage-recovery.test.ts \
+  test/offline/m6-durability.test.ts \
+  test/offline/m5-process-restart.test.ts \
+  test/offline/production-cli.test.ts
+```
+
+Result: **26 passed / 26, 5 files** at `e9e7e7b`. Measured on 2026-11-11 against a tree whose test files
+are byte-identical to `e9e7e7b` (`e9e7e7b..7995f51` touches no test file); the earlier draft of this record
+said 27, which did not reproduce.
+
+### Re-run at `a4f1ed1` (2026-11-14)
+
+The same five files at the current merged head give **27 passed / 27, 5 files**:
+`m6-i1-storage-recovery` now has **4** cases (main gained one after `e9e7e7b`), while the other counts are
+unchanged — 4 + 4 + 2 + 2 + 15. The `e9e7e7b` result remains **26/26 with 3** cases in that suite; the
+earlier 27 at that head still did not reproduce. Each run is bound to its own head.
+
+| Suite | Cases | What it asserts |
+| --- | --- | --- |
+| `m6-recovery` (4) | C-32, C-33 | recovery view separates confirmed from unresolved; reopen restores confirmed only and keeps the rest unknown with no replay; the projection is re-derived from committed events; an unsupported schema version refuses to start |
+| `m6-i1-storage-recovery` (3 at `e9e7e7b`; 4 at `a4f1ed1`) | C-32/C-33, C-68 | the real coordinator writes SQLite and a reopen restores only confirmed history; an earlier completed segment stays eligible and the interrupted one is excluded; empty confirmed history when nothing completed |
+| `m6-durability` (2) | INV-12, FR-06 | a crash-state copy (`isla.db` + non-empty `-wal`) recovers every committed row and keeps the schema version; a committed row is visible to a second handle without a clean close |
+| `m5-process-restart` (2) | C-74 | two spawned production CLI processes over one real SQLite database; the second uses a fresh live id and the explicitly selected archive, receives only confirmed history, and neither replays old audio nor promotes the partial-unknown tail; a second case SIGKILLs the first process between commits, preserves the committed prefix and never promotes the unfinished tail |
+| `production-cli` (15) | C-73 | shutdown waits for a genuinely pending owned release before reporting completion; a failed release reports an incomplete shutdown; startup failure still awaits the owned release; output is drained until both streams end |
+
+## What this does not prove
+
+- No live provider, acoustic output or physical silence.
+- No product-console path; the process tests use controlled peers.
+- No Windows result: the direct-signal tests are skipped there and no Windows run was made.
+- No uncommitted-WAL-tail recovery and no kill **during** a database write; the kill lands **between commits**.
+- No CP6 acceptance: the other CP6 rows (M3/M5 fault cases, M1/M2 playback, privacy) are not evaluated
+  here, and a named human decides the checkpoint.
+
+## Traceability
+
+FR-06 (persist and replay) · INV-12 (confirmed history only; no replay) · ADR-005 (restart recovery) ·
+cases C-32, C-33, C-68, C-73, C-74. Windows gap: DEBT-07.
+
+## Reproduction note
+
+The evidence is fixture- and process-based on Linux/macOS; it is not a substitute for the product-console
+or platform acceptance. A re-run must record its own head; the counts above belong to `e9e7e7b`.
