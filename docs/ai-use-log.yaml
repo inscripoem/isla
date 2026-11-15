@@ -5333,9 +5333,10 @@ entries:
       limits: >-
         No live text provider, VTube Studio session, Kokoro model load or
         acoustic output was run. The release and hotkey-map refusals are
-        exercised only with injected fakes. The three hotkey ids and plugin
-        identity confirmation remain pending with M1, and CP04 acceptance is
-        not claimed.
+        exercised only with injected fakes. M1 supplied the model id, hotkey
+        ids and plugin identity on #95; the host operator still approves that
+        identity in VTube Studio at pairing time, and no live pairing was run.
+        CP04 acceptance is not claimed.
     scope: >-
       src/runtime/deployments/reference-live-config.ts,
       src/runtime/deployments/reference-live.ts, two offline tests,
