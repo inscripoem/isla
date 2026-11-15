@@ -103,7 +103,15 @@ ISLA_RUNTIME_HOST=127.0.0.1 ISLA_RUNTIME_PORT=4317 \
 pnpm runtime:production
 ```
 
-`ISLA_VTS_HOTKEY_MAP` is a JSON object such as `{"smile":"<hotkey-id>"}`; every advertised action must have exactly one binding. The retained synthesis factory uses the merged M1 PR33/34 interfaces; see the [physical synthesis handoff](docs/team/HANDOFF-M5-PHYSICAL-SYNTHESIS.en.md) for the shared adapter, originating gate and owned-release contract. The controlled deployment combines M3 rule selection and reaction with fixed WAV assets; live M4 text and selected model adapters remain owner deliverables. M5 owns dynamic audio HTTP/resource assembly and physical
+`ISLA_VTS_HOTKEY_MAP` is a JSON object; every advertised action must have exactly one binding. The reference target uses the bundled `Hiyori_A` model (`00f9750080014d43bb398cd98e4f55ad`) and these three verified hotkeys:
+
+```sh
+ISLA_VTS_HOTKEY_MAP='{"animation-1":"b66cf516d694446b9e1aafbcf16459a9","animation-2":"c28e206b5e3c4eb5be3c1dcee11f02c0","animation-3":"ad4e0bc1a58746a58002ad180692e649"}'
+```
+
+`animation-1/2/3` map to `hiyori_m03/m06/m10.motion3.json`; the display names are the model's "My Animation 1/2/3". The host operator keeps the raw model, textures and motions outside the repository. The demo credits must carry Live2D's prescribed Hiyori copyright notice and use content that respects the character terms.
+
+The retained synthesis factory uses the merged M1 PR33/34 interfaces; see the [physical synthesis handoff](docs/team/HANDOFF-M5-PHYSICAL-SYNTHESIS.en.md) for the shared adapter, originating gate and owned-release contract. The controlled deployment combines M3 rule selection and reaction with fixed WAV assets; live M4 text and selected model adapters remain owner deliverables. M5 owns dynamic audio HTTP/resource assembly and physical
 provider lifecycle; M2 is the browser consumer. The module under
 `test/support/` is test-only and is used by the automated CLI suite, not by the
 product entry. SIGINT/SIGTERM perform the controlled shutdown: stop the transport,

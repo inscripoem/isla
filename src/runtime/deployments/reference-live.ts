@@ -90,7 +90,8 @@ const REFERENCE_KOKORO: Omit<KokoroProviderConfig, 'environment'> = {
   speed: REFERENCE_VOICE_PROFILE.speed,
 }
 
-const REFERENCE_VTS_MODEL_ID = 'isla-reference-model'
+/** Bundled Hiyori_A model id verified on the target VTube Studio 1.35.10. */
+const REFERENCE_VTS_MODEL_ID = '00f9750080014d43bb398cd98e4f55ad'
 const REFERENCE_VTS_RENDERER_ID = 'isla-reference-renderer'
 const REFERENCE_VTS_CHARACTER_ID = 'isla-reference-character'
 const REFERENCE_VTS_CAPABILITY_REVISION = 1
