@@ -353,11 +353,11 @@ describe('M5 evaluation adapter through the M6 runner', () => {
       usage: { inputTokens: null, outputTokens: null, costUsd: null, usageMissing: true },
       failureReason: null,
     })
-    // Only intervals whose endpoints are recorded are reported: the single
-    // input gives a dispatch interval, and the completed turn gives dialogue
-    // time. The plan interval is reversed by the runtime's event order today.
+    // Only intervals whose endpoints are recorded are reported: the completed
+    // turn gives dialogue time. There is no dispatched boundary, so the submit
+    // interval stays null rather than absorbing selection planning time.
     expect(record.timing).toEqual({
-      submitMs: expect.any(Number),
+      submitMs: null,
       planMs: null,
       dialogueMs: expect.any(Number),
       synthesisMs: null,
@@ -508,6 +508,8 @@ describe('M5 evaluation adapter through the M6 runner', () => {
     expect(run.notRun[0].reason).toContain('mislabelled')
     expect(run.notRun[1].reason).toContain('no deployment peers are configured')
     expect(run.notRun[2].reason).toContain('cannot run')
+    // A not-run before any submission carries no observed inputs.
+    expect(run.notRunObservations).toBeUndefined()
     // Nothing was attempted: no session, no runtime, no provider call.
     expect(harness.sessions).toEqual([])
 
@@ -1867,7 +1869,7 @@ describe('M5 evaluation adapter prepared inputs', () => {
       },
     ])
     expect(observation.timings).toEqual({
-      submitMs: expect.any(Number),
+      submitMs: null,
       planMs: null,
       dialogueMs: expect.any(Number),
       synthesisMs: null,
@@ -1948,8 +1950,8 @@ describe('M5 evaluation adapter prepared inputs', () => {
     const turn = events.find((event) => event.type === 'turn.started')
     expect(turn?.seq ?? -1).toBeGreaterThan(lastAcceptedSeq)
 
-    // Five admitted inputs leave the dispatched input ambiguous, so the submit
-    // interval stays null rather than guessing one of them.
+    // No dispatched boundary is recorded, so the submit interval stays null;
+    // the single turn still gives dialogue time.
     const observation = harness.observations[0]
     expect(observation.inputs.map((input) => input.status)).toEqual(
       Array.from({ length: 5 }, () => 'accepted'),
@@ -2152,8 +2154,9 @@ describe('M5 evaluation adapter prepared inputs', () => {
 /**
  * Admission export and observable timings. The adapter records what the runtime
  * acknowledged, in submission order, and derives only intervals whose two
- * endpoints are recorded and ordered. `planMs` stays null because the
- * coordinator persists `selection.plan` before `turn.started`.
+ * endpoints are recorded and ordered. `submitMs` stays null because no
+ * dispatched boundary is recorded, and `planMs` stays null because no
+ * selection-entry boundary is recorded.
  */
 describe('M5 evaluation adapter admission export and observable timings', () => {
   const prepared = (
@@ -2162,7 +2165,7 @@ describe('M5 evaluation adapter admission export and observable timings', () => 
     actorId: string,
   ): PreparedEvaluationInput => ({ source, text, actorId })
 
-  it('exports the accepted acknowledgement and derives submit and dialogue time', async () => {
+  it('exports the accepted acknowledgement and derives dialogue time', async () => {
     const clock = createVirtualClock(1_000)
     const harness = createHarness(clock)
     const selectionBase = createFixtureSelectionPort()
@@ -2210,12 +2213,13 @@ describe('M5 evaluation adapter admission export and observable timings', () => 
         identityReason: INPUT_IDENTITY_UNAVAILABLE_REASON,
       },
     ])
-    // Selection advances the clock by 7 before the plan is persisted; the
-    // dispatch interval is therefore 7 ms. The plan interval is reversed by the
-    // runtime's event order, and the first reaction advances 5 ms before the
-    // dialogue result is persisted.
+    // Selection advances the clock by 7 before `turn.started`, which is after
+    // the plan is persisted. Submission ends at a dispatched boundary, not at
+    // `turn.started`, so that 7 ms is neither submission nor planning time and
+    // both intervals stay null. The first reaction advances 5 ms between
+    // `turn.started` and `dialogue.result`.
     expect(observation.timings).toEqual({
-      submitMs: 7,
+      submitMs: null,
       planMs: null,
       dialogueMs: 5,
       synthesisMs: null,
@@ -2274,8 +2278,8 @@ describe('M5 evaluation adapter admission export and observable timings', () => 
     })
     const events = await harness.store.readSession(sessionId)
     expect(events.filter((event) => event.type === 'input.accepted')).toHaveLength(1)
-    // Exactly one admitted input remains, so the dispatch interval is known.
-    expect(observation.timings.submitMs).toEqual(expect.any(Number))
+    // No dispatched boundary is recorded, so the submit interval stays null.
+    expect(observation.timings.submitMs).toBeNull()
     expect(observation.timings.planMs).toBeNull()
     expect(observation.timings.dialogueMs).toEqual(expect.any(Number))
   })
@@ -2351,6 +2355,142 @@ describe('M5 evaluation adapter admission export and observable timings', () => 
     })
   })
 
+  it('exposes retained input observations when the first prepared input is rejected', async () => {
+    const harness = createHarness()
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const consumer = createControlledConsumer({
+      media: createControlledMediaDriver({ autoEvents: true }),
+      resolver,
+      receiptPrefix: 'first-rejected',
+      onAttach: (composition) => {
+        const endpoint = composition.coordinator.endpoint
+        const original = endpoint.submitInput.bind(endpoint)
+        // Submitting on the previous epoch is refused by the real coordinator,
+        // so the first prepared input is rejected before any selection.
+        endpoint.submitInput = (message, context) =>
+          original({ ...message, epoch: message.epoch - 1 }, context)
+      },
+    })
+    consumerCleanups.push(() => consumer.detach())
+    const batch: PreparedEvaluationInput[] = [
+      prepared('local-audience', 'rejected one', 'viewer-1'),
+      prepared('cohost-text', 'never sent two', 'cohost-2'),
+    ]
+    const adapter = buildAdapter(
+      harness,
+      [{ variant: VARIANT, peers: fixturePeers(harness) }],
+      { consumer, input: { mode: 'prepared', resolve: () => batch } },
+    )
+
+    const run = await runComparison(
+      { variants: [VARIANT], cases: [evalCase('case-first-rejected')] },
+      { runVariant: adapter.runVariant },
+    )
+
+    expect(run.records).toEqual([])
+    expect(run.notRun).toHaveLength(1)
+    expect(run.notRun[0].reason).toContain('rejected before selection')
+    // The frozen recorded not-run entry gains no field.
+    expect(Object.keys(run.notRun[0]).sort()).toEqual(['caseId', 'reason', 'variantId'])
+    const sessionId = harness.sessions[0]
+    expect(run.notRunObservations).toEqual([
+      {
+        variantId: VARIANT.id,
+        caseId: 'case-first-rejected',
+        occurrence: 1,
+        inputs: [
+          {
+            requestMessageId: `${sessionId}-input-1`,
+            eventId: null,
+            status: 'rejected',
+            admittedAtMs: expect.any(Number),
+            sourceId: null,
+            inputId: null,
+            identityReason: INPUT_IDENTITY_UNAVAILABLE_REASON,
+          },
+          {
+            requestMessageId: null,
+            eventId: null,
+            status: 'not-submitted',
+            admittedAtMs: null,
+            sourceId: null,
+            inputId: null,
+            identityReason: INPUT_IDENTITY_UNAVAILABLE_REASON,
+          },
+        ],
+      },
+    ])
+    // Zero selection: the rejection happened before any provider work.
+    expect(harness.observations).toEqual([])
+  })
+
+  it('exposes retained input observations when the first submission throws', async () => {
+    const harness = createHarness()
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const consumer = createControlledConsumer({
+      media: createControlledMediaDriver({ autoEvents: true }),
+      resolver,
+      receiptPrefix: 'first-threw',
+      onAttach: (composition) => {
+        const endpoint = composition.coordinator.endpoint
+        endpoint.submitInput = async () => {
+          throw new Error('ack transport failed')
+        }
+      },
+    })
+    consumerCleanups.push(() => consumer.detach())
+    const batch: PreparedEvaluationInput[] = [
+      prepared('local-audience', 'lost one', 'viewer-1'),
+      prepared('cohost-text', 'never sent two', 'cohost-2'),
+    ]
+    const adapter = buildAdapter(
+      harness,
+      [{ variant: VARIANT, peers: fixturePeers(harness) }],
+      { consumer, input: { mode: 'prepared', resolve: () => batch } },
+    )
+
+    const run = await runComparison(
+      { variants: [VARIANT], cases: [evalCase('case-first-threw')] },
+      { runVariant: adapter.runVariant },
+    )
+
+    expect(run.records).toEqual([])
+    expect(run.notRun).toHaveLength(1)
+    expect(run.notRun[0].reason).toContain('could not admit case input 1 of 2')
+    expect(Object.keys(run.notRun[0]).sort()).toEqual(['caseId', 'reason', 'variantId'])
+    const sessionId = harness.sessions[0]
+    expect(run.notRunObservations).toEqual([
+      {
+        variantId: VARIANT.id,
+        caseId: 'case-first-threw',
+        occurrence: 1,
+        inputs: [
+          {
+            requestMessageId: `${sessionId}-input-1`,
+            eventId: null,
+            status: 'no-acknowledgement',
+            admittedAtMs: null,
+            sourceId: null,
+            inputId: null,
+            identityReason: INPUT_IDENTITY_UNAVAILABLE_REASON,
+          },
+          {
+            requestMessageId: null,
+            eventId: null,
+            status: 'not-submitted',
+            admittedAtMs: null,
+            sourceId: null,
+            inputId: null,
+            identityReason: INPUT_IDENTITY_UNAVAILABLE_REASON,
+          },
+        ],
+      },
+    ])
+    expect(harness.observations).toEqual([])
+  })
+
   describe('deriveStageTimings', () => {
     const event = (type: string, seq: number, timestampMs: number): RuntimeEvent =>
       fixtureRuntimeEvent({ type, seq, timestampMs })
@@ -2364,46 +2504,47 @@ describe('M5 evaluation adapter admission export and observable timings', () => 
         firstAudibleMs: null,
         stopToSilenceMs: null,
       })
-      const repeatedAccepted = deriveStageTimings([
-        event('input.accepted', 1, 10),
-        event('input.accepted', 2, 20),
-        event('turn.started', 3, 30),
+      const repeatedDialogue = deriveStageTimings([
+        event('turn.started', 1, 10),
+        event('dialogue.result', 2, 20),
+        event('dialogue.result', 3, 30),
       ])
-      expect(repeatedAccepted.submitMs).toBeNull()
+      expect(repeatedDialogue.dialogueMs).toBeNull()
       const missingDialogue = deriveStageTimings([
-        event('input.accepted', 1, 0),
-        event('turn.started', 2, 4),
-        event('selection.plan', 3, 9),
+        event('turn.started', 1, 0),
+        event('selection.plan', 2, 4),
       ])
       expect(missingDialogue.dialogueMs).toBeNull()
+      // Submission and planning have no recorded boundary even when every
+      // admission and selection event is present.
+      expect(missingDialogue.submitMs).toBeNull()
+      expect(missingDialogue.planMs).toBeNull()
     })
 
     it('reports a reversed interval as null, never a negative or invented zero', () => {
-      const timings = deriveStageTimings([
-        event('input.accepted', 1, 100),
-        event('selection.plan', 2, 120),
+      const reversedOrder = deriveStageTimings([
         event('turn.started', 3, 110),
-        event('dialogue.result', 4, 125),
+        event('dialogue.result', 2, 125),
       ])
-      expect(timings).toEqual({
-        submitMs: 10,
-        planMs: null,
-        dialogueMs: 5,
-        synthesisMs: null,
-        firstAudibleMs: null,
-        stopToSilenceMs: null,
-      })
+      expect(reversedOrder.dialogueMs).toBeNull()
+      const negativeDelta = deriveStageTimings([
+        event('turn.started', 1, 125),
+        event('dialogue.result', 2, 110),
+      ])
+      expect(negativeDelta.dialogueMs).toBeNull()
     })
 
-    it('measures the three intervals when both endpoints are recorded and ordered', () => {
+    it('measures the dialogue interval when both endpoints are recorded and ordered', () => {
       const timings = deriveStageTimings([
         event('input.accepted', 1, 0),
-        event('turn.started', 2, 4),
-        event('selection.plan', 3, 9),
+        event('selection.plan', 2, 7),
+        event('turn.started', 3, 9),
         event('dialogue.result', 4, 21),
       ])
-      expect(timings.submitMs).toBe(4)
-      expect(timings.planMs).toBe(5)
+      // Only the dialogue interval has a recorded start; admission and planning
+      // stay null.
+      expect(timings.submitMs).toBeNull()
+      expect(timings.planMs).toBeNull()
       expect(timings.dialogueMs).toBe(12)
       expect(timings.synthesisMs).toBeNull()
       expect(timings.firstAudibleMs).toBeNull()
@@ -2524,7 +2665,7 @@ describe('M5 evaluation adapter over retained physical synthesis', () => {
       usage: { inputTokens: null, outputTokens: null, costUsd: null, usageMissing: true },
     })
     expect(success.records[0].timing).toEqual({
-      submitMs: expect.any(Number),
+      submitMs: null,
       planMs: null,
       dialogueMs: expect.any(Number),
       synthesisMs: null,
@@ -2612,7 +2753,7 @@ describe('M5 evaluation adapter over retained physical synthesis', () => {
     expect(busy.records[0].failureReason).toContain('recorded dependency failure')
     expect(busy.records[0].failureReason).toContain('busy')
     expect(busy.records[0].timing).toEqual({
-      submitMs: expect.any(Number),
+      submitMs: null,
       planMs: null,
       dialogueMs: expect.any(Number),
       synthesisMs: null,
@@ -2652,7 +2793,7 @@ describe('M5 evaluation adapter over retained physical synthesis', () => {
       totalMs: null,
     })
     expect(reuse.records[0].timing).toEqual({
-      submitMs: expect.any(Number),
+      submitMs: null,
       planMs: null,
       dialogueMs: expect.any(Number),
       synthesisMs: null,

@@ -98,22 +98,26 @@ import type { ProductionPeers } from './production'
  *    fabricates one, and a consumer that confirms nothing leaves the delivery
  *    uncommitted and the attempt non-completed.
  *  - **Timing is reported only where the runtime records both endpoints.** The
- *    observation and the record carry `submitMs` (`input.accepted` ->
- *    `turn.started`), `planMs` (`turn.started` -> `selection.plan`) and
- *    `dialogueMs` (`selection.plan` -> `dialogue.result`). A missing or repeated
- *    endpoint, a multi-input batch whose dispatched input is ambiguous, or a
- *    reversed event order is `null`, never zero. `planMs` is `null` today
- *    because the coordinator persists the plan before starting the turn;
- *    `synthesisMs`, `firstAudibleMs` and `stopToSilenceMs` have no observable
- *    start/end pair at this boundary and stay `null`. `totalMs` also stays
- *    `null`: a successful turn's wall time is never reported as
+ *    observation and the record carry `dialogueMs` (`turn.started` ->
+ *    `dialogue.result`). `submitMs` would run from `input.accepted` to a
+ *    dispatched boundary; the coordinator records no dispatched boundary, and
+ *    the only later edge, `turn.started`, follows selection planning, so it
+ *    stays `null` rather than attributing selection time to submission.
+ *    `planMs` would run from a selection-entry boundary to `selection.plan`;
+ *    no selection-entry boundary is recorded, so it also stays `null`. A
+ *    missing or repeated endpoint or a reversed event order is `null`, never
+ *    zero. `synthesisMs`, `firstAudibleMs` and `stopToSilenceMs` have no
+ *    observable start/end pair at this boundary and stay `null`. `totalMs`
+ *    also stays `null`: a successful turn's wall time is never reported as
  *    input-to-first-audible.
  *  - **Admission is exported per input from the acknowledgement.** Each attempt
  *    lists its prepared inputs in submission order with the ack's request message
  *    id, event id and status; a stopped batch keeps its unsent entries as
- *    `not-submitted`. `sourceId`/`inputId` stay `null` with a recorded reason
- *    because the prepared plan carries no corpus metadata, and they are never
- *    inferred from the runtime `source` channel (ADR-008 D5).
+ *    `not-submitted`. A zero-accepted not-run carries the same observations only
+ *    on an in-memory channel, so the recorded not-run keeps its frozen shape.
+ *    `sourceId`/`inputId` stay `null` with a recorded reason because the
+ *    prepared plan carries no corpus metadata, and they are never inferred from
+ *    the runtime `source` channel (ADR-008 D5).
  *  - **Usage is joined by full invocation identity.** Each `provider.call` event
  *    is one M5 port invocation; a `provider.usage.late` event fills the same
  *    invocation rather than adding an attempt. Port invocation counts are not
@@ -537,26 +541,24 @@ function intervalMs(earlier: RuntimeEvent | null, later: RuntimeEvent | null): n
 /**
  * Stage timings observable from one attempt's persisted events.
  *
- * - `submitMs`: the admitted input's `input.accepted` -> `turn.started`. A batch
- *   with zero or several admitted inputs leaves the dispatched input ambiguous,
- *   so the interval is `null`.
- * - `planMs`: `turn.started` -> `selection.plan`. The current coordinator persists
- *   the plan before starting the turn, so this interval is reversed today and is
- *   reported `null` rather than a negative or invented duration.
- * - `dialogueMs`: `selection.plan` -> `dialogue.result`.
+ * - `dialogueMs`: `turn.started` -> `dialogue.result`.
+ * - `submitMs`: `input.accepted` -> a recorded dispatched boundary. The
+ *   coordinator records no dispatched boundary, and the only later edge,
+ *   `turn.started`, follows selection planning; using it would attribute
+ *   selection time to submission. It is `null`, never zero.
+ * - `planMs`: a selection-entry boundary -> `selection.plan`. No selection-entry
+ *   boundary is recorded, so it is `null` rather than inferred from admission.
  *
- * A missing or repeated endpoint, or a reversed interval, is `null`. The three
+ * A missing or repeated endpoint, or a reversed interval, is `null`. The
  * remaining stages have no start/end pair at this boundary and stay `null`.
  */
 export function deriveStageTimings(events: readonly RuntimeEvent[]): StageTiming {
-  const accepted = singleEvent(events, 'input.accepted')
   const turnStarted = singleEvent(events, 'turn.started')
-  const plan = singleEvent(events, 'selection.plan')
   const dialogueResult = singleEvent(events, 'dialogue.result')
   return {
-    submitMs: intervalMs(accepted, turnStarted),
-    planMs: intervalMs(turnStarted, plan),
-    dialogueMs: intervalMs(plan, dialogueResult),
+    submitMs: null,
+    planMs: null,
+    dialogueMs: intervalMs(turnStarted, dialogueResult),
     synthesisMs: null,
     firstAudibleMs: null,
     stopToSilenceMs: null,
@@ -991,7 +993,11 @@ export function createEvaluationAdapter(options: EvaluationAdapterOptions): Eval
 
   return {
     async runVariant(requested: Variant, evalCase: EvalCase): Promise<VariantRun> {
-      const notRun = (reason: string): VariantRun => ({ ran: false, reason })
+      const notRun = (
+        reason: string,
+        inputs?: readonly EvaluationInputAcknowledgement[],
+      ): VariantRun =>
+        inputs === undefined ? { ran: false, reason } : { ran: false, reason, inputs }
 
       // ---- prerequisites: no runtime built, no provider invoked ----
       const config = byId.get(requested.id)
@@ -1285,11 +1291,16 @@ export function createEvaluationAdapter(options: EvaluationAdapterOptions): Eval
       }
 
       // Nothing was accepted: the case is still a not-run, exactly as the single
-      // input path always was.
+      // input path always was. Its retained admission evidence (the rejecting or
+      // unacknowledged submission plus the unsent tail) is carried on the
+      // in-memory not-run result for the provenance companion. It is never
+      // written into the recorded run, whose frozen shape keeps only
+      // `variantId`, `caseId` and `reason` (ADR-008 D4).
       if (admissionFailure !== null && acceptedInputs === 0) {
         const cleanup = await closeBeforeAttempt(composition, consumer, detach)
         return notRun(
           withCleanupFailure(`variant ${requested.id} ${admissionFailure}`, cleanup),
+          inputObservations,
         )
       }
 

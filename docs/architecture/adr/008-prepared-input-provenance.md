@@ -208,11 +208,23 @@ own triggers; this ADR deliberately does not take it.
 | --- | --- | --- | --- |
 | 1 | ~~Is `(corpusVersion, casesSha256, caseId, candidate.eventId)` the stable corpus identity?~~ | M3 | **Closed 2026-10-29** — confirmed for v1; `inputId` still needs M5's export |
 | 2 | ~~Does `history.source: 'none'` carry the empty-set digest or `null`?~~ | M4 | **Closed 2026-10-28** — empty-set digest for `none`; `null` means unobserved |
-| 3 | Who exports the per-input acknowledgement — `sourceId`, `requestMessageId`, `eventId` — and in what shape? | M5 | `requestMessageId`/`eventId` may stay `null`; correlation is `missing`. The producing export of all three must be pinned before any CP05 scoring that joins an attempt to dialogue-side records (M4, 2026-11-08); eligibility must cite names, not conventions. |
+| 3 | Who exports the per-input acknowledgement — `sourceId`, `requestMessageId`, `eventId` — and in what shape? | M5 | `requestMessageId`/`eventId` are exported per prepared input, including a zero-accepted not-run; `sourceId` stays `null` with `identityReason`. Corpus `sourceId` export is a separate follow-up, so correlation stays `missing` until it is bound. Eligibility must cite names, not conventions (M4, 2026-11-08). |
 | 4 | Does `correlation: exact` describe the admitted link or the complete submitted batch (e.g. `accepted → no-acknowledgement → not-submitted`)? | M5/M4 | A partial batch can currently be recorded as `exact`; eligibility must respect the agreed distinction before CP05 scoring |
 
 Rows 1 and 2 are closed by M3's and M4's answers. Row 3 blocks CP05 scoring, not the companion's merge.
 Row 4 must be agreed before the eligibility path fixes the `exact` distinction.
+
+**Row 3 — split recorded 2026-11-16.** The M5 adapter exports the runtime acknowledgement
+per prepared input — `requestMessageId`, `eventId`, `status` and `admittedAtMs`, in submission
+order. A not-run whose every input failed admission carries the same observations on an
+in-memory channel bound by `(variantId, caseId, occurrence)`; `RecordedRunV1` and its
+`notRun[]` shape keep exactly `variantId`, `caseId` and `reason`. `sourceId` and `inputId`
+remain `null` with the recorded `INPUT_IDENTITY_UNAVAILABLE_REASON`, because the prepared
+plan carries only source/text/actorId, and neither is inferred from the runtime source
+channel (D5). The companion's `exact` rule is not relaxed: a `null` `sourceId`/`inputId`
+still yields `missing`. Binding a corpus `sourceId` to the acknowledgement is the named
+follow-up **`corpus sourceId export`**; no stable task or issue identifier is allocated for
+it, so it is recorded by name only.
 
 **Row 4 — M4 position recorded 2026-11-12.** `correlation: exact` asserts the observed
 input/acknowledgement link, not completeness of the submitted batch. A partially admitted
