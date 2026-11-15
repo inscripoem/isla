@@ -7342,3 +7342,61 @@ entries:
       query/fragment and safe-integer hardening, normative prompt-spec parity
       checks, and explicit coverage-fixture framing; production.ts remains on
       m3-rules and live provider evaluation remains deferred to CP07 (#109/#110).
+
+  - date: "2026-11-16"
+    task: M3-02-issue98-fail-closed-corpus-certification
+    branch: feat/m3-98-corpus-and-variants
+    member: shallight (M3)
+    change: >-
+      Make single-port corpus certification in test/support/decision-runner.ts
+      fail-closed for unmarked SelectionPort stubs per M6 review 5910194589 on
+      PR #155 (#98). Add a WeakSet-backed isRuleSelectionPort(port) marker in
+      src/decision/selection.ts without changing rule selection behaviour,
+      update runSelectionCase so certifiesCorpus requires an authentic port
+      (isLiveProviderSelectionPort or isRuleSelectionPort) while retaining
+      explicit syntheticPort: true priority and keeping model-variant live-port
+      enforcement in runSelectionVariantsOnCorpus intact, add 12-row observed
+      negative assertions for an unmarked inline defer stub, forced
+      syntheticPort: true override, and a rule port passed into generalModel in
+      test/offline/m3-decision.test.ts, and state the exact fail-closed
+      condition in test/fixtures/decision/v1/README.md.
+    requirements: [FR-01, NFR-03, NFR-04]
+    invariants: [INV-13, INV-14, INV-16]
+    cases: [C-13]
+    commits: [e82a400fdf391440c88d8654652f735269755811]
+    agent: opencode/deepseek-v4-flash
+    opencode_version: 1.19.5
+    model_cli_id: "personal-deepseek/deepseek-v4-flash"
+    model: deepseek-v4-flash
+    resolved_model: deepseek-flash
+    provider: personal-deepseek
+    variant: xhigh
+    launch_flags: ["--pure", "--agent", "build", "-m", "personal-deepseek/deepseek-v4-flash", "--variant", "xhigh", "--format", "json"]
+    sessions:
+      - ses_e1e5d345effe6WMK9D47zj19bk
+    supervision: >-
+      Captain reviewed and approved the fail-closed certification plan (adopting
+      M6's WeakSet marker plus model-variant live-port preservation and 12/12
+      observed inline-stub assertions while keeping splitScore semantics intact).
+      All 4 touched files in commit e82a400 were inspected line-by-line by the
+      supervisor before commit; zero corpus JSON files were touched.
+    human_review: >-
+      Resolves the remaining M6 blocking item on PR #155 while keeping all 12
+      committed corpus JSON triples byte-identical to cb156c4. Merge remains
+      human-gated.
+    transcript_record: >-
+      Exported sanitized OpenCode session record ses_e1e5d345effe6WMK9D47zj19bk
+      and JSONL stream log are stored outside the repository checkout in the
+      supervisor scratch evidence directory; verified 0 secret hits across all
+      exported evidence and repository files.
+    verification:
+      platform: macOS arm64 (Darwin)
+      base: 3d557104f340903e78c65c2c1ada31644cb46161
+      results: >-
+        gate:ai-use-log passed, test:m3 114/114, test:trace 41/41, and full pnpm
+        verify passed (typecheck, lint 0/0 on 296 files, vitest 1858/1858 across
+        85 files, vite build).
+    scope: >-
+      Fail-closed SelectionPort authenticity gating in runSelectionCase and
+      documentation/test parity; rule selection logic, shared contracts, and
+      corpus JSON fixtures are unchanged.
