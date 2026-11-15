@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url'
 import { runBench, serializeRecordedRun, type BenchConditions } from './bench'
 import type { EvalCase, Variant, VariantRun } from './comparison'
 import type { RunMeta } from './report'
+import { parseRecordedRun } from './recorded-run'
 
 /**
  * M6 / CP05 (#103) — the evaluation run command.
@@ -228,6 +229,23 @@ export async function executeRun(
   )
 
   const json = serializeRecordedRun(run)
+
+  // The command must not write an artifact the consumer refuses. `readRunSpec`
+  // checks only the fields the runner itself needs; the recorded-run parser owns
+  // the full shape, so the exact bytes that would be written are parsed with the
+  // same parser the report command uses. A run that cannot be read back is a
+  // refusal, and nothing is written.
+  const validated = parseRecordedRun(json)
+  if (!validated.ok) {
+    return {
+      ok: false,
+      violations: [
+        'the run produced an artifact its own parser rejects; nothing was written',
+        ...validated.violations,
+      ],
+    }
+  }
+
   writeAtomically(outPath, json)
 
   const outcomes: Record<string, number> = {}

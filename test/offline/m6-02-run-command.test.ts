@@ -162,6 +162,41 @@ describe('M6 CP05 #103 run command', () => {
     expect(parsed.input.run.records).toHaveLength(2)
   })
 
+  it('refuses to write a run its own parser rejects', async () => {
+    const dir = workspace()
+    const out = join(dir, 'run.json')
+    const bad: RunSpec = { ...SPEC, conditions: {} as never }
+    const result = await executeRun(bad, harness(), out)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.violations.join(' ')).toContain('its own parser rejects')
+    expect(existsSync(out)).toBe(false)
+  })
+
+  it('refuses an unreadable artifact through the CLI and writes nothing', async () => {
+    const dir = workspace()
+    const specPath = join(dir, 'spec.json')
+    const out = join(dir, 'run.json')
+    writeFileSync(specPath, JSON.stringify({ ...SPEC, conditions: {} }), 'utf8')
+
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const code = await runEvaluationCommand([
+      '--spec',
+      specPath,
+      '--harness',
+      HARNESS_MODULE,
+      '--out',
+      out,
+    ])
+
+    expect(code).toBe(1)
+    expect(existsSync(out)).toBe(false)
+    expect(stderr.mock.calls.map((call) => String(call[0])).join(' ')).toContain(
+      'parser rejects',
+    )
+  })
+
   it('refuses to replace an existing recorded run', async () => {
     const dir = workspace()
     const out = join(dir, 'run.json')
