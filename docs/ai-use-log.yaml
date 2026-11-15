@@ -7118,3 +7118,44 @@ entries:
       trace-matrix row's cells and the `test:m6` file list. No storage, runtime,
       contract, provider or gate-workflow change; no threshold value is set and no
       issue is claimed closed.
+  - date: "2026-11-15"
+    task: M6-CP05-evaluation-run-command
+    change: >-
+      Add `evaluation:run`, the missing imperative shell for a run. It reads a
+      run spec (meta, conditions, cases), loads an evaluation harness module named
+      on the command line, executes every case through the harness `runVariant`
+      seam and writes the recorded run. The harness owns the peers, so the command
+      never imports the runtime composition; the shell is testable with a
+      synthetic harness and no provider. Refusals are data: unreadable or empty
+      spec, missing harness module, throwing factory, harness without variants or
+      seam, and an existing output path are all refused without writing. No
+      existing module, schema, contract, gate or storage path changed.
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    commits: ['58631fb']
+    agent: opencode/build
+    provider: opencode-go
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      The M6 member set the scope (the runner CP05 #103 needs) and reviewed the
+      diff. The agent wrote the command, the fake harness, the suite and the trace
+      row. One live end-to-end run was made against the configured provider with a
+      local harness that substitutes the audio path; it is a local demonstration,
+      not product evidence, and no measurement or threshold is claimed.
+    verification:
+      base: 205424f
+      reproduction: >-
+        Run from the repository root. The new suite: 13 passed. Five mutations
+        were applied one at a time and each turned its own test red: the existing
+        output refusal, the duplicate-option refusal, the missing-option refusal,
+        the empty case set and the empty variant list; the file was restored after
+        each. pnpm typecheck -> exit 0. pnpm lint -> exit 0. pnpm test:m6 -> 22
+        files, 337 passed. pnpm test:trace -> 41 passed. pnpm test:readiness -> 47
+        passed. pnpm test -> 88 files, 1870 passed. pnpm build -> exit 0.
+        End to end: `evaluation:run` wrote a recorded run for one real case
+        (completed) and `evaluation:report` rendered it with every attempt
+        unscored for want of a provenance companion.
+    scope: >-
+      M6 only: one new module under `src/evaluation/`, one offline suite, one test
+      support harness, one trace row and the `test:m6` file list. The local
+      `deployment/` harness and spec are untracked and not part of this change.
