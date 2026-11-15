@@ -5301,6 +5301,7 @@ entries:
       - 252aea198a7d0378c44df963e77cf288c37e1f39
       - 5e4daff8ac049fca34717fc08fd54c1b1c2a7753
       - 1fccda9cec9c2ad559e0270116db7eb44d29801c
+      - 3d4c729ea0b4fe501394a843540967e95d865b78
     agent: build
     provider: self-api
     model: deepseek-v4-flash
@@ -5314,7 +5315,9 @@ entries:
       text/WebSocket URL, canonical-origin and host-entry validation so a bad
       value fails at startup by variable name instead of being dropped, and a
       regression test that exercises the exported production factory with an
-      empty environment.
+      empty environment. After M1 supplied the target model id and three
+      hotkeys on #95, Codex pinned the verified Hiyori_A model id and the three
+      action-to-hotkey bindings in the reference deployment and its README.
     human_review: >-
       Local only. Push and pull-request creation await Captain approval; no
       agent merges and no product acceptance is claimed.
