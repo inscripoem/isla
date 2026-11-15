@@ -204,6 +204,39 @@ for (const group of MODEL_ENV_GROUPS) {
       expect(report.config?.apiKey).toBe(SECRET)
     })
 
+    it('preserves query parameters while trimming trailing path slashes', () => {
+      const report = group.read(
+        modelEnv({
+          [group.env.baseUrl]:
+            'https://gateway.example.com/v1///?tenant=a/',
+        }),
+      )
+      expect(report.available).toBe(true)
+      expect(report.reason).toBeNull()
+      expect(report.config?.baseUrl).toBe(
+        'https://gateway.example.com/v1?tenant=a/',
+      )
+    })
+
+    it('refuses credentialed and fragment-bearing base URLs without echoing values', () => {
+      for (const baseUrl of [
+        'https://user:pass@gateway.example.com/v1',
+        'https://gateway.example.com/v1#frag',
+        'https://gateway.example.com/v1#',
+      ]) {
+        const report = group.read(
+          modelEnv({ [group.env.baseUrl]: baseUrl }),
+        )
+        expect(report.available).toBe(false)
+        expect(report.config).toBeNull()
+        expect(report.reason).toContain(group.env.baseUrl)
+        expect(report.reason).not.toContain(baseUrl)
+        expect(report.reason).not.toContain('user:pass')
+        expect(report.reason).not.toContain('#')
+        expect(report.reason).not.toContain(SECRET)
+      }
+    })
+
     it('never echoes an environment value into the unavailability reason', () => {
       const report = group.read(
         modelEnv({ [group.env.baseUrl]: 'not-a-valid-url' }),

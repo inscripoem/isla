@@ -10,12 +10,14 @@ import {
   decisionRequestSchema,
   decisionResultSchema,
 } from '../contracts'
-import type { DecisionFetch } from './provider-selection'
 import {
   DECISION_PROMPT_VERSION,
-  DEFAULT_DECISION_MAX_TOKENS,
-  MAX_DECISION_RESPONSE_CHARS,
-} from './provider-selection'
+  executeOpenAiCompatibleCall,
+  isNonBlank,
+  validateClockPortOptions,
+  type DecisionCallErrorCode,
+  type DecisionFetch,
+} from './openai-compatible-core'
 
 /**
  * Provider-backed C3 segment-reaction decisions over the OpenAI-compatible
@@ -75,50 +77,6 @@ export interface OpenAiCompatibleReactionPortOptions {
   readonly maxTokens?: number
   /** Transport seam for deterministic tests. Defaults to the global fetch. */
   readonly fetchImpl?: DecisionFetch
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function isNonBlank(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0
-}
-
-function isNonNegativeInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0
-}
-
-function readChoiceContent(body: Record<string, unknown>): string | null {
-  const choices = body.choices
-  if (!Array.isArray(choices)) return null
-  const first: unknown = choices[0]
-  if (!isRecord(first)) return null
-  const message = first.message
-  if (!isRecord(message)) return null
-  return typeof message.content === 'string' ? message.content : null
-}
-
-function isUsableSignal(value: unknown): value is AbortSignal {
-  if (!isRecord(value)) return false
-  return typeof value.aborted === 'boolean'
-}
-
-function readSignal(context: unknown): AbortSignal | null {
-  if (!isRecord(context)) return null
-  const signal = context.signal
-  return isUsableSignal(signal) ? signal : null
-}
-
-function supportsAbortListener(signal: AbortSignal): boolean {
-  return (
-    typeof signal.addEventListener === 'function' &&
-    typeof signal.removeEventListener === 'function'
-  )
-}
-
-function isAborted(signal: AbortSignal): boolean {
-  return signal.aborted === true
 }
 
 /**
@@ -191,506 +149,164 @@ export function renderReactionUserPrompt(request: DecisionRequest): string {
   ].join('\n')
 }
 
-function isLoopbackHostname(hostname: string): boolean {
-  return (
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname === '[::1]' ||
-    hostname === '::1'
-  )
-}
-
-/** Parses a provider base URL, accepting https or loopback-only plain http. */
-function parseProviderBaseUrl(baseUrl: unknown): URL | null {
-  if (typeof baseUrl !== 'string') return null
-  const trimmed = baseUrl.trim()
-  if (trimmed.length === 0) return null
-  let url: URL
-  try {
-    url = new URL(trimmed)
-  } catch {
-    return null
-  }
-  if (url.username !== '' || url.password !== '') return null
-  if (url.protocol === 'https:') return url
-  if (url.protocol === 'http:' && isLoopbackHostname(url.hostname)) return url
-  return null
-}
-
-/** Joins the configured base URL with the endpoint path regardless of trailing slashes. */
-function completionsUrl(baseUrl: string): string {
-  const endpoint = '/chat/completions'
-  const trimmed = baseUrl.trim().replace(/\/+$/, '')
-  if (trimmed.toLowerCase().endsWith(endpoint)) {
-    return `${trimmed.slice(0, trimmed.length - endpoint.length)}${endpoint}`
-  }
-  return `${trimmed}${endpoint}`
-}
-
-/** Strips an optional surrounding markdown code fence from model content. */
-function stripCodeFence(content: string): string {
-  const trimmed = content.trim()
-  if (!trimmed.startsWith('```')) return trimmed
-  const match = /^```[a-zA-Z0-9_-]*\s*([\s\S]*?)\s*```$/.exec(trimmed)
-  if (match === null) return trimmed
-  return (match[1] ?? '').trim()
-}
-
-function failureDuringCall(
-  signal: AbortSignal,
-  timedOut: boolean,
-  clock: ClockPort,
-  governingAtMs: number,
+function createReactionError(
+  code: DecisionCallErrorCode,
+  message: string,
 ): ProviderReactionError {
-  if (isAborted(signal)) {
-    return new ProviderReactionError('aborted', 'reaction aborted during provider call')
-  }
-  if (timedOut) {
-    return new ProviderReactionError(
-      'deadline-exceeded',
-      `reaction deadline ${governingAtMs} has expired`,
-    )
-  }
-  const nowMs = clock.nowMs()
-  if (Number.isFinite(nowMs) && nowMs >= governingAtMs) {
-    return new ProviderReactionError(
-      'deadline-exceeded',
-      `reaction deadline ${governingAtMs} has expired`,
-    )
-  }
-  return new ProviderReactionError(
-    'transport-failed',
-    'openai-compatible reaction request failed due to transport error',
-  )
+  return new ProviderReactionError(code, message)
 }
 
-function readCount(
-  usage: Record<string, unknown> | undefined,
-  key: string,
-): number | null {
-  if (usage === undefined) return null
-  const value = usage[key]
-  return isNonNegativeInteger(value) ? value : null
-}
-
-function readUsage(body: Record<string, unknown>): {
-  readonly inputTokens: number | null
-  readonly outputTokens: number | null
-  readonly usageMissing: boolean
-} {
-  const usage = isRecord(body.usage) ? body.usage : undefined
-  const inputTokens = readCount(usage, 'prompt_tokens')
-  const outputTokens = readCount(usage, 'completion_tokens')
-  if (inputTokens === null || outputTokens === null) {
-    return { inputTokens: null, outputTokens: null, usageMissing: true }
+function parseReactionRequest(request: unknown): DecisionRequest {
+  const parsed = decisionRequestSchema.safeParse(request)
+  if (
+    !parsed.success ||
+    parsed.data.segmentText.trim().length === 0 ||
+    parsed.data.eligibleActionIds.some(
+      (actionId) => actionId.trim().length === 0,
+    )
+  ) {
+    throw new ProviderReactionError(
+      'invalid-request',
+      'reaction request failed schema validation',
+    )
   }
-  return { inputTokens, outputTokens, usageMissing: false }
+  return parsed.data
 }
 
 export function createOpenAiCompatibleReactionPort(
   options: OpenAiCompatibleReactionPortOptions,
 ): ReactionPort {
-  if (
-    options === null ||
-    typeof options !== 'object' ||
-    options.clock === null ||
-    typeof options.clock !== 'object' ||
-    typeof options.clock.nowMs !== 'function'
-  ) {
-    throw new TypeError('provider reaction port requires a ClockPort')
-  }
-  const { clock } = options
+  validateClockPortOptions(options, 'reaction')
 
   return {
     async decide(
       request: DecisionRequest,
       context: CallContext,
     ): Promise<DecisionResult> {
-      const signal = readSignal(context)
-      if (signal === null) {
+      const outcome = await executeOpenAiCompatibleCall(
+        {
+          ...options,
+          label: 'reaction',
+          requestTypeName: 'DecisionRequest',
+          defaultProviderName: DEFAULT_PROVIDER_REACTION_NAME,
+          defaultModelVersion: PROVIDER_REACTION_MODEL_VERSION,
+          systemPrompt: renderReactionSystemPrompt(),
+          renderUserPrompt: renderReactionUserPrompt,
+          parseRequest: parseReactionRequest,
+          createError: createReactionError,
+        },
+        request,
+        context,
+      )
+
+      const { parsedRequest, proposal } = outcome
+
+      const allowedKeys = new Set([
+        'status',
+        'actionId',
+        'reasonCode',
+        'confidence',
+      ])
+      if (!Object.keys(proposal).every((key) => allowedKeys.has(key))) {
         throw new ProviderReactionError(
-          'invalid-request',
-          'reaction requires a valid CallContext signal',
+          'invalid-decision',
+          'openai-compatible reaction proposal contains unexpected keys',
         )
       }
 
-      if (isAborted(signal)) {
+      const status = proposal.status
+      if (status !== 'selected' && status !== 'abstained') {
         throw new ProviderReactionError(
-          'aborted',
-          'reaction aborted before provider call',
+          'invalid-decision',
+          'openai-compatible reaction proposal has an invalid status',
         )
       }
-      if (!supportsAbortListener(signal)) {
+      const actionId = proposal.actionId
+      if (!isNonBlank(proposal.reasonCode)) {
         throw new ProviderReactionError(
-          'invalid-request',
-          'reaction requires a valid CallContext signal',
+          'invalid-decision',
+          'openai-compatible reaction proposal has a blank reasonCode',
         )
       }
 
-      if (!isNonBlank(options.apiKey)) {
-        throw new ProviderReactionError(
-          'invalid-config',
-          'provider reaction requires a non-blank apiKey',
-        )
-      }
-      if (parseProviderBaseUrl(options.baseUrl) === null) {
-        throw new ProviderReactionError(
-          'invalid-config',
-          'provider reaction requires an https baseUrl or loopback http',
-        )
-      }
-      if (!isNonBlank(options.model)) {
-        throw new ProviderReactionError(
-          'invalid-config',
-          'provider reaction requires a non-blank model',
-        )
-      }
-      const providerName = options.providerName ?? DEFAULT_PROVIDER_REACTION_NAME
-      if (!isNonBlank(providerName)) {
-        throw new ProviderReactionError(
-          'invalid-config',
-          'provider reaction requires a non-blank providerName',
-        )
-      }
-      const modelVersion = options.modelVersion ?? PROVIDER_REACTION_MODEL_VERSION
-      if (!isNonBlank(modelVersion)) {
-        throw new ProviderReactionError(
-          'invalid-config',
-          'provider reaction requires a non-blank modelVersion',
-        )
-      }
-      const pricingRef = options.pricingRef ?? null
-      if (pricingRef !== null && !isNonBlank(pricingRef)) {
-        throw new ProviderReactionError(
-          'invalid-config',
-          'provider reaction requires a non-blank pricingRef when supplied',
-        )
-      }
-      const maxTokens = options.maxTokens ?? DEFAULT_DECISION_MAX_TOKENS
-      if (
-        typeof maxTokens !== 'number' ||
-        !Number.isSafeInteger(maxTokens) ||
-        maxTokens <= 0
+      let confidence: number | null
+      if (proposal.confidence === undefined || proposal.confidence === null) {
+        confidence = null
+      } else if (
+        typeof proposal.confidence === 'number' &&
+        Number.isFinite(proposal.confidence) &&
+        proposal.confidence >= 0 &&
+        proposal.confidence <= 1
       ) {
+        confidence = proposal.confidence
+      } else {
         throw new ProviderReactionError(
-          'invalid-config',
-          'provider reaction requires a positive integer maxTokens',
+          'invalid-decision',
+          'openai-compatible reaction proposal has an invalid confidence',
         )
       }
 
-      if (!isRecord(request)) {
-        throw new ProviderReactionError(
-          'invalid-request',
-          'reaction requires a valid DecisionRequest',
-        )
-      }
-
-      const startedAtMs = clock.nowMs()
-      const requestAtMs = request.deadline?.atMs
-      const contextAtMs = context.deadline?.atMs
-      if (
-        typeof startedAtMs !== 'number' ||
-        !Number.isFinite(startedAtMs) ||
-        startedAtMs < 0 ||
-        typeof requestAtMs !== 'number' ||
-        !Number.isFinite(requestAtMs) ||
-        typeof contextAtMs !== 'number' ||
-        !Number.isFinite(contextAtMs)
-      ) {
-        throw new ProviderReactionError(
-          'invalid-deadline',
-          'reaction requires finite request, call and clock deadlines',
-        )
-      }
-      const governingAtMs = Math.min(requestAtMs, contextAtMs)
-      if (startedAtMs >= governingAtMs) {
-        throw new ProviderReactionError(
-          'deadline-exceeded',
-          `reaction deadline ${governingAtMs} has expired`,
-        )
-      }
-
-      const parsedRequest = decisionRequestSchema.safeParse(request)
-      if (
-        !parsedRequest.success ||
-        parsedRequest.data.segmentText.trim().length === 0 ||
-        parsedRequest.data.eligibleActionIds.some(
-          (actionId) => actionId.trim().length === 0,
-        )
-      ) {
-        throw new ProviderReactionError(
-          'invalid-request',
-          'reaction request failed schema validation',
-        )
-      }
-
-      const callController = new AbortController()
-      let timedOut = false
-      const handleAbort = (): void => {
-        callController.abort()
-      }
-      signal.addEventListener('abort', handleAbort, { once: true })
-      const timeoutHandle = setTimeout(() => {
-        timedOut = true
-        callController.abort()
-      }, Math.max(0, governingAtMs - startedAtMs))
-
-      try {
-        if (isAborted(signal)) {
-          throw new ProviderReactionError(
-            'aborted',
-            'reaction aborted before provider call',
-          )
-        }
-
-        const fetchImpl: DecisionFetch = options.fetchImpl ?? fetch
-        let response: Response
-        try {
-          response = await fetchImpl(completionsUrl(options.baseUrl), {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${options.apiKey.trim()}`,
-            },
-            body: JSON.stringify({
-              model: options.model.trim(),
-              temperature: 0,
-              stream: false,
-              max_tokens: maxTokens,
-              messages: [
-                { role: 'system', content: renderReactionSystemPrompt() },
-                {
-                  role: 'user',
-                  content: renderReactionUserPrompt(parsedRequest.data),
-                },
-              ],
-            }),
-            signal: callController.signal,
-          })
-        } catch {
-          throw failureDuringCall(signal, timedOut, clock, governingAtMs)
-        }
-
-        const afterFetchAtMs = clock.nowMs()
-        if (isAborted(signal)) {
-          throw new ProviderReactionError(
-            'aborted',
-            'reaction aborted during provider call',
-          )
-        }
-        if (!Number.isFinite(afterFetchAtMs)) {
-          throw new ProviderReactionError(
-            'invalid-deadline',
-            'reaction requires a finite clock deadline',
-          )
-        }
-        if (timedOut || afterFetchAtMs >= governingAtMs) {
-          throw new ProviderReactionError(
-            'deadline-exceeded',
-            `reaction deadline ${governingAtMs} has expired`,
-          )
-        }
-        if (response.status < 200 || response.status > 299) {
-          throw new ProviderReactionError(
-            'http-error',
-            `openai-compatible reaction request failed: HTTP ${response.status}`,
-          )
-        }
-
-        if (typeof response.headers?.get === 'function') {
-          const contentLength = Number(response.headers.get('content-length'))
-          if (
-            Number.isFinite(contentLength) &&
-            Number.isInteger(contentLength) &&
-            contentLength > MAX_DECISION_RESPONSE_CHARS
-          ) {
-            throw new ProviderReactionError(
-              'invalid-json',
-              'openai-compatible reaction response exceeds maximum size',
-            )
-          }
-        }
-
-        let text: string
-        try {
-          text = await response.text()
-        } catch {
-          throw failureDuringCall(signal, timedOut, clock, governingAtMs)
-        }
-
-        const completedAtMs = clock.nowMs()
-        if (isAborted(signal)) {
-          throw new ProviderReactionError(
-            'aborted',
-            'reaction aborted during provider call',
-          )
-        }
-        if (!Number.isFinite(completedAtMs)) {
-          throw new ProviderReactionError(
-            'invalid-deadline',
-            'reaction requires a finite clock deadline',
-          )
-        }
-        if (timedOut || completedAtMs >= governingAtMs) {
-          throw new ProviderReactionError(
-            'deadline-exceeded',
-            `reaction deadline ${governingAtMs} has expired`,
-          )
-        }
-        if (text.length > MAX_DECISION_RESPONSE_CHARS) {
-          throw new ProviderReactionError(
-            'invalid-json',
-            'openai-compatible reaction response exceeds maximum size',
-          )
-        }
-
-        let body: unknown
-        try {
-          body = JSON.parse(text)
-        } catch {
-          throw new ProviderReactionError(
-            'invalid-json',
-            'openai-compatible reaction response is not valid JSON',
-          )
-        }
-        if (!isRecord(body)) {
-          throw new ProviderReactionError(
-            'invalid-json',
-            'openai-compatible reaction response is not a JSON object',
-          )
-        }
-
-        const content = readChoiceContent(body)
-        if (content === null) {
-          throw new ProviderReactionError(
-            'invalid-json',
-            'openai-compatible reaction response has no choices[0].message.content string',
-          )
-        }
-
-        let proposal: unknown
-        try {
-          proposal = JSON.parse(stripCodeFence(content))
-        } catch {
-          throw new ProviderReactionError(
-            'invalid-json',
-            'openai-compatible reaction proposal is not valid JSON',
-          )
-        }
-        if (!isRecord(proposal)) {
-          throw new ProviderReactionError(
-            'invalid-json',
-            'openai-compatible reaction proposal is not a JSON object',
-          )
-        }
-
-        const allowedKeys = new Set([
-          'status',
-          'actionId',
-          'reasonCode',
-          'confidence',
-        ])
-        if (!Object.keys(proposal).every((key) => allowedKeys.has(key))) {
+      if (status === 'abstained') {
+        if (actionId !== null) {
           throw new ProviderReactionError(
             'invalid-decision',
-            'openai-compatible reaction proposal contains unexpected keys',
+            'openai-compatible reaction abstained proposal carries an action id',
           )
         }
-
-        const status = proposal.status
-        if (status !== 'selected' && status !== 'abstained') {
+      } else {
+        if (!isNonBlank(actionId)) {
           throw new ProviderReactionError(
             'invalid-decision',
-            'openai-compatible reaction proposal has an invalid status',
+            'openai-compatible reaction selected proposal requires a non-blank action id',
           )
         }
-        const actionId = proposal.actionId
-        if (!isNonBlank(proposal.reasonCode)) {
-          throw new ProviderReactionError(
-            'invalid-decision',
-            'openai-compatible reaction proposal has a blank reasonCode',
-          )
-        }
-
-        let confidence: number | null
-        if (proposal.confidence === undefined || proposal.confidence === null) {
-          confidence = null
-        } else if (
-          typeof proposal.confidence === 'number' &&
-          Number.isFinite(proposal.confidence) &&
-          proposal.confidence >= 0 &&
-          proposal.confidence <= 1
+        const eligibleActionIds: readonly string[] =
+          parsedRequest.eligibleActionIds
+        if (
+          actionId !== NO_OP_ACTION &&
+          !eligibleActionIds.includes(actionId)
         ) {
-          confidence = proposal.confidence
-        } else {
           throw new ProviderReactionError(
             'invalid-decision',
-            'openai-compatible reaction proposal has an invalid confidence',
+            'openai-compatible reaction proposal names an ineligible action',
           )
         }
-
-        if (status === 'abstained') {
-          if (actionId !== null) {
-            throw new ProviderReactionError(
-              'invalid-decision',
-              'openai-compatible reaction abstained proposal carries an action id',
-            )
-          }
-        } else {
-          if (!isNonBlank(actionId)) {
-            throw new ProviderReactionError(
-              'invalid-decision',
-              'openai-compatible reaction selected proposal requires a non-blank action id',
-            )
-          }
-          const eligibleActionIds: readonly string[] =
-            parsedRequest.data.eligibleActionIds
-          if (actionId !== NO_OP_ACTION && !eligibleActionIds.includes(actionId)) {
-            throw new ProviderReactionError(
-              'invalid-decision',
-              'openai-compatible reaction proposal names an ineligible action',
-            )
-          }
-        }
-
-        const servedModel =
-          typeof body.model === 'string' && body.model.trim().length > 0
-            ? body.model.trim()
-            : null
-        const usage = readUsage(body)
-        const elapsedMs = Math.max(0, completedAtMs - startedAtMs)
-
-        return decisionResultSchema.parse({
-          requestId: parsedRequest.data.requestId,
-          sessionId: parsedRequest.data.sessionId,
-          epoch: parsedRequest.data.epoch,
-          turnId: parsedRequest.data.turnId,
-          segmentId: parsedRequest.data.segmentId,
-          snapshotRevision: parsedRequest.data.snapshotRevision,
-          capabilityRevision: parsedRequest.data.capabilityRevision,
-          status,
-          actionId,
-          provider: providerName,
-          modelVersion,
-          reasonCode: proposal.reasonCode,
-          confidence,
-          usage: {
-            provider: providerName,
-            requestedModel: options.model.trim(),
-            resolvedModel: servedModel,
-            requestId: parsedRequest.data.requestId,
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
-            usageMissing: usage.usageMissing,
-            elapsedMs,
-            status: 'ok',
-            pricingRef,
-          },
-        })
-      } finally {
-        clearTimeout(timeoutHandle)
-        signal.removeEventListener('abort', handleAbort)
       }
+
+      const result = decisionResultSchema.safeParse({
+        requestId: parsedRequest.requestId,
+        sessionId: parsedRequest.sessionId,
+        epoch: parsedRequest.epoch,
+        turnId: parsedRequest.turnId,
+        segmentId: parsedRequest.segmentId,
+        snapshotRevision: parsedRequest.snapshotRevision,
+        capabilityRevision: parsedRequest.capabilityRevision,
+        status,
+        actionId,
+        provider: outcome.providerName,
+        modelVersion: outcome.modelVersion,
+        reasonCode: proposal.reasonCode,
+        confidence,
+        usage: {
+          provider: outcome.providerName,
+          requestedModel: outcome.requestedModel,
+          resolvedModel: outcome.servedModel,
+          requestId: parsedRequest.requestId,
+          inputTokens: outcome.usage.inputTokens,
+          outputTokens: outcome.usage.outputTokens,
+          usageMissing: outcome.usage.usageMissing,
+          elapsedMs: outcome.elapsedMs,
+          status: 'ok',
+          pricingRef: outcome.pricingRef,
+        },
+      })
+      if (!result.success) {
+        throw new ProviderReactionError(
+          'invalid-decision',
+          'openai-compatible reaction result failed schema validation',
+        )
+      }
+      return result.data
     },
   }
 }
