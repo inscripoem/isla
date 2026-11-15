@@ -6,6 +6,24 @@ import type {
   SelectionResult,
 } from '../contracts'
 import { selectionRequestSchema, selectionResultSchema } from '../contracts'
+import {
+  DECISION_PROMPT_VERSION,
+  DEFAULT_DECISION_MAX_TOKENS,
+  MAX_DECISION_RESPONSE_CHARS,
+  executeOpenAiCompatibleCall,
+  isNonBlank,
+  isStringArray,
+  validateClockPortOptions,
+  type DecisionCallErrorCode,
+  type DecisionFetch,
+} from './openai-compatible-core'
+
+export {
+  DECISION_PROMPT_VERSION,
+  DEFAULT_DECISION_MAX_TOKENS,
+  MAX_DECISION_RESPONSE_CHARS,
+}
+export type { DecisionFetch }
 
 /**
  * Provider-backed C1 response-plan selection over the OpenAI-compatible
@@ -21,11 +39,8 @@ import { selectionRequestSchema, selectionResultSchema } from '../contracts'
  * an offered, unexpired candidate and an allowed reply intent.
  */
 
-export const DECISION_PROMPT_VERSION = 'm3-decision-prompt-v1'
 export const PROVIDER_SELECTION_MODEL_VERSION = 'openai-compatible-selection-v1'
 export const DEFAULT_PROVIDER_SELECTION_NAME = 'openai-compatible'
-export const DEFAULT_DECISION_MAX_TOKENS = 256
-export const MAX_DECISION_RESPONSE_CHARS = 65_536
 
 export type ProviderSelectionErrorCode =
   | 'aborted'
@@ -62,8 +77,6 @@ export function isMockProviderSelectionPort(port: SelectionPort): boolean {
   return mockProviderSelectionPorts.has(port)
 }
 
-export type DecisionFetch = (url: string, init: RequestInit) => Promise<Response>
-
 export interface OpenAiCompatibleSelectionPortOptions {
   /** The exact server clock used to construct SelectionRequest deadlines. */
   readonly clock: ClockPort
@@ -83,57 +96,6 @@ export interface OpenAiCompatibleSelectionPortOptions {
   readonly maxTokens?: number
   /** Transport seam for deterministic tests. Defaults to the global fetch. */
   readonly fetchImpl?: DecisionFetch
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function isNonBlank(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0
-}
-
-function isNonNegativeInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0
-}
-
-function isStringArray(value: unknown): value is readonly string[] {
-  return (
-    Array.isArray(value) &&
-    value.every((item: unknown) => typeof item === 'string')
-  )
-}
-
-function readChoiceContent(body: Record<string, unknown>): string | null {
-  const choices = body.choices
-  if (!Array.isArray(choices)) return null
-  const first: unknown = choices[0]
-  if (!isRecord(first)) return null
-  const message = first.message
-  if (!isRecord(message)) return null
-  return typeof message.content === 'string' ? message.content : null
-}
-
-function isUsableSignal(value: unknown): value is AbortSignal {
-  if (!isRecord(value)) return false
-  return typeof value.aborted === 'boolean'
-}
-
-function readSignal(context: unknown): AbortSignal | null {
-  if (!isRecord(context)) return null
-  const signal = context.signal
-  return isUsableSignal(signal) ? signal : null
-}
-
-function supportsAbortListener(signal: AbortSignal): boolean {
-  return (
-    typeof signal.addEventListener === 'function' &&
-    typeof signal.removeEventListener === 'function'
-  )
-}
-
-function isAborted(signal: AbortSignal): boolean {
-  return signal.aborted === true
 }
 
 /**
@@ -210,512 +172,166 @@ export function renderSelectionUserPrompt(request: SelectionRequest): string {
   ].join('\n')
 }
 
-function isLoopbackHostname(hostname: string): boolean {
-  return (
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname === '[::1]' ||
-    hostname === '::1'
-  )
-}
-
-/** Parses a provider base URL, accepting https or loopback-only plain http. */
-function parseProviderBaseUrl(baseUrl: unknown): URL | null {
-  if (typeof baseUrl !== 'string') return null
-  const trimmed = baseUrl.trim()
-  if (trimmed.length === 0) return null
-  let url: URL
-  try {
-    url = new URL(trimmed)
-  } catch {
-    return null
-  }
-  if (url.username !== '' || url.password !== '') return null
-  if (url.protocol === 'https:') return url
-  if (url.protocol === 'http:' && isLoopbackHostname(url.hostname)) return url
-  return null
-}
-
-/** Joins the configured base URL with the endpoint path regardless of trailing slashes. */
-function completionsUrl(baseUrl: string): string {
-  const endpoint = '/chat/completions'
-  const trimmed = baseUrl.trim().replace(/\/+$/, '')
-  if (trimmed.toLowerCase().endsWith(endpoint)) {
-    return `${trimmed.slice(0, trimmed.length - endpoint.length)}${endpoint}`
-  }
-  return `${trimmed}${endpoint}`
-}
-
-/** Strips an optional surrounding markdown code fence from model content. */
-function stripCodeFence(content: string): string {
-  const trimmed = content.trim()
-  if (!trimmed.startsWith('```')) return trimmed
-  const match = /^```[a-zA-Z0-9_-]*\s*([\s\S]*?)\s*```$/.exec(trimmed)
-  if (match === null) return trimmed
-  return (match[1] ?? '').trim()
-}
-
-function failureDuringCall(
-  signal: AbortSignal,
-  timedOut: boolean,
-  clock: ClockPort,
-  governingAtMs: number,
+function createSelectionError(
+  code: DecisionCallErrorCode,
+  message: string,
 ): ProviderSelectionError {
-  if (isAborted(signal)) {
-    return new ProviderSelectionError('aborted', 'selection aborted during provider call')
-  }
-  if (timedOut) {
-    return new ProviderSelectionError(
-      'deadline-exceeded',
-      `selection deadline ${governingAtMs} has expired`,
-    )
-  }
-  const nowMs = clock.nowMs()
-  if (Number.isFinite(nowMs) && nowMs >= governingAtMs) {
-    return new ProviderSelectionError(
-      'deadline-exceeded',
-      `selection deadline ${governingAtMs} has expired`,
-    )
-  }
-  return new ProviderSelectionError(
-    'transport-failed',
-    'openai-compatible selection request failed due to transport error',
-  )
+  return new ProviderSelectionError(code, message)
 }
 
-function readCount(
-  usage: Record<string, unknown> | undefined,
-  key: string,
-): number | null {
-  if (usage === undefined) return null
-  const value = usage[key]
-  return isNonNegativeInteger(value) ? value : null
-}
-
-function readUsage(body: Record<string, unknown>): {
-  readonly inputTokens: number | null
-  readonly outputTokens: number | null
-  readonly usageMissing: boolean
-} {
-  const usage = isRecord(body.usage) ? body.usage : undefined
-  const inputTokens = readCount(usage, 'prompt_tokens')
-  const outputTokens = readCount(usage, 'completion_tokens')
-  if (inputTokens === null || outputTokens === null) {
-    return { inputTokens: null, outputTokens: null, usageMissing: true }
+function parseSelectionRequest(request: unknown): SelectionRequest {
+  const parsed = selectionRequestSchema.safeParse(request)
+  if (!parsed.success) {
+    throw new ProviderSelectionError(
+      'invalid-request',
+      'selection request failed schema validation',
+    )
   }
-  return { inputTokens, outputTokens, usageMissing: false }
+  return parsed.data
 }
 
 export function createOpenAiCompatibleSelectionPort(
   options: OpenAiCompatibleSelectionPortOptions,
 ): SelectionPort {
-  if (
-    options === null ||
-    typeof options !== 'object' ||
-    options.clock === null ||
-    typeof options.clock !== 'object' ||
-    typeof options.clock.nowMs !== 'function'
-  ) {
-    throw new TypeError('provider selection port requires a ClockPort')
-  }
-  const { clock } = options
+  validateClockPortOptions(options, 'selection')
 
   const port: SelectionPort = {
     async select(
       request: SelectionRequest,
       context: CallContext,
     ): Promise<SelectionResult> {
-      const signal = readSignal(context)
-      if (signal === null) {
+      const outcome = await executeOpenAiCompatibleCall(
+        {
+          ...options,
+          label: 'selection',
+          requestTypeName: 'SelectionRequest',
+          defaultProviderName: DEFAULT_PROVIDER_SELECTION_NAME,
+          defaultModelVersion: PROVIDER_SELECTION_MODEL_VERSION,
+          systemPrompt: renderSelectionSystemPrompt(),
+          renderUserPrompt: renderSelectionUserPrompt,
+          parseRequest: parseSelectionRequest,
+          createError: createSelectionError,
+        },
+        request,
+        context,
+      )
+
+      const { parsedRequest, proposal, completedAtMs } = outcome
+
+      const allowedKeys = new Set([
+        'disposition',
+        'selectedEventIds',
+        'replyIntent',
+        'reasonCode',
+      ])
+      if (!Object.keys(proposal).every((key) => allowedKeys.has(key))) {
         throw new ProviderSelectionError(
-          'invalid-request',
-          'selection requires a valid CallContext signal',
+          'invalid-proposal',
+          'openai-compatible selection proposal contains unexpected keys',
         )
       }
 
-      if (isAborted(signal)) {
+      const disposition = proposal.disposition
+      if (disposition !== 'respond' && disposition !== 'defer') {
         throw new ProviderSelectionError(
-          'aborted',
-          'selection aborted before provider call',
+          'invalid-proposal',
+          'openai-compatible selection proposal has an invalid disposition',
         )
       }
-      if (!supportsAbortListener(signal)) {
+      if (!isStringArray(proposal.selectedEventIds)) {
         throw new ProviderSelectionError(
-          'invalid-request',
-          'selection requires a valid CallContext signal',
+          'invalid-proposal',
+          'openai-compatible selection proposal has invalid selectedEventIds',
         )
       }
-
-      if (!isNonBlank(options.apiKey)) {
+      const selectedEventIds = proposal.selectedEventIds
+      const replyIntent = proposal.replyIntent
+      if (replyIntent !== null && typeof replyIntent !== 'string') {
         throw new ProviderSelectionError(
-          'invalid-config',
-          'provider selection requires a non-blank apiKey',
+          'invalid-proposal',
+          'openai-compatible selection proposal has an invalid replyIntent',
         )
       }
-      if (parseProviderBaseUrl(options.baseUrl) === null) {
+      if (!isNonBlank(proposal.reasonCode)) {
         throw new ProviderSelectionError(
-          'invalid-config',
-          'provider selection requires an https baseUrl or loopback http',
-        )
-      }
-      if (!isNonBlank(options.model)) {
-        throw new ProviderSelectionError(
-          'invalid-config',
-          'provider selection requires a non-blank model',
-        )
-      }
-      const providerName = options.providerName ?? DEFAULT_PROVIDER_SELECTION_NAME
-      if (!isNonBlank(providerName)) {
-        throw new ProviderSelectionError(
-          'invalid-config',
-          'provider selection requires a non-blank providerName',
-        )
-      }
-      const modelVersion = options.modelVersion ?? PROVIDER_SELECTION_MODEL_VERSION
-      if (!isNonBlank(modelVersion)) {
-        throw new ProviderSelectionError(
-          'invalid-config',
-          'provider selection requires a non-blank modelVersion',
-        )
-      }
-      const pricingRef = options.pricingRef ?? null
-      if (pricingRef !== null && !isNonBlank(pricingRef)) {
-        throw new ProviderSelectionError(
-          'invalid-config',
-          'provider selection requires a non-blank pricingRef when supplied',
-        )
-      }
-      const maxTokens = options.maxTokens ?? DEFAULT_DECISION_MAX_TOKENS
-      if (
-        typeof maxTokens !== 'number' ||
-        !Number.isSafeInteger(maxTokens) ||
-        maxTokens <= 0
-      ) {
-        throw new ProviderSelectionError(
-          'invalid-config',
-          'provider selection requires a positive integer maxTokens',
+          'invalid-proposal',
+          'openai-compatible selection proposal has a blank reasonCode',
         )
       }
 
-      if (!isRecord(request)) {
-        throw new ProviderSelectionError(
-          'invalid-request',
-          'selection requires a valid SelectionRequest',
-        )
-      }
-
-      const startedAtMs = clock.nowMs()
-      const requestAtMs = request.deadline?.atMs
-      const contextAtMs = context.deadline?.atMs
-      if (
-        typeof startedAtMs !== 'number' ||
-        !Number.isFinite(startedAtMs) ||
-        startedAtMs < 0 ||
-        typeof requestAtMs !== 'number' ||
-        !Number.isFinite(requestAtMs) ||
-        typeof contextAtMs !== 'number' ||
-        !Number.isFinite(contextAtMs)
-      ) {
-        throw new ProviderSelectionError(
-          'invalid-deadline',
-          'selection requires finite request, call and clock deadlines',
-        )
-      }
-      const governingAtMs = Math.min(requestAtMs, contextAtMs)
-      if (startedAtMs >= governingAtMs) {
-        throw new ProviderSelectionError(
-          'deadline-exceeded',
-          `selection deadline ${governingAtMs} has expired`,
-        )
-      }
-
-      const parsedRequest = selectionRequestSchema.safeParse(request)
-      if (!parsedRequest.success) {
-        throw new ProviderSelectionError(
-          'invalid-request',
-          'selection request failed schema validation',
-        )
-      }
-
-      const callController = new AbortController()
-      let timedOut = false
-      const handleAbort = (): void => {
-        callController.abort()
-      }
-      signal.addEventListener('abort', handleAbort, { once: true })
-      const timeoutHandle = setTimeout(() => {
-        timedOut = true
-        callController.abort()
-      }, Math.max(0, governingAtMs - startedAtMs))
-
-      try {
-        if (isAborted(signal)) {
-          throw new ProviderSelectionError(
-            'aborted',
-            'selection aborted before provider call',
-          )
-        }
-
-        const fetchImpl: DecisionFetch = options.fetchImpl ?? fetch
-        let response: Response
-        try {
-          response = await fetchImpl(completionsUrl(options.baseUrl), {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${options.apiKey.trim()}`,
-            },
-            body: JSON.stringify({
-              model: options.model.trim(),
-              temperature: 0,
-              stream: false,
-              max_tokens: maxTokens,
-              messages: [
-                { role: 'system', content: renderSelectionSystemPrompt() },
-                {
-                  role: 'user',
-                  content: renderSelectionUserPrompt(parsedRequest.data),
-                },
-              ],
-            }),
-            signal: callController.signal,
-          })
-        } catch {
-          throw failureDuringCall(signal, timedOut, clock, governingAtMs)
-        }
-
-        const afterFetchAtMs = clock.nowMs()
-        if (isAborted(signal)) {
-          throw new ProviderSelectionError(
-            'aborted',
-            'selection aborted during provider call',
-          )
-        }
-        if (!Number.isFinite(afterFetchAtMs)) {
-          throw new ProviderSelectionError(
-            'invalid-deadline',
-            'selection requires a finite clock deadline',
-          )
-        }
-        if (timedOut || afterFetchAtMs >= governingAtMs) {
-          throw new ProviderSelectionError(
-            'deadline-exceeded',
-            `selection deadline ${governingAtMs} has expired`,
-          )
-        }
-        if (response.status < 200 || response.status > 299) {
-          throw new ProviderSelectionError(
-            'http-error',
-            `openai-compatible selection request failed: HTTP ${response.status}`,
-          )
-        }
-
-        if (typeof response.headers?.get === 'function') {
-          const contentLength = Number(response.headers.get('content-length'))
-          if (
-            Number.isFinite(contentLength) &&
-            Number.isInteger(contentLength) &&
-            contentLength > MAX_DECISION_RESPONSE_CHARS
-          ) {
-            throw new ProviderSelectionError(
-              'invalid-json',
-              'openai-compatible selection response exceeds maximum size',
-            )
-          }
-        }
-
-        let text: string
-        try {
-          text = await response.text()
-        } catch {
-          throw failureDuringCall(signal, timedOut, clock, governingAtMs)
-        }
-
-        const completedAtMs = clock.nowMs()
-        if (isAborted(signal)) {
-          throw new ProviderSelectionError(
-            'aborted',
-            'selection aborted during provider call',
-          )
-        }
-        if (!Number.isFinite(completedAtMs)) {
-          throw new ProviderSelectionError(
-            'invalid-deadline',
-            'selection requires a finite clock deadline',
-          )
-        }
-        if (timedOut || completedAtMs >= governingAtMs) {
-          throw new ProviderSelectionError(
-            'deadline-exceeded',
-            `selection deadline ${governingAtMs} has expired`,
-          )
-        }
-        if (text.length > MAX_DECISION_RESPONSE_CHARS) {
-          throw new ProviderSelectionError(
-            'invalid-json',
-            'openai-compatible selection response exceeds maximum size',
-          )
-        }
-
-        let body: unknown
-        try {
-          body = JSON.parse(text)
-        } catch {
-          throw new ProviderSelectionError(
-            'invalid-json',
-            'openai-compatible selection response is not valid JSON',
-          )
-        }
-        if (!isRecord(body)) {
-          throw new ProviderSelectionError(
-            'invalid-json',
-            'openai-compatible selection response is not a JSON object',
-          )
-        }
-
-        const content = readChoiceContent(body)
-        if (content === null) {
-          throw new ProviderSelectionError(
-            'invalid-json',
-            'openai-compatible selection response has no choices[0].message.content string',
-          )
-        }
-
-        let proposal: unknown
-        try {
-          proposal = JSON.parse(stripCodeFence(content))
-        } catch {
-          throw new ProviderSelectionError(
-            'invalid-json',
-            'openai-compatible selection proposal is not valid JSON',
-          )
-        }
-        if (!isRecord(proposal)) {
-          throw new ProviderSelectionError(
-            'invalid-json',
-            'openai-compatible selection proposal is not a JSON object',
-          )
-        }
-
-        const allowedKeys = new Set([
-          'disposition',
-          'selectedEventIds',
-          'replyIntent',
-          'reasonCode',
-        ])
-        if (!Object.keys(proposal).every((key) => allowedKeys.has(key))) {
+      if (disposition === 'defer') {
+        if (selectedEventIds.length !== 0 || replyIntent !== null) {
           throw new ProviderSelectionError(
             'invalid-proposal',
-            'openai-compatible selection proposal contains unexpected keys',
+            'openai-compatible selection defer proposal carries a selection or intent',
           )
         }
-
-        const disposition = proposal.disposition
-        if (disposition !== 'respond' && disposition !== 'defer') {
+      } else {
+        if (selectedEventIds.length !== 1) {
           throw new ProviderSelectionError(
             'invalid-proposal',
-            'openai-compatible selection proposal has an invalid disposition',
+            'openai-compatible selection respond proposal must select exactly one event',
           )
         }
-        if (!isStringArray(proposal.selectedEventIds)) {
+        const selectedEventId = selectedEventIds[0]!
+        const candidate = parsedRequest.candidates.find(
+          (entry) => entry.eventId === selectedEventId,
+        )
+        if (candidate === undefined) {
           throw new ProviderSelectionError(
             'invalid-proposal',
-            'openai-compatible selection proposal has invalid selectedEventIds',
+            'openai-compatible selection proposal names an unoffered candidate',
           )
         }
-        const selectedEventIds = proposal.selectedEventIds
-        const replyIntent = proposal.replyIntent
-        if (replyIntent !== null && typeof replyIntent !== 'string') {
+        if (candidate.expiresAtMs <= completedAtMs) {
           throw new ProviderSelectionError(
             'invalid-proposal',
-            'openai-compatible selection proposal has an invalid replyIntent',
+            'openai-compatible selection proposal names an expired candidate',
           )
         }
-        if (!isNonBlank(proposal.reasonCode)) {
+        const allowedIntents: readonly string[] = parsedRequest.allowedIntents
+        if (
+          typeof replyIntent !== 'string' ||
+          !allowedIntents.includes(replyIntent)
+        ) {
           throw new ProviderSelectionError(
             'invalid-proposal',
-            'openai-compatible selection proposal has a blank reasonCode',
+            'openai-compatible selection proposal names a disallowed reply intent',
           )
         }
-
-        if (disposition === 'defer') {
-          if (selectedEventIds.length !== 0 || replyIntent !== null) {
-            throw new ProviderSelectionError(
-              'invalid-proposal',
-              'openai-compatible selection defer proposal carries a selection or intent',
-            )
-          }
-        } else {
-          if (selectedEventIds.length !== 1) {
-            throw new ProviderSelectionError(
-              'invalid-proposal',
-              'openai-compatible selection respond proposal must select exactly one event',
-            )
-          }
-          const selectedEventId = selectedEventIds[0]!
-          const candidate = parsedRequest.data.candidates.find(
-            (entry) => entry.eventId === selectedEventId,
-          )
-          if (candidate === undefined) {
-            throw new ProviderSelectionError(
-              'invalid-proposal',
-              'openai-compatible selection proposal names an unoffered candidate',
-            )
-          }
-          if (candidate.expiresAtMs <= completedAtMs) {
-            throw new ProviderSelectionError(
-              'invalid-proposal',
-              'openai-compatible selection proposal names an expired candidate',
-            )
-          }
-          const allowedIntents: readonly string[] =
-            parsedRequest.data.allowedIntents
-          if (
-            typeof replyIntent !== 'string' ||
-            !allowedIntents.includes(replyIntent)
-          ) {
-            throw new ProviderSelectionError(
-              'invalid-proposal',
-              'openai-compatible selection proposal names a disallowed reply intent',
-            )
-          }
-        }
-
-        const servedModel =
-          typeof body.model === 'string' && body.model.trim().length > 0
-            ? body.model.trim()
-            : null
-        const usage = readUsage(body)
-        const elapsedMs = Math.max(0, completedAtMs - startedAtMs)
-
-        return selectionResultSchema.parse({
-          requestId: parsedRequest.data.requestId,
-          sessionId: parsedRequest.data.sessionId,
-          epoch: parsedRequest.data.epoch,
-          snapshotRevision: parsedRequest.data.snapshotRevision,
-          disposition,
-          selectedEventIds,
-          replyIntent,
-          reasonCode: proposal.reasonCode,
-          provider: providerName,
-          modelVersion,
-          usage: {
-            provider: providerName,
-            requestedModel: options.model.trim(),
-            resolvedModel: servedModel,
-            requestId: parsedRequest.data.requestId,
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
-            usageMissing: usage.usageMissing,
-            elapsedMs,
-            status: 'ok',
-            pricingRef,
-          },
-        })
-      } finally {
-        clearTimeout(timeoutHandle)
-        signal.removeEventListener('abort', handleAbort)
       }
+
+      const result = selectionResultSchema.safeParse({
+        requestId: parsedRequest.requestId,
+        sessionId: parsedRequest.sessionId,
+        epoch: parsedRequest.epoch,
+        snapshotRevision: parsedRequest.snapshotRevision,
+        disposition,
+        selectedEventIds,
+        replyIntent,
+        reasonCode: proposal.reasonCode,
+        provider: outcome.providerName,
+        modelVersion: outcome.modelVersion,
+        usage: {
+          provider: outcome.providerName,
+          requestedModel: outcome.requestedModel,
+          resolvedModel: outcome.servedModel,
+          requestId: parsedRequest.requestId,
+          inputTokens: outcome.usage.inputTokens,
+          outputTokens: outcome.usage.outputTokens,
+          usageMissing: outcome.usage.usageMissing,
+          elapsedMs: outcome.elapsedMs,
+          status: 'ok',
+          pricingRef: outcome.pricingRef,
+        },
+      })
+      if (!result.success) {
+        throw new ProviderSelectionError(
+          'invalid-proposal',
+          'openai-compatible selection result failed schema validation',
+        )
+      }
+      return result.data
     },
   }
 

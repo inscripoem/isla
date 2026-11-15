@@ -131,17 +131,23 @@ function isLoopbackHostname(hostname: string): boolean {
   )
 }
 
-/** Accepts https anywhere, or plain http only on loopback hosts. */
-function isLoopbackSafeBaseUrl(baseUrl: string): boolean {
+/**
+ * Accepts https anywhere, or plain http only on loopback hosts. Rejects
+ * embedded credentials and URL fragments.
+ */
+function parseLoopbackSafeBaseUrl(baseUrl: string): URL | null {
+  if (baseUrl.includes('#')) return null
   let url: URL
   try {
     url = new URL(baseUrl)
   } catch {
-    return false
+    return null
   }
-  if (url.username !== '' || url.password !== '') return false
-  if (url.protocol === 'https:') return true
-  return url.protocol === 'http:' && isLoopbackHostname(url.hostname)
+  if (url.hash !== '') return null
+  if (url.username !== '' || url.password !== '') return null
+  if (url.protocol === 'https:') return url
+  if (url.protocol === 'http:' && isLoopbackHostname(url.hostname)) return url
+  return null
 }
 
 function readModelProviderConfig(
@@ -163,7 +169,8 @@ function readModelProviderConfig(
   const model = (env[providerEnv.model] ?? '').trim()
   const apiKey = (env[providerEnv.apiKey] ?? '').trim()
 
-  if (!isLoopbackSafeBaseUrl(baseUrl)) {
+  const parsedBaseUrl = parseLoopbackSafeBaseUrl(baseUrl)
+  if (parsedBaseUrl === null) {
     return {
       available: false,
       reason: `${providerEnv.baseUrl} must be an https URL or loopback http (localhost, 127.0.0.1, [::1])`,
@@ -190,7 +197,10 @@ function readModelProviderConfig(
     available: true,
     reason: null,
     config: {
-      baseUrl: baseUrl.replace(/\/+$/, ''),
+      baseUrl: `${parsedBaseUrl.origin}${parsedBaseUrl.pathname.replace(
+        /\/+$/,
+        '',
+      )}${parsedBaseUrl.search}`,
       model,
       apiKey,
       ...(maxTokens === undefined ? {} : { maxTokens }),

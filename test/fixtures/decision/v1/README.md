@@ -1,6 +1,6 @@
 # M3 selection corpus v1.1
 
-Status: human-reviewed. Owner: M3.
+Status: human-recorded coverage fixture. Owner: M3.
 
 `corpusVersion` is `m3-selection-v1.1`; `rubricVersion` is
 `m3-quality-rubric-v0.1`. That rubric
@@ -22,8 +22,9 @@ are used by the test scorer only after the result returns.
 ## Case layout
 
 The corpus contains 12 `selection-port` cases. Four are development cases with
-`heldOut: false` (`selection-001`..`selection-004`) and eight are held-out
-evaluation cases with `heldOut: true` (`selection-005`..`selection-012`).
+`heldOut: false` (`selection-001`..`selection-004`) and eight carry `heldOut: true`
+(`selection-005`..`selection-012`) for split-accounting and smoke coverage (see
+Fixture role and evaluation boundary below).
 
 - `selection-001` and `selection-002` are the original greeting and
   unintelligible-input cases.
@@ -76,13 +77,24 @@ A `draft` review record produces no adopted score. Records with
 never certify corpus evidence. Exhaustive intent coverage requires a reviewed
 `coverageRationale`; otherwise unlisted allowed intents are unassessed.
 
-## Split freeze and evaluation boundary
+## Fixture role and evaluation boundary
 
-All 12 cases (4 `heldOut: false` development cases and 8 `heldOut: true`
-evaluation cases) were authored in PR #155
+`m3-selection-v1.1`
 (`casesSha256 = c7c1b19d875e7510210e156656ad4749c33c82d6b54dbb1ee2bb7a6b9f68fa63`)
-to establish the initial freeze before any live-provider prompt or model tuning.
-Offline mock runs are mechanics checks only (`certifiesCorpus: false`) and never
-constitute quality or generalisation evidence. `heldOut: true` reserves
-`selection-005` through `selection-012` strictly against post-freeze prompt or
-model tuning on real providers.
+is a deterministic contract-coverage and smoke/regression fixture, and the
+pre-pilot case set for Issue `#98`. It is not a standalone generalisation or
+variant-quality benchmark.
+
+All 12 requests, reference labels, `heldOut` flags (the 4 development cases
+`selection-001`..`004` and the 8 `heldOut: true` cases `selection-005`..`012`) and
+detached `reviews/*.json` records (`reviewerId: "shallight"`) were authored
+in-repo by M3. M4 `@L01nki1`'s 12/12 review is recorded as PR review
+`PRR_kwDOU7Q6_88AAAABX2SVaw` rather than as separate non-author label files. The
+offline suite pins the deterministic rule baseline's exact score sums
+(`dev = 3`, `heldOut = 9`) as regression invariants.
+
+This fixture alone cannot support a held-out generalisation claim or a
+variant-superiority claim. Offline mock runs remain non-certifying mechanics
+checks (`certifiesCorpus: false`). Independent multi-reviewer human scoring,
+disagreement resolution and formal live variant comparison are deferred to
+Checkpoint 07 under Issue `#110` (M3/M4, reviewed by M6) and Issue `#109` (M6).

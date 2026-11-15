@@ -40,9 +40,12 @@ process environment only; they are never committed, defaulted, logged or echoed.
 For this group, `ISLA_LIVE_DECISION_BASE_URL` accepts either the API root
 (`https://host/v1`) or the full endpoint (`https://host/v1/chat/completions`);
 the adapter appends `/chat/completions` only when it is not already present.
-`https://` is required except for loopback `http://` (`localhost`, `127.0.0.1`,
-`[::1]`). `ISLA_LIVE_DECISION_MAX_TOKENS` is optional; when set it must be a
-positive integer, and when absent or blank the adapter default of 256 applies.
+Query parameters on `baseUrl` (such as `?tenant=...` or `?api-version=...`) are
+preserved on the `/chat/completions` request URL, while URL `#` fragments and
+embedded URL credentials are rejected. `https://` is required except for loopback
+`http://` (`localhost`, `127.0.0.1`, `[::1]`).
+`ISLA_LIVE_DECISION_MAX_TOKENS` is optional; when set it must be a positive
+integer, and when absent or blank the adapter default of 256 applies.
 
 ### M3 Jev provider (`readLiveJevProviderConfig`)
 
@@ -55,9 +58,12 @@ positive integer, and when absent or blank the adapter default of 256 applies.
 
 For this group, `ISLA_LIVE_JEV_BASE_URL` accepts either the API root
 (`https://host/v1`) or the full endpoint (`https://host/v1/chat/completions`);
-`https://` is required except for loopback `http://` (`localhost`, `127.0.0.1`,
-`[::1]`). `ISLA_LIVE_JEV_MAX_TOKENS` is optional; when set it must be a positive
-integer, and when absent or blank the adapter default of 256 applies.
+query parameters on `baseUrl` (such as `?tenant=...` or `?api-version=...`) are
+preserved on the `/chat/completions` request URL, while URL `#` fragments and
+embedded URL credentials are rejected. `https://` is required except for loopback
+`http://` (`localhost`, `127.0.0.1`, `[::1]`). `ISLA_LIVE_JEV_MAX_TOKENS` is
+optional; when set it must be a positive integer, and when absent or blank the
+adapter default of 256 applies.
 
 The Jev group names the NFR-03 dedicated-model configuration. It is reported
 separately so a measurement run can compare `m3-general-model` with `m3-jev`
@@ -69,6 +75,9 @@ without conflating either credential or endpoint.
   reports the missing variable names and skips.
 - A non-http(s) base URL, or remote plaintext `http://` for the M3 groups, makes
   the group unavailable and names the offending variable.
+- URL `#` fragments and embedded URL credentials make an M3 group unavailable;
+  query parameters on `baseUrl` (such as `?tenant=...` or `?api-version=...`) are
+  preserved on the `/chat/completions` request URL.
 - An invalid optional `maxTokens` value makes the M3 group unavailable and names
   only the environment variable, never its value.
 - An available group runs its live cases; a rejection, timeout or invalid model

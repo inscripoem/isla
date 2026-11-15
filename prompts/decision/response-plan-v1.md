@@ -4,11 +4,12 @@ Owner: M3 (decision). Status: **ready**. Version: `1`.
 
 Prompt version: `promptVersion: m3-decision-prompt-v1`.
 
-This document is the source of truth for the fixed instructions rendered by
-`renderSelectionSystemPrompt` in `src/decision/provider-selection.ts` and
-`renderReactionSystemPrompt` in `src/decision/provider-reaction.ts`. Both adapters
-use the OpenAI-compatible chat-completions API with `temperature: 0`,
-`stream: false` and a `max_tokens` limit.
+`src/decision/openai-compatible-core.ts`, `src/decision/provider-selection.ts`
+and `src/decision/provider-reaction.ts` define the executable prompt renderers
+and call-boundary constants at runtime. This specification documents those
+renderers and constants, and `test/offline/m3-decision.test.ts` locks the two in
+parity. Both adapters use the OpenAI-compatible chat-completions API with
+`temperature: 0`, `stream: false` and a `max_tokens` limit.
 
 ## 1. Common provider boundary
 
@@ -16,17 +17,21 @@ Both tasks obey the same call-boundary rules.
 
 - **Endpoint and transport.** The configured base URL must use `https://`, or
   plain `http://` only on a loopback host (`localhost`, `127.0.0.1` or `[::1]`);
-  embedded URL credentials are rejected. The adapter appends `/chat/completions`
-  unless the configured URL already ends with that endpoint (case-insensitive),
-  so both an API root such as `https://host/v1` and the full endpoint
-  `https://host/v1/chat/completions` are accepted.
+  embedded URL credentials and URL `#` fragments are rejected as `invalid-config`
+  before any network call. Query parameters on the configured base URL are
+  preserved on the `/chat/completions` request URL. The adapter appends
+  `/chat/completions` unless the configured URL already ends with that endpoint
+  (case-insensitive), so both an API root such as `https://host/v1` and the full
+  endpoint `https://host/v1/chat/completions` are accepted.
 - **Completion limit.** Every outbound request includes `max_tokens`, the
   configurable positive integer `maxTokens` option, defaulting to `256`. A
   missing, non-integer or non-positive value is an `invalid-config` failure before
   any network activity.
-- **Bounded response.** A response is rejected as `invalid-json` when its
-  `Content-Length` header or its decoded text exceeds 65,536 characters. The
-  oversized body is never echoed in the error.
+- **Bounded response.** A declared `Content-Length` above `65,536` is rejected
+  as `invalid-json` before the body is read. When `Content-Length` is absent, the
+  `65,536`-character bound is checked after `response.text()` and before
+  `JSON.parse`; this bounds JSON parsing work, not arbitrary streaming memory
+  when the length is omitted. The oversized body is never echoed in the error.
 - **Single attempt.** Every request is attempted once, with zero internal
   retries. The adapters never retry a failed, aborted, timed-out or invalid call
   (`C-15`, `NFR-04`). The model is told not to ask for a retry and not to emit
@@ -43,7 +48,8 @@ Both tasks obey the same call-boundary rules.
   affected field, HTTP status or structural fault category.
 - **Honest usage.** A served model is reported only when the provider supplies
   it. Token counts are reported only when both prompt and completion counts are
-  finite non-negative integers; otherwise usage remains explicitly missing.
+  non-negative **safe** integers (`Number.isSafeInteger`); otherwise usage
+  remains explicitly missing.
 
 ## 2. Task C1 — `response-plan` (`SelectionPort.select`)
 

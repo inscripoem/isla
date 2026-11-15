@@ -7,7 +7,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type {
   CallContext,
   ClockPort,
@@ -19,7 +19,10 @@ import type {
   SelectionResult,
   SynthesisPort,
 } from '../../src/contracts'
-import { selectionResultSchema } from '../../src/contracts'
+import {
+  decisionResultSchema,
+  selectionResultSchema,
+} from '../../src/contracts'
 import {
   DECISION_PROMPT_VERSION,
   DEFAULT_DECISION_MAX_TOKENS,
@@ -36,6 +39,7 @@ import {
   createRuleReactionPort,
   createRuleSelectionPort,
   renderReactionSystemPrompt,
+  renderReactionUserPrompt,
   renderSelectionSystemPrompt,
   renderSelectionUserPrompt,
 } from '../../src/decision'
@@ -458,6 +462,22 @@ function canonicalPromptBlock(
   const fenceEnd = specification.indexOf('\n```', contentStart)
   if (fenceEnd < 0) throw new Error(`unterminated canonical fence in ${heading}`)
   return specification.slice(contentStart, fenceEnd)
+}
+
+/** Returns the first fenced block after a heading, tolerating a language tag. */
+function fencedBlockAfterHeading(
+  specification: string,
+  heading: string,
+): string {
+  const headingIndex = specification.indexOf(heading)
+  if (headingIndex < 0) throw new Error(`missing prompt section ${heading}`)
+  const fenceStart = specification.indexOf('```', headingIndex)
+  if (fenceStart < 0) throw new Error(`missing fenced block in ${heading}`)
+  const contentStart = specification.indexOf('\n', fenceStart)
+  if (contentStart < 0) throw new Error(`unterminated fence in ${heading}`)
+  const fenceEnd = specification.indexOf('\n```', contentStart)
+  if (fenceEnd < 0) throw new Error(`unterminated fence in ${heading}`)
+  return specification.slice(contentStart + 1, fenceEnd)
 }
 
 /**
@@ -1920,6 +1940,82 @@ describe('M3 OpenAI-compatible SelectionPort', () => {
       completionResponse(selectionProposal(), { model: null }),
     ).select(request, createCallContext(3000))
     expect(absentModel.usage.resolvedModel).toBeNull()
+
+    const unsafePrompt = await providerSelectionPort(async () =>
+      completionResponse(selectionProposal(), {
+        usage: { prompt_tokens: 2 ** 53, completion_tokens: 4 },
+      }),
+    ).select(request, createCallContext(3000))
+    expect(unsafePrompt.usage).toMatchObject({
+      inputTokens: null,
+      outputTokens: null,
+      usageMissing: true,
+    })
+
+    const unsafeCompletion = await providerSelectionPort(async () =>
+      completionResponse(selectionProposal(), {
+        usage: {
+          prompt_tokens: 4,
+          completion_tokens: Number.MAX_SAFE_INTEGER + 1,
+        },
+      }),
+    ).select(request, createCallContext(3000))
+    expect(unsafeCompletion.usage).toMatchObject({
+      inputTokens: null,
+      outputTokens: null,
+      usageMissing: true,
+    })
+
+    const maxSafe = await providerSelectionPort(async () =>
+      completionResponse(selectionProposal(), {
+        usage: {
+          prompt_tokens: Number.MAX_SAFE_INTEGER,
+          completion_tokens: 0,
+        },
+      }),
+    ).select(request, createCallContext(3000))
+    expect(maxSafe.usage).toMatchObject({
+      inputTokens: Number.MAX_SAFE_INTEGER,
+      outputTokens: 0,
+      usageMissing: false,
+    })
+  })
+
+  it('accepts fractional elapsed intervals and maps schema failure to a typed error', async () => {
+    const startedAtMs = 100.25
+    const completedAtMs = 112.75
+    let calls = 0
+    const clock: ClockPort = {
+      nowMs: () => {
+        calls += 1
+        return calls >= 3 ? completedAtMs : startedAtMs
+      },
+    }
+    const request = providerSelectionRequest({
+      deadline: { atMs: 2_000 },
+      candidates: [fixtureInputEvent({ eventId: 'candidate-1' })],
+    })
+    const result = await providerSelectionPort(
+      async () => completionResponse(selectionProposal()),
+      { clock },
+    ).select(request, createCallContext(2_000))
+    expect(result.usage.elapsedMs).toBe(12.5)
+
+    const spy = vi
+      .spyOn(selectionResultSchema, 'safeParse')
+      .mockReturnValueOnce({
+        success: false,
+        error: new Error('schema mismatch'),
+      } as never)
+    try {
+      const run = providerSelectionPort(async () =>
+        completionResponse(selectionProposal()),
+      ).select(request, createCallContext(2_000))
+      await expect(run).rejects.toBeInstanceOf(ProviderSelectionError)
+      await expect(run).rejects.toMatchObject({ code: 'invalid-proposal' })
+    } finally {
+      spy.mockRestore()
+    }
   })
 
   it('isolates untrusted candidate data and pins the prompt version', () => {
@@ -1961,6 +2057,48 @@ describe('M3 OpenAI-compatible SelectionPort', () => {
     )
     expect(selectionCanonicalBlock).toBe(renderSelectionSystemPrompt())
     expect(reactionCanonicalBlock).toBe(renderReactionSystemPrompt())
+
+    expect(specification).toContain(DECISION_PROMPT_VERSION)
+    expect(specification).toContain(`\`${DEFAULT_DECISION_MAX_TOKENS}\``)
+    expect(specification).toContain(
+      MAX_DECISION_RESPONSE_CHARS.toLocaleString('en-US'),
+    )
+
+    const selectionUserPrompt = renderSelectionUserPrompt(
+      providerSelectionRequest(),
+    )
+    const reactionUserPrompt = renderReactionUserPrompt(
+      providerDecisionRequest(),
+    )
+
+    for (const marker of [
+      'UNTRUSTED_CANDIDATE_DATA',
+      'END_UNTRUSTED_CANDIDATE_DATA',
+    ]) {
+      expect(specification).toContain(marker)
+      expect(selectionUserPrompt).toContain(marker)
+    }
+    for (const marker of [
+      'UNTRUSTED_SEGMENT_DATA',
+      'END_UNTRUSTED_SEGMENT_DATA',
+    ]) {
+      expect(specification).toContain(marker)
+      expect(reactionUserPrompt).toContain(marker)
+    }
+
+    const selectionShape =
+      '{ "disposition": "respond" | "defer", "selectedEventIds": string[], "replyIntent": string | null, "reasonCode": string }'
+    const reactionShape =
+      '{ "status": "selected" | "abstained", "actionId": string | null, "reasonCode": string, "confidence": number | null }'
+
+    expect(
+      fencedBlockAfterHeading(specification, '### 2.3 Output contract').trim(),
+    ).toBe(selectionShape)
+    expect(
+      fencedBlockAfterHeading(specification, '### 3.3 Output contract').trim(),
+    ).toBe(reactionShape)
+    expect(renderSelectionSystemPrompt()).toContain(selectionShape)
+    expect(renderReactionSystemPrompt()).toContain(reactionShape)
   })
 
   it('attempts once and maps HTTP, transport and malformed response faults', async () => {
@@ -2068,6 +2206,8 @@ describe('M3 OpenAI-compatible SelectionPort', () => {
     for (const baseUrl of [
       'http://decision.example.com/v1',
       'https://user:pass@decision.example.com/v1',
+      'https://decision.example.com/v1#frag',
+      'https://decision.example.com/v1#',
     ]) {
       const fetch = countingFetch(async () =>
         completionResponse(selectionProposal()),
@@ -2089,6 +2229,7 @@ describe('M3 OpenAI-compatible SelectionPort', () => {
       )
       expect(message).not.toContain(baseUrl)
       expect(message).not.toContain('user:pass')
+      expect(message).not.toContain('#')
       expect(message).not.toContain(DECISION_API_KEY)
     }
 
@@ -2171,6 +2312,37 @@ describe('M3 OpenAI-compatible SelectionPort', () => {
         createCallContext(3000),
       )
       expect(urls).toEqual([expected])
+    }
+
+    const queryCases: ReadonlyArray<readonly [string, string]> = [
+      [
+        'https://decision.example.com/v1?tenant=a&api-version=2024-10',
+        'https://decision.example.com/v1/chat/completions?tenant=a&api-version=2024-10',
+      ],
+      [
+        'https://decision.example.com/v1/?tenant=a',
+        'https://decision.example.com/v1/chat/completions?tenant=a',
+      ],
+      [
+        'https://decision.example.com/v1/chat/completions?tenant=a',
+        'https://decision.example.com/v1/chat/completions?tenant=a',
+      ],
+      [
+        'https://decision.example.com/v1/CHAT/COMPLETIONS/?tenant=a',
+        'https://decision.example.com/v1/chat/completions?tenant=a',
+      ],
+    ]
+    for (const [baseUrl, expectedUrl] of queryCases) {
+      const urls: string[] = []
+      const fetch = countingFetch(async (url) => {
+        urls.push(url)
+        return completionResponse(selectionProposal())
+      })
+      await providerSelectionPort(fetch.fetchImpl, { baseUrl }).select(
+        request,
+        createCallContext(3000),
+      )
+      expect(urls).toEqual([expectedUrl])
     }
   })
 
@@ -2411,6 +2583,90 @@ describe('M3 OpenAI-compatible ReactionPort', () => {
     expect(fencedResult).toMatchObject({ status: 'selected', actionId: 'neutral' })
   })
 
+  it('keeps token usage honestly missing for unsafe integer counts', async () => {
+    const request = providerDecisionRequest({
+      eligibleActionIds: ['neutral', 'smile'],
+      segmentText: 'That was great!',
+    })
+
+    const unsafePrompt = await providerReactionPort(async () =>
+      completionResponse(reactionProposal(), {
+        usage: { prompt_tokens: 2 ** 53, completion_tokens: 4 },
+      }),
+    ).decide(request, createCallContext(3000))
+    expect(unsafePrompt.usage).toMatchObject({
+      inputTokens: null,
+      outputTokens: null,
+      usageMissing: true,
+    })
+
+    const unsafeCompletion = await providerReactionPort(async () =>
+      completionResponse(reactionProposal(), {
+        usage: {
+          prompt_tokens: 4,
+          completion_tokens: Number.MAX_SAFE_INTEGER + 1,
+        },
+      }),
+    ).decide(request, createCallContext(3000))
+    expect(unsafeCompletion.usage).toMatchObject({
+      inputTokens: null,
+      outputTokens: null,
+      usageMissing: true,
+    })
+
+    const maxSafe = await providerReactionPort(async () =>
+      completionResponse(reactionProposal(), {
+        usage: {
+          prompt_tokens: Number.MAX_SAFE_INTEGER,
+          completion_tokens: 0,
+        },
+      }),
+    ).decide(request, createCallContext(3000))
+    expect(maxSafe.usage).toMatchObject({
+      inputTokens: Number.MAX_SAFE_INTEGER,
+      outputTokens: 0,
+      usageMissing: false,
+    })
+  })
+
+  it('accepts fractional elapsed intervals and maps schema failure to a typed error', async () => {
+    const startedAtMs = 100.25
+    const completedAtMs = 112.75
+    let calls = 0
+    const clock: ClockPort = {
+      nowMs: () => {
+        calls += 1
+        return calls >= 3 ? completedAtMs : startedAtMs
+      },
+    }
+    const request = providerDecisionRequest({
+      eligibleActionIds: ['neutral', 'smile'],
+      segmentText: 'That was great!',
+      deadline: { atMs: 2_000 },
+    })
+    const result = await providerReactionPort(
+      async () => completionResponse(reactionProposal()),
+      { clock },
+    ).decide(request, createCallContext(2_000))
+    expect(result.usage.elapsedMs).toBe(12.5)
+
+    const spy = vi
+      .spyOn(decisionResultSchema, 'safeParse')
+      .mockReturnValueOnce({
+        success: false,
+        error: new Error('schema mismatch'),
+      } as never)
+    try {
+      const run = providerReactionPort(async () =>
+        completionResponse(reactionProposal()),
+      ).decide(request, createCallContext(2_000))
+      await expect(run).rejects.toBeInstanceOf(ProviderReactionError)
+      await expect(run).rejects.toMatchObject({ code: 'invalid-decision' })
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
   it('accepts https and loopback http base URLs but rejects remote http and credentialed URLs', async () => {
     const request = providerDecisionRequest({
       eligibleActionIds: ['neutral', 'smile'],
@@ -2420,6 +2676,8 @@ describe('M3 OpenAI-compatible ReactionPort', () => {
     for (const baseUrl of [
       'http://decision.example.com/v1',
       'https://user:pass@decision.example.com/v1',
+      'https://decision.example.com/v1#frag',
+      'https://decision.example.com/v1#',
     ]) {
       const fetch = countingFetch(async () =>
         completionResponse(reactionProposal()),
@@ -2441,6 +2699,7 @@ describe('M3 OpenAI-compatible ReactionPort', () => {
       )
       expect(message).not.toContain(baseUrl)
       expect(message).not.toContain('user:pass')
+      expect(message).not.toContain('#')
       expect(message).not.toContain(DECISION_API_KEY)
     }
 
@@ -2525,6 +2784,37 @@ describe('M3 OpenAI-compatible ReactionPort', () => {
         createCallContext(3000),
       )
       expect(urls).toEqual([expected])
+    }
+
+    const queryCases: ReadonlyArray<readonly [string, string]> = [
+      [
+        'https://decision.example.com/v1?tenant=a&api-version=2024-10',
+        'https://decision.example.com/v1/chat/completions?tenant=a&api-version=2024-10',
+      ],
+      [
+        'https://decision.example.com/v1/?tenant=a',
+        'https://decision.example.com/v1/chat/completions?tenant=a',
+      ],
+      [
+        'https://decision.example.com/v1/chat/completions?tenant=a',
+        'https://decision.example.com/v1/chat/completions?tenant=a',
+      ],
+      [
+        'https://decision.example.com/v1/CHAT/COMPLETIONS/?tenant=a',
+        'https://decision.example.com/v1/chat/completions?tenant=a',
+      ],
+    ]
+    for (const [baseUrl, expectedUrl] of queryCases) {
+      const urls: string[] = []
+      const fetch = countingFetch(async (url) => {
+        urls.push(url)
+        return completionResponse(reactionProposal())
+      })
+      await providerReactionPort(fetch.fetchImpl, { baseUrl }).decide(
+        request,
+        createCallContext(3000),
+      )
+      expect(urls).toEqual([expectedUrl])
     }
   })
 
