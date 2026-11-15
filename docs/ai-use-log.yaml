@@ -8517,3 +8517,63 @@ entries:
       src/runtime/evaluation-adapter.ts and
       test/offline/m5-evaluation-adapter.test.ts only. No src/contracts file,
       RecordedRunV1, storage, provider or companion schema changed.
+
+  - date: "2026-11-16"
+    task: M5-101-admission-export-review-fixes
+    change: >-
+      Address M6's two blocking findings and M4's timing correction on the
+      admission export. A zero-accepted not-run now retains the prepared
+      inputs that were submitted and observed (a rejected or unacknowledged
+      submission plus the unsent tail) on an in-memory channel bound by
+      variant, case and occurrence; RecordedRunV1 and its notRun entries keep
+      exactly variantId, caseId and reason. dialogueMs now runs from
+      turn.started to dialogue.result; submitMs and planMs stay null until the
+      runtime records a dispatched or selection-entry boundary, so selection
+      planning time is not attributed to submission. sourceId and inputId
+      remain null with the recorded reason, and ADR-008 open decision row 3
+      records the split: requestMessageId and eventId are produced per input,
+      while the corpus sourceId mapping is the named follow-up "corpus
+      sourceId export".
+    requirements: [NFR-01, NFR-03]
+    invariants: [INV-16]
+    commits: [a464c8072f77966e41db26f777301c16781b47bf]
+    agent: build
+    provider: self-api
+    model: deepseek-v4-flash
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    sessions: [ses_e1f744d59ffeVohxjXwKLapXp9]
+    supervision: >-
+      The orchestrating assistant (Claude Code) supervised the OpenCode build
+      session in the repository's task-level configuration, which disables
+      oh-my-opencode-slim and enables the build agent. The session had no
+      shell tool, so the orchestrator ran every test command outside the
+      session and the results below are measured locally.
+    human_review: >-
+      Captain requested the review fixes and authorized local work. The change
+      is local only; push, PR body update and re-review requests await Captain
+      approval. No agent merges.
+    transcript_record: >-
+      The genuine OpenCode session ses_e1f744d59ffeVohxjXwKLapXp9 remains in
+      the local OpenCode store; the raw export has not yet been copied outside
+      the checkout.
+    verification:
+      base: 205424f663bb9da87d5dd690825d9972be10f0f2
+      results: >-
+        Linux: pnpm typecheck exited 0; pnpm test:m5 passed 265/265; pnpm test
+        passed 85 files / 1837 tests; pnpm lint exited 0; pnpm verify exited 0
+        with a successful build. The pre-fix M6 review figures at c61b31d were
+        37/37 focused, test:m5 263/263 and verify 1555/1555; the current
+        counts include the merged main and the two new not-run tests.
+      limits: >-
+        No live provider, browser playback, acoustic measurement, Windows run
+        or GitHub CI run was performed. The not-run observation channel is
+        in-memory only: a runner or companion producer must opt in before it
+        can consume it, and the recorded-run file still loses it by design.
+        sourceId remains null, so the companion correlation stays missing
+        until the named corpus sourceId export follow-up lands.
+    scope: >-
+      src/runtime/evaluation-adapter.ts, src/evaluation/comparison.ts,
+      test/offline/m5-evaluation-adapter.test.ts,
+      docs/architecture/adr/008-prepared-input-provenance.md and this log
+      entry. No frozen contract, RecordedRunV1, storage, provider, companion
+      schema, dependency or deployment change.
