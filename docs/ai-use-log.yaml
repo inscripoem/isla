@@ -7075,3 +7075,46 @@ entries:
       The M4-151 rebase round: branch rebuild onto main, evidence repointing,
       the working-memory expiry-input guard and the contract statements; no
       contract, storage, runtime or provider change.
+  - date: "2026-11-15"
+    task: M6-CP05-provenance-capture-and-threshold-register
+    change: >-
+      Add the producer half of the ADR-008 provenance companion and enforce the
+      threshold register's own rule. `captureProvenance` derives `runDigest` from
+      the recorded-run bytes instead of accepting it from the writer, parses the
+      run from those same bytes so one companion cannot be bound to one run object
+      and a different artifact, and refuses through the merged `parseProvenance`
+      so producer and consumer share one rule. `collectThresholdViolations` reads
+      `docs/architecture/evaluation-thresholds.md` and refuses a pending row that
+      carries a baseline, a comparison or a pilot head, and a fixed row missing its
+      baseline value, head/date or approver. No existing parser, schema, contract,
+      report path, storage module or gate workflow changed.
+    requirements: [NFR-01, NFR-03, NFR-04]
+    invariants: [INV-16]
+    commits: ['3cec440']
+    agent: opencode/build
+    provider: opencode-go
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      The M6 member set the scope (issue #100 capture, issue #103 threshold rule),
+      reviewed the diff and re-ran the gates. The agent wrote the two modules,
+      their tests, the `test:m6` file list and one trace-matrix row in one
+      supervised session. No live provider call was made, no evaluation result is
+      claimed, and the pilot remains not run.
+    verification:
+      base: 205424f
+      reproduction: >-
+        Run from the repository root on the working tree that contains this round.
+        The two new suites: 28 passed (13 capture, 15 threshold). Seven mutations
+        were applied one at a time and each turned its own test red: the draft's
+        runId replacing the parsed one, the asserted-digest refusal, the
+        pending-baseline rule, the measured-baseline rule, the head/date rule, the
+        duplicate-obligation rule, and a wrong digest that the report command must
+        refuse; every source file was restored after each. pnpm typecheck -> exit
+        0. pnpm lint -> exit 0. pnpm test:m6 -> 21 files, 324 passed.
+        pnpm test:trace -> 41 passed. pnpm test:readiness -> 47 passed.
+        pnpm test -> 87 files, 1857 passed. pnpm build -> exit 0.
+    scope: >-
+      M6 only: two new modules under `src/evaluation/`, two new offline suites, one
+      trace-matrix row's cells and the `test:m6` file list. No storage, runtime,
+      contract, provider or gate-workflow change; no threshold value is set and no
+      issue is claimed closed.
