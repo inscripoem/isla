@@ -2,6 +2,7 @@ import { REPLY_INTENTS } from '../contracts'
 import type { ReplyIntent } from '../contracts'
 import { CHARACTER_CONTENT, PERSONA_AUTHORING_STATUS } from './persona-content'
 import type { PersonaContent } from './persona-content'
+import type { PersonaFact } from './persona-recall'
 import { isSubstantiveSpeech } from './text'
 
 /**
@@ -228,6 +229,109 @@ export function standingFactsFromBible(bible: string): readonly string[] {
       .trim()
     if (text.length > 0) facts.push(text)
   }
+  return facts
+}
+
+/** Heading that opens a bible section, as `## 3. Likes`. */
+const BIBLE_SECTION_HEADING = /^##\s+\d+\.\s*(.+)$/
+/** Section name used for `[R]` entries that appear before the first heading. */
+const BIBLE_UNSECTIONED_SLUG = 'section'
+
+function slugOf(sectionTitle: string): string {
+  const words = sectionTitle.trim().toLowerCase().split(/\s+/).slice(0, 2)
+  return words
+    .map((word) => word.replace(/[^a-z0-9]/g, ''))
+    .filter((word) => word.length > 0)
+    .join('-')
+}
+
+/**
+ * Extract every `[R]` recall-candidate entry from the bible body.
+ *
+ * Parsing only, no judgement: whether the pool in `persona-content.ts` agrees with
+ * these entries is left to a test, so a divergence is a build failure and the two
+ * copies cannot drift apart.
+ *
+ * Only entries inside a blockquote are accepted, the same rule as
+ * `standingFactsFromBible`: a marker in prose documents the format and is not a
+ * fact. An entry may span physical lines - the authored bible wraps two of them -
+ * so a blockquote line without a marker is a continuation unless it opens a new
+ * list item. A marker line, a new list dash, a blank line (including a blockquote
+ * line that holds nothing but `>`), or any non-blockquote line closes the open
+ * entry.
+ *
+ * Continuations are joined with a single space and nothing else is normalized, so
+ * the parsed text is the authored wording with the wrapping undone.
+ *
+ * `id` is `<section-slug>-<NN>`, where the slug is the first two words of the
+ * enclosing `## N. Title` heading and NN restarts per section. `source` keeps the
+ * full heading title. Keywords and intents are omitted: they are authored
+ * enrichment in `persona-content.ts`, not something a parser can infer.
+ */
+export function recallFactsFromBible(bible: string): readonly PersonaFact[] {
+  const markers: readonly string[] = Object.values(BIBLE_MARKERS)
+  const facts: PersonaFact[] = []
+  let sectionTitle: string | null = null
+  // Ordinal of the last `[R]` entry in the current section; restarts per section.
+  let ordinal = 0
+  // An open entry's accumulated lines, or null between entries.
+  let open: string[] | null = null
+
+  const close = (): void => {
+    if (open === null) return
+    const text = open.join(' ').replace(/^[\s>*-]+/, '').trim()
+    const slug = sectionTitle === null ? BIBLE_UNSECTIONED_SLUG : slugOf(sectionTitle)
+    if (text.length > 0) {
+      facts.push({
+        id: `${slug}-${String(ordinal).padStart(2, '0')}`,
+        text,
+        keywords: [],
+        ...(sectionTitle === null ? {} : { source: sectionTitle }),
+      })
+    }
+    open = null
+  }
+
+  for (const rawLine of bible.split(/\r?\n/)) {
+    const heading = BIBLE_SECTION_HEADING.exec(rawLine)
+    if (heading !== null) {
+      close()
+      sectionTitle = (heading[1] ?? '').trim()
+      ordinal = 0
+      continue
+    }
+    if (!/^\s*>/.test(rawLine)) {
+      close()
+      continue
+    }
+
+    const body = rawLine.replace(/^[\s>]+/, '')
+    const marker = markers.find((candidate) => rawLine.includes(candidate))
+    if (marker !== undefined) {
+      close()
+      if (marker !== BIBLE_MARKERS.recall) continue
+      ordinal += 1
+      open = [rawLine.slice(rawLine.indexOf(marker) + marker.length)]
+      continue
+    }
+
+    if (open === null) continue
+    // A stripped `-` opens a new, unmarked list item, which ends this entry.
+    if (body.trimStart().startsWith('-')) {
+      close()
+      continue
+    }
+    const continuation = body.trim()
+    // A blockquote line holding nothing but `>` is a blank line: it closes the
+    // entry the same way an empty line does.
+    if (continuation.length === 0) {
+      close()
+      continue
+    }
+    open.push(continuation)
+  }
+  close()
+
   return facts
 }
 

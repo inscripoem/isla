@@ -21,6 +21,10 @@ import { buildDialogueUsage } from './usage'
 import { FIXTURE_DIALOGUE_MODEL, FIXTURE_DIALOGUE_MODEL_VERSION } from './usage'
 import { resolveCharacterProfile } from './persona'
 import type { MemoryEntrySource } from './context'
+import type { BudgetPlan } from './budget'
+import type { CharacterState, StateBaseline, StateProfile } from './state'
+import type { ListenerHistoryPort } from './listener-history'
+import type { WorkingMemoryStore } from './working-memory'
 
 /**
  * Dialogue generation.
@@ -148,9 +152,10 @@ export interface DialoguePortOptions {
    */
   memory?: MemoryEntrySource
   /**
-   * Persona fact recall. Omitted means no recall, equivalent to
-   * `PERSONA_RECALL_POLICY = 'off'`. The recall block shares one character budget
-   * with confirmed history, see ./persona-recall.
+   * Persona fact recall. Omitted means recall is disabled; that is the production
+   * default, and `PERSONA_RECALL_POLICY` declares the strategy rather than
+   * switching it. The recall block shares one character budget with confirmed
+   * history, see ./persona-recall.
    */
   personaRecall?: PersonaRecallPort
   /**
@@ -210,6 +215,73 @@ export interface DialoguePortOptions {
    * added, so the character budget and the rendered block are unchanged.
    */
   markConflictingTurns?: boolean
+  /**
+   * Inner state of the character for this call (./state), passed through to
+   * context assembly. A future state worker's `read` result fills this; this
+   * batch only carries it, it never computes it.
+   *
+   * Omitted means the state block is not rendered and the prompt is unchanged
+   * byte for byte. Supplying it adds no provider call: rendering is a
+   * deterministic string join that is charged to the character budget.
+   */
+  state?: CharacterState
+  /**
+   * Resting point of the state, carried for the state seam. Assembly does not
+   * read it yet, so passing it alone changes nothing.
+   */
+  stateBaseline?: StateBaseline
+  /** State rendering profile; assembly reads only `renderMode` today. */
+  stateProfile?: StateProfile
+  /**
+   * Layered section budget passed through to `assembleDialogueContext`
+   * (./budget). Omitted means context assembly follows the existing single-pool
+   * rule and the assembled context is unchanged. Pure data: it adds no provider
+   * call to the reply path.
+   *
+   * Combines with `state`: a supplied state block is charged to the plan's own
+   * `state` section, exactly as the working-memory block is charged to
+   * `workingMemory`, so each block is bounded by its own cap while the shared
+   * pool still pays for both.
+   */
+  budgetPlan?: BudgetPlan
+  /**
+   * Listener history source (issue #146 A01). Omitted means the feature is off:
+   * `recent()` is never called, the assembled context carries no transcript and
+   * the rendered prompt and every budget number are byte-identical to the
+   * previous behaviour.
+   *
+   * When supplied, `recent(request.sessionId, request.contextLimits.maxTurns)`
+   * is called at most once per `generate`, inside context assembly, so a port
+   * rejection follows the same failed-outcome path as a history-port failure.
+   * It is a local read: no provider attempt and no retry (NFR-04).
+   */
+  listenerHistory?: ListenerHistoryPort
+  /**
+   * In-memory working memory (issue #146 A07). Omitted means the feature is
+   * off: the store is never consulted, and the assembled context, the rendered
+   * prompt and every budget number are byte-identical to the previous
+   * behaviour.
+   *
+   * When supplied, each `generate` call first closes the loop:
+   * `observe(listenerTurns, request.sessionId)` fulfils 'awaiting-reply' entries
+   * whose actor has since spoken — this only ever fires when a `listenerHistory`
+   * port is also supplied — and then `pending(clock.nowMs(), request.sessionId)`
+   * supplies the live entries to context assembly. The selected input's own
+   * event is filtered out of the list handed to `observe`, exactly as context
+   * assembly filters it, so a port that returns the current utterance cannot
+   * answer the reply the character still owes; the raw list still reaches
+   * assembly unchanged. The store is constructed for one session, so
+   * `request.sessionId` must be that session (a read for another session
+   * throws). The store is written by its owner after a successful delivery
+   * commit, never by this port; nothing here persists it, so a fresh process
+   * starts with an empty store.
+   *
+   * Production injects neither option yet: `listenerHistory` is issue
+   * #151/A01 (shape only, no production caller) and its data source is issue
+   * #147 X01. Until that wiring lands the closed loop cannot fire in
+   * production and 'awaiting-reply' entries age out by TTL alone.
+   */
+  workingMemory?: WorkingMemoryStore
 }
 
 /**
@@ -430,6 +502,35 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
 
       const assemble = async (): Promise<AssembledDialogueContext> => {
         try {
+          const listenerTurns =
+            options.listenerHistory === undefined
+              ? undefined
+              : await options.listenerHistory.recent(
+                  request.sessionId,
+                  request.contextLimits.maxTurns,
+                )
+          /*
+           * Working memory (issue #146 A07), closed-loop read. `observe` first
+           * fulfils 'awaiting-reply' entries the audience has since answered
+           * (it only fires when listener turns are supplied), then `pending`
+           * supplies the live entries. Both are local, in-memory calls: no
+           * provider attempt, no extra I/O beyond the listener read above.
+           *
+           * The selected input's own event is filtered here as well as in the
+           * assembler: `observe` must not let the model's current input fulfil
+           * the entry that input is answering. The raw list still reaches
+           * assembly unchanged.
+           */
+          const listenerTurnsForObserve = (listenerTurns ?? []).filter(
+            (turn) => turn.eventId !== request.selectedInput.eventId,
+          )
+          if (options.workingMemory !== undefined) {
+            options.workingMemory.observe(listenerTurnsForObserve, request.sessionId)
+          }
+          const workingMemoryEntries =
+            options.workingMemory === undefined
+              ? undefined
+              : options.workingMemory.pending(clock.nowMs(), request.sessionId)
           return await assembleDialogueContext({
             request,
             profile,
@@ -447,6 +548,16 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
             ...(options.markConflictingTurns === undefined
               ? {}
               : { markConflictingTurns: options.markConflictingTurns }),
+            ...(options.budgetPlan === undefined ? {} : { budgetPlan: options.budgetPlan }),
+            ...(options.state === undefined ? {} : { state: options.state }),
+            ...(options.stateBaseline === undefined
+              ? {}
+              : { stateBaseline: options.stateBaseline }),
+            ...(options.stateProfile === undefined
+              ? {}
+              : { stateProfile: options.stateProfile }),
+            ...(listenerTurns === undefined ? {} : { listenerTurns }),
+            ...(workingMemoryEntries === undefined ? {} : { workingMemory: workingMemoryEntries }),
           })
         } catch (error) {
           // Preserve the original error; the observer still gets one report.
