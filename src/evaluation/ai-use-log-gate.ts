@@ -174,9 +174,10 @@ export interface AiUseReferenceDeps {
   /** Called for facts that are reported but do not fail the gate. */
   readonly onAdvisory?: (message: string) => void
   /**
-   * Entries with an index below this are historical: their commits are checked
-   * only as advice, because a fresh clone does not carry the orphaned commits of
-   * squash-merged work. Entries at or after it are new and must cite commits
+   * Entries with an index below this are historical: their commit values are
+   * checked only as advice (unresolved or non-string values do not fail),
+   * because a fresh clone does not carry the orphaned commits of squash-merged
+   * work. Entries at or after it are new and must cite string commits
    * reachable from HEAD. Defaults to 0 (every entry is new) so a caller cannot
    * accidentally weaken the rule by omitting it.
    */
@@ -256,12 +257,18 @@ export function collectAiUseLogReferenceFindings(
     const commits = Array.isArray(record.commits) ? record.commits : []
     for (const raw of commits) {
       if (typeof raw !== 'string') {
-        findings.push({
-          policy: 'POL-G6-02',
-          trigger: 'commit-not-a-string',
-          message: `${label} (entry ${index}) has a non-string commit entry`,
-          evidence: { entry: label, field: 'commits', value: String(raw) },
-        })
+        // A historical entry may cite a bare number that YAML parsed as an
+        // integer, and a reviewer's clone cannot repair it. Treat it like an
+        // unresolved historical commit rather than a failure. New entries must
+        // still use a string so the commit reference stays identifiable.
+        if (!historical) {
+          findings.push({
+            policy: 'POL-G6-02',
+            trigger: 'commit-not-a-string',
+            message: `${label} (entry ${index}) has a non-string commit entry`,
+            evidence: { entry: label, field: 'commits', value: String(raw) },
+          })
+        }
         continue
       }
       if (raw.trim().length === 0) continue

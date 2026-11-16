@@ -269,6 +269,20 @@ entries:
     expect(advisories.join(' ')).toContain('historical entry')
   })
 
+  it('ignores a historical entry\'s non-string commit value', () => {
+    const violations = collectAiUseLogReferenceViolations(
+      log('[4273673]'),
+      deps({ historicalBefore: 1 }),
+    )
+    expect(violations).toEqual([])
+  })
+
+  it('rejects a new entry\'s non-string commit value', () => {
+    const violations = collectAiUseLogReferenceViolations(log('[4273673]'), deps())
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toContain('non-string commit entry')
+  })
+
   it('rejects a new entry whose commit is not reachable from HEAD', () => {
     const violations = collectAiUseLogReferenceViolations(log('[fedcba9]'), deps())
     expect(violations.join(' ')).toContain('not reachable from HEAD')
