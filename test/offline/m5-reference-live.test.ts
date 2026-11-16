@@ -30,6 +30,12 @@ import { parseReferenceLiveConfig } from '../../src/runtime/deployments/referenc
  * configuration, the action/hotkey agreement check and the idempotent release.
  */
 
+const REFERENCE_HOTKEYS: Record<string, string> = {
+  'animation-1': 'b66cf516d694446b9e1aafbcf16459a9',
+  'animation-2': 'c28e206b5e3c4eb5be3c1dcee11f02c0',
+  'animation-3': 'ad4e0bc1a58746a58002ad180692e649',
+}
+
 function validEnv(): Record<string, string> {
   return {
     ISLA_LIVE_TEXT_BASE_URL: 'https://text.example.test/v1',
@@ -39,7 +45,7 @@ function validEnv(): Record<string, string> {
     ISLA_VTS_PLUGIN_NAME: 'Reference Plugin',
     ISLA_VTS_PLUGIN_DEVELOPER: 'Reference Studio',
     ISLA_VTS_TOKEN_PATH: '/run/secrets/vts-token',
-    ISLA_VTS_HOTKEY_MAP: '{"toggle-mute": "Ctrl+Alt+M"}',
+    ISLA_VTS_HOTKEY_MAP: JSON.stringify(REFERENCE_HOTKEYS),
     ISLA_KOKORO_MODEL_DIR: '/models/kokoro',
     ISLA_ALLOWED_ORIGINS: 'https://app.example.test,https://admin.example.test',
     ISLA_ALLOWED_HOSTS: 'app.example.test,admin.example.test',
@@ -179,8 +185,16 @@ describe('reference live deployment', () => {
     expect(deployment.allowedOrigins).toEqual(config.allowedOrigins)
     expect(deployment.allowedHosts).toEqual(config.allowedHosts)
     expect(deployment.initialSelection.liveSessionId).toMatch(/^session-/)
+    expect(deployment.initialSelection.liveProfile).toEqual({
+      profileId: 'Elleya',
+      profileVersion: '2',
+    })
     expect(deployment.initialSelection.selectedSources).toEqual([])
     expect(deployment.initialSelection.catalogue.size).toBe(0)
+    expect(deployment.peers.profile).toMatchObject({
+      characterProfileId: 'Elleya',
+      characterProfileVersion: '2',
+    })
     expect(deployment.peers.selection).toBe(fakeSelection)
     expect(deployment.peers.reaction).toBe(fakeReaction)
     expect(deployment.peers.textSource).toBe(fakeTextSource)
@@ -202,12 +216,35 @@ describe('reference live deployment', () => {
     gate.dispose()
   })
 
-  it('fails loudly when the hotkey map is empty', async () => {
-    const env = validEnv()
-    env.ISLA_VTS_HOTKEY_MAP = '{}'
-    const config = parseReferenceLiveConfig(env)
+  it('fails loudly when a hand-built configuration has an empty hotkey map', async () => {
+    const config = { ...parseReferenceLiveConfig(validEnv()), hotkeyMap: {} }
 
     await expect(buildReferenceDeployment(config, {}, fixedClock())).rejects.toThrow(/hotkey map/)
+  })
+
+  it('fails closed when the reference hotkey map is missing a pinned action', async () => {
+    const hotkeys = { ...REFERENCE_HOTKEYS }
+    delete hotkeys['animation-3']
+    const env = validEnv()
+    env.ISLA_VTS_HOTKEY_MAP = JSON.stringify(hotkeys)
+    const config = parseReferenceLiveConfig(env)
+
+    await expect(buildReferenceDeployment(config, {}, fixedClock())).rejects.toThrow(
+      /missing action animation-3/,
+    )
+  })
+
+  it('fails closed when the reference hotkey map has an unexpected action', async () => {
+    const env = validEnv()
+    env.ISLA_VTS_HOTKEY_MAP = JSON.stringify({
+      ...REFERENCE_HOTKEYS,
+      'animation-4': 'd00d0000000000000000000000000000',
+    })
+    const config = parseReferenceLiveConfig(env)
+
+    await expect(buildReferenceDeployment(config, {}, fixedClock())).rejects.toThrow(
+      /unexpected action animation-4/,
+    )
   })
 
   it('fails loudly when the VTS renderer advertises an unconfigured action', async () => {
@@ -216,7 +253,7 @@ describe('reference live deployment', () => {
     const disposed: string[] = []
     const deployment = await buildReferenceDeployment(
       config,
-      fakeFactories(disposed, ['toggle-mute', 'unconfigured-action']),
+      fakeFactories(disposed, ['animation-1', 'animation-2', 'animation-3', 'unconfigured-action']),
       clock,
     )
     const gate = createDeadlineGate(clock)

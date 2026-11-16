@@ -137,6 +137,16 @@ describe('parseReferenceLiveConfig', () => {
     expect(error.message).not.toContain('toggle-mute');
   });
 
+  it('rejects an empty hotkey map by variable name without leaking values', () => {
+    const env = validEnv();
+    env.ISLA_VTS_HOTKEY_MAP = '{}';
+
+    const error = captureError(() => parseReferenceLiveConfig(env));
+
+    expect(error.message).toContain('ISLA_VTS_HOTKEY_MAP');
+    expect(error.message).not.toContain('{}');
+  });
+
   it('rejects a hotkey map that is not a JSON object', () => {
     for (const raw of ['["toggle-mute"]', '"Ctrl+Alt+M"', 'null', '42', 'true']) {
       const env = validEnv();

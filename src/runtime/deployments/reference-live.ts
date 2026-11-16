@@ -68,11 +68,14 @@ import { parseReferenceLiveConfig } from './reference-live-config'
 /**
  * The reference deployment's fixed live identities. These are deployment
  * choices, not environment defaults: every configurable value still comes from
- * `parseReferenceLiveConfig`, and a missing value fails there.
+ * `parseReferenceLiveConfig`, and a missing value fails there. This registered
+ * Elleya@2 profile is the one source for both the peer profile and the initial
+ * live selection; the VTS character identity below is derived from it so the
+ * capability snapshot cannot drift.
  */
 const REFERENCE_CHARACTER_PROFILE = {
-  profileId: 'isla-reference-character',
-  profileVersion: '1',
+  profileId: 'Elleya',
+  profileVersion: '2',
 } as const
 
 const REFERENCE_VOICE_PROFILE: KokoroVoiceProfile = {
@@ -90,11 +93,14 @@ const REFERENCE_KOKORO: Omit<KokoroProviderConfig, 'environment'> = {
   speed: REFERENCE_VOICE_PROFILE.speed,
 }
 
-/** Bundled Hiyori_A model id verified on the target VTube Studio 1.35.10. */
+/** Bundled Hiyori_A model id from M1 observations on issue #95; not re-measured by this PR. */
 const REFERENCE_VTS_MODEL_ID = '00f9750080014d43bb398cd98e4f55ad'
 const REFERENCE_VTS_RENDERER_ID = 'isla-reference-renderer'
-const REFERENCE_VTS_CHARACTER_ID = 'isla-reference-character'
+const REFERENCE_VTS_CHARACTER_ID = REFERENCE_CHARACTER_PROFILE.profileId
 const REFERENCE_VTS_CAPABILITY_REVISION = 1
+
+/** The three reference actions pinned by README.md for the bundled Hiyori_A model. */
+const REFERENCE_HOTKEY_ACTIONS = ['animation-1', 'animation-2', 'animation-3'] as const
 
 const VTS_REQUEST_TIMEOUT_MS = 5_000
 const VTS_MAX_PENDING = 8
@@ -178,10 +184,33 @@ function createRebindableGate(): RebindableGate {
 }
 
 /**
+ * Refuse a reference map that is not exactly the three actions pinned by the
+ * README. The deployment owns the action set, so a missing or unexpected action
+ * fails at build time instead of silently advertising an un-dispatchable action.
+ */
+function assertReferenceHotkeyActions(mappings: readonly VtsActionMapping[]): void {
+  const expected = new Set<string>(REFERENCE_HOTKEY_ACTIONS)
+  const actual = new Set(mappings.map((mapping) => mapping.actionId))
+  const differences = [
+    ...REFERENCE_HOTKEY_ACTIONS.filter((actionId) => !actual.has(actionId)).map(
+      (actionId) => `missing action ${actionId}`,
+    ),
+    ...[...actual]
+      .filter((actionId) => !expected.has(actionId))
+      .map((actionId) => `unexpected action ${actionId}`),
+  ]
+  if (differences.length > 0) {
+    throw new Error(
+      `reference-live: hotkey map must contain exactly ${REFERENCE_HOTKEY_ACTIONS.join(', ')}: ${differences.join('; ')}`,
+    )
+  }
+}
+
+/**
  * Derive the exact ordered mappings from the configured hotkey map. The config
  * parser already trims and validates each key and value; this check keeps the
  * build seam honest when it is called with a hand-built config and refuses an
- * empty or ambiguous map before any provider is contacted.
+ * empty, ambiguous or non-reference action map before any provider is contacted.
  */
 function toMappings(hotkeyMap: Readonly<Record<string, string>>): readonly VtsActionMapping[] {
   const entries = Object.entries(hotkeyMap)
@@ -206,6 +235,7 @@ function toMappings(hotkeyMap: Readonly<Record<string, string>>): readonly VtsAc
     seenHotkeys.add(hotkeyId)
     mappings.push({ actionId, hotkeyId })
   }
+  assertReferenceHotkeyActions(mappings)
   return mappings
 }
 
