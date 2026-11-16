@@ -1,0 +1,46 @@
+{
+  "caseId": "selection-008",
+  "selectionScores": [
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-008-a"],
+      "score": 2
+    },
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-008-b"],
+      "score": 1
+    },
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-008-c"],
+      "score": 0
+    },
+    {
+      "disposition": "defer",
+      "selectedEventIds": [],
+      "score": 0
+    }
+  ],
+  "intentLabels": [
+    {
+      "selectedEventId": "message-008-a",
+      "acceptableIntents": ["check-correction"],
+      "coverage": "partial",
+      "coverageRationale": null
+    },
+    {
+      "selectedEventId": "message-008-b",
+      "acceptableIntents": ["acknowledge"],
+      "coverage": "partial",
+      "coverageRationale": null
+    },
+    {
+      "selectedEventId": "message-008-c",
+      "acceptableIntents": ["clarify"],
+      "coverage": "partial",
+      "coverageRationale": null
+    }
+  ],
+  "rationale": "Checking the factual correction about the harbor key (message-008-a) with 'check-correction' is the preferred outcome and intent; acknowledging the music comment (message-008-b) with 'acknowledge' is an acceptable alternative, message-008-c is unsuitable, and waiting is not preferred. Intent coverage is partial, so unlisted allowed intents remain unassessed."
+}

@@ -1,0 +1,38 @@
+{
+  "requestId": "selection-request-006",
+  "task": "response-plan",
+  "sessionId": "session-eval-006",
+  "epoch": 1,
+  "snapshotRevision": 1,
+  "candidates": [
+    {
+      "eventId": "message-006-a",
+      "sessionId": "session-eval-006",
+      "epoch": 1,
+      "source": "local-audience",
+      "actorId": "viewer-r",
+      "text": "I wiped on this boss six times tonight, feeling pretty discouraged.",
+      "receivedAtMs": 3500,
+      "expiresAtMs": 9000,
+      "trust": "untrusted-content"
+    },
+    {
+      "eventId": "message-006-b",
+      "sessionId": "session-eval-006",
+      "epoch": 1,
+      "source": "local-audience",
+      "actorId": "viewer-s",
+      "text": "first time catching the stream!",
+      "receivedAtMs": 3700,
+      "expiresAtMs": 9000,
+      "trust": "untrusted-content"
+    }
+  ],
+  "personaSummary": "Isla is warm and encouraging when viewers feel stuck, without inventing game mechanics.",
+  "currentTopic": "Practicing the citadel boss phase two",
+  "recentHistory": [],
+  "allowedIntents": ["support", "acknowledge", "answer", "playful"],
+  "deadline": { "atMs": 6500 },
+  "policyVersion": "m3-policy-v1",
+  "providerVersion": "m3-corpus-v1.1"
+}
