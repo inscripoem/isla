@@ -8083,3 +8083,52 @@ entries:
       not_run: >-
         No merge, ruleset change, live provider run or evaluation run; CI on this
         head is not yet observed.
+
+  - date: "2026-11-16"
+    task: M6-158-g6-historical-nonstring-fix
+    change: >-
+      Resolve the #158 merge with current main and fix the G6 historical-entry
+      gap exposed by that merge. Historical AI-use entries may carry a commit
+      value that YAML parses as a number; the gate now treats such a value as
+      advisory when the entry is below historicalBefore, consistent with the
+      existing historical commit rule, while a new entry with a non-string
+      commit still fails POL-G6-02. The merge preserves every main log entry and
+      appends the six M6 gate entries from the PR branch.
+    requirements: []
+    invariants: [INV-14]
+    commits: [049125ebbaa2f3a7408fed645d47927698f74f93]
+    agent: build
+    provider: self-api
+    model: deepseek-v4-flash
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    sessions: [ses_e1aee1906ffeWv5gXw52VHBEQN]
+    supervision: >-
+      The orchestrating assistant (Claude Code) resolved the log conflict,
+      identified the G6 failure from the merge, and supervised the OpenCode
+      build session that made the gate and test change. The session had no
+      shell tool, so the orchestrator ran every test command outside it. The
+      session retried after provider ECONNRESET errors; the successful edits and
+      local test results are retained.
+    human_review: >-
+      Captain requested the #158 conflict resolution. M6 owns the PR and the
+      gate; this change is limited to the historical-entry rule and its tests.
+      Push and merge decisions remain with the Captain; no agent merge is
+      claimed.
+    transcript_record: >-
+      The genuine OpenCode session ses_e1aee1906ffeWv5gXw52VHBEQN remains in
+      the local OpenCode store; the raw export has not yet been copied outside
+      the checkout.
+    verification:
+      base: bb9eaa3875f52f9f013a7aaf20e71af286814aef
+      results: >-
+        Linux: pnpm test:gates passed 6 files / 149 tests; pnpm verify exited 0
+        with 91 files / 1993 tests and a successful build; the G6 gate passed
+        against the origin/main log baseline after the historical fix.
+      limits: >-
+        No live provider, evaluation run, Windows run or GitHub CI run was
+        performed locally. The merge commit is the conflict resolution; the
+        remote CI must still confirm the combined tree.
+    scope: >-
+      docs/ai-use-log.yaml merge resolution, src/evaluation/ai-use-log-gate.ts,
+      test/offline/ai-use-log-gate.test.ts and this log entry. No other gate
+      rule, workflow, schema or application behaviour changed.
