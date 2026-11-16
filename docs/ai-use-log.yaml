@@ -7199,6 +7199,8 @@ entries:
       line and this AI-use entry; no shared contract, storage, SQL, runtime
       or provider change, no quality or live-output claim, and no AGENTS.md
       change.
+
+  - date: "2026-11-13"
     task: M3-02-issue98-corpus-and-variants
     branch: feat/m3-98-corpus-and-variants
     member: shallight (M3)
