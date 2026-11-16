@@ -1,5 +1,9 @@
+import { existsSync, readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
+import { parseDocument } from 'yaml'
 import { readChangedFiles } from './changed-files'
+import { writeFindings, type GateFinding } from './gate-record'
+import { commitTime, firstCommitTouching, isAncestorOf, mergeBase } from './git-facts'
 
 /**
  * M6 / R3 — gate G1: tests are approved before implementation (ADR-006).
@@ -62,8 +66,310 @@ export function runCli(input: TestApprovalInput, mode: GateMode): number {
   return 1
 }
 
+
+export const APPROVALS_PATH = 'docs/code-governance/test-approvals.yaml'
+
+/**
+ * A recorded test approval. The record is the durable form of the label: it can
+ * carry a date, a scope and the tests that were agreed.
+ *
+ * The gate proves **ordering**, not judgement. A record committed before the first
+ * code commit is evidence that the tests were written down first; it is not proof
+ * that a human read them. Review still owns that question.
+ */
+export interface ApprovalRecord {
+  readonly id: string
+  readonly task: string
+  readonly approved_at: string
+  readonly approved_by: string
+  readonly scope: readonly string[]
+  readonly tests: readonly string[]
+}
+
+export type ApprovalsParse =
+  | { readonly ok: true; readonly approvals: readonly ApprovalRecord[] }
+  | { readonly ok: false; readonly errors: readonly string[] }
+
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:\d{2})$/
+
+export function parseApprovals(text: string): ApprovalsParse {
+  const document = parseDocument(text, { uniqueKeys: true })
+  if (document.errors.length > 0) {
+    return { ok: false, errors: document.errors.map((error) => error.message) }
+  }
+  const root = document.toJS() as { approvals?: unknown } | null
+  const approvals = root?.approvals
+  if (!Array.isArray(approvals) || approvals.length === 0) {
+    return { ok: false, errors: [`${APPROVALS_PATH} has no non-empty "approvals" list`] }
+  }
+  const errors: string[] = []
+  const records: ApprovalRecord[] = []
+  approvals.forEach((entry, index) => {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      errors.push(`approval ${index} is not a mapping`)
+      return
+    }
+    const record = entry as Record<string, unknown>
+    const text = (field: string): string | null =>
+      typeof record[field] === 'string' && (record[field] as string).trim().length > 0
+        ? (record[field] as string).trim()
+        : null
+    const id = text('id')
+    const task = text('task')
+    const approvedAt = text('approved_at')
+    const approvedBy = text('approved_by')
+    const scope = Array.isArray(record.scope)
+      ? record.scope.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      : null
+    const tests = Array.isArray(record.tests)
+      ? record.tests.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      : null
+    const label = id ?? `approval ${index}`
+    if (id === null) errors.push(`${label} has no non-empty "id"`)
+    if (task === null) errors.push(`${label} has no non-empty "task"`)
+    if (approvedAt === null || !ISO_INSTANT.test(approvedAt)) {
+      errors.push(`${label} has no ISO-8601 "approved_at"`)
+    }
+    if (approvedBy === null) errors.push(`${label} has no non-empty "approved_by"`)
+    if (scope === null || scope.length === 0) errors.push(`${label} has no non-empty "scope"`)
+    if (tests === null || tests.length === 0) errors.push(`${label} has no non-empty "tests"`)
+    if (
+      id !== null &&
+      task !== null &&
+      approvedAt !== null &&
+      ISO_INSTANT.test(approvedAt) &&
+      approvedBy !== null &&
+      scope !== null &&
+      scope.length > 0 &&
+      tests !== null &&
+      tests.length > 0
+    ) {
+      records.push({ id, task, approved_at: approvedAt, approved_by: approvedBy, scope, tests })
+    }
+  })
+  return errors.length > 0 ? { ok: false, errors } : { ok: true, approvals: records }
+}
+
+export interface ApprovalEvidenceInput {
+  readonly isPullRequest: boolean
+  readonly changedFiles: readonly string[]
+  /** `null` when the record file is missing or unparsable. */
+  readonly approvals: readonly ApprovalRecord[] | null
+  /** First commit in the diff range touching the approvals file, or `null` if it predates it. */
+  readonly recordFirstTouch: string | null
+  /** First commit in the diff range touching code or prompts. */
+  readonly firstCodeCommit: string | null
+  readonly firstCodeCommitTime: string | null
+  readonly isAncestor: (ancestor: string, descendant: string) => boolean | null
+  readonly fileExists: (relative: string) => boolean
+}
+
+function covers(scope: string, file: string): boolean {
+  return scope.endsWith('/') ? file.startsWith(scope) : file === scope
+}
+
+/**
+ * Evidence mode: a recorded approval must cover every changed code path, name
+ * tests that exist, and have been committed **before** the first code commit.
+ *
+ * A missing base, a missing history answer or an unreadable record is a violation,
+ * never a pass. The one thing it cannot check is whether a human actually approved;
+ * that stays a review obligation and is stated in the ADR.
+ */
+export function collectApprovalEvidenceFindings(
+  input: ApprovalEvidenceInput,
+): GateFinding[] {
+  if (!input.isPullRequest) return []
+  const codeFiles = input.changedFiles.filter((file) =>
+    CODE_OR_PROMPT_PREFIXES.some((prefix) => file.startsWith(prefix)),
+  )
+  if (codeFiles.length === 0) return []
+
+  const findings: GateFinding[] = []
+  if (input.approvals === null) {
+    return [
+      {
+        policy: 'POL-G1-01',
+        trigger: 'record-missing',
+        message: `this pull request changes code or prompts but ${APPROVALS_PATH} is missing or unreadable (gate G1)`,
+        evidence: {
+          files: codeFiles,
+          approval_id: null,
+          record_commit: input.recordFirstTouch,
+          first_code_commit: input.firstCodeCommit,
+          approved_at: null,
+        },
+      },
+    ]
+  }
+
+  const covering = new Map<string, ApprovalRecord>()
+  const uncovered: string[] = []
+  for (const file of codeFiles) {
+    const match = input.approvals.find((approval) =>
+      approval.scope.some((scope) => covers(scope, file)),
+    )
+    if (match === undefined) {
+      uncovered.push(file)
+      continue
+    }
+    covering.set(file, match)
+  }
+  if (uncovered.length > 0) {
+    findings.push({
+      policy: 'POL-G1-01',
+      trigger: 'scope-miss',
+      message: `no recorded approval covers ${uncovered.join(', ')} (gate G1)`,
+      evidence: {
+        files: uncovered,
+        approval_id: null,
+        record_commit: input.recordFirstTouch,
+        first_code_commit: input.firstCodeCommit,
+        approved_at: null,
+      },
+    })
+  }
+
+  for (const [file, approval] of covering) {
+    for (const test of approval.tests) {
+      if (!input.fileExists(test)) {
+        findings.push({
+          policy: 'POL-G1-01',
+          trigger: 'test-missing',
+          message: `approval ${approval.id} names ${test}, which does not exist (gate G1)`,
+          evidence: {
+            files: [file],
+            approval_id: approval.id,
+            record_commit: input.recordFirstTouch,
+            first_code_commit: input.firstCodeCommit,
+            approved_at: approval.approved_at,
+          },
+        })
+      }
+    }
+  }
+
+  if (input.recordFirstTouch !== null) {
+    if (input.firstCodeCommit === null) {
+      findings.push({
+        policy: 'POL-G1-03',
+        trigger: 'history-unavailable',
+        message: 'code changed but the first code commit could not be determined; G1 is not verified',
+        evidence: { reason: 'first code commit not found in the diff range' },
+      })
+    } else {
+      const ordered = input.isAncestor(input.recordFirstTouch, input.firstCodeCommit)
+      if (ordered === null) {
+        findings.push({
+          policy: 'POL-G1-03',
+          trigger: 'history-unavailable',
+          message: 'commit history is unavailable; G1 is not verified',
+          evidence: { reason: 'git could not answer whether the record precedes the code' },
+        })
+      } else if (!ordered) {
+        findings.push({
+          policy: 'POL-G1-02',
+          trigger: 'record-late',
+          message: `the approval record was committed after implementation began: ${input.recordFirstTouch} is not an ancestor of ${input.firstCodeCommit} (gate G1)`,
+          evidence: {
+            approval_id: input.approvals[0]?.id ?? null,
+            approved_at: input.approvals[0]?.approved_at ?? null,
+            first_code_commit: input.firstCodeCommit,
+          },
+        })
+      }
+    }
+  }
+
+  if (input.firstCodeCommitTime !== null) {
+    for (const approval of new Set(covering.values())) {
+      const approved = Date.parse(approval.approved_at)
+      const first = Date.parse(input.firstCodeCommitTime)
+      if (Number.isFinite(approved) && Number.isFinite(first) && approved > first) {
+        findings.push({
+          policy: 'POL-G1-02',
+          trigger: 'approval-dated-late',
+          message: `approval ${approval.id} is dated ${approval.approved_at}, after the first code commit (${input.firstCodeCommitTime}) (gate G1)`,
+          evidence: {
+            approval_id: approval.id,
+            approved_at: approval.approved_at,
+            first_code_commit: input.firstCodeCommit,
+          },
+        })
+      }
+    }
+  }
+
+  return findings
+}
+
+/** String view for callers that only need the messages (existing tests and logs). */
+export function collectApprovalEvidenceViolations(input: ApprovalEvidenceInput): string[] {
+  return collectApprovalEvidenceFindings(input).map((finding) => finding.message)
+}
+
 function main(argv: readonly string[]): number {
-  const mode: GateMode = argv[0] === 'enforce' ? 'enforce' : 'advise'
+  const requested = argv[0]
+  const mode: GateMode = requested === 'enforce' ? 'enforce' : 'advise'
+  if (requested === 'evidence') {
+    const labelMode = collectTestApprovalViolations({
+      isPullRequest: process.env.GITHUB_EVENT_NAME === 'pull_request',
+      labels: [],
+      changedFiles: [],
+    })
+    void labelMode
+    const changedFiles = argv.length > 1 ? argv.slice(1) : readChangedFiles()
+    const base = process.env.GATE_BASE_SHA ?? mergeBase('origin/main')
+    const approvalsText = existsSync(APPROVALS_PATH) ? readFileSync(APPROVALS_PATH, 'utf8') : null
+    const parsed = approvalsText === null ? null : parseApprovals(approvalsText)
+    const violations: string[] = []
+    if (parsed !== null && !parsed.ok) {
+      violations.push(...parsed.errors)
+    }
+    const firstCode = firstCommitTouching(['src', 'prompts'], base)
+    violations.push(
+      ...collectApprovalEvidenceViolations({
+        isPullRequest: process.env.GITHUB_EVENT_NAME === 'pull_request',
+        changedFiles,
+        approvals: parsed !== null && parsed.ok ? parsed.approvals : null,
+        recordFirstTouch: firstCommitTouching([APPROVALS_PATH], base),
+        firstCodeCommit: firstCode,
+        firstCodeCommitTime: firstCode === null ? null : commitTime(firstCode),
+        isAncestor: isAncestorOf,
+        fileExists: (relative) => existsSync(relative),
+      }),
+    )
+    if (violations.length === 0) {
+      process.stdout.write('G1: recorded test approvals cover this change and predate implementation\n')
+      return 0
+    }
+    for (const violation of violations) process.stderr.write(`G1 (evidence): ${violation}\n`)
+    try {
+      const changed = argv.length > 1 ? argv.slice(1) : readChangedFiles()
+      const approvalsText = existsSync(APPROVALS_PATH) ? readFileSync(APPROVALS_PATH, 'utf8') : null
+      const parsed = approvalsText === null ? null : parseApprovals(approvalsText)
+      const firstCode = firstCommitTouching(['src', 'prompts'], base)
+      const paths = writeFindings(
+        collectApprovalEvidenceFindings({
+          isPullRequest: process.env.GITHUB_EVENT_NAME === 'pull_request',
+          changedFiles: changed,
+          approvals: parsed !== null && parsed.ok ? parsed.approvals : null,
+          recordFirstTouch: firstCommitTouching([APPROVALS_PATH], base),
+          firstCodeCommit: firstCode,
+          firstCodeCommitTime: firstCode === null ? null : commitTime(firstCode),
+          isAncestor: isAncestorOf,
+          fileExists: (relative) => existsSync(relative),
+        }),
+        { base, commit: firstCode },
+      )
+      for (const path of paths) process.stdout.write(`G1: failure record ${path}\n`)
+    } catch (error) {
+      process.stderr.write(
+        `G1: could not write the failure record: ${error instanceof Error ? error.message : String(error)}\n`,
+      )
+    }
+    return 1
+  }
   const labels = (process.env.PR_LABELS ?? '')
     .split(',')
     .map((label) => label.trim())
