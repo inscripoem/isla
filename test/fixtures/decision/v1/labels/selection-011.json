@@ -1,0 +1,46 @@
+{
+  "caseId": "selection-011",
+  "selectionScores": [
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-011-a"],
+      "score": 2
+    },
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-011-b"],
+      "score": 1
+    },
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-011-c"],
+      "score": 0
+    },
+    {
+      "disposition": "defer",
+      "selectedEventIds": [],
+      "score": 0
+    }
+  ],
+  "intentLabels": [
+    {
+      "selectedEventId": "message-011-a",
+      "acceptableIntents": ["acknowledge"],
+      "coverage": "partial",
+      "coverageRationale": null
+    },
+    {
+      "selectedEventId": "message-011-b",
+      "acceptableIntents": ["acknowledge"],
+      "coverage": "partial",
+      "coverageRationale": null
+    },
+    {
+      "selectedEventId": "message-011-c",
+      "acceptableIntents": ["clarify"],
+      "coverage": "partial",
+      "coverageRationale": null
+    }
+  ],
+  "rationale": "Acknowledging the co-host's lobby arrival (message-011-a) with 'acknowledge' is the preferred outcome and intent; welcoming Mira from chat (message-011-b) with 'acknowledge' is an acceptable alternative, message-011-c is unsuitable, and waiting is not preferred under the restricted intents. Intent coverage is partial, so unlisted allowed intents remain unassessed."
+}
