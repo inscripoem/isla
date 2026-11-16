@@ -7847,7 +7847,7 @@ entries:
     requirements: [FR-06, NFR-04]
     invariants: [INV-13, INV-14]
     cases: []
-    commits: [e601cb9]
+    commits: [9492070f34da71613dcf0700536e6cf0ca56cd44]
     agent: opencode/build
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -7893,7 +7893,7 @@ entries:
     requirements: [FR-06, NFR-04]
     invariants: [INV-13, INV-14]
     cases: []
-    commits: [ab203ac]
+    commits: [9492070f34da71613dcf0700536e6cf0ca56cd44]
     agent: opencode/build
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -7933,7 +7933,7 @@ entries:
     requirements: [NFR-04]
     invariants: [INV-13, INV-14]
     cases: []
-    commits: [969612f]
+    commits: [9492070f34da71613dcf0700536e6cf0ca56cd44]
     agent: opencode/build
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -7974,7 +7974,7 @@ entries:
     requirements: [FR-06, NFR-04]
     invariants: [INV-13, INV-14]
     cases: []
-    commits: [b41ff23]
+    commits: [9492070f34da71613dcf0700536e6cf0ca56cd44]
     agent: opencode/build
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -8013,7 +8013,7 @@ entries:
     requirements: [FR-06, NFR-04]
     invariants: [INV-14]
     cases: []
-    commits: [6ba49eb]
+    commits: [9492070f34da71613dcf0700536e6cf0ca56cd44]
     agent: opencode/build
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -8057,7 +8057,7 @@ entries:
     requirements: [FR-06, NFR-04]
     invariants: [INV-13, INV-14]
     cases: []
-    commits: [26cb922]
+    commits: [9492070f34da71613dcf0700536e6cf0ca56cd44]
     agent: opencode/build
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -8096,7 +8096,7 @@ entries:
       appends the six M6 gate entries from the PR branch.
     requirements: []
     invariants: [INV-14]
-    commits: [049125ebbaa2f3a7408fed645d47927698f74f93]
+    commits: [9492070f34da71613dcf0700536e6cf0ca56cd44]
     agent: build
     provider: self-api
     model: deepseek-v4-flash
@@ -8132,3 +8132,42 @@ entries:
       docs/ai-use-log.yaml merge resolution, src/evaluation/ai-use-log-gate.ts,
       test/offline/ai-use-log-gate.test.ts and this log entry. No other gate
       rule, workflow, schema or application behaviour changed.
+
+  - date: "2026-11-17"
+    task: M6-158-ai-use-squash-repoint
+    change: >-
+      Repoint the seven #158 AI-use entries from their squash-orphaned branch
+      commits to the integrated main commit 9492070f. The earlier baseline and
+      gate workaround is reverted in this branch; the final diff changes only
+      this log. The exact branch SHAs remain visible in the #158 pull request
+      and branch history, while the checked commit reference now names the
+      commit that actually entered main.
+    requirements: []
+    invariants: [INV-14]
+    commits: [9492070f34da71613dcf0700536e6cf0ca56cd44]
+    agent: claude-code
+    supervision: >-
+      The orchestrating assistant applied the docs-only correction after the
+      #158 squash merge left the branch commits unreachable. No application
+      code, gate rule, baseline or workflow change remains; the gate and tests
+      were reverted to the main versions before this entry was added.
+    human_review: >-
+      Captain directed use of the existing pull request #169 for this
+      correction. The change is documentation only; merge remains subject to
+      the repository rules.
+    transcript_record: >-
+      This correction was made by the orchestrating assistant; it has no
+      OpenCode session transcript of its own. The related OpenCode sessions for
+      the reverted workaround and the #158 gate remain in the local store.
+    verification:
+      base: 9492070f34da71613dcf0700536e6cf0ca56cd44
+      results: >-
+        Linux: pnpm test:gates passed 6 files / 149 tests; pnpm verify exited 0
+        with 91 files / 1993 tests and a successful build; the G6 gate passed
+        against the main log baseline after the seven entries were repointed.
+      limits: >-
+        Documentation-only correction. It does not change product behaviour,
+        gate logic or the evaluation evidence; it only changes which commit the
+        seven log entries cite.
+    scope: >-
+      docs/ai-use-log.yaml only.
