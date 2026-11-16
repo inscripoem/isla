@@ -1165,7 +1165,7 @@ async function generateThroughPort(
 function staticListenerHistory(turns: readonly ListenerTurn[]): ListenerHistoryPort {
   return {
     async recent() {
-      return turns
+      return { turns, unavailable: null }
     },
   }
 }
@@ -1615,7 +1615,7 @@ describe('M4 working memory in the dialogue port: closed loop (condition 13)', (
     const counting: ListenerHistoryPort = {
       async recent() {
         reads += 1
-        return [listenerTurn({ actorId: 'aud-1', receivedAtMs: T0 + 1 })]
+        return { turns: [listenerTurn({ actorId: 'aud-1', receivedAtMs: T0 + 1 })], unavailable: null }
       },
     }
 
@@ -1634,5 +1634,62 @@ describe('M4 working memory in the dialogue port: closed loop (condition 13)', (
     // Counterfactual: an unconditional listener read (calling `recent` even
     // when no port was supplied) reddens this line.
     expect(reads).toBe(0)
+  })
+
+  it('never hands the current input or an unavailable read to observe', async () => {
+    const memory = createDeliveryMemoryStore()
+    const request = integrationRequest(2000)
+    const observed: string[][] = []
+    const spy: WorkingMemoryStore = {
+      observe: (turns) => {
+        observed.push(turns.map((turn) => turn.eventId))
+      },
+      pending: () => [],
+      record: () => {
+        throw new Error('record is not exercised here')
+      },
+      entries: () => [],
+    }
+
+    const success: ListenerHistoryPort = {
+      async recent() {
+        return {
+          turns: [
+            listenerTurn({ eventId: 'event-listener-1', actorId: 'aud-1', receivedAtMs: T0 + 1 }),
+            listenerTurn({
+              eventId: request.selectedInput.eventId,
+              actorId: 'aud-1',
+              receivedAtMs: T0 + 2,
+            }),
+          ],
+          unavailable: null,
+        }
+      },
+    }
+    const unavailable: ListenerHistoryPort = {
+      async recent() {
+        // A source that reports failure and still returns turns: none may reach
+        // `observe`, or a pending entry could be fulfilled by a read that failed.
+        return {
+          turns: [listenerTurn({ eventId: 'event-stray', actorId: 'aud-1', receivedAtMs: T0 + 1 })],
+          unavailable: 'timeout',
+        }
+      },
+    }
+
+    await generateThroughPort(memory, captureView(), {
+      request,
+      workingMemory: spy,
+      listenerHistory: success,
+    })
+    await generateThroughPort(memory, captureView(), {
+      request,
+      workingMemory: spy,
+      listenerHistory: unavailable,
+    })
+
+    // Counterfactual: observing the raw list keeps the selected event, and
+    // observing a timed-out read's turns leaks a failed read into the loop.
+    expect(observed).toEqual([['event-listener-1'], []])
   })
 })

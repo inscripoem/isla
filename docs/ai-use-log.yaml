@@ -18,7 +18,7 @@ entries:
       path and the retained genuine pair.
     requirements: [NFR-03]
     invariants: []
-    commits: ["4273673"]
+    commits: [4273673]
     agent: zcode/glm-5.3-flash
     provider: zai-plan
     model: glm-5.3-flash
@@ -2047,7 +2047,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: [INV-16]
     cases: []
-    commits: ["3512135"]
+    commits: [3512135]
     agent: opencode/deepseek-v4-flash
     verification:
       focused: "test/offline/m6-02-recorded-run.test.ts: 11/1 passed."
@@ -3983,7 +3983,7 @@ entries:
       no boundary rule needed widening.
     requirements: []
     invariants: []
-    commits: ["3014648"]
+    commits: [3014648]
     agent: workbuddy/deepseek-v4.1-flash
     provider: deepseek
     model: deepseek-v4.1-flash
@@ -4628,7 +4628,7 @@ entries:
     requirements: [FR-03]
     invariants: []
     cases: [C-06, C-11]
-    commits: ["6780977"]
+    commits: [6780977]
     agent: opencode/deepseek-v4-flash
     provider: personal-deepseek
     model: deepseek-v4-flash
@@ -5758,7 +5758,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: [INV-16]
     cases: []
-    commits: ["813e935"]
+    commits: [813e935]
     agent: opencode/build
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -6204,7 +6204,7 @@ entries:
     requirements: [FR-06, NFR-03, NFR-05]
     invariants: [INV-06, INV-10, INV-11, INV-16]
     cases: []
-    commits: ["379e292"]
+    commits: [379e292]
     agent: opencode/build
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -6320,7 +6320,7 @@ entries:
     requirements: [FR-06, NFR-03, NFR-05]
     invariants: [INV-17]
     cases: [C-75, C-76, C-77, C-78]
-    commits: ["9688899"]
+    commits: [9688899]
     agent: opencode/build
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -7075,6 +7075,264 @@ entries:
       The M4-151 rebase round: branch rebuild onto main, evidence repointing,
       the working-memory expiry-input guard and the contract statements; no
       contract, storage, runtime or provider change.
+  - date: "2026-11-14"
+    task: M4-X01-listener-history-port-v2
+    branch: feat/m4-x01-port-v2-final
+    change: >-
+      Revise M4's own half of X01 in response to the two integration defects
+      recorded by M5 on issue #147: an explicit stateless generation boundary
+      and a value-channel failure signal for the optional listener-history
+      read, so a failed optional read never blocks a reply and is never
+      reported as a successful full-history read. In
+      src/dialogue/listener-history.ts, ListenerHistoryPort.recent now takes
+      ListenerHistoryQuery { sessionId, limit, beforeEventId } and returns
+      ListenerHistoryRead { turns, unavailable: 'timeout' | 'rejected' | null };
+      ListenerTurn is unchanged and the file remains the single definition
+      site. dialogueRequestSchema carries no admission timestamp or sequence
+      number (src/contracts/app/pipeline.ts is frozen), so the boundary is the
+      selected input's event id: M5's adapter resolves "strictly earlier"
+      using its own admission ordering, while M4 only passes the boundary and
+      never infers a time or sequence. In src/dialogue/dialogue-port.ts the
+      read is performed at most once per generate, inside context assembly;
+      only the awaited recent() call is contained, and a synchronous throw or
+      rejected promise becomes { turns: [], unavailable: 'rejected' } rather
+      than terminal('failed', 'failed'). Three states stay strictly separated:
+      port absent contributes no turns; a successful read may legitimately be
+      empty; an unavailable read contributes no turns at all even when the
+      source returned some. A new always-present diagnostic field
+      DialogueOutcomeReport.historyUnavailable is carried through terminal()
+      and report() by one per-generate variable; it never changes endStatus or
+      usageStatus, is not a delivery or playback claim, and does not touch
+      FR-02 semantics. observe() never receives the selected input's own event
+      or any turn from an unavailable read. The outer assemble() catch is
+      unchanged. There is no new provider call, retry or I/O (NFR-04). Tests:
+      test/offline/m4-transcript.test.ts rewrites the two existing cases (a
+      rejected port now keeps the reply on its normal path with
+      historyUnavailable 'rejected'; the recent() argument assertion now covers
+      the whole query), adds eight cases for cutoff, boundary shape, source
+      timeout, synchronous throw, unavailable reads carrying stray turns,
+      legitimate empty reads, the absent-port byte-for-byte baseline and
+      working-memory interaction, and keeps the existing stable re-sort case
+      working under the new shape; test/offline/m4-working-memory.test.ts
+      adapts its two fixture ports and adds a closed-loop observe() case;
+      test/offline/m5-dialogue-outcome.test.ts extends the whole-report
+      builder with historyUnavailable: null. A ride-along build session also
+      lands four supervisor polish items inside the already-touched files
+      (three-state comment wording, a narrowing hoist that removes a
+      defensive optional chain, cutoff-case cap pressure maxTurns 8 to 3 with
+      its own query assertion updated, an ASCII test title and one blank
+      line) and exactly one new case in test/offline/m4-audience-scope.test.ts
+      pinning the M4 recall rule recorded on issue #148: once the owner
+      evidence behind a cross-session candidate is retracted, recall stays
+      empty while the crossSessionDrops audit counter still explains the
+      loss, with evidence append-only and no physical-deletion claim. No new
+      test file was created, so the test:m4 manifest line in package.json is
+      unchanged. The real M5 adapter, runtime wiring, storage, shared
+      contracts and AGENTS.md are out of scope: all application code was
+      written by the genuine OpenCode build sessions
+      ses_e2a77ce49ffe2j3Pbg9NstlN8d and ses_e26d6379fffeZFybAo2i4I9u50.
+    agent: opencode/build
+    sessions: [ses_e2a783b19ffeowLSgSDqZY6W1f, ses_e2a77ce49ffe2j3Pbg9NstlN8d, ses_e26d6379fffeZFybAo2i4I9u50]
+    requirements: [FR-02, NFR-04]
+    invariants: []
+    cases: []
+    commits: [6c44dd3ada510bd380587823668a12f2d268e321]
+    supervision: >-
+      The M4 supervisor wrote two English task books outside the repository
+      (m4-impl/X01-port-v2/taskbook.md for the port round and
+      taskbook-ridealong.md for the ride-along), which fixed the exact port
+      shapes, the behaviour rules, the mandatory assertion rewrites, the
+      allowed-file lists and the hard constraints. A diagnostic smoke session
+      ses_e2a783b19ffeowLSgSDqZY6W1f established that opencode run --server
+      requires the password printed by the serve instance at startup (the
+      background-service password in service.json does not apply); it changed
+      no file. The implementation session ses_e2a77ce49ffe2j3Pbg9NstlN8d
+      wrote the five port files on the stacked worktree at the 2026-11-13
+      d597d88 base. After PR #151 merged on 2026-11-14, the supervisor
+      migrated that diff by patch (x01-code.patch, git apply with zero
+      conflicts) onto a fresh worktree and branch feat/m4-x01-port-v2-final
+      based on merged origin/main b863fa9; no commit SHA was rewritten and
+      the old stacked worktree is preserved untouched. The ride-along
+      session ses_e26d6379fffeZFybAo2i4I9u50 then wrote the four polish
+      items and the X08 case per taskbook-ridealong.md, changing exactly the
+      three allowed files. The supervisor did NOT accept either session's
+      own report: it re-ran the gates independently before and after the
+      ride-along and reviewed every diff line against the task books. One
+      disclosure is recorded: the task book's own Item 1 example text
+      contained em dashes while its hard rule said ASCII-only, so two added
+      comment lines in listener-history.ts carry em dashes; this matches the
+      existing repository comment style (dialogue-port.ts baseline lines in
+      the same diff) and the em-dash lines were kept after disclosure.
+      Model, provider and exact launch-flag fields are omitted because they
+      could not be verified from the session streams; nothing was invented.
+      The owner's uncommitted AGENTS.md edit lives in a different worktree
+      and is excluded from both commits. The PR round makes two consecutive
+      commits, code first and then this log, with no squash and no amend, so
+      commits can cite the real code SHA.
+    transcript_record: >-
+      The three sessions retain their conversations in the local OpenCode
+      session store. Their per-session records (title, session id, role) are
+      kept outside the repository at
+      D:/isla-m4-05/m4-impl/X01-port-v2/opencode-sessions.md; the raw JSONL
+      streams are D:/isla-m4-05/m4-impl/X01-port-v2/impl-session-raw.json
+      (735,178 bytes, empty stderr) and
+      D:/isla-m4-05/m4-impl/X01-port-v2/ridealong-session-raw.json
+      (230,449 bytes, empty stderr). No export is stored in the repository
+      and no credential appears in repository files.
+    verification:
+      base: b863fa9
+      reproduction: >-
+        Run from the worktree containing this round's changes
+        (feat/m4-x01-port-v2-final on b863fa9). pnpm typecheck -> exit 0;
+        pnpm lint -> 0 warnings and 0 errors on 291 files; targeted vitest on
+        the four changed test files -> 129 passed in 4 files; pnpm test:m4 ->
+        390 passed in 16 files (clean b863fa9 baseline 381, +8 port cases and
+        +1 X08 case); pnpm test -> one Windows-host baseline failure in
+        m6-02-provenance-command (the symlink case, reproduced on clean main
+        in earlier rounds and untouched by this branch), all other files and
+        tests passing; pnpm build -> exit 0; the pnpm verify composite cannot
+        run its nested pnpm invocation on this host, so its four components
+        were verified individually and the remote verify run is the final
+        authority; pnpm test:readiness and pnpm test:trace -> exit 0; git
+        diff --check -> exit 0. Gate G6 fails on the code-only state with
+        "a code or prompt change must also update docs/ai-use-log.yaml" and
+        passes only after this entry is appended with the real code SHA. The
+        full suite and the remote verify run are the final authority.
+    scope: >-
+      M4 listener-history port v2, its dialogue-port reporter diagnostic, the
+      four polish items inside already-touched files, one X08 recall-refusal
+      assertion in an existing test file, three offline test files and this
+      AI-use entry. No shared contract, storage, SQL, runtime, prompt,
+      package.json or AGENTS.md change; no new dependency; no new test file;
+      no quality, latency, cost, live-provider or physical-output claim; no
+      merge, approval, dismissal or checkpoint acceptance is claimed. M5's
+      readSession adapter and composition wiring remain M5's half, to be
+      brought against the port revision this PR lands, after #151 (merged)
+      and checkpoint 03 close.
+
+  - date: "2026-11-13"
+    task: M4-X02X07-offmain
+    change: >-
+      Deliver M4's own halves of X02 (derived-memory semantics) and X07
+      (memory corpora), per inscripoem/isla#147 and M4's 2026-11-11 answers
+      there, on task branch feat/m4-x02-x07 off origin/main @ c8605e2; the
+      application code is committed at
+      c17d53de18b7a6d6d203938d484bf2c7b15d070e and this entry records that
+      code commit. X02: the new module
+      src/dialogue/derived-memory.ts implements the semantics with no SQL, no
+      src/storage import and no provider call on any path (NFR-04) -- the
+      DerivedEpisode, DerivedTopic and DerivedMemoryPort types (verbatim from
+      #147), the DeriveSourceTurn input, deriveEpisode, deriveEpisodes and
+      deriveTopics with extractive verbatim topic and summary rules, the
+      importance formula min(1, 0.25 * turnCount + totalChars / 4000) rounded
+      to three decimals, the exported DERIVED_EXTRACTOR_VERSION
+      ("derived-memory/1") and monotonicAppliedSeq(persisted, rebuild)
+      returning max(persisted, rebuild); src/dialogue/index.ts gains the
+      single export line `export * from './derived-memory'` (line 22, the +1
+      shown by git diff --stat). X07: three memory corpora as JSON fixtures
+      under test/fixtures/memory/ -- cross-turn-reference (recall probes),
+      temporal-reasoning (temporal probes) and contradiction-update
+      (contradiction probes) -- six cases each with two held out
+      (heldOutCaseIds: ctr-03/ctr-06, tr-02/tr-05, cu-01/cu-04), English
+      fictional content and stable case-scoped turn ids, plus the loader
+      test/support/memory-corpus.ts. Tests: test/offline/
+      m4-derived-memory.test.ts covers the blueprint section 2 assertion
+      list and test/offline/m4-memory-corpus.test.ts validates the corpus
+      schema and the section 3.3 rules. The review-round-1 rework session
+      then applied the review findings: turn ids renamed to the case-scoped
+      <prefix>-<caseNumber>-s<sessionNumber>-t<turnNumber> scheme in all
+      three fixtures with every probe expected id updated, the redundant
+      !last half of the deriveEpisode guard removed (line 130 now checks
+      !first only), rule 5 tightened to assert 3-8 turns per session and
+      rule 6 restored to corpus-wide turn-id uniqueness. The eight
+      implementation files of the blueprint section 4 checklist are the
+      module, the index.ts export line, the three corpora, the two offline
+      tests and the loader. Per blueprint section 7, the PR round added the
+      two new test names to the test:m4 manifest line in package.json and
+      appended this AI-use entry; those two are not application code and
+      were written directly by the supervisor. The owner's uncommitted
+      AGENTS.md edit was excluded from both commits and remains untouched in
+      the working tree.
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    opencode_version: "2.0.20"
+    launch_flags: [--standalone, --auto, --agent, build, --format, json]
+    model_id: cslabllm/CS5351/DeepSeek-V4-Flash
+    sessions: [ses_e2efed1a2ffe4QPHPHUZdtsOB8, ses_e2ef42e46ffe8xNZ3jJZcIqaCy, ses_e2eecb2b4ffe2MiRSSAoDuYlUj, ses_e2ee1738fffesM0yM2jX1fz8qe, ses_e2063ae85ffe04Q9e0kz5YiSOj, ses_e205f7159ffehZ2GXmaxiHcc65]
+    requirements: [NFR-04]
+    invariants: []
+    commits: [418bcad35b8554e442594695e50286083d94e60f]
+    supervision: >-
+      The M4 supervision workflow produced the baseline blueprint
+      (m4-impl/X02X07/blueprint.md, 2026-11-13), ran the plan consult
+      (ses_e2efed1a2ffe4QPHPHUZdtsOB8, title m4-x02x07-consult) and the
+      comparison, and wrote the English task books for the implementation
+      sessions. OpenCode build sessions wrote all application code:
+      ses_e2ef42e46ffe8xNZ3jJZcIqaCy (m4-x02x07-impl-x02) implemented X02 and
+      ses_e2eecb2b4ffe2MiRSSAoDuYlUj (m4-x02x07-impl-x07) implemented X07.
+      The supervisor reviewed the resulting diffs against the task books
+      rather than accepting the sessions' own reports. After the independent
+      review, the rework session ses_e2ee1738fffesM0yM2jX1fz8qe
+      (m4-x02x07-fix-review-1) applied the review findings, and the
+      deterministic gates and the independent review then passed. Per
+      blueprint section 7 the manifest line and this AI-use entry are
+      PR-round changes, not application code, so the supervisor wrote them
+      directly and no session claims to have produced them. The supervisor
+      fast-forwarded the branch to origin/main c8605e2, ran six deterministic
+      gates on that base (typecheck, lint, the two new test files, test:m4,
+      the full suite and build) with every exit code 0, then made two
+      consecutive commits -- code first, then this log -- so commits can cite
+      the real code SHA; no squash and no amend was used. No gate-fix session
+      (titles m4-x02x07-fix-gate-*) was launched in this round.
+    human_review: >-
+      Rebased onto main 205424f on 2026-11-15 after the 11-14 merge wave:
+      the two commits were replayed sequentially with no squash and no
+      amend, and three conflicts were resolved as pure unions -- the
+      test:m4 manifest line (main's 16 test files plus this round's two,
+      18 files), the src/dialogue/index.ts export list (main's
+      working-memory export plus this round's derived-memory export), and
+      the ai-use-log tail (main's 191 entries plus this entry appended as
+      the 192nd with byte-identical content and the commit hash repointed
+      from the pre-rebase c17d53d to the replayed code commit 418bcad, with
+      verification re-run on the new base). All three conflict resolutions
+      and this entry update were written by OpenCode build sessions
+      (m4-x02x07-rebase-code, m4-x02x07-rebase-log, m4-x02x07-rebase-entry
+      and m4-x02x07-rebase-entry-2; the entry-update session
+      ses_e204adcecffeq7Q6sEDAAf3Emj hung on a provider call after its
+      first two edits and this follow-up session completed the remaining
+      four); the supervisor only performed the git mechanics, re-ran the
+      gates and stopped the hung session. The push replaces the two
+      pre-rebase commits (c17d53d, 7138772) with the replayed pair
+      (418bcad, log commit).
+    transcript_record: >-
+      The sessions listed in sessions retain their conversations in the
+      local OpenCode session store; their per-session record (session
+      title, task book, session id, created time and role) is written
+      outside the repository: the four original-round sessions at
+      D:/isla-m4-05/m4-impl/X02X07/opencode-sessions.md and the rebase-round
+      sessions at D:/isla-m4-05/m4-impl/X02X07-rebase/opencode-sessions.md.
+      No export is stored in the repository.
+    verification:
+      base: 205424f
+      typecheck: 0
+      lint: 0
+      newTests: 0
+      "test:m4": 0
+      build: 0
+      full-exit: 1
+      newFailures: []
+      fullNote: >-
+        The full suite on Windows reports 1 failed / 1848 passed / 9 skipped
+        across 87 files; the single failure is the known Windows
+        symlink-probe baseline (issue #162, EPERM in
+        test/offline/m6-02-provenance-command.test.ts), which is present on
+        the main baseline 205424f itself, so newFailures stays empty.
+    scope: >-
+      M4 derived-memory semantics and memory corpora, the test:m4 manifest
+      line and this AI-use entry; no shared contract, storage, SQL, runtime
+      or provider change, no quality or live-output claim, and no AGENTS.md
+      change.
 
   - date: "2026-11-13"
     task: M3-02-issue98-corpus-and-variants
@@ -7400,6 +7658,176 @@ entries:
       Fail-closed SelectionPort authenticity gating in runSelectionCase and
       documentation/test parity; rule selection logic, shared contracts, and
       corpus JSON fixtures are unchanged.
+
+  - date: "2026-11-14"
+    task: M5-96-reference-live-deployment
+    change: >-
+      Added the reference live product deployment and its configuration parser.
+      The module reads configuration only from the injected environment,
+      rejects missing or invalid variables by name without echoing values,
+      parses the VTS hotkey map, and wires the rule selection/reaction ports,
+      the OpenAI-compatible dialogue source, Kokoro synthesis, the audio
+      resource registry and a VTS-backed mapped renderer. The renderer
+      advertises exactly the configured actions and refuses an incomplete
+      hotkey map. An idempotent release disposes owned resources, and the
+      README/.env.example document the startup command and variable names.
+    requirements: [FR-01, FR-03]
+    invariants: []
+    commits:
+      - 252aea198a7d0378c44df963e77cf288c37e1f39
+      - 5e4daff8ac049fca34717fc08fd54c1b1c2a7753
+      - 1fccda9cec9c2ad559e0270116db7eb44d29801c
+      - 3d4c729ea0b4fe501394a843540967e95d865b78
+    agent: build
+    provider: self-api
+    model: deepseek-v4-flash
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    sessions: [ses_e2694c86affedCutmrg7F7si06, ses_e2692bf9fffe8bjPoTraHUz4WS]
+    supervision: >-
+      OpenCode authored the configuration parser, deployment module and tests
+      in the two recorded sessions. Codex supervised both sessions, fixed one
+      TypeScript disposer-signature error in the new test, authored the README,
+      .env.example and package test-list edits directly, and added strict
+      text/WebSocket URL, canonical-origin and host-entry validation so a bad
+      value fails at startup by variable name instead of being dropped, and a
+      regression test that exercises the exported production factory with an
+      empty environment. After M1 supplied the target model id and three
+      hotkeys on #95, Codex pinned the verified Hiyori_A model id and the three
+      action-to-hotkey bindings in the reference deployment and its README.
+    human_review: >-
+      Local only. Push and pull-request creation await Captain approval; no
+      agent merges and no product acceptance is claimed.
+    transcript_record: >-
+      Both sessions remain in the local OpenCode store; raw exports have not
+      yet been copied outside the checkout.
+    verification:
+      base: 78c7656c10229b25ceb1e8ecc566feb2f556f116
+      results: >-
+        Linux: the two new test files pass 22/22; test:m5 passes 15 files /
+        279 tests; pnpm verify exits 0 with 1571/1571 tests in 76 files and a
+        successful build; typecheck and lint pass.
+      limits: >-
+        No live text provider, VTube Studio session, Kokoro model load or
+        acoustic output was run. The release and hotkey-map refusals are
+        exercised only with injected fakes. M1 supplied the model id, hotkey
+        ids and plugin identity on #95; the host operator still approves that
+        identity in VTube Studio at pairing time, and no live pairing was run.
+        CP04 acceptance is not claimed.
+    scope: >-
+      src/runtime/deployments/reference-live-config.ts,
+      src/runtime/deployments/reference-live.ts, two offline tests,
+      package.json test:m5, README.md, .env.example and this AI-use entry. No
+      frozen contract, storage, dependency or provider behaviour changed.
+
+  - date: "2026-11-16"
+    task: M5-96-reference-live-review-fixes
+    change: >-
+      Address M1's blocking persona finding, M4's identity confirmation and
+      M6's evidence findings on the reference live deployment. The deployment
+      now uses the registered Elleya@2 character profile as the single source
+      for peers.profile, initialSelection.liveProfile and the VTS character
+      identity. The configuration parser rejects an empty hotkey map by
+      variable name, and the reference deployment fails closed unless the map
+      contains exactly animation-1, animation-2 and animation-3. The trace
+      matrix gains the reference-live row, and the README attributes the
+      Hiyori_A model id and hotkey ids to M1's observations on #95 rather than
+      implying this PR measured them. Tests cover the persona fields, the empty
+      map, missing and unexpected actions, and the existing renderer agreement.
+    requirements: [FR-01, FR-03, FR-06]
+    invariants: []
+    commits: [b819d8735854fa3f3c54ef8f11ad2e924b3a7d0c]
+    agent: build
+    provider: self-api
+    model: deepseek-v4-flash
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    sessions: [ses_e1d82bd58ffedigb6HDcG4vtR3]
+    supervision: >-
+      The orchestrating assistant (Claude Code) supervised the OpenCode build
+      session. The session had no shell tool, so the orchestrator ran every
+      test command outside the session and the results below are measured
+      locally. The review findings were supplied as constraints rather than
+      line-by-line implementation.
+    human_review: >-
+      Captain requested the CP04 review fixes and authorized local work. The
+      change is local only; push and re-review requests await Captain approval.
+      No agent merges and no CP04 acceptance is claimed.
+    transcript_record: >-
+      The genuine OpenCode session ses_e1d82bd58ffedigb6HDcG4vtR3 remains in
+      the local OpenCode store; the raw export has not yet been copied outside
+      the checkout.
+    verification:
+      base: 8825c33492e12be8dd02654e5bb668bf6d8c9e27
+      results: >-
+        Linux: pnpm typecheck exited 0; pnpm test:m5 passed 15 files / 282
+        tests; pnpm test:trace passed 41/41; pnpm verify exited 0 with 87 files
+        / 1883 tests and a successful build.
+      limits: >-
+        No live text provider, VTube Studio session, Kokoro model load,
+        acoustic output or Windows run was performed. M1's stock-deployment
+        Windows rerun and M6's re-review are still required before CP04 or
+        #94/#97 joint acceptance.
+    scope: >-
+      src/runtime/deployments/reference-live.ts,
+      src/runtime/deployments/reference-live-config.ts,
+      test/offline/m5-reference-live.test.ts,
+      test/offline/m5-reference-live-config.test.ts,
+      docs/architecture/trace-matrix.md, README.md and this log entry. No
+      frozen contract, storage, dependency or provider behaviour changed.
+
+  - date: "2026-11-10"
+    task: M5-console-strictmode-bootstrap-followup
+    member: M5
+    change: >-
+      Defer the console effect's initial bootstrap by one event-loop turn and
+      cancel the pending start during cleanup. Add a controlled browser
+      regression for StrictMode startup, reload, early unmount, disconnect and
+      an unavailable endpoint. Existing teardown and connection-error
+      reporting remain in place.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/build
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    opencode_version: 2.2.6
+    sessions: [ses_e3c429349ffebBz9NcI4oREI7o]
+    supervision: >-
+      Captain requested the repair in a separate worktree. A Luna sub-agent
+      drove the initial OpenCode work; Codex reviewed the scope, required CPU
+      browser flags and a bounded source comment, and continued the same
+      OpenCode session to correct the test harness and its TypeScript typing.
+      The initial interrupted work and failed checks are retained in evidence.
+    human_review: >-
+      Captain authorized the local work. The candidate remains uncommitted and
+      has not received a new review from the console owner; publication and
+      merge decisions remain separate.
+    transcript_record: >-
+      The complete native session.get response, 119 ascending
+      session.message.list pages and the terminal empty page are
+      retained outside the repository in evidence/issue92-proxy-worker-20261110.
+      This is an API projection, not a byte-identical oversized CLI export.
+    verification:
+      base: e9e7e7be0138b90df1190ce4fc674d33607a461e
+      independent: >-
+        pnpm test:m2 passed 93/93; pnpm verify passed 1,541/1,541 tests in
+        74 files plus typecheck, lint and build. The CPU-only browser startup
+        regression passed six observed scenarios; the same final regression
+        failed against the unmodified source with two bootstrap attempts.
+        The separate controlled M5 playback/Stop/replay/recovery diagnostic
+        passed 13 steps, with a read-only SQLite quick_check of ok.
+      failures: >-
+        An initial browser run used the wrong disconnect-detail selector; a
+        subsequent run asserted a server delta on the wrong object. The first
+        full verify then failed on a test-only TypeScript narrowing error.
+        Each was corrected and rerun; the original failure records remain.
+    scope: >-
+      src/console/ConsoleApp.tsx and three test/browser startup regression
+      files, plus this log entry. No shared transport interface, Vite proxy
+      configuration, dependency or registered identifier was changed. The
+      browser checks are controlled, headless and muted; they do not establish
+      live-provider, physical-audio, avatar or Windows behaviour.
+
   - date: "2026-11-13"
     task: "M6 Tier 1 gate enforcement"
     branch: m6-gate-enforcement
