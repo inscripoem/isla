@@ -1,0 +1,10 @@
+{
+  "caseId": "selection-004",
+  "status": "reviewed",
+  "provenance": "human",
+  "reviewerId": "shallight",
+  "reviewedAt": "2026-11-13",
+  "requestSha256": "6283ed837bbc26b5fd73377c9be7d6aaa9c181e4e90947d5bedf67499487d3e1",
+  "labelSha256": "b1db3d61ae2b11599a7e129a50aee34053ef4583820dcdda4b1f145a9f16a449",
+  "notes": "Approved candidate scores: defer = 2, message-004-a = 0, message-004-b = 0 for viewer-to-viewer side chat. Intent coverage remains partial; heldOut remains false."
+}

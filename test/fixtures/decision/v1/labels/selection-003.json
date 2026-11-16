@@ -1,0 +1,46 @@
+{
+  "caseId": "selection-003",
+  "selectionScores": [
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-003-a"],
+      "score": 1
+    },
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-003-b"],
+      "score": 2
+    },
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-003-c"],
+      "score": 0
+    },
+    {
+      "disposition": "defer",
+      "selectedEventIds": [],
+      "score": 0
+    }
+  ],
+  "intentLabels": [
+    {
+      "selectedEventId": "message-003-a",
+      "acceptableIntents": ["acknowledge"],
+      "coverage": "partial",
+      "coverageRationale": null
+    },
+    {
+      "selectedEventId": "message-003-b",
+      "acceptableIntents": ["answer"],
+      "coverage": "partial",
+      "coverageRationale": null
+    },
+    {
+      "selectedEventId": "message-003-c",
+      "acceptableIntents": ["acknowledge"],
+      "coverage": "partial",
+      "coverageRationale": null
+    }
+  ],
+  "rationale": "Answering the on-topic lantern shrine question (message-003-b) with 'answer' is the preferred outcome and intent; acknowledging the greeting (message-003-a) with 'acknowledge' is acceptable, while message-003-c is unsuitable and waiting is least preferred. Intent coverage is partial, so unlisted allowed intents remain unassessed."
+}

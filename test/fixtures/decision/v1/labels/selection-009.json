@@ -1,0 +1,68 @@
+{
+  "caseId": "selection-009",
+  "selectionScores": [
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-009-a"],
+      "score": 0
+    },
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-009-b"],
+      "score": 1
+    },
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-009-c"],
+      "score": 2
+    },
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-009-d"],
+      "score": 0
+    },
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-009-e"],
+      "score": 0
+    },
+    {
+      "disposition": "defer",
+      "selectedEventIds": [],
+      "score": 0
+    }
+  ],
+  "intentLabels": [
+    {
+      "selectedEventId": "message-009-a",
+      "acceptableIntents": ["acknowledge"],
+      "coverage": "partial",
+      "coverageRationale": null
+    },
+    {
+      "selectedEventId": "message-009-b",
+      "acceptableIntents": ["acknowledge"],
+      "coverage": "partial",
+      "coverageRationale": null
+    },
+    {
+      "selectedEventId": "message-009-c",
+      "acceptableIntents": ["answer"],
+      "coverage": "partial",
+      "coverageRationale": null
+    },
+    {
+      "selectedEventId": "message-009-d",
+      "acceptableIntents": ["playful"],
+      "coverage": "partial",
+      "coverageRationale": null
+    },
+    {
+      "selectedEventId": "message-009-e",
+      "acceptableIntents": ["acknowledge"],
+      "coverage": "partial",
+      "coverageRationale": null
+    }
+  ],
+  "rationale": "Answering the substantive brazier question (message-009-c) with 'answer' is the preferred outcome and intent; acknowledging 'hype!' (message-009-b) with 'acknowledge' is an acceptable alternative, while the short emotes and noise are unsuitable and waiting is not preferred. Intent coverage is partial, so unlisted allowed intents remain unassessed."
+}

@@ -18,7 +18,7 @@ entries:
       path and the retained genuine pair.
     requirements: [NFR-03]
     invariants: []
-    commits: [4273673]
+    commits: ["4273673"]
     agent: zcode/glm-5.3-flash
     provider: zai-plan
     model: glm-5.3-flash
@@ -2047,7 +2047,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: [INV-16]
     cases: []
-    commits: [3512135]
+    commits: ["3512135"]
     agent: opencode/deepseek-v4-flash
     verification:
       focused: "test/offline/m6-02-recorded-run.test.ts: 11/1 passed."
@@ -3983,7 +3983,7 @@ entries:
       no boundary rule needed widening.
     requirements: []
     invariants: []
-    commits: [3014648]
+    commits: ["3014648"]
     agent: workbuddy/deepseek-v4.1-flash
     provider: deepseek
     model: deepseek-v4.1-flash
@@ -4628,7 +4628,7 @@ entries:
     requirements: [FR-03]
     invariants: []
     cases: [C-06, C-11]
-    commits: [6780977]
+    commits: ["6780977"]
     agent: opencode/deepseek-v4-flash
     provider: personal-deepseek
     model: deepseek-v4-flash
@@ -5758,7 +5758,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: [INV-16]
     cases: []
-    commits: [813e935]
+    commits: ["813e935"]
     agent: opencode/build
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -6204,7 +6204,7 @@ entries:
     requirements: [FR-06, NFR-03, NFR-05]
     invariants: [INV-06, INV-10, INV-11, INV-16]
     cases: []
-    commits: [379e292]
+    commits: ["379e292"]
     agent: opencode/build
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -6320,7 +6320,7 @@ entries:
     requirements: [FR-06, NFR-03, NFR-05]
     invariants: [INV-17]
     cases: [C-75, C-76, C-77, C-78]
-    commits: [9688899]
+    commits: ["9688899"]
     agent: opencode/build
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -7075,6 +7075,331 @@ entries:
       The M4-151 rebase round: branch rebuild onto main, evidence repointing,
       the working-memory expiry-input guard and the contract statements; no
       contract, storage, runtime or provider change.
+
+  - date: "2026-11-13"
+    task: M3-02-issue98-corpus-and-variants
+    branch: feat/m3-98-corpus-and-variants
+    member: shallight (M3)
+    change: >-
+      Deliver M3-02 OpenAI-compatible decision provider adapters, comparison
+      variant descriptors, versioned response-plan prompt specification, and the
+      12-case selection corpus m3-selection-v1.1 for Issue #98 and Role Issue #4
+      (M3-02). Add prompts/decision/response-plan-v1.md (m3-decision-prompt-v1),
+      src/decision/provider-selection.ts, src/decision/provider-reaction.ts,
+      src/decision/variants.ts (m3-rules, m3-general-model, m3-jev,
+      m3-m4-combined), and additive re-exports in src/decision/index.ts without
+      modifying src/decision/selection.ts or src/decision/reaction.ts. Expand
+      test/fixtures/decision/v1 to 12 cases (4 dev, 8 held-out) while keeping
+      selection-001 (reviewed) and selection-002 (draft) byte-for-byte unchanged
+      and committing selection-003..selection-012 as status: "draft" pending
+      human review sign-off by shallight. Bridge M3 variants to M6 runComparison
+      in test/support/decision-runner.ts with honest not-run accounting when
+      model providers are unconfigured or selection-port mode cannot execute
+      m3-m4-combined, add offline provider/variant/no-secret-echo suites in
+      test/offline/m3-decision.test.ts, add opt-in live configuration and smoke
+      suites in test/live/{live-config.ts,live-config.test.ts,m3-decision.live.test.ts,README.md},
+      and update FR-01/FR-03 rows in docs/architecture/trace-matrix.md.
+    requirements: [FR-01, FR-03, NFR-03, NFR-04]
+    invariants: [INV-07, INV-13, INV-14, INV-16]
+    cases: [C-06, C-11, C-13, C-14, C-15]
+    commits: [a79bec8891e7717c8d90bd8252aaa53bd3136d53]
+    agent: opencode/deepseek-v4-flash
+    opencode_version: 1.19.5
+    model_cli_id: "personal-deepseek/deepseek-v4-flash"
+    model: deepseek-v4-flash
+    resolved_model: deepseek-flash
+    provider: personal-deepseek
+    variant: xhigh
+    launch_flags: ["--pure", "--agent", "build", "-m", "personal-deepseek/deepseek-v4-flash", "--variant", "xhigh", "--format", "json"]
+    sessions:
+      - ses_e2e5ea758ffeN7JOQ1Azbv6qZC
+      - ses_e2e55eb68ffeEyosSWikkc2hKq
+      - ses_e2e533dcbffe065K3LK5AeRnpq
+    supervision: >-
+      Captain authorized OpenCode build execution for Issue #98 using transient
+      in-memory environment authentication without modifying global OpenCode
+      configuration or writing credentials to disk. The provider resolved
+      deepseek-v4-flash to server model id deepseek-flash (DeepSeek-V4.1-Flash).
+      All authored files were inspected in full by the supervisor before commit.
+      Commit SHA updated from pre-rebase e19c17a0b375789cae50bcd33b101939127ed6c1
+      to rebased equivalent a79bec8891e7717c8d90bd8252aaa53bd3136d53 on main
+      205424f663bb9da87d5dd690825d9972be10f0f2.
+    human_review: >-
+      New corpus records selection-003 through selection-012 are explicitly
+      committed with status: "draft" in reviews/selection-0XX.json and partial
+      intent coverage so no adopted semantic score is claimed before human
+      review sign-off by shallight. PR carries an explicit top-level draft-label
+      disclosure banner; merge remains human-gated.
+    transcript_record: >-
+      Exported OpenCode session records and JSONL stream logs are stored outside
+      the repository checkout in the supervisor scratch evidence directory; zero
+      secret tokens appear in repository files or exported evidence.
+    verification:
+      platform: macOS arm64 (Darwin)
+      base: e540bb4ed0621dfdaf6d5520422da1746d214b94
+      results: >-
+        test:m3 91/91, live-config 18/18 (live provider cases 8 skipped cleanly
+        with unset ISLA_LIVE_*), test:composition 12/12, test:readiness 47/47,
+        test:trace 41/41, and full pnpm verify passed (typecheck, lint 0/0 on
+        273 files, vitest 1565/1565 across 74 files, vite build).
+    scope: >-
+      Additive M3-02 provider adapters, comparison variants, live-config gating,
+      and m3-selection-v1.1 draft corpus expansion. Live provider execution and
+      adopted corpus quality scores remain unclaimed until credentials are
+      supplied for opt-in measurement and human review sign-off promotes
+      selection-002..selection-012 from draft to reviewed.
+
+  - date: "2026-11-13"
+    task: M3-02-issue98-human-label-signoff
+    branch: feat/m3-98-corpus-and-variants
+    member: shallight (M3)
+    change: >-
+      Record human reviewer shallight's explicit sign-off on 2026-11-13 for
+      selection-002 through selection-012 in test/fixtures/decision/v1,
+      completing 12/12 human-reviewed provenance (status: "reviewed",
+      provenance: "human", SHA-256-bound requestSha256 and labelSha256,
+      casesSha256 = c7c1b19d875e7510210e156656ad4749c33c82d6b54dbb1ee2bb7a6b9f68fa63)
+      for m3-selection-v1.1. Refresh test/fixtures/decision/v1/README.md and
+      update test/offline/m3-decision.test.ts so negative draft-label guards run
+      against mutated temporary corpus copies while the committed 12-case corpus
+      is verified as 12/12 human-reviewed.
+    requirements: [FR-01, NFR-03]
+    invariants: [INV-07, INV-13, INV-14, INV-16]
+    cases: [C-13]
+    commits: [7590a222608527a448fafe24ab42953ace454271]
+    agent: opencode/deepseek-v4-flash
+    opencode_version: 1.19.5
+    model_cli_id: "personal-deepseek/deepseek-v4-flash"
+    model: deepseek-v4-flash
+    resolved_model: deepseek-flash
+    provider: personal-deepseek
+    variant: xhigh
+    launch_flags: ["--pure", "--agent", "build", "-m", "personal-deepseek/deepseek-v4-flash", "--variant", "xhigh", "--format", "json"]
+    sessions:
+      - ses_e2cbec712ffeV2duIpJ5sHMMKT
+    supervision: >-
+      Captain (shallight) personally reviewed the translated and original
+      scenarios, candidates, scores, and intents for selection-002..selection-012
+      and explicitly authorized human sign-off and promotion of PR #155 from
+      Draft to Ready for Review. Commit SHA updated from pre-rebase
+      6fc008fa9145cb92376d5a440472d91596f201f2 to rebased equivalent
+      7590a222608527a448fafe24ab42953ace454271.
+    human_review: >-
+      All 12 cases in m3-selection-v1.1 now carry status: "reviewed" and
+      provenance: "human" recorded by shallight (selection-001 on 2026-10-23;
+      selection-002..selection-012 on 2026-11-13) with partial intent coverage.
+      Merge remains human-gated.
+    transcript_record: >-
+      Exported OpenCode session record ses_e2cbec712ffeV2duIpJ5sHMMKT is stored
+      outside the repository checkout in the supervisor scratch evidence
+      directory; zero secret tokens appear in repository files or exported
+      evidence.
+    verification:
+      platform: macOS arm64 (Darwin)
+      base: f970c13db59ad6f75935a5fafb0e623db7b62237
+      results: >-
+        test:m3 91/91, test:trace 41/41, and full pnpm verify passed (typecheck,
+        lint 0/0 on 273 files, vitest 1565/1565 across 74 files, vite build).
+    scope: >-
+      Detached human review record for selection-002..selection-012 and
+      associated test assertions; live provider execution and G4 measurement
+      remain separate opt-in steps.
+
+  - date: "2026-11-14"
+    task: M3-02-issue98-peer-review-remediation
+    branch: feat/m3-98-corpus-and-variants
+    member: shallight (M3)
+    change: >-
+      Address M6, M5, and M4 peer-review findings on PR #155 without altering
+      any committed request, label, review, or manifest JSON file
+      (casesSha256 = c7c1b19d875e7510210e156656ad4749c33c82d6b54dbb1ee2bb7a6b9f68fa63).
+      Enforce https or loopback-only plain http base URLs without embedded
+      credentials (B5), add configurable positive-integer maxTokens defaulting
+      to 256 (B8), normalize /chat/completions endpoint URLs so API-root and
+      full-endpoint configurations both resolve cleanly (M5), cap response
+      payload size at 65,536 characters without body echo, track live vs
+      synthetic/mock SelectionPort provenance so mock or stub runs always
+      report certifiesCorpus: false (B1), delete the hand-written keyword mock
+      heuristic and offline superiority assertions in favour of non-certifying
+      runner mechanics checks (B2), assert exact character-for-character system
+      prompt parity against prompts/decision/response-plan-v1.md (B6), and
+      document recorded self-review plus M4 (@L01nki1) 12-case independent
+      cross-review in test/fixtures/decision/v1/README.md (B3, B4).
+    requirements: [FR-01, FR-03, NFR-03, NFR-04]
+    invariants: [INV-07, INV-13, INV-14, INV-16]
+    cases: [C-06, C-11, C-13, C-14, C-15]
+    commits: [1833c45ef9e4f004ef300169aba7f9da40875792]
+    agent: opencode/deepseek-v4-flash
+    opencode_version: 1.19.5
+    model_cli_id: "personal-deepseek/deepseek-v4-flash"
+    model: deepseek-v4-flash
+    resolved_model: deepseek-flash
+    provider: personal-deepseek
+    variant: xhigh
+    launch_flags: ["--pure", "--agent", "build", "-m", "personal-deepseek/deepseek-v4-flash", "--variant", "xhigh", "--format", "json"]
+    sessions:
+      - ses_e2961c091ffeD2MEtaLtxav74N
+    supervision: >-
+      Captain reviewed and approved the point-by-point remediation plan before
+      execution. All 9 touched files were inspected line-by-line by the
+      supervisor prior to commit; all 12 corpus request, label, review, and
+      manifest JSON files remained byte-identical to cb156c4. Commit SHA updated
+      from pre-rebase c681c9e6dfa55b6a1f1ad38bf0d7af008f2ebc5d to rebased
+      equivalent 1833c45ef9e4f004ef300169aba7f9da40875792 (rebased test:m3
+      110/110 passed on main 205424f).
+    human_review: >-
+      Addresses initial M6 and M5 CHANGES_REQUESTED items and records M4
+      (@L01nki1)'s completed 12/12 independent label cross-review at cb156c4.
+      Merge remains human-gated.
+    transcript_record: >-
+      Exported OpenCode session record ses_e2961c091ffeD2MEtaLtxav74N and JSONL
+      stream logs are stored outside the repository checkout in the supervisor
+      scratch evidence directory; zero secret tokens appear in repository files
+      or exported evidence.
+    verification:
+      platform: macOS arm64 (Darwin)
+      base: cb156c426c848cdecf2789029ac4c2957f45352d
+      results: >-
+        gate:ai-use-log passed, live-config 26/26 (8 live cases skipped cleanly),
+        test:m3 100/100 (110/110 after rebase onto #156), test:trace 41/41, and
+        full pnpm verify passed.
+    scope: >-
+      Offline provider-adapter hardening, runner evidence-provenance gating,
+      non-certifying mechanics test cleanup, prompt parity check, and corpus
+      governance documentation; live provider execution and G4 quality
+      comparisons remain separate opt-in steps requiring real credentials.
+
+  - date: "2026-11-15"
+    task: M3-02-issue98-stage3-rebase-and-remediation
+    branch: feat/m3-98-corpus-and-variants
+    member: shallight (M3)
+    change: >-
+      Rebase feat/m3-98-corpus-and-variants onto main
+      205424f663bb9da87d5dd690825d9972be10f0f2 after PR #156 merged (09bb73e)
+      while keeping all 12 m3-selection-v1.1 JSON triples byte-identical to
+      cb156c4 (casesSha256 =
+      c7c1b19d875e7510210e156656ad4749c33c82d6b54dbb1ee2bb7a6b9f68fa63), and
+      resolve all M6 re-review items on #155 (#98, #4). Extract shared internal
+      module src/decision/openai-compatible-core.ts consolidating all duplicated
+      validation/transport/usage helpers and single-attempt call execution across
+      src/decision/provider-selection.ts and src/decision/provider-reaction.ts
+      while guarding Node's 32-bit signed setTimeout overflow (B4); preserve
+      baseUrl query parameters on /chat/completions while rejecting URL #
+      fragments and embedded credentials in both adapters and M3 live-config
+      readers (B1); enforce Number.isSafeInteger for token-usage counts so
+      unsafe integers degrade to usageMissing: true and guard final result
+      assembly with selectionResultSchema.safeParse /
+      decisionResultSchema.safeParse while keeping fractional monotonic clock
+      elapsedMs symmetric across both ports (B2); relabel m3-selection-v1.1 in
+      test/fixtures/decision/v1/README.md explicitly as a human-recorded
+      coverage/smoke fixture deferring multi-reviewer human scoring and live
+      variant quality claims to CP07 Issues #110 and #109 (B5); clarify
+      MAX_DECISION_RESPONSE_CHARS parsing-vs-streaming-memory semantics and
+      executable-vs-spec parity ownership in prompts/decision/response-plan-v1.md
+      and test/offline/m3-decision.test.ts (Minors 2-3); and add
+      src/decision/openai-compatible-core.ts to FR-01/FR-03 in
+      docs/architecture/trace-matrix.md.
+    requirements: [FR-01, FR-03, NFR-03, NFR-04]
+    invariants: [INV-07, INV-13, INV-14, INV-16]
+    cases: [C-06, C-11, C-13, C-14, C-15]
+    commits: [6eec8dfff2d6617ffd7728c1983b9b0202e84567]
+    agent: opencode/deepseek-v4-flash
+    opencode_version: 1.19.5
+    model_cli_id: "personal-deepseek/deepseek-v4-flash"
+    model: deepseek-v4-flash
+    resolved_model: deepseek-flash
+    provider: personal-deepseek
+    variant: xhigh
+    launch_flags: ["--pure", "--agent", "build", "-m", "personal-deepseek/deepseek-v4-flash", "--variant", "xhigh", "--format", "json"]
+    sessions:
+      - ses_e235a4408ffekUKnA35M9DDJM4
+    supervision: >-
+      Captain reviewed and approved the Stage 3 rebase and remediation plan
+      (including keeping M3-02 adapters under Role Issue #4 and Issue #98). All
+      10 modified files in commit 6eec8df were inspected 100% line-by-line by
+      the supervisor before commit, catching and correcting a fractional-clock
+      elapsedMs asymmetry and a 32-bit setTimeout overflow before landing.
+    human_review: >-
+      All 12 corpus JSON triples (manifest.json, requests/*, labels/*,
+      reviews/*) remain 100% byte-identical to cb156c4 (0 diff lines),
+      preserving M4 (@L01nki1)'s 12/12 cross-review sign-off. Merge remains
+      human-gated.
+    transcript_record: >-
+      Exported sanitized OpenCode session record ses_e235a4408ffekUKnA35M9DDJM4
+      and JSONL stream logs are stored outside the repository checkout in the
+      supervisor scratch evidence directory; verified 0 secret hits across all
+      exported evidence and repository files.
+    verification:
+      platform: macOS arm64 (Darwin)
+      base: 205424f663bb9da87d5dd690825d9972be10f0f2
+      results: >-
+        gate:ai-use-log passed, live-config 30/30 (8 live cases skipped cleanly),
+        test:m3 113/113, test:composition 12/12, test:trace 41/41, and full pnpm
+        verify passed (typecheck, lint 0/0 on 296 files, vitest 1857/1857 across
+        85 files, vite build).
+    scope: >-
+      Post-#156 rebase onto main, shared OpenAI-compatible core extraction, URL
+      query/fragment and safe-integer hardening, normative prompt-spec parity
+      checks, and explicit coverage-fixture framing; production.ts remains on
+      m3-rules and live provider evaluation remains deferred to CP07 (#109/#110).
+
+  - date: "2026-11-16"
+    task: M3-02-issue98-fail-closed-corpus-certification
+    branch: feat/m3-98-corpus-and-variants
+    member: shallight (M3)
+    change: >-
+      Make single-port corpus certification in test/support/decision-runner.ts
+      fail-closed for unmarked SelectionPort stubs per M6 review 5910194589 on
+      PR #155 (#98). Add a WeakSet-backed isRuleSelectionPort(port) marker in
+      src/decision/selection.ts without changing rule selection behaviour,
+      update runSelectionCase so certifiesCorpus requires an authentic port
+      (isLiveProviderSelectionPort or isRuleSelectionPort) while retaining
+      explicit syntheticPort: true priority and keeping model-variant live-port
+      enforcement in runSelectionVariantsOnCorpus intact, add 12-row observed
+      negative assertions for an unmarked inline defer stub, forced
+      syntheticPort: true override, and a rule port passed into generalModel in
+      test/offline/m3-decision.test.ts, and state the exact fail-closed
+      condition in test/fixtures/decision/v1/README.md.
+    requirements: [FR-01, NFR-03, NFR-04]
+    invariants: [INV-13, INV-14, INV-16]
+    cases: [C-13]
+    commits: [e82a400fdf391440c88d8654652f735269755811]
+    agent: opencode/deepseek-v4-flash
+    opencode_version: 1.19.5
+    model_cli_id: "personal-deepseek/deepseek-v4-flash"
+    model: deepseek-v4-flash
+    resolved_model: deepseek-flash
+    provider: personal-deepseek
+    variant: xhigh
+    launch_flags: ["--pure", "--agent", "build", "-m", "personal-deepseek/deepseek-v4-flash", "--variant", "xhigh", "--format", "json"]
+    sessions:
+      - ses_e1e5d345effe6WMK9D47zj19bk
+    supervision: >-
+      Captain reviewed and approved the fail-closed certification plan (adopting
+      M6's WeakSet marker plus model-variant live-port preservation and 12/12
+      observed inline-stub assertions while keeping splitScore semantics intact).
+      All 4 touched files in commit e82a400 were inspected line-by-line by the
+      supervisor before commit; zero corpus JSON files were touched.
+    human_review: >-
+      Resolves the remaining M6 blocking item on PR #155 while keeping all 12
+      committed corpus JSON triples byte-identical to cb156c4. Merge remains
+      human-gated.
+    transcript_record: >-
+      Exported sanitized OpenCode session record ses_e1e5d345effe6WMK9D47zj19bk
+      and JSONL stream log are stored outside the repository checkout in the
+      supervisor scratch evidence directory; verified 0 secret hits across all
+      exported evidence and repository files.
+    verification:
+      platform: macOS arm64 (Darwin)
+      base: 3d557104f340903e78c65c2c1ada31644cb46161
+      results: >-
+        gate:ai-use-log passed, test:m3 114/114, test:trace 41/41, and full pnpm
+        verify passed (typecheck, lint 0/0 on 296 files, vitest 1858/1858 across
+        85 files, vite build).
+    scope: >-
+      Fail-closed SelectionPort authenticity gating in runSelectionCase and
+      documentation/test parity; rule selection logic, shared contracts, and
+      corpus JSON fixtures are unchanged.
   - date: "2026-11-15"
     task: M6-CP05-provenance-capture-and-threshold-register
     change: >-
