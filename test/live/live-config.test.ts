@@ -49,12 +49,72 @@ describe('M4 live text provider configuration', () => {
     expect(report.reason).toContain(LIVE_TEXT_PROVIDER_ENV.model)
   })
 
-  it('refuses a base URL that is not http(s)', () => {
+  it('refuses a base URL that is not an https or loopback http URL', () => {
     const report = readLiveTextProviderConfig(
       envWith({ [LIVE_TEXT_PROVIDER_ENV.baseUrl]: 'ftp://gateway.example.com' }),
     )
     expect(report.available).toBe(false)
     expect(report.reason).toContain(LIVE_TEXT_PROVIDER_ENV.baseUrl)
+  })
+
+  it('refuses remote plaintext http and accepts https and loopback http', () => {
+    const remote = readLiveTextProviderConfig(
+      envWith({ [LIVE_TEXT_PROVIDER_ENV.baseUrl]: 'http://gateway.example.com/v1' }),
+    )
+    expect(remote.available).toBe(false)
+    expect(remote.config).toBeNull()
+    expect(remote.reason).toContain(LIVE_TEXT_PROVIDER_ENV.baseUrl)
+    expect(remote.reason).not.toContain('gateway.example.com')
+    expect(remote.reason).not.toContain('http://gateway.example.com/v1')
+
+    for (const baseUrl of [
+      'http://127.0.0.1:8080/v1',
+      'http://localhost:8080/v1',
+      'http://[::1]:8080/v1',
+    ]) {
+      const report = readLiveTextProviderConfig(
+        envWith({ [LIVE_TEXT_PROVIDER_ENV.baseUrl]: baseUrl }),
+      )
+      expect(report.available).toBe(true)
+      expect(report.reason).toBeNull()
+      expect(report.config?.baseUrl).toBe(baseUrl)
+    }
+
+    const remoteHttps = readLiveTextProviderConfig(
+      envWith({ [LIVE_TEXT_PROVIDER_ENV.baseUrl]: 'https://gateway.example.com/v1' }),
+    )
+    expect(remoteHttps.available).toBe(true)
+    expect(remoteHttps.config?.baseUrl).toBe('https://gateway.example.com/v1')
+  })
+
+  it('refuses credentialed and fragment-bearing base URLs without echoing values', () => {
+    for (const baseUrl of [
+      'https://user:pass@gateway.example.com/v1',
+      'https://gateway.example.com/v1#frag',
+      'https://gateway.example.com/v1#',
+      'http://user:pass@127.0.0.1:8080/v1',
+    ]) {
+      const report = readLiveTextProviderConfig(
+        envWith({ [LIVE_TEXT_PROVIDER_ENV.baseUrl]: baseUrl }),
+      )
+      expect(report.available).toBe(false)
+      expect(report.config).toBeNull()
+      expect(report.reason).toContain(LIVE_TEXT_PROVIDER_ENV.baseUrl)
+      expect(report.reason).not.toContain(baseUrl)
+      expect(report.reason).not.toContain('user:pass')
+      expect(report.reason).not.toContain('pass@')
+      expect(report.reason).not.toContain('#')
+      expect(report.reason).not.toContain(SECRET)
+    }
+  })
+
+  it('preserves query parameters while trimming trailing path slashes', () => {
+    const report = readLiveTextProviderConfig(
+      envWith({ [LIVE_TEXT_PROVIDER_ENV.baseUrl]: 'https://gateway.example.com/v1///?tenant=a/' }),
+    )
+    expect(report.available).toBe(true)
+    expect(report.reason).toBeNull()
+    expect(report.config?.baseUrl).toBe('https://gateway.example.com/v1?tenant=a/')
   })
 
   it('parses a complete configuration and trims the base URL', () => {
