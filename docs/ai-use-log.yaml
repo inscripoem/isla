@@ -7524,3 +7524,118 @@ entries:
       Fail-closed SelectionPort authenticity gating in runSelectionCase and
       documentation/test parity; rule selection logic, shared contracts, and
       corpus JSON fixtures are unchanged.
+
+  - date: "2026-11-14"
+    task: M5-96-reference-live-deployment
+    change: >-
+      Added the reference live product deployment and its configuration parser.
+      The module reads configuration only from the injected environment,
+      rejects missing or invalid variables by name without echoing values,
+      parses the VTS hotkey map, and wires the rule selection/reaction ports,
+      the OpenAI-compatible dialogue source, Kokoro synthesis, the audio
+      resource registry and a VTS-backed mapped renderer. The renderer
+      advertises exactly the configured actions and refuses an incomplete
+      hotkey map. An idempotent release disposes owned resources, and the
+      README/.env.example document the startup command and variable names.
+    requirements: [FR-01, FR-03]
+    invariants: []
+    commits:
+      - 252aea198a7d0378c44df963e77cf288c37e1f39
+      - 5e4daff8ac049fca34717fc08fd54c1b1c2a7753
+      - 1fccda9cec9c2ad559e0270116db7eb44d29801c
+      - 3d4c729ea0b4fe501394a843540967e95d865b78
+    agent: build
+    provider: self-api
+    model: deepseek-v4-flash
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    sessions: [ses_e2694c86affedCutmrg7F7si06, ses_e2692bf9fffe8bjPoTraHUz4WS]
+    supervision: >-
+      OpenCode authored the configuration parser, deployment module and tests
+      in the two recorded sessions. Codex supervised both sessions, fixed one
+      TypeScript disposer-signature error in the new test, authored the README,
+      .env.example and package test-list edits directly, and added strict
+      text/WebSocket URL, canonical-origin and host-entry validation so a bad
+      value fails at startup by variable name instead of being dropped, and a
+      regression test that exercises the exported production factory with an
+      empty environment. After M1 supplied the target model id and three
+      hotkeys on #95, Codex pinned the verified Hiyori_A model id and the three
+      action-to-hotkey bindings in the reference deployment and its README.
+    human_review: >-
+      Local only. Push and pull-request creation await Captain approval; no
+      agent merges and no product acceptance is claimed.
+    transcript_record: >-
+      Both sessions remain in the local OpenCode store; raw exports have not
+      yet been copied outside the checkout.
+    verification:
+      base: 78c7656c10229b25ceb1e8ecc566feb2f556f116
+      results: >-
+        Linux: the two new test files pass 22/22; test:m5 passes 15 files /
+        279 tests; pnpm verify exits 0 with 1571/1571 tests in 76 files and a
+        successful build; typecheck and lint pass.
+      limits: >-
+        No live text provider, VTube Studio session, Kokoro model load or
+        acoustic output was run. The release and hotkey-map refusals are
+        exercised only with injected fakes. M1 supplied the model id, hotkey
+        ids and plugin identity on #95; the host operator still approves that
+        identity in VTube Studio at pairing time, and no live pairing was run.
+        CP04 acceptance is not claimed.
+    scope: >-
+      src/runtime/deployments/reference-live-config.ts,
+      src/runtime/deployments/reference-live.ts, two offline tests,
+      package.json test:m5, README.md, .env.example and this AI-use entry. No
+      frozen contract, storage, dependency or provider behaviour changed.
+
+  - date: "2026-11-16"
+    task: M5-96-reference-live-review-fixes
+    change: >-
+      Address M1's blocking persona finding, M4's identity confirmation and
+      M6's evidence findings on the reference live deployment. The deployment
+      now uses the registered Elleya@2 character profile as the single source
+      for peers.profile, initialSelection.liveProfile and the VTS character
+      identity. The configuration parser rejects an empty hotkey map by
+      variable name, and the reference deployment fails closed unless the map
+      contains exactly animation-1, animation-2 and animation-3. The trace
+      matrix gains the reference-live row, and the README attributes the
+      Hiyori_A model id and hotkey ids to M1's observations on #95 rather than
+      implying this PR measured them. Tests cover the persona fields, the empty
+      map, missing and unexpected actions, and the existing renderer agreement.
+    requirements: [FR-01, FR-03, FR-06]
+    invariants: []
+    commits: [b819d8735854fa3f3c54ef8f11ad2e924b3a7d0c]
+    agent: build
+    provider: self-api
+    model: deepseek-v4-flash
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    sessions: [ses_e1d82bd58ffedigb6HDcG4vtR3]
+    supervision: >-
+      The orchestrating assistant (Claude Code) supervised the OpenCode build
+      session. The session had no shell tool, so the orchestrator ran every
+      test command outside the session and the results below are measured
+      locally. The review findings were supplied as constraints rather than
+      line-by-line implementation.
+    human_review: >-
+      Captain requested the CP04 review fixes and authorized local work. The
+      change is local only; push and re-review requests await Captain approval.
+      No agent merges and no CP04 acceptance is claimed.
+    transcript_record: >-
+      The genuine OpenCode session ses_e1d82bd58ffedigb6HDcG4vtR3 remains in
+      the local OpenCode store; the raw export has not yet been copied outside
+      the checkout.
+    verification:
+      base: 8825c33492e12be8dd02654e5bb668bf6d8c9e27
+      results: >-
+        Linux: pnpm typecheck exited 0; pnpm test:m5 passed 15 files / 282
+        tests; pnpm test:trace passed 41/41; pnpm verify exited 0 with 87 files
+        / 1883 tests and a successful build.
+      limits: >-
+        No live text provider, VTube Studio session, Kokoro model load,
+        acoustic output or Windows run was performed. M1's stock-deployment
+        Windows rerun and M6's re-review are still required before CP04 or
+        #94/#97 joint acceptance.
+    scope: >-
+      src/runtime/deployments/reference-live.ts,
+      src/runtime/deployments/reference-live-config.ts,
+      test/offline/m5-reference-live.test.ts,
+      test/offline/m5-reference-live-config.test.ts,
+      docs/architecture/trace-matrix.md, README.md and this log entry. No
+      frozen contract, storage, dependency or provider behaviour changed.
