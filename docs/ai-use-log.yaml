@@ -8132,3 +8132,55 @@ entries:
       docs/ai-use-log.yaml merge resolution, src/evaluation/ai-use-log-gate.ts,
       test/offline/ai-use-log-gate.test.ts and this log entry. No other gate
       rule, workflow, schema or application behaviour changed.
+
+  - date: "2026-11-17"
+    task: M6-158-g6-unreachable-baseline
+    change: >-
+      Repair main G6 after the #158 squash merge. The seven new #158 AI-use
+      entries cite branch commits that the squash integration left in the object
+      database but outside main's history; the gate applied the commit baseline
+      only when an object was missing, so main CI failed as unreachable. The
+      gate now consults the same expiry-dated baseline for an unreachable cited
+      commit: an unexpired item suppresses the finding, an expired item reports
+      POL-G6-04, and an unregistered value keeps the existing POL-G6-02
+      unreachable failure. The baseline registers the seven #158 branch commits
+      and this fix's code commit, each with a 2027-01-31 expiry and the reason
+      that the exact source SHA remains in this log.
+    requirements: []
+    invariants: [INV-14]
+    commits: [676d698dea4fd7e7b3a5c7c274b9534aca2e354e]
+    agent: build
+    provider: self-api
+    model: deepseek-v4-flash
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    sessions: [ses_e1ae58c70ffeK5z9GaJx5dCbr7]
+    supervision: >-
+      The orchestrating assistant (Claude Code) diagnosed the main G6 failure,
+      requested the minimal gate change and supplied the baseline identities.
+      The OpenCode session authored the gate and test change; it ran one
+      unintended read-only `cat .prettierrc*` while checking for a formatter,
+      which changed nothing. The session had no general shell tool, so the
+      orchestrator ran every test command outside it.
+    human_review: >-
+      Captain requested the #158 conflict resolution and the resulting main CI
+      repair. This change is local only; push, pull-request creation and merge
+      await Captain approval. M6 owns the gate and the PR remains subject to the
+      team's review rules.
+    transcript_record: >-
+      The genuine OpenCode session ses_e1ae58c70ffeK5z9GaJx5dCbr7 remains in
+      the local OpenCode store; the raw export has not yet been copied outside
+      the checkout.
+    verification:
+      base: 9492070f34da71613dcf0700536e6cf0ca56cd44
+      results: >-
+        Linux: pnpm test:gates passed 6 files / 151 tests; pnpm verify exited 0
+        with 91 files / 1995 tests and a successful build; the G6 gate passed
+        against the main log baseline with the baseline register applied.
+      limits: >-
+        No live provider, evaluation run or Windows run was performed. The
+        baseline is an admission with a 2027-01-31 expiry, not a fix of the
+        orphaned commits; main CI must confirm the post-merge tree.
+    scope: >-
+      src/evaluation/ai-use-log-gate.ts, test/offline/ai-use-log-gate.test.ts,
+      docs/code-governance/gate-baseline.yaml and this log entry. No other gate
+      rule, workflow, schema or application behaviour changed.
