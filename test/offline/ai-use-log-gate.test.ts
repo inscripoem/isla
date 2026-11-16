@@ -341,19 +341,6 @@ entries:
     )
     expect(violations.join(' ')).toContain('0badbad')
   })
-
-  it('accepts a baselined unreachable commit before its expiry', () => {
-    const baseline = [{ kind: 'commit' as const, value: 'fedcba9', expires: '2026-12-31' }]
-    expect(collectAiUseLogReferenceViolations(log('[fedcba9]'), deps({ baseline }))).toEqual([])
-  })
-
-  it('rejects a baselined unreachable commit after its expiry', () => {
-    const baseline = [{ kind: 'commit' as const, value: 'fedcba9', expires: '2026-01-01' }]
-    const violations = collectAiUseLogReferenceViolations(log('[fedcba9]'), deps({ baseline }))
-    expect(violations).toHaveLength(1)
-    expect(violations[0]).toContain('expired')
-    expect(violations[0]).not.toContain('not reachable from HEAD')
-  })
 })
 
 describe('register loaders agree with the committed registers (T0)', () => {

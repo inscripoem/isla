@@ -8,47 +8,10 @@
 #
 # Owner: M6. Reviewed: 2026-11-13 with the gate implementation.
 version: "1"
-items:
-  # #158 squash-merged branch commits. The exact source SHAs remain in
-  # docs/ai-use-log.yaml; squash integration left them unreachable from main.
-  - kind: commit
-    value: "e601cb9"
-    expires: "2027-01-31"
-    reason: "squash-merged #158 branch commit; exact source SHA retained in the AI-use log"
-  - kind: commit
-    value: "ab203ac"
-    expires: "2027-01-31"
-    reason: "squash-merged #158 branch commit; exact source SHA retained in the AI-use log"
-  - kind: commit
-    value: "969612f"
-    expires: "2027-01-31"
-    reason: "squash-merged #158 branch commit; exact source SHA retained in the AI-use log"
-  - kind: commit
-    value: "b41ff23"
-    expires: "2027-01-31"
-    reason: "squash-merged #158 branch commit; exact source SHA retained in the AI-use log"
-  - kind: commit
-    value: "6ba49eb"
-    expires: "2027-01-31"
-    reason: "squash-merged #158 branch commit; exact source SHA retained in the AI-use log"
-  - kind: commit
-    value: "26cb922"
-    expires: "2027-01-31"
-    reason: "squash-merged #158 branch commit; exact source SHA retained in the AI-use log"
-  - kind: commit
-    value: "049125ebbaa2f3a7408fed645d47927698f74f93"
-    expires: "2027-01-31"
-    reason: "squash-merged #158 G6 historical fix; exact source SHA retained in the AI-use log"
-  - kind: commit
-    value: "676d698dea4fd7e7b3a5c7c274b9534aca2e354e"
-    expires: "2027-01-31"
-    reason: "squash-merged #158 unreachable-baseline fix; exact source SHA retained in the AI-use log"
-
+items: []
 # Historical AI-use entries may cite commits that a fresh clone does not carry
 # (squash-merged work). Those are advisory, never failures, so they need no
-# exemption. A NEW entry is normally required to cite a reachable commit; a
-# squash merge can leave its branch commits unreachable, so an expiry-dated
-# commit baseline covers that case until the audit window closes.
+# exemption. Only a NEW entry is required to cite a commit reachable from HEAD.
 
 # Trace rows whose ADR cell cannot yet name a number. The key is the SHA-256 of
 # `requirement|component|interface`; editing any of those cells invalidates the
