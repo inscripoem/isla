@@ -544,3 +544,20 @@ describe('the module exposes only its documented surface', () => {
     expect(Object.keys(reportModule).sort()).toEqual(['renderEvaluationReport', 'writeEvaluationReport'])
   })
 })
+
+describe('writer evidence preservation', () => {
+  it('refuses to overwrite a pre-existing temporary file and leaves it intact', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'm6-report-temp-'))
+    try {
+      const path = join(directory, 'evaluation-table.md')
+      const temporary = join(directory, `.evaluation-table.md.${process.pid}.tmp`)
+      writeFileSync(temporary, 'evidence sentinel', 'utf8')
+
+      expect(() => writeEvaluationReport(input(), path)).toThrow()
+      expect(readFileSync(temporary, 'utf8')).toBe('evidence sentinel')
+      expect(existsSync(path)).toBe(false)
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+})

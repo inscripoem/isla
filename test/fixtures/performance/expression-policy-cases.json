@@ -1,0 +1,493 @@
+{
+  "issue": "https://github.com/inscripoem/isla/issues/149",
+  "baselineRevision": "e540bb4ed0621dfdaf6d5520422da1746d214b94",
+  "fixtureParameters": {
+    "cooldownMs": 3000,
+    "windowSize": 6,
+    "maxSameInWindow": 2,
+    "allowExtremeBypass": true
+  },
+  "catalogue": [
+    {
+      "actionId": "smile-hidden",
+      "affectTag": "joy",
+      "intensity": 1,
+      "extreme": false
+    },
+    {
+      "actionId": "nod",
+      "affectTag": "calm",
+      "intensity": 1,
+      "extreme": false
+    },
+    {
+      "actionId": "smile",
+      "affectTag": "joy",
+      "intensity": 3,
+      "extreme": false
+    },
+    {
+      "actionId": "smile-wide",
+      "affectTag": "joy",
+      "intensity": 4,
+      "extreme": false
+    },
+    {
+      "actionId": "smile-soft",
+      "affectTag": "joy",
+      "intensity": 1,
+      "extreme": false
+    },
+    {
+      "actionId": "chuckle",
+      "affectTag": "joy",
+      "intensity": 2,
+      "extreme": false
+    },
+    {
+      "actionId": "gentle-smile",
+      "affectTag": "joy",
+      "intensity": 1,
+      "extreme": false
+    },
+    {
+      "actionId": "cheer",
+      "affectTag": "joy",
+      "intensity": 5,
+      "extreme": true
+    }
+  ],
+  "selectionCases": [
+    {
+      "name": "First request uses the requested action",
+      "advertisedActionIds": [
+        "smile",
+        "smile-soft",
+        "nod"
+      ],
+      "acceptedHistory": [],
+      "request": {
+        "sessionId": "s1",
+        "actionId": "smile",
+        "nowMs": 1000
+      },
+      "expectedActionId": "smile"
+    },
+    {
+      "name": "Cooldown chooses an advertised action with the same affect tag",
+      "advertisedActionIds": [
+        "smile",
+        "smile-soft",
+        "nod"
+      ],
+      "acceptedHistory": [
+        {
+          "sessionId": "s1",
+          "actionId": "smile",
+          "atMs": 1000
+        }
+      ],
+      "request": {
+        "sessionId": "s1",
+        "actionId": "smile",
+        "nowMs": 3999
+      },
+      "expectedActionId": "smile-soft"
+    },
+    {
+      "name": "The requested action is eligible at the cooldown boundary",
+      "advertisedActionIds": [
+        "smile",
+        "smile-soft",
+        "nod"
+      ],
+      "acceptedHistory": [
+        {
+          "sessionId": "s1",
+          "actionId": "smile",
+          "atMs": 1000
+        }
+      ],
+      "request": {
+        "sessionId": "s1",
+        "actionId": "smile",
+        "nowMs": 4000
+      },
+      "expectedActionId": "smile"
+    },
+    {
+      "name": "The requested action is eligible after cooldown",
+      "advertisedActionIds": [
+        "smile",
+        "smile-soft",
+        "nod"
+      ],
+      "acceptedHistory": [
+        {
+          "sessionId": "s1",
+          "actionId": "smile",
+          "atMs": 1000
+        }
+      ],
+      "request": {
+        "sessionId": "s1",
+        "actionId": "smile",
+        "nowMs": 4001
+      },
+      "expectedActionId": "smile"
+    },
+    {
+      "name": "At the window cap choose a lower intensity action",
+      "advertisedActionIds": [
+        "smile",
+        "smile-wide",
+        "smile-soft",
+        "nod"
+      ],
+      "acceptedHistory": [
+        {
+          "sessionId": "s1",
+          "actionId": "smile",
+          "atMs": 1000
+        },
+        {
+          "sessionId": "s1",
+          "actionId": "smile",
+          "atMs": 4500
+        },
+        {
+          "sessionId": "s1",
+          "actionId": "nod",
+          "atMs": 6500
+        }
+      ],
+      "request": {
+        "sessionId": "s1",
+        "actionId": "smile",
+        "nowMs": 8000
+      },
+      "expectedActionId": "smile-soft"
+    },
+    {
+      "name": "With only a different affect available keep the requested action",
+      "advertisedActionIds": [
+        "smile",
+        "nod"
+      ],
+      "acceptedHistory": [
+        {
+          "sessionId": "s1",
+          "actionId": "smile",
+          "atMs": 1000
+        }
+      ],
+      "request": {
+        "sessionId": "s1",
+        "actionId": "smile",
+        "nowMs": 1500
+      },
+      "expectedActionId": "smile"
+    },
+    {
+      "name": "With both same-affect actions cooling down keep the requested action",
+      "advertisedActionIds": [
+        "smile",
+        "smile-soft"
+      ],
+      "acceptedHistory": [
+        {
+          "sessionId": "s1",
+          "actionId": "smile",
+          "atMs": 1000
+        },
+        {
+          "sessionId": "s1",
+          "actionId": "smile-soft",
+          "atMs": 1400
+        }
+      ],
+      "request": {
+        "sessionId": "s1",
+        "actionId": "smile",
+        "nowMs": 1500
+      },
+      "expectedActionId": "smile"
+    },
+    {
+      "name": "At the window cap with no lower intensity candidate keep the requested action",
+      "advertisedActionIds": [
+        "smile",
+        "smile-wide",
+        "nod"
+      ],
+      "acceptedHistory": [
+        {
+          "sessionId": "s1",
+          "actionId": "smile",
+          "atMs": 1000
+        },
+        {
+          "sessionId": "s1",
+          "actionId": "smile",
+          "atMs": 4500
+        }
+      ],
+      "request": {
+        "sessionId": "s1",
+        "actionId": "smile",
+        "nowMs": 8000
+      },
+      "expectedActionId": "smile"
+    },
+    {
+      "name": "An enabled extreme action bypasses both repetition limits",
+      "advertisedActionIds": [
+        "cheer",
+        "smile-soft"
+      ],
+      "acceptedHistory": [
+        {
+          "sessionId": "s1",
+          "actionId": "cheer",
+          "atMs": 1000
+        },
+        {
+          "sessionId": "s1",
+          "actionId": "cheer",
+          "atMs": 1100
+        }
+      ],
+      "request": {
+        "sessionId": "s1",
+        "actionId": "cheer",
+        "nowMs": 1200
+      },
+      "expectedActionId": "cheer"
+    },
+    {
+      "name": "A new session does not inherit another session's cooldown",
+      "advertisedActionIds": [
+        "smile",
+        "smile-soft",
+        "nod"
+      ],
+      "acceptedHistory": [
+        {
+          "sessionId": "s1",
+          "actionId": "smile",
+          "atMs": 1000
+        }
+      ],
+      "request": {
+        "sessionId": "s2",
+        "actionId": "smile",
+        "nowMs": 1500
+      },
+      "expectedActionId": "smile"
+    },
+    {
+      "name": "A dispatch outside the count window still contributes to cooldown",
+      "advertisedActionIds": [
+        "smile",
+        "smile-soft",
+        "nod"
+      ],
+      "acceptedHistory": [
+        {
+          "sessionId": "s1",
+          "actionId": "smile",
+          "atMs": 1000
+        },
+        {
+          "sessionId": "s1",
+          "actionId": "nod",
+          "atMs": 1100
+        },
+        {
+          "sessionId": "s1",
+          "actionId": "nod",
+          "atMs": 1200
+        },
+        {
+          "sessionId": "s1",
+          "actionId": "nod",
+          "atMs": 1300
+        },
+        {
+          "sessionId": "s1",
+          "actionId": "nod",
+          "atMs": 1400
+        },
+        {
+          "sessionId": "s1",
+          "actionId": "nod",
+          "atMs": 1500
+        },
+        {
+          "sessionId": "s1",
+          "actionId": "nod",
+          "atMs": 1600
+        }
+      ],
+      "request": {
+        "sessionId": "s1",
+        "actionId": "smile",
+        "nowMs": 2000
+      },
+      "expectedActionId": "smile-soft"
+    },
+    {
+      "name": "Dispatches evicted from the count window no longer count toward its cap",
+      "advertisedActionIds": [
+        "smile",
+        "smile-soft",
+        "nod"
+      ],
+      "acceptedHistory": [
+        {
+          "sessionId": "s1",
+          "actionId": "smile",
+          "atMs": 1000
+        },
+        {
+          "sessionId": "s1",
+          "actionId": "smile",
+          "atMs": 4500
+        },
+        {
+          "sessionId": "s1",
+          "actionId": "nod",
+          "atMs": 5000
+        },
+        {
+          "sessionId": "s1",
+          "actionId": "nod",
+          "atMs": 5600
+        },
+        {
+          "sessionId": "s1",
+          "actionId": "nod",
+          "atMs": 6200
+        },
+        {
+          "sessionId": "s1",
+          "actionId": "nod",
+          "atMs": 6800
+        },
+        {
+          "sessionId": "s1",
+          "actionId": "nod",
+          "atMs": 7400
+        },
+        {
+          "sessionId": "s1",
+          "actionId": "nod",
+          "atMs": 8000
+        }
+      ],
+      "request": {
+        "sessionId": "s1",
+        "actionId": "smile",
+        "nowMs": 9500
+      },
+      "expectedActionId": "smile"
+    }
+  ],
+  "sequences": [
+    {
+      "name": "Five requests record the action actually accepted each time",
+      "advertisedActionIds": [
+        "smile",
+        "smile-wide",
+        "smile-soft",
+        "chuckle",
+        "gentle-smile",
+        "nod"
+      ],
+      "steps": [
+        {
+          "request": {
+            "sessionId": "s1",
+            "actionId": "smile",
+            "nowMs": 1000
+          },
+          "expectedActionId": "smile",
+          "recordAcceptance": true
+        },
+        {
+          "request": {
+            "sessionId": "s1",
+            "actionId": "smile",
+            "nowMs": 1100
+          },
+          "expectedActionId": "smile-wide",
+          "recordAcceptance": true
+        },
+        {
+          "request": {
+            "sessionId": "s1",
+            "actionId": "smile",
+            "nowMs": 1200
+          },
+          "expectedActionId": "smile-soft",
+          "recordAcceptance": true
+        },
+        {
+          "request": {
+            "sessionId": "s1",
+            "actionId": "smile",
+            "nowMs": 1300
+          },
+          "expectedActionId": "chuckle",
+          "recordAcceptance": true
+        },
+        {
+          "request": {
+            "sessionId": "s1",
+            "actionId": "smile",
+            "nowMs": 1400
+          },
+          "expectedActionId": "gentle-smile",
+          "recordAcceptance": true
+        }
+      ]
+    },
+    {
+      "name": "Picking alone does not add an accepted dispatch to history",
+      "advertisedActionIds": [
+        "smile",
+        "smile-soft",
+        "nod"
+      ],
+      "steps": [
+        {
+          "request": {
+            "sessionId": "s1",
+            "actionId": "smile",
+            "nowMs": 1000
+          },
+          "expectedActionId": "smile",
+          "recordAcceptance": false
+        },
+        {
+          "request": {
+            "sessionId": "s1",
+            "actionId": "smile",
+            "nowMs": 1100
+          },
+          "expectedActionId": "smile",
+          "recordAcceptance": true
+        },
+        {
+          "request": {
+            "sessionId": "s1",
+            "actionId": "smile",
+            "nowMs": 1200
+          },
+          "expectedActionId": "smile-soft",
+          "recordAcceptance": true
+        }
+      ]
+    }
+  ]
+}

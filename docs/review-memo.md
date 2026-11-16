@@ -194,3 +194,14 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
   `docs/architecture/invariants.md` and the existing trace rows.
 - Verification: readiness **42/3**, trace **41/1**, `test:m6` **182/14**, full **1125/63**, `pnpm verify` exit 0.
 - Limits: documentation-only; no new ID, no S6/G4/live claim.
+
+## M6 CORE review — three local slices (#100 / #92 / #103)
+
+- Date: 2026-11-06 · Reviewer: M6 (self, advisory) · Verdicts: **#140 CHANGES REQUIRED → fixed**, **#141 APPROVE**, **#142 APPROVE**
+- Spec alignment: ADR-008 D2/D3/D5/D7/D8 and protocol §3–§6 compared line by line; every changed file is inside `src/evaluation/` or `test/offline/`.
+- Findings and fixes: D1 renderer trusted its caller, D2 unexported identity implied an id, D3 artifact did not name its source, D4 lowercase-only digest, D5 digest over a decoded string, D6 duplicated status order (all fixed in `c210260`); T1 two-turn log not reopened (`5d89284`); T2 byte-exactness untested, T3 type refusals untested, T5 no trace row (same slice); T4 protocol stale (`1019bd5`).
+- Verification: provenance 30 tests, `test:m6` 212/16, full 1455/73; #92 full 1426/71; 16 mutations red then restored.
+- Limits (as of 2026-11-06): the companion shape is still unconfirmed; no independent reviewer had read any
+  head on that date. Since then M4 reviewed #140 (`99df88b`, `dd4cebf`) and #142 (`1019bd5`), and M5
+  approved #141 (`5d89284`). No merge or checkpoint acceptance is claimed.
+
