@@ -7460,3 +7460,58 @@ entries:
       src/runtime/deployments/reference-live.ts, two offline tests,
       package.json test:m5, README.md, .env.example and this AI-use entry. No
       frozen contract, storage, dependency or provider behaviour changed.
+
+  - date: "2026-11-16"
+    task: M5-96-reference-live-review-fixes
+    change: >-
+      Address M1's blocking persona finding, M4's identity confirmation and
+      M6's evidence findings on the reference live deployment. The deployment
+      now uses the registered Elleya@2 character profile as the single source
+      for peers.profile, initialSelection.liveProfile and the VTS character
+      identity. The configuration parser rejects an empty hotkey map by
+      variable name, and the reference deployment fails closed unless the map
+      contains exactly animation-1, animation-2 and animation-3. The trace
+      matrix gains the reference-live row, and the README attributes the
+      Hiyori_A model id and hotkey ids to M1's observations on #95 rather than
+      implying this PR measured them. Tests cover the persona fields, the empty
+      map, missing and unexpected actions, and the existing renderer agreement.
+    requirements: [FR-01, FR-03, FR-06]
+    invariants: []
+    commits: [b819d8735854fa3f3c54ef8f11ad2e924b3a7d0c]
+    agent: build
+    provider: self-api
+    model: deepseek-v4-flash
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    sessions: [ses_e1d82bd58ffedigb6HDcG4vtR3]
+    supervision: >-
+      The orchestrating assistant (Claude Code) supervised the OpenCode build
+      session. The session had no shell tool, so the orchestrator ran every
+      test command outside the session and the results below are measured
+      locally. The review findings were supplied as constraints rather than
+      line-by-line implementation.
+    human_review: >-
+      Captain requested the CP04 review fixes and authorized local work. The
+      change is local only; push and re-review requests await Captain approval.
+      No agent merges and no CP04 acceptance is claimed.
+    transcript_record: >-
+      The genuine OpenCode session ses_e1d82bd58ffedigb6HDcG4vtR3 remains in
+      the local OpenCode store; the raw export has not yet been copied outside
+      the checkout.
+    verification:
+      base: 8825c33492e12be8dd02654e5bb668bf6d8c9e27
+      results: >-
+        Linux: pnpm typecheck exited 0; pnpm test:m5 passed 15 files / 282
+        tests; pnpm test:trace passed 41/41; pnpm verify exited 0 with 87 files
+        / 1883 tests and a successful build.
+      limits: >-
+        No live text provider, VTube Studio session, Kokoro model load,
+        acoustic output or Windows run was performed. M1's stock-deployment
+        Windows rerun and M6's re-review are still required before CP04 or
+        #94/#97 joint acceptance.
+    scope: >-
+      src/runtime/deployments/reference-live.ts,
+      src/runtime/deployments/reference-live-config.ts,
+      test/offline/m5-reference-live.test.ts,
+      test/offline/m5-reference-live-config.test.ts,
+      docs/architecture/trace-matrix.md, README.md and this log entry. No
+      frozen contract, storage, dependency or provider behaviour changed.
