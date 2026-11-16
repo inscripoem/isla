@@ -7521,3 +7521,41 @@ entries:
       M6 only: `src/evaluation/run-command.ts`, its suite, the module README, one
       Delta and one trace row. No schema, contract, runtime, storage, gate or
       deployment change; no threshold value and no case id.
+  - date: "2026-11-16"
+    task: M6-CP05-run-spec-preflight
+    change: >-
+      Stop `evaluation:run` spending provider calls on a run it can never
+      publish. The spec's `conditions` are shaped into a zero-record run and
+      parsed with `parseRecordedRun` before a harness module is loaded, so an
+      incomplete spec is refused before any case executes; a test asserts the
+      harness factory is never reached. An existing `--out` is refused in the
+      same pre-flight, before the harness opens peers. The write now uses
+      `linkSync`, which fails with `EEXIST` instead of replacing the target as
+      `rename` would, so "never replace" also holds if the path appears during
+      the run. No schema, contract, gate or provider change.
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    commits: ['be5d1a2']
+    agent: opencode/build
+    provider: opencode-go
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      The M6 member approved the three pre-flight improvements and reviewed the
+      diff. The agent wrote the pre-flight, the link-based write, the three
+      ordering tests, the module README paragraph, the Delta amendment and the
+      trace-row extension. No live call was made in this round and no
+      measurement is claimed.
+    verification:
+      base: 205424f
+      reproduction: >-
+        Run from the repository root on the merged branch. The command suite: 16
+        passed. Two mutations, each restored: disabling the `executeRun`
+        pre-flight turns "before any variant runs" red (the harness is called);
+        disabling the CLI pre-flight turns "before the harness module is loaded"
+        red ("factory threw"). pnpm typecheck -> exit 0. pnpm lint -> exit 0.
+        pnpm test:m6 -> 22 files, 340 passed. pnpm test:trace -> 41.
+        pnpm test:readiness -> 47. pnpm verify -> exit 0, 88 files, 1902 passed.
+    scope: >-
+      M6 only: `src/evaluation/run-command.ts`, its suite, one test-support
+      harness, the module README, Delta-007a and one trace row. The branch also
+      carries a merge of main 8825c33 that conflicts only in the AI-use log.
