@@ -131,7 +131,8 @@ A missing label file or a `draft` label leaves the attempt unscored. `provenance
 rules 1–4 passed; it does **not** mean the attempt is label-reviewed. The reason `no-label-record` is
 proposed, not implemented, and would add one reason to the eligibility module. A failed or cancelled attempt
 may carry a label as a human observation, but that does not make it scoreable; eligibility excludes it
-**when** M4's completed-only decision is recorded. A `notRun` entry is never scored.
+now that M4's completed-only decision is recorded
+(`docs/decision/m4-completed-only-eligibility-v1.md`). A `notRun` entry is never scored.
 
 ## What this does not do
 
@@ -159,8 +160,8 @@ may carry a label as a human observation, but that does not make it scoreable; e
 4. **Scale.** The validator keeps "finite number" for now; the example is illustrative. Once #99 records a
    rubric version, its range is enforced in the rubric layer, not in the file shape.
 5. **Failed/cancelled.** The interface may allow a label as a human observation, but it does not make the
-   attempt scoreable. Eligibility excludes failed/cancelled when the completed-only decision is recorded;
-   a `notRun` entry is never scored.
+   attempt scoreable. Eligibility excludes failed/cancelled now that the completed-only decision is recorded
+   (`docs/decision/m4-completed-only-eligibility-v1.md`); a `notRun` entry is never scored.
 
 ## Verification of this document
 
