@@ -40,8 +40,12 @@ deployment keeps its peers and its owner; the runner keeps the evidence rules.
 - **D-B — the artifact is parsed before it is written.** `readRunSpec` checks only the fields the
   runner itself needs; the recorded-run parser owns the full shape. The exact bytes that would be
   written are parsed with `parseRecordedRun`, so the command cannot emit an artifact the report
-  command refuses. A refusal writes nothing.
-- **D-C — evidence is never replaced.** An existing output path is refused, not overwritten.
+  command refuses. A refusal writes nothing. The same parser validates a zero-record probe built
+  from the spec **before** a harness module is loaded, so an incomplete `conditions` object or a
+  malformed meta cannot spend a provider call; a test asserts the harness factory is never reached.
+- **D-C — evidence is never replaced.** An existing output path is refused before the harness is
+  loaded, and again at write time by `linkSync`, which fails with `EEXIST` instead of replacing the
+  target as `rename` would. A path that appears while the run executes is refused, not overwritten.
 - **D-D — expected refusals are data, faults throw.** A bad argument, an unreadable or empty spec,
   a missing harness module, a throwing factory and an existing output return
   `{ ok: false, violations }`. A filesystem fault during the write throws, and the temporary file is

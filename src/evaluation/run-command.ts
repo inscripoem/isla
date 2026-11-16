@@ -1,10 +1,10 @@
-import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, linkSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { runBench, serializeRecordedRun, type BenchConditions } from './bench'
 import type { EvalCase, Variant, VariantRun } from './comparison'
 import type { RunMeta } from './report'
-import { parseRecordedRun } from './recorded-run'
+import { RECORDED_RUN_SCHEMA_VERSION, parseRecordedRun } from './recorded-run'
 
 /**
  * M6 / CP05 (#103) — the evaluation run command.
@@ -204,19 +204,50 @@ export function validateHarness(value: unknown): { readonly ok: true; readonly h
  * An existing output is refused rather than replaced: a recorded run is
  * evidence, and a second run belongs in a second file.
  */
+/** A sentinel variant used only to shape the pre-flight probe; it is never executed. */
+const PREFLIGHT_VARIANT: Variant = { id: 'preflight', kind: 'rules', combined: false }
+
+/**
+ * Refusals that need no execution: an output that already exists, and a spec
+ * whose declared conditions cannot form a readable recorded run.
+ *
+ * The conditions are checked by shaping a zero-record run and parsing the exact
+ * bytes with the recorded-run parser — the same validator the write path uses.
+ * It runs before a harness module is loaded and before any case executes, so an
+ * incomplete spec cannot spend a provider call.
+ */
+export function preflightRun(spec: RunSpec, outPath: string): string[] {
+  const violations: string[] = []
+  if (existsSync(outPath)) {
+    violations.push(
+      `refusing to overwrite ${outPath}: a recorded run is evidence and is never replaced; choose a new path`,
+    )
+  }
+  const probe = serializeRecordedRun({
+    schemaVersion: RECORDED_RUN_SCHEMA_VERSION,
+    meta: spec.meta,
+    variants: [PREFLIGHT_VARIANT],
+    conditions: { ...spec.conditions, sampleSize: spec.cases.length },
+    records: [],
+    notRun: [],
+  })
+  const parsed = parseRecordedRun(probe)
+  if (!parsed.ok) {
+    violations.push(
+      'the run spec is not executable: its declared conditions cannot form a readable recorded run',
+      ...parsed.violations,
+    )
+  }
+  return violations
+}
+
 export async function executeRun(
   spec: RunSpec,
   harness: EvaluationHarness,
   outPath: string,
 ): Promise<RunResult> {
-  if (existsSync(outPath)) {
-    return {
-      ok: false,
-      violations: [
-        `refusing to overwrite ${outPath}: a recorded run is evidence and is never replaced; choose a new path`,
-      ],
-    }
-  }
+  const refusals = preflightRun(spec, outPath)
+  if (refusals.length > 0) return { ok: false, violations: refusals }
 
   const run = await runBench(
     {
@@ -246,7 +277,21 @@ export async function executeRun(
     }
   }
 
-  writeAtomically(outPath, json)
+  try {
+    writeAtomically(outPath, json)
+  } catch (error) {
+    // The pre-flight checked, but the path can appear while the run executes.
+    // The hard link is the actual guarantee: it fails instead of replacing.
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+      return {
+        ok: false,
+        violations: [
+          `refusing to overwrite ${outPath}: a recorded run is evidence and is never replaced; choose a new path`,
+        ],
+      }
+    }
+    throw error
+  }
 
   const outcomes: Record<string, number> = {}
   for (const record of run.records) {
@@ -257,16 +302,17 @@ export async function executeRun(
 
 function writeAtomically(path: string, text: string): void {
   const temporary = join(dirname(path), `.${basename(path)}.tmp`)
+  writeFileSync(temporary, text, { encoding: 'utf8', flag: 'wx' })
   try {
-    writeFileSync(temporary, text, { encoding: 'utf8', flag: 'wx' })
-    renameSync(temporary, path)
-  } catch (error) {
+    // A hard link fails with EEXIST instead of replacing an existing file, which
+    // `rename` would silently overwrite. The target appears atomically or not at all.
+    linkSync(temporary, path)
+  } finally {
     try {
       rmSync(temporary, { force: true })
     } catch {
-      // The original fault is the one worth reporting.
+      // A cleanup fault cannot change the linked artifact.
     }
-    throw error
   }
 }
 
@@ -323,6 +369,14 @@ export async function runEvaluationCommand(argv: readonly string[]): Promise<num
     return 1
   }
 
+  const target = resolve(process.cwd(), args.value.out)
+  const preflight = preflightRun(parsed.spec, target)
+  if (preflight.length > 0) {
+    process.stderr.write(`evaluation:run: refused ${args.value.spec}\n`)
+    for (const violation of preflight) process.stderr.write(`- ${violation}\n`)
+    return 1
+  }
+
   const context: EvaluationHarnessContext = { cwd: process.cwd(), env: process.env }
   const loaded = await loadHarness(args.value.harness, context)
   if (!loaded.ok) {
@@ -332,7 +386,7 @@ export async function runEvaluationCommand(argv: readonly string[]): Promise<num
   }
 
   try {
-    const result = await executeRun(parsed.spec, loaded.harness, resolve(process.cwd(), args.value.out))
+    const result = await executeRun(parsed.spec, loaded.harness, target)
     if (!result.ok) {
       for (const violation of result.violations) process.stderr.write(`evaluation:run: ${violation}\n`)
       return 1

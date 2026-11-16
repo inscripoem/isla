@@ -92,9 +92,11 @@ pnpm evaluation:run --spec spec.json --harness ./harness.ts --out run.json
 
 The spec carries `meta`, `conditions` and `cases`. The harness module is loaded by
 path and supplies `variants` and the `runVariant` seam, so the command never imports
-the product composition; a deployment keeps its own peers. The exact bytes that would
-be written are parsed with the recorded-run parser first, a refusal writes nothing, and
-an existing output path is never replaced.
+the product composition; a deployment keeps its own peers. Before the harness is
+loaded, the spec's conditions are checked by shaping a zero-record run and parsing it
+with the recorded-run parser, and an existing output path is refused. After the run,
+the exact bytes that would be written are parsed again, and the file is created with a
+hard link so an existing artifact is never replaced.
 
 ## Boundaries
 

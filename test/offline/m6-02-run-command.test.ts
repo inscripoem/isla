@@ -38,6 +38,7 @@ const SPEC: RunSpec = {
 }
 
 const HARNESS_MODULE = 'test/support/evaluation-harness-fake.ts'
+const HARNESS_THROWS = 'test/support/evaluation-harness-throws.ts'
 
 const directories: string[] = []
 
@@ -162,21 +163,28 @@ describe('M6 CP05 #103 run command', () => {
     expect(parsed.input.run.records).toHaveLength(2)
   })
 
-  it('refuses to write a run its own parser rejects', async () => {
+  it('refuses an unexecutable spec before any variant runs', async () => {
     const dir = workspace()
     const out = join(dir, 'run.json')
+    let calls = 0
+    const counting = harness({
+      async runVariant() {
+        calls += 1
+        throw new Error('the variant must not run for a refused spec')
+      },
+    })
     const bad: RunSpec = { ...SPEC, conditions: {} as never }
-    const result = await executeRun(bad, harness(), out)
+    const result = await executeRun(bad, counting, out)
     expect(result.ok).toBe(false)
     if (result.ok) return
-    expect(result.violations.join(' ')).toContain('its own parser rejects')
+    expect(result.violations.join(' ')).toContain('not executable')
     expect(existsSync(out)).toBe(false)
+    expect(calls).toBe(0)
   })
 
-  it('refuses an unreadable artifact through the CLI and writes nothing', async () => {
+  it('refuses a bad spec before the harness module is loaded', async () => {
     const dir = workspace()
     const specPath = join(dir, 'spec.json')
-    const out = join(dir, 'run.json')
     writeFileSync(specPath, JSON.stringify({ ...SPEC, conditions: {} }), 'utf8')
 
     vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
@@ -185,16 +193,40 @@ describe('M6 CP05 #103 run command', () => {
       '--spec',
       specPath,
       '--harness',
-      HARNESS_MODULE,
+      HARNESS_THROWS,
+      '--out',
+      join(dir, 'run.json'),
+    ])
+
+    expect(code).toBe(1)
+    const text = stderr.mock.calls.map((call) => String(call[0])).join(' ')
+    expect(text).toContain('not executable')
+    expect(text).not.toContain('factory threw')
+  })
+
+  it('refuses an existing output before the harness module is loaded', async () => {
+    const dir = workspace()
+    const specPath = join(dir, 'spec.json')
+    const out = join(dir, 'run.json')
+    writeFileSync(specPath, JSON.stringify(SPEC), 'utf8')
+    writeFileSync(out, 'previous evidence', 'utf8')
+
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const code = await runEvaluationCommand([
+      '--spec',
+      specPath,
+      '--harness',
+      HARNESS_THROWS,
       '--out',
       out,
     ])
 
     expect(code).toBe(1)
-    expect(existsSync(out)).toBe(false)
-    expect(stderr.mock.calls.map((call) => String(call[0])).join(' ')).toContain(
-      'parser rejects',
-    )
+    const text = stderr.mock.calls.map((call) => String(call[0])).join(' ')
+    expect(text).toContain('never replaced')
+    expect(text).not.toContain('factory threw')
+    expect(readFileSync(out, 'utf8')).toBe('previous evidence')
   })
 
   it('refuses to replace an existing recorded run', async () => {
