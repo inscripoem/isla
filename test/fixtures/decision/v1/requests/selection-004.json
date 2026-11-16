@@ -1,0 +1,38 @@
+{
+  "requestId": "selection-request-004",
+  "task": "response-plan",
+  "sessionId": "session-eval-004",
+  "epoch": 0,
+  "snapshotRevision": 2,
+  "candidates": [
+    {
+      "eventId": "message-004-a",
+      "sessionId": "session-eval-004",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-j",
+      "text": "@viewer-k did your stream audio stutter for a second too?",
+      "receivedAtMs": 2600,
+      "expiresAtMs": 8000,
+      "trust": "untrusted-content"
+    },
+    {
+      "eventId": "message-004-b",
+      "sessionId": "session-eval-004",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-k",
+      "text": "@viewer-j nah it cleared up right after refreshing",
+      "receivedAtMs": 2750,
+      "expiresAtMs": 8000,
+      "trust": "untrusted-content"
+    }
+  ],
+  "personaSummary": "Isla is a calm streamer who avoids interrupting viewer-to-viewer side chat.",
+  "currentTopic": "Sorting inventory before the cavern descent",
+  "recentHistory": [],
+  "allowedIntents": ["answer", "acknowledge", "clarify"],
+  "deadline": { "atMs": 5500 },
+  "policyVersion": "m3-policy-v1",
+  "providerVersion": "m3-corpus-v1.1"
+}

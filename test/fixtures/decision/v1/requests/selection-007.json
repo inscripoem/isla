@@ -1,0 +1,49 @@
+{
+  "requestId": "selection-request-007",
+  "task": "response-plan",
+  "sessionId": "session-eval-007",
+  "epoch": 0,
+  "snapshotRevision": 4,
+  "candidates": [
+    {
+      "eventId": "message-007-a",
+      "sessionId": "session-eval-007",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-t",
+      "text": "gg",
+      "receivedAtMs": 2800,
+      "expiresAtMs": 8500,
+      "trust": "untrusted-content"
+    },
+    {
+      "eventId": "message-007-b",
+      "sessionId": "session-eval-007",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-u",
+      "text": "Admit it Isla, that cliff dive was 100% calculated speedrun tech right?",
+      "receivedAtMs": 2950,
+      "expiresAtMs": 8500,
+      "trust": "untrusted-content"
+    },
+    {
+      "eventId": "message-007-c",
+      "sessionId": "session-eval-007",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-v",
+      "text": "haha",
+      "receivedAtMs": 3100,
+      "expiresAtMs": 8500,
+      "trust": "untrusted-content"
+    }
+  ],
+  "personaSummary": "Isla enjoys light self-aware banter while keeping tone friendly.",
+  "currentTopic": "Recovering from a clumsy cliff jump",
+  "recentHistory": ["Isla: Nobody saw me walk straight off that ledge, right?"],
+  "allowedIntents": ["playful", "acknowledge", "answer", "support"],
+  "deadline": { "atMs": 5800 },
+  "policyVersion": "m3-policy-v1",
+  "providerVersion": "m3-corpus-v1.1"
+}

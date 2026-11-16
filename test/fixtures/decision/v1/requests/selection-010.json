@@ -1,0 +1,38 @@
+{
+  "requestId": "selection-request-010",
+  "task": "response-plan",
+  "sessionId": "session-eval-010",
+  "epoch": 0,
+  "snapshotRevision": 2,
+  "candidates": [
+    {
+      "eventId": "message-010-a",
+      "sessionId": "session-eval-010",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-6",
+      "text": "brb grabbing some tea",
+      "receivedAtMs": 4100,
+      "expiresAtMs": 9500,
+      "trust": "untrusted-content"
+    },
+    {
+      "eventId": "message-010-b",
+      "sessionId": "session-eval-010",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-7",
+      "text": "asdfghjkl",
+      "receivedAtMs": 4300,
+      "expiresAtMs": 9500,
+      "trust": "untrusted-content"
+    }
+  ],
+  "personaSummary": "Isla stays focused during quiet lore reading and defers non-actionable chatter.",
+  "currentTopic": "Reading the ancient mural inscription",
+  "recentHistory": [],
+  "allowedIntents": ["acknowledge", "clarify", "answer"],
+  "deadline": { "atMs": 7000 },
+  "policyVersion": "m3-policy-v1",
+  "providerVersion": "m3-corpus-v1.1"
+}
