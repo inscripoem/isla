@@ -50,7 +50,9 @@ inside `pnpm test`, but are not named gates; G1/G4/G6 are absent). The course di
   every later pull-request base carries it and G1 evaluates approval records instead of the label.
   That switch is a **separate team adoption decision under D2**, to be recorded before or with the
   merge; the tooling does not make it. On `push` events G1 is skipped by design and the aggregate
-  records `g1: skipped-by-design`, never a pass. **G4** is
+  records `g1: skipped-by-design`, never a pass.
+  **Adopted 2026-11-16:** recorded in
+  `docs/code-governance/g1-test-approval-proposal.md` §11 (1 of 6 named; Captain waiver). **G4** is
   `src/evaluation/eval-gate.ts`, wired as the `G4` step (`pnpm gate:eval`): it reports **not run** without
   an evaluation set + provider access (team-gated) — never a pass — and fails an evaluation table that
   omits the fixed conditions NFR-01 requires.

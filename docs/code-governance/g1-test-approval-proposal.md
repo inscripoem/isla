@@ -1,9 +1,8 @@
 # Proposal — gate G1: tests approved before implementation
 
-Status: **partially adopted 2026-11-13 — the `evidence` mode and
-`docs/code-governance/test-approvals.yaml` now check ordering in-repo; the label remains the
-advisory fallback for bases without the record, and the team's activation decision is still open.**
-Owner: M6 (R3 tooling).
+Status: **adopted 2026-11-16 — see §11.** The `evidence` mode and
+`docs/code-governance/test-approvals.yaml` check ordering in-repo; the label remains the fallback for
+bases that do not carry the record. Owner: M6 (R3 tooling).
 Revision 2026-10-16.1. Related: `docs/architecture/adr/006-gate-tooling.md`, `.github/PULL_REQUEST_TEMPLATE.md`,
 `docs/debt-register.md` (DEBT-02), `docs/code-governance/structural-constraints.md`.
 
@@ -113,3 +112,40 @@ by this PR; this section records the conditions, not an activation.
    A tally must therefore cite the agreement, not the label.
 
 Until then the step prints a warning and never fails a run, and changing it is a separate decision.
+
+## 11. Adoption record — 2026-11-16
+
+**Decision: adopted.** G1 evaluates approval records from
+`docs/code-governance/test-approvals.yaml` for every pull request whose base carries that file. The
+mechanical switch is the merge of PR #158: the file lands on `main`, so every later pull-request base
+selects `evidence` mode in the G1 step. Bases that do not carry the file keep the label/advise rule, so
+no open pull request is retroactively failed.
+
+### Tally
+
+| Owner | Reply | Source | Date |
+| --- | --- | --- | --- |
+| M6 | agree | this record; PR #158 | 2026-11-16 |
+| M1 | no reply | — | — |
+| M2 | no reply | — | — |
+| M3 | no reply | — | — |
+| M4 | no reply | — | — |
+| M5 | code approval only — explicitly **not** an adoption vote | review 5912348532 | 2026-11-15 |
+
+**Quorum obtained: 1 of 6 named.** The three-of-six condition in §10 is **waived by the Captain**
+because the team did not reply to the request on issue #25. The shortfall is recorded here, not counted
+as agreement.
+
+### What this record does not do
+
+- It does not count M5's approval of the code as an adoption vote; that approval says so itself.
+- It does not make the gate blocking by itself. The `verify` check must remain required in the
+  repository ruleset; that is an admin setting, not a repository file.
+- It does not claim that the label or the record proves the tests were agreed *before* the change; §8
+  and §10.3 still apply.
+
+### Consequence
+
+Merging PR #158 activates the evidence mode for every later pull request. The first approval record is
+`docs/code-governance/test-approvals.yaml`; a change that touches `src/` or `prompts/` must add or cite
+one.
