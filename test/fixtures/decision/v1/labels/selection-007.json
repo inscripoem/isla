@@ -1,0 +1,46 @@
+{
+  "caseId": "selection-007",
+  "selectionScores": [
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-007-a"],
+      "score": 1
+    },
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-007-b"],
+      "score": 2
+    },
+    {
+      "disposition": "respond",
+      "selectedEventIds": ["message-007-c"],
+      "score": 0
+    },
+    {
+      "disposition": "defer",
+      "selectedEventIds": [],
+      "score": 0
+    }
+  ],
+  "intentLabels": [
+    {
+      "selectedEventId": "message-007-a",
+      "acceptableIntents": ["acknowledge"],
+      "coverage": "partial",
+      "coverageRationale": null
+    },
+    {
+      "selectedEventId": "message-007-b",
+      "acceptableIntents": ["playful"],
+      "coverage": "partial",
+      "coverageRationale": null
+    },
+    {
+      "selectedEventId": "message-007-c",
+      "acceptableIntents": ["playful"],
+      "coverage": "partial",
+      "coverageRationale": null
+    }
+  ],
+  "rationale": "Joining the playful banter (message-007-b) with 'playful' is the preferred outcome and intent; acknowledging the short 'gg' (message-007-a) with 'acknowledge' is acceptable, message-007-c is unsuitable, and waiting is not preferred. Intent coverage is partial, so unlisted allowed intents remain unassessed."
+}

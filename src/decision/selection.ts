@@ -43,6 +43,13 @@ export interface RuleSelectionPortOptions {
 export const RULE_SELECTION_PROVIDER = 'm3-rules'
 export const RULE_SELECTION_MODEL_VERSION = 'm3-rules-v0.1'
 
+const ruleSelectionPorts = new WeakSet<SelectionPort>()
+
+/** True when the port was created by `createRuleSelectionPort`. */
+export function isRuleSelectionPort(port: SelectionPort): boolean {
+  return ruleSelectionPorts.has(port)
+}
+
 function assertLive(
   request: SelectionRequest,
   context: CallContext,
@@ -79,7 +86,7 @@ export function createRuleSelectionPort(
   }
   const { clock } = options
 
-  return {
+  const port: SelectionPort = {
     async select(
       request: SelectionRequest,
       context: CallContext,
@@ -133,4 +140,7 @@ export function createRuleSelectionPort(
       })
     },
   }
+
+  ruleSelectionPorts.add(port)
+  return port
 }

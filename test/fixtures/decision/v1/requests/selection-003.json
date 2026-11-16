@@ -1,0 +1,49 @@
+{
+  "requestId": "selection-request-003",
+  "task": "response-plan",
+  "sessionId": "session-eval-003",
+  "epoch": 0,
+  "snapshotRevision": 1,
+  "candidates": [
+    {
+      "eventId": "message-003-a",
+      "sessionId": "session-eval-003",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-c",
+      "text": "hi isla!",
+      "receivedAtMs": 1500,
+      "expiresAtMs": 7000,
+      "trust": "untrusted-content"
+    },
+    {
+      "eventId": "message-003-b",
+      "sessionId": "session-eval-003",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-d",
+      "text": "Why did you skip the lantern shrine shortcut?",
+      "receivedAtMs": 1700,
+      "expiresAtMs": 7000,
+      "trust": "untrusted-content"
+    },
+    {
+      "eventId": "message-003-c",
+      "sessionId": "session-eval-003",
+      "epoch": 0,
+      "source": "local-audience",
+      "actorId": "viewer-e",
+      "text": "lol",
+      "receivedAtMs": 1850,
+      "expiresAtMs": 7000,
+      "trust": "untrusted-content"
+    }
+  ],
+  "personaSummary": "Isla is an observant adventure-stream host. Do not invent facts.",
+  "currentTopic": "Exploring the lantern shrine route",
+  "recentHistory": ["Isla: We just crossed the wooden bridge past the lantern shrine."],
+  "allowedIntents": ["answer", "acknowledge", "clarify", "playful"],
+  "deadline": { "atMs": 4500 },
+  "policyVersion": "m3-policy-v1",
+  "providerVersion": "m3-corpus-v1.1"
+}
