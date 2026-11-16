@@ -340,6 +340,20 @@ export function collectAiUseLogReferenceFindings(
         continue
       }
       if (!reachableSet.has(full)) {
+        // A squash merge leaves the branch commits in the object database but
+        // out of main's history. An unexpired baseline exemption covers that
+        // case exactly as it covers a missing object.
+        const exempt = baselineItem(deps, 'commit', sha)
+        if (exempt !== null && !exempt.expired) continue
+        if (exempt !== null && exempt.expired) {
+          findings.push({
+            policy: 'POL-G6-04',
+            trigger: 'baseline-expired',
+            message: `${label} (entry ${index}) cites ${sha}, whose exemption expired on ${exempt.item.expires}`,
+            evidence: { value: sha, expires: exempt.item.expires },
+          })
+          continue
+        }
         findings.push({
           policy: 'POL-G6-02',
           trigger: 'commit-unreachable',
