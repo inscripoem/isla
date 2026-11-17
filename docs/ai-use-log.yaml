@@ -8467,3 +8467,151 @@ entries:
       docs/code-governance/verification-constraints.md,
       docs/debt-register.md, README.md and this log entry. No
       test-approvals.yaml, ruleset, dependency or other gate changed.
+  - date: "2026-11-17"
+    task: M4-A06-style-contract
+    branch: feat/m4-a06-style-contract
+    change: >-
+      Add the deterministic output-side style contract as a standalone pure
+      module (issue #146 A06; its A05 dependency landed in PR #151). New
+      src/dialogue/style-contract.ts defines StyleContract with code-owned
+      defaults aligned to the authored character in
+      src/dialogue/persona-content.ts and a code comment mapping each default
+      to the authored boundary or style note it executes: the verbal tic
+      hmph/nya with a two-line minimum gap (styleNotes[1] says sparingly,
+      never in every sentence), audience-shaming address violations
+      (boundaries[2]), medical-promise and real-supernatural or
+      guaranteed-protection boundary patterns in CJK and English
+      (boundaries[0] and [4]), self and audience reference sets matching the
+      authored templates, and forbiddenPatterns empty by default per the
+      proposal's risk note that a contract only covers patterns the author
+      explicitly rejects. deriveStyleContract(profile, overrides?) returns
+      the defaults with the profile id for provenance and a shallow merge of
+      overrides; prose styleNotes and boundaries are deliberately NOT parsed
+      into patterns (that would not be deterministic), and the limitation is
+      recorded in code. validateStyle(lines, contract, options?) runs seven
+      ordered deterministic checks: self-reference, audience-address,
+      tic-frequency (a window over the last minGapTurns recent turns plus the
+      candidate lines, reported at the later candidate line only, skipped
+      when the contract has no tic), sentence-length (report only; splitting
+      meaning-bearing sentences deterministically is not possible), forbidden,
+      boundary, and fact-contradiction, the last reusing the existing
+      scanContradictions from src/dialogue/consistency.ts with the actual
+      statement interfaces, respecting the module's work bounds and reporting
+      only findings actually returned, never claiming completeness.
+      Violation rules carry rule identity and indexes, never statement or
+      line text, the same redaction stance as the consistency audit.
+      repairStyledLines(lines, contract, options?) applies the deterministic
+      repair order - forbidden spans removed with whitespace collapse, tic
+      surplus occurrences removed keeping the first in each violating window,
+      a boundary-hit line replaced by the first intent template that itself
+      passes validateStyle for the given replyIntent, the original line kept
+      and reported when no template qualifies or no intent is given -
+      self-reference, audience-address, sentence-length and
+      fact-contradiction are report-only in v0 because no deterministic
+      repair exists without inventing content. The repair never adds a
+      provider call (NFR-04), never changes the line count (lines map
+      one-to-one to dialogue segments, so the MAX_DIALOGUE_SEGMENTS cap is
+      respected by construction), keeps an emptied line as an empty slot, and
+      DialogueStyleReport carries the pre-repair violations plus repaired and
+      fallbackUsed flags. This lands the standalone pure module only: the
+      one-line wiring call in DialoguePort.generate (after the text source
+      returns lines, before the sink write) is a named follow-up now that
+      PR #163 has merged, and this change claims no end-to-end effect. Tests:
+      new test/offline/m4-style.test.ts with eleven cases covering zero false
+      kills over every authored intent-template line under the default
+      contract, out-of-character self-reference, audience shaming, tic
+      frequency (consecutive lines, recentTurns extension, gap respected,
+      disabled), sentence length, a forbidden-pattern override removed with
+      the line count unchanged, boundary fallback replacement plus the
+      absent-intent and all-templates-violate paths, a standing-fact
+      contradiction reported without repair, the line-count and emptied-slot
+      invariant, contract derivation with overrides and profile id, and
+      purity (same inputs, deep-equal outputs). The scripts.test:m4 manifest
+      line in package.json grows by one file (test/offline/m4-style.test.ts);
+      M5 owns manifests per AGENTS.md and the growth is disclosed here and in
+      the PR body; src/dialogue/index.ts is deliberately not edited (the
+      module is importable by path). No change to src/contracts/app beyond
+      reading the already-exported MAX_DIALOGUE_SEGMENTS and ReplyIntent, no
+      new dependency, no I/O, no clock read, and no second provider call.
+    agent: opencode/build
+    sessions: [ses_e262f0a3effeFpyJop8WexJbRu]
+    requirements: [NFR-03, NFR-04]
+    invariants: []
+    cases: []
+    commits: [8765b8cefd48d1d9697a5883eb6c36275f947b89]
+    supervision: >-
+      The M4 supervisor wrote the English task book
+      (m4-impl/A06/taskbook.md) fixing the contract shape, the default
+      values, the seven checks and their order, the repair order, the
+      redaction stance, the reuse points (scanContradictions, the frozen
+      contracts exports, isSubstantiveSpeech), the three allowed files, and
+      the test plan, including the scope decision that the dialogue-port
+      wiring is a named follow-up because PR #163 owned that file in flight
+      at implementation time. The implementation session
+      ses_e262f0a3effeFpyJop8WexJbRu wrote the two new files and the
+      manifest line on 2026-11-14 at the 205424f base; src/dialogue/index.ts
+      was deliberately not touched per the task book's stop rule. The
+      supervisor independently re-ran the gates and reviewed the diff.
+      Before the commit round the branch (which had no commits) was migrated
+      by stash and fast-forward rebase onto merged main a093f50; the
+      package.json manifest line conflicted with the growth PR #159 had
+      already merged and was resolved as main's eighteen-file line plus
+      m4-style.test.ts (nineteen files), with main's test:m5 line taken
+      verbatim; after PRs #165, #172, #173 and #164 merged while this PR was
+      open, the pushed commits were rebuilt onto main b58a5ad by patch
+      migration with the old branch SHAs kept as backup refs and a
+      force-with-lease push, the two new files re-applied and the manifest
+      line appended to main's unchanged eighteen-file test:m4 line; the
+      gates were re-run on each new base before committing.
+      One disclosure is recorded: the sentence splitter contains the literal
+      ellipsis character inside its character class because the task book's
+      own regex specified it; the CJK members of that class are written as
+      unicode escapes while the ellipsis is a functional literal, and it was
+      kept after disclosure (it can be normalized in the follow-up wiring
+      session). This AI-use entry is written by a separate genuine OpenCode
+      session per the 2026-11-15 tightened rule that repository code and all
+      ai-use-log content are session-written; that session's id and raw
+      stream are recorded outside the repository in
+      m4-impl/A06/opencode-sessions.md. The PR round makes two consecutive
+      commits, code first and then this log, with no squash and no amend, so
+      commits can cite the real code SHA; if the PR is squash-merged, the
+      entry's commits field will be repointed to the squash commit in a
+      follow-up docs change, the same convention PR #169 recorded for the
+      #158 entries.
+    transcript_record: >-
+      The implementation session retains its conversation in the local
+      OpenCode session store. Its record (title, session id, role) and raw
+      JSONL stream (393,065 bytes, empty stderr) are kept outside the
+      repository at D:/isla-m4-05/m4-impl/A06/opencode-sessions.md and
+      D:/isla-m4-05/m4-impl/A06/impl-session-raw.json. The session writing
+      this entry also retains its conversation there. No export is stored in
+      the repository and no credential appears in repository files.
+    verification:
+      base: b58a5ad
+      reproduction: >-
+        Run from the worktree containing this round's changes
+        (feat/m4-a06-style-contract on b58a5ad). pnpm typecheck -> exit 0;
+        pnpm lint -> 0 warnings and 0 errors on 323 files; pnpm test:m4 ->
+        430 passed in 19 files (clean b58a5ad baseline 419 in 18 files, +11
+        style cases); pnpm test -> 2039 passed, 9 skipped and 1 failed in
+        the full suite, the single failure being the pre-existing
+        Windows-host baseline m6-02-provenance-command symlink case
+        (reproduced on clean main in earlier rounds and untouched by this
+        branch); pnpm build -> exit 0; the pnpm verify composite cannot run
+        its nested pnpm invocation on this host, so its four components were
+        verified individually and the remote verify run is the final
+        authority; pnpm test:readiness and pnpm test:trace -> exit 0; git
+        diff --check -> clean. Gate G6 fails on the code-only state and
+        passes only after this entry is appended with the real code SHA. The
+        full suite and the remote verify run are the final authority.
+    scope: >-
+      The standalone style-contract pure module, its deterministic
+      validation and repair, the new style test file, the one-line manifest
+      growth, and this AI-use entry. No wiring in DialoguePort.generate
+      (named follow-up after PR #163, which has since merged); no shared
+      contract or wire field change beyond reading already-exported frozen
+      constants; no storage, SQL, runtime, prompt or AGENTS.md change; no
+      new dependency; no quality, latency, cost, live-provider or
+      physical-output claim; no merge, approval, dismissal or checkpoint
+      acceptance is claimed. DialogueStyleReport is M4-owned; any M2 display
+      would be a separate diagnostic protocol proposal coordinated by M5.
