@@ -8467,3 +8467,146 @@ entries:
       docs/code-governance/verification-constraints.md,
       docs/debt-register.md, README.md and this log entry. No
       test-approvals.yaml, ruleset, dependency or other gate changed.
+  - date: "2026-11-17"
+    task: M4-A03-role-aware-salience
+    branch: feat/m4-a03-salience-v2
+    change: >-
+      Make salience scoring role-aware and time-aware, so audience self-statements
+      are scored instead of only the character's own confirmed speech (issue #146
+      A03; the A01 joint transcript it depends on landed in PR #151). In
+      src/dialogue/salience.ts, scoreSalience now takes
+      SalienceInput { role, text, mentionCount?, ageMs? } with
+      SalienceRole = 'listener' | 'character' and returns
+      SalienceScore { score, signals, decayed }. The listener catalog is
+      self-disclosure 3, promise 3, preference 2, relationship 2,
+      emotion-peak 2, unanswered-question 1, concrete-detail 1; the character
+      catalog is commitment 3, identity 3, boundary 2, concrete-detail 1. The
+      v1 pattern tables are reused verbatim behind the role-specific names;
+      three new precision patterns are added (relationship, emotion-peak,
+      boundary) with their deliberate exclusions recorded (no 别/不会 in the
+      boundary table, no bare 一定 in the promise family). The score is
+      normalized by the max signal weight (min(1, weightedSum / 3)) plus a
+      mention bonus of 0.05 per earlier same-session same-role turn sharing
+      the primary signal, capped at +0.2; decayed = score * exp(-ageDays/45)
+      and SALIENCE_PIN_THRESHOLD is repurposed to 0.35 on the decayed scale
+      while MAX_PINNED_TURNS stays 3. In src/dialogue/context.ts, character
+      turns are scored with role 'character' and no ageMs - confirmed records
+      carry no delivery timestamp (the recorded transcript-pairing
+      limitation), so their decayed equals their score - and mention counts
+      are assigned in a second pass per (sessionId, role) in utterance order.
+      Each surviving listener turn is scored with role 'listener' and
+      ageMs anchored to the newest surviving listener receivedAtMs
+      (deterministic; no clock read, no new parameter), and listener turns
+      never enter the character trim or pin logic. The merged transcript's
+      listener entries carry the computed score through the new optional
+      TranscriptEntry.salience field (src/dialogue/transcript.ts);
+      mergeTranscript's signature and behaviour are unchanged and
+      renderTranscriptLine does not render salience, so rendering, budget
+      arithmetic and trim ordering are unchanged wherever v1 and v2 agree on
+      the pinned set. AssembledTurn.salienceScore now stores the decayed
+      score and the pin cap sorts on it (stable sort keeps the older turn on
+      ties); heard-prefix turns stay pinned: false with score 0. AssembledTurn
+      gains no new required field and src/contracts/app is untouched. Tests:
+      nine new unit cases and one assembly integration case appended to
+      test/offline/m4-salience-signals.test.ts (no new test file, so the
+      test:m4 manifest line is unchanged), covering listener self-disclosure
+      pinning, the role split on one text, character boundary and commitment,
+      listener relationship and emotion-peak, character preference scoring
+      nothing, the mention bonus and its cap, 60-day decay dropping below the
+      threshold, unknown age leaving decayed equal to score, determinism, and
+      the assembled-context integration (listener entries carry salience, the
+      older listener turn decays, character trimming untouched, rendered
+      output unchanged). Existing expectations are updated to the v2 rules
+      with a per-expectation comment naming the rule: listener identity
+      becomes self-disclosure, character promise becomes commitment, the
+      preference-alone case now pins under the v2 normalization (the
+      inversion is the point of A03), the threshold constant is 0.35, a lone
+      listener question scores 1/3 and does not pin, and non-speech returns
+      decayed 0. test/offline/m4-memory-enhancement.test.ts updates its
+      salience assertions to the role-aware API and the commitment signal
+      name. No change to src/contracts/app, shared wire fields,
+      src/runtime, src/storage, SQL, prompts, package.json or AGENTS.md; no
+      new dependency; no provider call (NFR-04 applies unchanged); scoring
+      stays deterministic and recomputed per assembly, never persisted
+      (NFR-03 A/B attribution preserved).
+    agent: opencode/build
+    sessions: [ses_e263987adffettwQIU4aFycGMe]
+    requirements: [NFR-03]
+    invariants: []
+    cases: []
+    commits: [12cf4e6ebb959e1f3bc6b323205eed2944155f55]
+    supervision: >-
+      The M4 supervisor wrote the English task book
+      (m4-impl/A03/taskbook.md) fixing every free parameter: the role
+      catalogs and weights, the normalization and mention formulas, the
+      decay constant and threshold, the primary-signal mention rule, the
+      context/transcript integration points, the five allowed files, the
+      forbidden files (the PR #163 set, to avoid touching a PR in flight),
+      and the test plan. The implementation session
+      ses_e263987adffettwQIU4aFycGMe wrote all five changed files on
+      2026-11-14 at the 205424f base; its one disclosed adjustment is
+      RELATIONSHIP_PATTERN spelling 妈妈?/爸爸? so 我妈/我爸 fire as the task
+      book's case requires. The supervisor independently re-ran the gates
+      before and after the round and reviewed every diff line against the
+      task book. Two disclosures are recorded. First, character-side decay
+      is not computable in the assembler because confirmed records carry no
+      delivery timestamp (the same recorded limitation as the transcript
+      pairing note), so character ageMs is absent and decayed equals score
+      for character turns; decay applies fully for listener turns and at the
+      pure-function level, and no storage or contract change was made to
+      fake it. Second, two added comment lines in listener-history-adjacent
+      code carry em dashes because the task book's own example text
+      contained them; they match the existing repository comment style and
+      were kept after disclosure. Before the commit round the branch was
+      migrated from 205424f to merged main a093f50 by stash and rebase (the
+      branch had no commits, so the rebase was a fast-forward) with the
+      working diff re-applied with zero conflicts; after PRs #165, #172,
+      #173 and #164 merged while this PR was open, the pushed commits were
+      rebuilt onto main b58a5ad by patch migration with the old branch SHAs
+      kept as backup refs and a force-with-lease push, the working diff
+      re-applied with zero conflicts; the gates were re-run on each new
+      base. This AI-use entry is written by a separate genuine
+      OpenCode session per the 2026-11-15 tightened rule that repository
+      code and all ai-use-log content are session-written; that session's
+      id and raw stream are recorded outside the repository in
+      m4-impl/A03/opencode-sessions.md. The PR round makes two consecutive
+      commits, code first and then this log, with no squash and no amend, so
+      commits can cite the real code SHA; if the PR is squash-merged, the
+      entry's commits field will be repointed to the squash commit in a
+      follow-up docs change, the same convention PR #169 recorded for the
+      #158 entries.
+    transcript_record: >-
+      The implementation session retains its conversation in the local
+      OpenCode session store. Its record (title, session id, role) and raw
+      JSONL stream (741,117 bytes, empty stderr) are kept outside the
+      repository at D:/isla-m4-05/m4-impl/A03/opencode-sessions.md and
+      D:/isla-m4-05/m4-impl/A03/impl-session-raw.json. The session writing
+      this entry also retains its conversation there. No export is stored
+      in the repository and no credential appears in repository files.
+    verification:
+      base: b58a5ad
+      reproduction: >-
+        Run from the worktree containing this round's changes
+        (feat/m4-a03-salience-v2 on b58a5ad). pnpm typecheck -> exit 0;
+        pnpm lint -> 0 warnings and 0 errors on 321 files; pnpm test:m4 ->
+        429 passed in 18 files (clean a093f50 baseline 419, +10: nine unit
+        cases and one integration case); pnpm test -> 1993 passed, 9 skipped
+        and 1 failed in the full suite, the single failure being the
+        pre-existing Windows-host baseline m6-02-provenance-command symlink
+        case (reproduced on clean main in earlier rounds and untouched by
+        this branch); pnpm build -> exit 0; the pnpm verify composite cannot
+        run its nested pnpm invocation on this host, so its four components
+        were verified individually and the remote verify run is the final
+        authority; pnpm test:readiness and pnpm test:trace -> exit 0; git
+        diff --check -> clean. Gate G6 fails on the code-only state and
+        passes only after this entry is appended with the real code SHA. The
+        full suite and the remote verify run are the final authority.
+    scope: >-
+      M4 role-aware salience scoring, the decayed pin scale, listener-side
+      salience attached to the merged transcript, and the accompanying test
+      updates, plus this AI-use entry. No shared contract, wire field,
+      storage, SQL, runtime, prompt, package.json or AGENTS.md change; no new
+      dependency; no new test file; no quality, latency, cost, live-provider
+      or physical-output claim; no merge, approval, dismissal or checkpoint
+      acceptance is claimed. A04's recall-ranking consumption of the listener
+      salience data is a later round.
