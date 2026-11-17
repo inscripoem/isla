@@ -353,13 +353,15 @@ describe('M5 evaluation adapter through the M6 runner', () => {
       usage: { inputTokens: null, outputTokens: null, costUsd: null, usageMissing: true },
       failureReason: null,
     })
-    // Only intervals whose endpoints are recorded are reported: the completed
-    // turn gives dialogue time. There is no dispatched boundary, so the submit
+    // Only intervals with an uncontaminated recorded boundary are reported. The
+    // completed turn still keeps dialogue time null: `dialogue.result` follows
+    // the in-flight segment chain, so it would include synthesis, reaction,
+    // rendering and playback. There is no dispatched boundary, so the submit
     // interval stays null rather than absorbing selection planning time.
     expect(record.timing).toEqual({
       submitMs: null,
       planMs: null,
-      dialogueMs: expect.any(Number),
+      dialogueMs: null,
       synthesisMs: null,
       firstAudibleMs: null,
       stopToSilenceMs: null,
@@ -1871,7 +1873,7 @@ describe('M5 evaluation adapter prepared inputs', () => {
     expect(observation.timings).toEqual({
       submitMs: null,
       planMs: null,
-      dialogueMs: expect.any(Number),
+      dialogueMs: null,
       synthesisMs: null,
       firstAudibleMs: null,
       stopToSilenceMs: null,
@@ -1950,15 +1952,17 @@ describe('M5 evaluation adapter prepared inputs', () => {
     const turn = events.find((event) => event.type === 'turn.started')
     expect(turn?.seq ?? -1).toBeGreaterThan(lastAcceptedSeq)
 
-    // No dispatched boundary is recorded, so the submit interval stays null;
-    // the single turn still gives dialogue time.
+    // No dispatched boundary is recorded, so the submit interval stays null.
+    // The multi-input batch also has several admissions and no boundary that
+    // says which one ended submission. Dialogue time stays null too: the
+    // dialogue result is persisted after the in-flight segment chain.
     const observation = harness.observations[0]
     expect(observation.inputs.map((input) => input.status)).toEqual(
       Array.from({ length: 5 }, () => 'accepted'),
     )
     expect(observation.timings.submitMs).toBeNull()
     expect(observation.timings.planMs).toBeNull()
-    expect(observation.timings.dialogueMs).toEqual(expect.any(Number))
+    expect(observation.timings.dialogueMs).toBeNull()
     expect(run.records[0].timing).toEqual(observation.timings)
   })
 
@@ -2153,10 +2157,12 @@ describe('M5 evaluation adapter prepared inputs', () => {
 
 /**
  * Admission export and observable timings. The adapter records what the runtime
- * acknowledged, in submission order, and derives only intervals whose two
- * endpoints are recorded and ordered. `submitMs` stays null because no
- * dispatched boundary is recorded, and `planMs` stays null because no
- * selection-entry boundary is recorded.
+ * acknowledged, in submission order, and reports only an uncontaminated
+ * interval whose two endpoints are recorded. Every stage stays null:
+ * `submitMs` has no dispatched boundary, `planMs` has no selection-entry
+ * boundary, and `dialogueMs` would include the in-flight segment chain
+ * (synthesis, reaction, rendering and playback) because `dialogue.result` is
+ * persisted after it.
  */
 describe('M5 evaluation adapter admission export and observable timings', () => {
   const prepared = (
@@ -2165,7 +2171,7 @@ describe('M5 evaluation adapter admission export and observable timings', () => 
     actorId: string,
   ): PreparedEvaluationInput => ({ source, text, actorId })
 
-  it('exports the accepted acknowledgement and derives dialogue time', async () => {
+  it('exports the accepted acknowledgement and keeps dialogue time null', async () => {
     const clock = createVirtualClock(1_000)
     const harness = createHarness(clock)
     const selectionBase = createFixtureSelectionPort()
@@ -2217,11 +2223,12 @@ describe('M5 evaluation adapter admission export and observable timings', () => 
     // the plan is persisted. Submission ends at a dispatched boundary, not at
     // `turn.started`, so that 7 ms is neither submission nor planning time and
     // both intervals stay null. The first reaction advances 5 ms between
-    // `turn.started` and `dialogue.result`.
+    // `turn.started` and `dialogue.result`, but that interval also contains the
+    // rest of the segment chain, so it is not reported as M4 dialogue time.
     expect(observation.timings).toEqual({
       submitMs: null,
       planMs: null,
-      dialogueMs: 5,
+      dialogueMs: null,
       synthesisMs: null,
       firstAudibleMs: null,
       stopToSilenceMs: null,
@@ -2279,9 +2286,11 @@ describe('M5 evaluation adapter admission export and observable timings', () => 
     const events = await harness.store.readSession(sessionId)
     expect(events.filter((event) => event.type === 'input.accepted')).toHaveLength(1)
     // No dispatched boundary is recorded, so the submit interval stays null.
+    // Dialogue time also stays null because `dialogue.result` follows the
+    // in-flight segment chain.
     expect(observation.timings.submitMs).toBeNull()
     expect(observation.timings.planMs).toBeNull()
-    expect(observation.timings.dialogueMs).toEqual(expect.any(Number))
+    expect(observation.timings.dialogueMs).toBeNull()
   })
 
   it('records a thrown submission as no-acknowledgement and never runs the stopped batch', async () => {
@@ -2495,7 +2504,7 @@ describe('M5 evaluation adapter admission export and observable timings', () => 
     const event = (type: string, seq: number, timestampMs: number): RuntimeEvent =>
       fixtureRuntimeEvent({ type, seq, timestampMs })
 
-    it('returns null for missing and repeated endpoints', () => {
+    it('returns every stage null when endpoints are missing or repeated', () => {
       expect(deriveStageTimings([])).toEqual({
         submitMs: null,
         planMs: null,
@@ -2521,31 +2530,21 @@ describe('M5 evaluation adapter admission export and observable timings', () => 
       expect(missingDialogue.planMs).toBeNull()
     })
 
-    it('reports a reversed interval as null, never a negative or invented zero', () => {
-      const reversedOrder = deriveStageTimings([
-        event('turn.started', 3, 110),
-        event('dialogue.result', 2, 125),
-      ])
-      expect(reversedOrder.dialogueMs).toBeNull()
-      const negativeDelta = deriveStageTimings([
-        event('turn.started', 1, 125),
-        event('dialogue.result', 2, 110),
-      ])
-      expect(negativeDelta.dialogueMs).toBeNull()
-    })
-
-    it('measures the dialogue interval when both endpoints are recorded and ordered', () => {
+    it('keeps dialogue time null even when both endpoints are recorded and ordered', () => {
       const timings = deriveStageTimings([
         event('input.accepted', 1, 0),
         event('selection.plan', 2, 7),
         event('turn.started', 3, 9),
         event('dialogue.result', 4, 21),
       ])
-      // Only the dialogue interval has a recorded start; admission and planning
-      // stay null.
+      // `turn.started` -> `dialogue.result` looks measurable, but the coordinator
+      // persists `dialogue.result` only after it awaits the in-flight segment
+      // chain. Reporting 12 ms would attribute synthesis, reaction, rendering and
+      // playback to M4, so the uncontaminated interval does not exist and the
+      // adapter keeps null rather than inventing a boundary.
       expect(timings.submitMs).toBeNull()
       expect(timings.planMs).toBeNull()
-      expect(timings.dialogueMs).toBe(12)
+      expect(timings.dialogueMs).toBeNull()
       expect(timings.synthesisMs).toBeNull()
       expect(timings.firstAudibleMs).toBeNull()
       expect(timings.stopToSilenceMs).toBeNull()
@@ -2667,7 +2666,7 @@ describe('M5 evaluation adapter over retained physical synthesis', () => {
     expect(success.records[0].timing).toEqual({
       submitMs: null,
       planMs: null,
-      dialogueMs: expect.any(Number),
+      dialogueMs: null,
       synthesisMs: null,
       firstAudibleMs: null,
       stopToSilenceMs: null,
@@ -2755,7 +2754,7 @@ describe('M5 evaluation adapter over retained physical synthesis', () => {
     expect(busy.records[0].timing).toEqual({
       submitMs: null,
       planMs: null,
-      dialogueMs: expect.any(Number),
+      dialogueMs: null,
       synthesisMs: null,
       firstAudibleMs: null,
       stopToSilenceMs: null,
@@ -2795,7 +2794,7 @@ describe('M5 evaluation adapter over retained physical synthesis', () => {
     expect(reuse.records[0].timing).toEqual({
       submitMs: null,
       planMs: null,
-      dialogueMs: expect.any(Number),
+      dialogueMs: null,
       synthesisMs: null,
       firstAudibleMs: null,
       stopToSilenceMs: null,

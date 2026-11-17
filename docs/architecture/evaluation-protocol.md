@@ -23,9 +23,9 @@ measured pilot baseline (§5). No S6, G4, quality, latency or cost result is cla
 
 | Metric | Owner | Observation | Missing value |
 | --- | --- | --- | --- |
-| `submitMs` | M5 | accepted → dispatched | `null` |
+| `submitMs` | M5 | accepted → dispatched; a multi-input prepared batch has several `input.accepted` events and no dispatched boundary identifying which admission ended submission, so the adapter leaves it `null` rather than fold selection planning into one admission | `null` |
 | `planMs` | M3 | selection entry → terminal selection outcome; excludes history assembly, admission, recall scoring and the consistency audit | `null` |
-| `dialogueMs` | M4 | dialogue stage; a deadline budget is not a measurement (`DEFAULT_CYCLE_TIMINGS.dialogueMs` is 60,000 ms at `src/runtime/coordinator.ts:225`, used as `dialogueDeadline` at `:1935`) | `null` |
+| `dialogueMs` | M4 | dialogue stage; a deadline budget is not a measurement (`DEFAULT_CYCLE_TIMINGS.dialogueMs` is 60,000 ms at `src/runtime/coordinator.ts:225`, used as `dialogueDeadline` at `:1935`). No uncontaminated boundary is recorded today: `dialogue.result` is persisted after the in-flight segment chain, so `turn.started` → `dialogue.result` would also contain M1 synthesis, M3 reaction, avatar rendering and audio playback; the adapter keeps this stage `null` rather than attribute those stages to M4 | `null` |
 | `synthesisMs` | M1 | synthesis stage; a deadline budget is not a measurement | `null` |
 | `firstAudibleMs` | M1 (observation); M2 (console) | physical output observation only | `null` |
 | `stopToSilenceMs` | M1/M2 | physical silence observation only | `null` |
@@ -35,9 +35,13 @@ measured pilot baseline (§5). No S6, G4, quality, latency or cost result is cla
 No stage is summed into an end-to-end latency. An unobserved stage is `null` and renders `—`
 (`src/evaluation/report.ts:231-233`).
 
-No stage is produced today: the adapter writes `NO_TIMING`, whose every stage is `null`
-(`src/runtime/evaluation-adapter.ts:278,1287`; `src/evaluation/comparison.ts:88,130`). A pilot will render
-`—` for every stage — correct, and expected rather than discovered.
+No stage is produced today: `deriveStageTimings` in `src/runtime/evaluation-adapter.ts` returns `null`
+for every stage, and a thrown variant is recorded with `NO_TIMING` in `src/evaluation/comparison.ts`.
+`dialogueMs` specifically has no uncontaminated boundary: the coordinator persists `dialogue.result`
+only after it awaits the in-flight segment chain, so `turn.started` → `dialogue.result` would include
+M1 synthesis, M3 reaction, avatar rendering and audio playback. No dialogue-completion boundary before
+segment dispatch is recorded, so the adapter does not invent one. A pilot will render `—` for every
+stage — correct, and expected rather than discovered.
 
 ## 3. Scoring and eligibility
 

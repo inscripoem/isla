@@ -97,19 +97,26 @@ import type { ProductionPeers } from './production'
  *    produced by the attached consumer's own playback machine; the adapter never
  *    fabricates one, and a consumer that confirms nothing leaves the delivery
  *    uncommitted and the attempt non-completed.
- *  - **Timing is reported only where the runtime records both endpoints.** The
- *    observation and the record carry `dialogueMs` (`turn.started` ->
- *    `dialogue.result`). `submitMs` would run from `input.accepted` to a
- *    dispatched boundary; the coordinator records no dispatched boundary, and
- *    the only later edge, `turn.started`, follows selection planning, so it
- *    stays `null` rather than attributing selection time to submission.
+ *  - **Timing is reported only where the runtime records both endpoints, and
+ *    only when the interval is uncontaminated.** Every stage stays `null`
+ *    today. `dialogueMs` is not `turn.started` -> `dialogue.result`: the
+ *    coordinator persists `dialogue.result` only after it awaits the in-flight
+ *    segment chain, so that interval includes M1 synthesis, M3 reaction, avatar
+ *    rendering and full audio playback. No dialogue-completion boundary before
+ *    segment dispatch is recorded, so this adapter does not manufacture one.
+ *    `submitMs` would run from `input.accepted` to a dispatched boundary; the
+ *    coordinator records no dispatched boundary, and the only later edge,
+ *    `turn.started`, follows selection planning, so it stays `null` rather than
+ *    attributing selection time to submission. With a multi-input prepared
+ *    batch several `input.accepted` events precede the single `turn.started`,
+ *    and no dispatched boundary identifies which admission ended submission;
+ *    even the earliest admission would fold selection planning into it.
  *    `planMs` would run from a selection-entry boundary to `selection.plan`;
  *    no selection-entry boundary is recorded, so it also stays `null`. A
- *    missing or repeated endpoint or a reversed event order is `null`, never
- *    zero. `synthesisMs`, `firstAudibleMs` and `stopToSilenceMs` have no
- *    observable start/end pair at this boundary and stay `null`. `totalMs`
- *    also stays `null`: a successful turn's wall time is never reported as
- *    input-to-first-audible.
+ *    missing stage is `null`, never zero. `synthesisMs`, `firstAudibleMs` and
+ *    `stopToSilenceMs` have no observable start/end pair at this boundary and
+ *    stay `null`. `totalMs` also stays `null`: a successful turn's wall time
+ *    is never reported as input-to-first-audible.
  *  - **Admission is exported per input from the acknowledgement.** Each attempt
  *    lists its prepared inputs in submission order with the ack's request message
  *    id, event id and status; a stopped batch keeps its unsent entries as
@@ -210,8 +217,9 @@ export interface EvaluationInputAcknowledgement {
   readonly eventId: string | null
   readonly status: EvaluationInputAckStatus
   /**
-   * The adapter clock when the acknowledgement returned; `null` when no
-   * acknowledgement returned (a thrown submission or an unsent input).
+   * Observation-only: the adapter clock when the acknowledgement returned.
+   * It is not persisted to `RecordedRunV1` or `ProvenanceCompanionV1`; `null`
+   * when no acknowledgement returned (a thrown submission or an unsent input).
    */
   readonly admittedAtMs: number | null
   /**
@@ -254,10 +262,14 @@ export interface EvaluationAttemptObservation {
    */
   readonly inputs: readonly EvaluationInputAcknowledgement[]
   /**
-   * Stage durations observed from this attempt's persisted events. A missing or
-   * ambiguous endpoint, or an interval whose recorded event order is reversed,
-   * is `null` — never zero and never inferred. `synthesisMs`, `firstAudibleMs`
-   * and `stopToSilenceMs` are not observable at this boundary and stay `null`.
+   * Stage durations observed from this attempt's persisted events. Every stage
+   * stays `null` today: no recorded interval is uncontaminated. In particular
+   * `dialogue.result` is persisted after the in-flight segment chain, so
+   * `turn.started` -> `dialogue.result` would include synthesis, reaction,
+   * rendering and playback; the adapter does not report it as M4 time. A missing
+   * measurement is `null`, never zero and never inferred. `synthesisMs`,
+   * `firstAudibleMs` and `stopToSilenceMs` have no observable start/end pair at
+   * this boundary.
    */
   readonly timings: StageTiming
   /**
@@ -512,53 +524,33 @@ function readEvidence(
 }
 
 /**
- * Returns the attempt's only event of `type`, or `null` when none or more than
- * one exists. A repeated endpoint is ambiguous: the adapter never picks one by
- * array position.
- */
-function singleEvent(events: readonly RuntimeEvent[], type: string): RuntimeEvent | null {
-  let found: RuntimeEvent | null = null
-  for (const event of events) {
-    if (event.type !== type) continue
-    if (found !== null) return null
-    found = event
-  }
-  return found
-}
-
-/**
- * A duration between two recorded endpoints, or `null` when either endpoint is
- * missing, the append order is not forward, or the timestamp delta is negative.
- * A reversed interval is not a duration — it is never reported as zero.
- */
-function intervalMs(earlier: RuntimeEvent | null, later: RuntimeEvent | null): number | null {
-  if (earlier === null || later === null) return null
-  if (later.seq <= earlier.seq) return null
-  const delta = later.timestampMs - earlier.timestampMs
-  return delta >= 0 ? delta : null
-}
-
-/**
  * Stage timings observable from one attempt's persisted events.
  *
- * - `dialogueMs`: `turn.started` -> `dialogue.result`.
- * - `submitMs`: `input.accepted` -> a recorded dispatched boundary. The
- *   coordinator records no dispatched boundary, and the only later edge,
- *   `turn.started`, follows selection planning; using it would attribute
- *   selection time to submission. It is `null`, never zero.
- * - `planMs`: a selection-entry boundary -> `selection.plan`. No selection-entry
- *   boundary is recorded, so it is `null` rather than inferred from admission.
+ * Every stage is `null` today because no recorded interval is uncontaminated:
  *
- * A missing or repeated endpoint, or a reversed interval, is `null`. The
- * remaining stages have no start/end pair at this boundary and stay `null`.
+ * - `dialogueMs` is not `turn.started` -> `dialogue.result`. The coordinator
+ *   awaits the in-flight segment chain before persisting `dialogue.result`, so
+ *   that interval includes M1 synthesis, M3 reaction, avatar rendering and full
+ *   audio playback. No dialogue-completion boundary before segment dispatch is
+ *   recorded, and this adapter does not invent one.
+ * - `submitMs` would be `input.accepted` -> a recorded dispatched boundary. The
+ *   coordinator records no dispatched boundary, and the only later edge,
+ *   `turn.started`, follows selection planning. A multi-input batch also has
+ *   several `input.accepted` events and no boundary saying which admission
+ *   ended submission. It stays `null`, never zero.
+ * - `planMs` would be a selection-entry boundary -> `selection.plan`. No
+ *   selection-entry boundary is recorded, so it stays `null` rather than being
+ *   inferred from admission.
+ *
+ * The remaining stages have no start/end pair at this boundary and stay `null`.
+ * The parameter is retained so the call site does not change when an
+ * uncontaminated boundary is recorded later.
  */
-export function deriveStageTimings(events: readonly RuntimeEvent[]): StageTiming {
-  const turnStarted = singleEvent(events, 'turn.started')
-  const dialogueResult = singleEvent(events, 'dialogue.result')
+export function deriveStageTimings(_events: readonly RuntimeEvent[]): StageTiming {
   return {
     submitMs: null,
     planMs: null,
-    dialogueMs: intervalMs(turnStarted, dialogueResult),
+    dialogueMs: null,
     synthesisMs: null,
     firstAudibleMs: null,
     stopToSilenceMs: null,

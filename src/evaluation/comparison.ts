@@ -76,6 +76,7 @@ export interface NotRunInputObservation {
   readonly requestMessageId: string | null
   readonly eventId: string | null
   readonly status: NotRunInputStatus
+  /** Observation-only adapter clock; never persisted to a recorded run. */
   readonly admittedAtMs: number | null
   readonly sourceId: string | null
   readonly inputId: string | null
@@ -90,7 +91,8 @@ export type VariantRun =
       readonly reason: string
       /**
        * Inputs the variant actually submitted and observed before stopping.
-       * Omitted when no input was submitted; never part of the recorded run.
+       * Omitted when no input was submitted, including an explicit empty list;
+       * never part of the recorded run.
        */
       readonly inputs?: readonly NotRunInputObservation[]
     }
@@ -199,7 +201,7 @@ export async function runComparison(
         const occurrence = (notRunOccurrences.get(pair) ?? 0) + 1
         notRunOccurrences.set(pair, occurrence)
         notRun.push({ variantId: variant.id, caseId: evalCase.id, reason: run.reason })
-        if (run.inputs !== undefined) {
+        if (run.inputs !== undefined && run.inputs.length > 0) {
           // The observations never join `notRun` itself, so the frozen recorded
           // run shape cannot gain a field. Copy them so the caller cannot revise
           // admission evidence through the returned object.
