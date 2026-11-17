@@ -18,7 +18,7 @@ entries:
       path and the retained genuine pair.
     requirements: [NFR-03]
     invariants: []
-    commits: [4273673]
+    commits: ["4273673"]
     agent: zcode/glm-5.3-flash
     provider: zai-plan
     model: glm-5.3-flash
@@ -2047,7 +2047,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: [INV-16]
     cases: []
-    commits: [3512135]
+    commits: ["3512135"]
     agent: opencode/deepseek-v4-flash
     verification:
       focused: "test/offline/m6-02-recorded-run.test.ts: 11/1 passed."
@@ -3983,7 +3983,7 @@ entries:
       no boundary rule needed widening.
     requirements: []
     invariants: []
-    commits: [3014648]
+    commits: ["3014648"]
     agent: workbuddy/deepseek-v4.1-flash
     provider: deepseek
     model: deepseek-v4.1-flash
@@ -4628,7 +4628,7 @@ entries:
     requirements: [FR-03]
     invariants: []
     cases: [C-06, C-11]
-    commits: [6780977]
+    commits: ["6780977"]
     agent: opencode/deepseek-v4-flash
     provider: personal-deepseek
     model: deepseek-v4-flash
@@ -5758,7 +5758,7 @@ entries:
     requirements: [NFR-01, NFR-04]
     invariants: [INV-16]
     cases: []
-    commits: [813e935]
+    commits: ["813e935"]
     agent: opencode/build
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -6204,7 +6204,7 @@ entries:
     requirements: [FR-06, NFR-03, NFR-05]
     invariants: [INV-06, INV-10, INV-11, INV-16]
     cases: []
-    commits: [379e292]
+    commits: ["379e292"]
     agent: opencode/build
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -6320,7 +6320,7 @@ entries:
     requirements: [FR-06, NFR-03, NFR-05]
     invariants: [INV-17]
     cases: [C-75, C-76, C-77, C-78]
-    commits: [9688899]
+    commits: ["9688899"]
     agent: opencode/build
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -8171,3 +8171,162 @@ entries:
         seven log entries cite.
     scope: >-
       docs/ai-use-log.yaml only.
+  - date: "2026-11-15"
+    task: M6-CP05-provenance-capture-and-threshold-register
+    change: >-
+      Add the producer half of the ADR-008 provenance companion and enforce the
+      threshold register's own rule. `captureProvenance` derives `runDigest` from
+      the recorded-run bytes instead of accepting it from the writer, parses the
+      run from those same bytes so one companion cannot be bound to one run object
+      and a different artifact, and refuses through the merged `parseProvenance`
+      so producer and consumer share one rule. `collectThresholdViolations` reads
+      `docs/architecture/evaluation-thresholds.md` and refuses a pending row that
+      carries a baseline, a comparison or a pilot head, and a fixed row missing its
+      baseline value, head/date or approver. No existing parser, schema, contract,
+      report path, storage module or gate workflow changed.
+    requirements: [NFR-01, NFR-03, NFR-04]
+    invariants: [INV-16]
+    commits: ['3cec440']
+    agent: opencode/build
+    provider: opencode-go
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      The M6 member set the scope (issue #100 capture, issue #103 threshold rule),
+      reviewed the diff and re-ran the gates. The agent wrote the two modules,
+      their tests, the `test:m6` file list and one trace-matrix row in one
+      supervised session. No live provider call was made, no evaluation result is
+      claimed, and the pilot remains not run.
+    verification:
+      base: 205424f
+      reproduction: >-
+        Run from the repository root on the working tree that contains this round.
+        The two new suites: 28 passed (13 capture, 15 threshold). Seven mutations
+        were applied one at a time and each turned its own test red: the draft's
+        runId replacing the parsed one, the asserted-digest refusal, the
+        pending-baseline rule, the measured-baseline rule, the head/date rule, the
+        duplicate-obligation rule, and a wrong digest that the report command must
+        refuse; every source file was restored after each. pnpm typecheck -> exit
+        0. pnpm lint -> exit 0. pnpm test:m6 -> 21 files, 324 passed.
+        pnpm test:trace -> 41 passed. pnpm test:readiness -> 47 passed.
+        pnpm test -> 87 files, 1857 passed. pnpm build -> exit 0.
+    scope: >-
+      M6 only: two new modules under `src/evaluation/`, two new offline suites, one
+      trace-matrix row's cells and the `test:m6` file list. No storage, runtime,
+      contract, provider or gate-workflow change; no threshold value is set and no
+      issue is claimed closed.
+  - date: "2026-11-15"
+    task: M6-CP05-evaluation-run-command
+    change: >-
+      Add `evaluation:run`, the missing imperative shell for a run. It reads a
+      run spec (meta, conditions, cases), loads an evaluation harness module named
+      on the command line, executes every case through the harness `runVariant`
+      seam and writes the recorded run. The harness owns the peers, so the command
+      never imports the runtime composition; the shell is testable with a
+      synthetic harness and no provider. Refusals are data: unreadable or empty
+      spec, missing harness module, throwing factory, harness without variants or
+      seam, and an existing output path are all refused without writing. No
+      existing module, schema, contract, gate or storage path changed.
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    commits: ['58631fb']
+    agent: opencode/build
+    provider: opencode-go
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      The M6 member set the scope (the runner CP05 #103 needs) and reviewed the
+      diff. The agent wrote the command, the fake harness, the suite and the trace
+      row. One live end-to-end run was made against the configured provider with a
+      local harness that substitutes the audio path; it is a local demonstration,
+      not product evidence, and no measurement or threshold is claimed.
+    verification:
+      base: 205424f
+      reproduction: >-
+        Run from the repository root. The new suite: 13 passed. Five mutations
+        were applied one at a time and each turned its own test red: the existing
+        output refusal, the duplicate-option refusal, the missing-option refusal,
+        the empty case set and the empty variant list; the file was restored after
+        each. pnpm typecheck -> exit 0. pnpm lint -> exit 0. pnpm test:m6 -> 22
+        files, 337 passed. pnpm test:trace -> 41 passed. pnpm test:readiness -> 47
+        passed. pnpm test -> 88 files, 1870 passed. pnpm build -> exit 0.
+        End to end: `evaluation:run` wrote a recorded run for one real case
+        (completed) and `evaluation:report` rendered it with every attempt
+        unscored for want of a provenance companion.
+    scope: >-
+      M6 only: one new module under `src/evaluation/`, one offline suite, one test
+      support harness, one trace row and the `test:m6` file list. The local
+      `deployment/` harness and spec are untracked and not part of this change.
+  - date: "2026-11-15"
+    task: M6-CP05-run-command-self-validation
+    change: >-
+      Refuse a recorded run the recorded-run parser cannot read. `evaluation:run`
+      previously wrote an artifact from an incomplete `conditions` object and
+      reported success; the report command then refused the file. The exact bytes
+      are now parsed with `parseRecordedRun` before the atomic write, so producer
+      and consumer share one validator and a refusal creates no file. Also records
+      the harness seam as Delta-007a (an amendment to ADR-007 that does not rewrite
+      it and claims no new ADR number), adds the command to the module README and
+      extends the trace row to state the self-validation.
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    commits: ['bc60371']
+    agent: opencode/build
+    provider: opencode-go
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      The M6 member approved the three fixes (artifact validation, Delta-007a,
+      module README) and reviewed the diff. The agent wrote the validation, the
+      two refusal tests, the Delta, the README rows and the trace-row extension.
+      No live call was made in this round and no measurement is claimed.
+    verification:
+      base: 205424f
+      reproduction: >-
+        Run from the repository root. The command suite: 15 passed, including a
+        spec with an empty `conditions` object through both `executeRun` and the
+        CLI: exit 1, no file written. Six mutations were applied one at a time and
+        each turned its own test red (existing-output refusal, duplicate option,
+        missing option, empty case set, empty variant list, output validation);
+        the file was restored after each. pnpm typecheck -> exit 0. pnpm lint ->
+        exit 0. pnpm test:m6 -> 22 files, 339 passed. pnpm test:trace -> 41.
+        pnpm test:readiness -> 47. pnpm verify -> exit 0, 88 files, 1872 passed.
+    scope: >-
+      M6 only: `src/evaluation/run-command.ts`, its suite, the module README, one
+      Delta and one trace row. No schema, contract, runtime, storage, gate or
+      deployment change; no threshold value and no case id.
+  - date: "2026-11-16"
+    task: M6-CP05-run-spec-preflight
+    change: >-
+      Stop `evaluation:run` spending provider calls on a run it can never
+      publish. The spec's `conditions` are shaped into a zero-record run and
+      parsed with `parseRecordedRun` before a harness module is loaded, so an
+      incomplete spec is refused before any case executes; a test asserts the
+      harness factory is never reached. An existing `--out` is refused in the
+      same pre-flight, before the harness opens peers. The write now uses
+      `linkSync`, which fails with `EEXIST` instead of replacing the target as
+      `rename` would, so "never replace" also holds if the path appears during
+      the run. No schema, contract, gate or provider change.
+    requirements: [NFR-01, NFR-04]
+    invariants: [INV-16]
+    commits: ['be5d1a2']
+    agent: opencode/build
+    provider: opencode-go
+    model: DeepSeek-V4.1-Flash
+    supervision: >-
+      The M6 member approved the three pre-flight improvements and reviewed the
+      diff. The agent wrote the pre-flight, the link-based write, the three
+      ordering tests, the module README paragraph, the Delta amendment and the
+      trace-row extension. No live call was made in this round and no
+      measurement is claimed.
+    verification:
+      base: 205424f
+      reproduction: >-
+        Run from the repository root on the merged branch. The command suite: 16
+        passed. Two mutations, each restored: disabling the `executeRun`
+        pre-flight turns "before any variant runs" red (the harness is called);
+        disabling the CLI pre-flight turns "before the harness module is loaded"
+        red ("factory threw"). pnpm typecheck -> exit 0. pnpm lint -> exit 0.
+        pnpm test:m6 -> 22 files, 340 passed. pnpm test:trace -> 41.
+        pnpm test:readiness -> 47. pnpm verify -> exit 0, 88 files, 1902 passed.
+    scope: >-
+      M6 only: `src/evaluation/run-command.ts`, its suite, one test-support
+      harness, the module README, Delta-007a and one trace row. The branch also
+      carries a merge of main 8825c33 that conflicts only in the AI-use log.
