@@ -8186,7 +8186,7 @@ entries:
       report path, storage module or gate workflow changed.
     requirements: [NFR-01, NFR-03, NFR-04]
     invariants: [INV-16]
-    commits: ['3cec440']
+    commits: [b8c3438a65d50a57862e3024fa1e3e1c28dc698d]
     agent: opencode/build
     provider: opencode-go
     model: DeepSeek-V4.1-Flash
@@ -8228,7 +8228,7 @@ entries:
       existing module, schema, contract, gate or storage path changed.
     requirements: [NFR-01, NFR-04]
     invariants: [INV-16]
-    commits: ['58631fb']
+    commits: [b8c3438a65d50a57862e3024fa1e3e1c28dc698d]
     agent: opencode/build
     provider: opencode-go
     model: DeepSeek-V4.1-Flash
@@ -8268,7 +8268,7 @@ entries:
       extends the trace row to state the self-validation.
     requirements: [NFR-01, NFR-04]
     invariants: [INV-16]
-    commits: ['bc60371']
+    commits: [b8c3438a65d50a57862e3024fa1e3e1c28dc698d]
     agent: opencode/build
     provider: opencode-go
     model: DeepSeek-V4.1-Flash
@@ -8306,7 +8306,7 @@ entries:
       the run. No schema, contract, gate or provider change.
     requirements: [NFR-01, NFR-04]
     invariants: [INV-16]
-    commits: ['be5d1a2']
+    commits: [b8c3438a65d50a57862e3024fa1e3e1c28dc698d]
     agent: opencode/build
     provider: opencode-go
     model: DeepSeek-V4.1-Flash
@@ -8330,3 +8330,39 @@ entries:
       M6 only: `src/evaluation/run-command.ts`, its suite, one test-support
       harness, the module README, Delta-007a and one trace row. The branch also
       carries a merge of main 8825c33 that conflicts only in the AI-use log.
+
+  - date: "2026-11-17"
+    task: M6-CP05-ai-use-squash-repoint
+    change: >-
+      Repoint the four #165 CP05 AI-use entries from their squash-orphaned
+      branch commits to the integrated main commit b8c3438a, which is the
+      squash of PR #165. The exact branch SHAs remain in the pull request and
+      branch history; the checked commit reference now names the commit that
+      actually entered main. Documentation only.
+    requirements: []
+    invariants: [INV-14]
+    commits: [b8c3438a65d50a57862e3024fa1e3e1c28dc698d]
+    agent: claude-code
+    supervision: >-
+      The orchestrating assistant applied the docs-only correction after the
+      #165 squash merge left the four branch commits unreachable from main. No
+      application code, gate rule or workflow change is included.
+    human_review: >-
+      Captain asked to check the #165 rebase and GitHub state; this correction
+      follows that check. Push and pull-request creation await Captain approval.
+    transcript_record: >-
+      This correction was made by the orchestrating assistant; no OpenCode
+      session transcript of its own. The #165 OpenCode sessions remain in the
+      local store.
+    verification:
+      base: b8c3438a65d50a57862e3024fa1e3e1c28dc698d
+      results: >-
+        Linux: pnpm verify exited 0 with 94 files / 2037 tests and a successful
+        build; the G6 gate passed against the main log baseline after the four
+        entries were repointed.
+      limits: >-
+        Documentation-only correction. It does not change product behaviour,
+        gate logic or evaluation evidence; it only changes which commit the four
+        log entries cite.
+    scope: >-
+      docs/ai-use-log.yaml only.
