@@ -1,0 +1,18 @@
+{
+  "meta": { "runId": "pilot-selection-001", "generatedAt": "2026-11-17" },
+  "conditions": {
+    "hardware": "local macOS host",
+    "providers": ["cs-project-ai.rkd.icu group/deepseek-flash"],
+    "workload": "m3-selection-v1.1 selection-001; text path, audio substituted",
+    "coldWarm": "cold",
+    "persona": { "profileId": "Elleya", "version": "2" },
+    "modelVersion": "group/deepseek-flash",
+    "promptVersion": "openai-compatible-v1",
+    "textBudget": { "maxCharacters": 400, "accounting": "rendered characters" },
+    "history": { "source": "durable", "recordSet": "m3-selection-v1.1/selection-001" },
+    "textSource": "provider",
+    "clock": "wall",
+    "recall": { "supplied": false, "maxTurns": null }
+  },
+  "cases": [{ "id": "selection-001", "input": "Which game are you playing?" }]
+}
