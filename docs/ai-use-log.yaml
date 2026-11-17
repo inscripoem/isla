@@ -8366,3 +8366,53 @@ entries:
         log entries cite.
     scope: >-
       docs/ai-use-log.yaml only.
+
+  - date: "2026-11-17"
+    task: M6-g6-pr-scope
+    change: >-
+      Scope G6's commit-reachability rule to pull requests. The pull request
+      remains the enforcement point: a new entry's cited commits must be
+      reachable from the PR head, and the log must add an entry for a
+      code/prompt change. A push to main is an integration event; CI supplies
+      no base copy there, so the gate treats every merged entry as historical
+      and does not re-adjudicate ancestry that the squash merge intentionally
+      orphaned. The workflow env, the gate comments, ADR-006 and a focused test
+      record the scope. Entry shape and the log-update rule remain enforced on
+      both events.
+    requirements: []
+    invariants: [INV-14]
+    commits: [42e76560fb7790d1db4026f2f1d6e0ae7826b768]
+    agent: build
+    provider: self-api
+    model: deepseek-v4-flash
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    sessions: [ses_e1873844bffeGrUfMYTxF2JKKV]
+    supervision: >-
+      The orchestrating assistant defined the policy and review scope; the
+      OpenCode build session made the workflow, comment, ADR and test edits.
+      The session had no general shell tool, so the orchestrator ran every test
+      command outside it.
+    human_review: >-
+      Captain approved the policy change: keep squash merges, enforce ancestry
+      at the pull request, and treat a main push as an integration event. The
+      change is local only; push, pull-request creation and merge await Captain
+      approval.
+    transcript_record: >-
+      The genuine OpenCode session ses_e1873844bffeGrUfMYTxF2JKKV remains in
+      the local OpenCode store; the raw export has not yet been copied outside
+      the checkout.
+    verification:
+      base: 3026c8d0b2e2503eec643c2432297ed81521086b
+      results: >-
+        Linux: pnpm test:gates passed 6 files / 150 tests; pnpm verify exited 0
+        with 94 files / 2038 tests and a successful build; the G6 PR-scope and
+        push-integration simulations passed.
+      limits: >-
+        No product code, evaluation run or Windows run changed. The policy
+        deliberately stops main CI from re-adjudicating ancestry; a direct push
+        to main is blocked by the repository ruleset and is not covered.
+    scope: >-
+      .github/workflows/ci.yml, src/evaluation/ai-use-log-gate.ts (comments
+      only), docs/architecture/adr/006-gate-tooling.md,
+      test/offline/ai-use-log-gate.test.ts and this log entry. No other gate
+      rule, schema, dependency or application behaviour changed.
