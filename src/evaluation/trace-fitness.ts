@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
@@ -37,6 +38,19 @@ export interface TraceFs extends RestorationFileView {
   list(relative: string): string[]
 }
 
+/** Exact test citation: `test/…/x.test.ts::the test title`. */
+const TEST_CITATION = /`(test\/[^`]+\.test\.ts)::([^`]+)`/g
+/** A citation that names a test file without a path, so it cannot be resolved. */
+const BARE_CITATION = /`([^`/]+\.test\.ts)::([^`]+)`/g
+const ADR_TOKEN = /ADR-\d{3}/
+
+/** One expiry-dated exemption for a trace row's ADR cell. */
+export interface AdrBaselineRow {
+  /** SHA-256 of `requirement|component|interface` for that row. */
+  readonly key: string
+  readonly expires: string
+}
+
 export interface TraceOptions {
   /** Files changed by the diff (CI); used by the frozen-path gate. */
   readonly changedFiles?: readonly string[]
@@ -47,6 +61,33 @@ export interface TraceOptions {
   readonly restoration?: RestorationContext
   /** Where the provenance of a frozen-path decision is reported, when one is made. */
   readonly onRestoration?: (message: string) => void
+  /** Advisory facts that are reported but do not fail the gate. */
+  readonly onAdvisory?: (message: string) => void
+  /** Expiry-dated exemptions for rows whose ADR cell cannot yet name a number. */
+  readonly adrBaseline?: readonly AdrBaselineRow[]
+  /** Today as YYYY-MM-DD, so an expired exemption fails deterministically. */
+  readonly today?: string
+}
+
+/** Stable identity for a trace row, so an edited row invalidates its exemption. */
+export function traceRowKey(
+  requirement: string,
+  component: string,
+  iface: string,
+): string {
+  return createHash('sha256')
+    .update(`${requirement.trim()}|${component.trim()}|${iface.trim()}`)
+    .digest('hex')
+}
+
+/** Whether a cited test title exists in the file, tolerating both quote styles. */
+export function hasTestTitle(fileText: string, title: string): boolean {
+  return (
+    fileText.includes(`it('${title}'`) ||
+    fileText.includes(`it("${title}"`) ||
+    fileText.includes(`test('${title}'`) ||
+    fileText.includes(`test("${title}"`)
+  )
 }
 
 /** Filesystem view rooted at `root` (production use). */
@@ -204,6 +245,10 @@ export function collectTraceViolations(fs: TraceFs, options: TraceOptions = {}):
       if (ownerColumn < 0) {
         add('trace-no-owner-column', 'trace-matrix.md table has no Owner column')
       }
+      const requirementColumn = columnIndex(table.header, 'Requirement')
+      const interfaceColumn = columnIndex(table.header, 'Interface')
+      const testColumn = columnIndex(table.header, 'Test / evidence')
+      const adrColumn = columnIndex(table.header, 'ADR')
       for (const row of table.rows) {
         if (ownerColumn >= 0 && (row[ownerColumn] ?? '').trim().length === 0) {
           add('trace-no-owner', 'a trace-matrix row has no owner')
@@ -214,6 +259,63 @@ export function collectTraceViolations(fs: TraceFs, options: TraceOptions = {}):
           if (path.includes('{')) continue
           if (!fs.exists(path)) add('trace-component-missing', `trace row references missing component ${path}`)
         }
+        if (testColumn >= 0) {
+          const cell = row[testColumn] ?? ''
+          for (const match of cell.matchAll(TEST_CITATION)) {
+            const file = match[1] ?? ''
+            const title = (match[2] ?? '').trim()
+            if (!fs.exists(file)) {
+              add('trace-test-missing', `trace row cites missing test file ${file}`)
+              continue
+            }
+            if (!hasTestTitle(fs.read(file), title)) {
+              add('trace-test-unknown', `trace row cites ${file}::${title}, which the file does not contain`)
+            }
+          }
+          for (const match of cell.matchAll(BARE_CITATION)) {
+            add(
+              'trace-test-unresolved',
+              `trace row cites ${match[1]}::${match[2]} without a test/ path, so the title cannot be checked`,
+            )
+          }
+          if (cell.includes('.test.ts') && !cell.includes('::')) {
+            options.onAdvisory?.(
+              `trace row cites tests without an exact title (${cell.slice(0, 80)}); the citation is unverified`,
+            )
+          }
+        }
+
+        if (adrColumn >= 0) {
+          const cell = (row[adrColumn] ?? '').trim()
+          if (cell.length === 0) {
+            add('trace-adr-missing', 'a trace row has an empty ADR cell')
+          } else if (!cell.startsWith('—') && !ADR_TOKEN.test(cell)) {
+            const key = traceRowKey(
+              requirementColumn >= 0 ? (row[requirementColumn] ?? '') : '',
+              row[componentColumn] ?? '',
+              interfaceColumn >= 0 ? (row[interfaceColumn] ?? '') : '',
+            )
+            const exempt = options.adrBaseline?.find((entry) => entry.key === key)
+            const today = options.today ?? new Date().toISOString().slice(0, 10)
+            if (exempt !== undefined && exempt.expires >= today) {
+              // An unexpired, row-identified exemption: reported, not hidden.
+              options.onAdvisory?.(
+                `trace row ADR cell is exempt until ${exempt.expires}: ${cell.slice(0, 60)}`,
+              )
+            } else if (exempt !== undefined) {
+              add(
+                'trace-adr-baseline-expired',
+                `a trace row ADR cell exemption expired on ${exempt.expires}; name an ADR or record a new decision`,
+              )
+            } else {
+              add(
+                'trace-adr-unnumbered',
+                `a trace row ADR cell names no ADR number: ${cell.slice(0, 60)}`,
+              )
+            }
+          }
+        }
+
         if (caseColumn >= 0) {
           for (const match of (row[caseColumn] ?? '').matchAll(CASE_ID)) {
             const id = match[0]

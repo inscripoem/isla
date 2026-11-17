@@ -23,7 +23,7 @@ import { resolveCharacterProfile } from './persona'
 import type { MemoryEntrySource } from './context'
 import type { BudgetPlan } from './budget'
 import type { CharacterState, StateBaseline, StateProfile } from './state'
-import type { ListenerHistoryPort } from './listener-history'
+import type { ListenerHistoryPort, ListenerHistoryRead } from './listener-history'
 import type { WorkingMemoryStore } from './working-memory'
 
 /**
@@ -250,10 +250,14 @@ export interface DialoguePortOptions {
    * the rendered prompt and every budget number are byte-identical to the
    * previous behaviour.
    *
-   * When supplied, `recent(request.sessionId, request.contextLimits.maxTurns)`
-   * is called at most once per `generate`, inside context assembly, so a port
-   * rejection follows the same failed-outcome path as a history-port failure.
-   * It is a local read: no provider attempt and no retry (NFR-04).
+   * When supplied, `recent({ sessionId, limit: contextLimits.maxTurns,
+   * beforeEventId: selectedInput.eventId })` is called at most once per
+   * `generate`, inside context assembly. The read is optional: a source that
+   * reports `unavailable` ('timeout' or 'rejected') contributes no turns, and a
+   * thrown or rejected call is contained as `'rejected'`, so neither changes the
+   * end or usage status - the reply proceeds without listener history and the
+   * outcome report carries `historyUnavailable`. It is a local read: no provider
+   * attempt, no retry and no extra I/O (NFR-04).
    */
   listenerHistory?: ListenerHistoryPort
   /**
@@ -317,6 +321,12 @@ export interface DialogueOutcomeReport {
   discarded: number
   /** Why each candidate lacks a fulfilled sink write, summing to `discarded`. */
   discards: Readonly<Record<string, number>>
+  /**
+   * null = listener history was off or the read succeeded. Never a delivery or
+   * playback claim: a diagnostic alongside `discards`, it never changes
+   * `endStatus` or `usageStatus`.
+   */
+  historyUnavailable: 'timeout' | 'rejected' | null
   /** Terminal `DialogueEnd.status` for the call. */
   endStatus: DialogueEnd['status']
   /** Usage status for the call. */
@@ -394,6 +404,7 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
     generated: number
     emitted: number
     discards: Readonly<Record<string, number>>
+    historyUnavailable: 'timeout' | 'rejected' | null
   }): void => {
     const observer = options.onOutcome
     if (observer === undefined) return
@@ -407,6 +418,7 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
         emitted: input.emitted,
         discarded: input.generated - input.emitted,
         discards: { ...input.discards },
+        historyUnavailable: input.historyUnavailable,
         endStatus: input.endStatus,
         usageStatus: input.usageStatus,
       })
@@ -457,6 +469,12 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
       let generated = 0
       let emitted = 0
       const discards: Record<string, number> = {}
+      /*
+       * The only per-`generate` diagnostic added by the listener-history port: it
+       * reports why an optional read yielded no turns (null = off or succeeded)
+       * and never feeds back into end status, usage, budget or prompt.
+       */
+      let historyUnavailable: 'timeout' | 'rejected' | null = null
       let reported = false
 
       const discard = (reason: string, count: number): void => {
@@ -478,7 +496,7 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
         const end = buildEnd(request, endStatus, emitted, startedAtMs, usageStatus, served)
         if (!reported) {
           reported = true
-          report({ request, endStatus, usageStatus, generated, emitted, discards })
+          report({ request, endStatus, usageStatus, generated, emitted, discards, historyUnavailable })
         }
         return end
       }
@@ -500,15 +518,39 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
         return terminal('failed', 'failed')
       }
 
+      /*
+       * One listener-history read per generation. Only this call is contained: an
+       * optional history read must never block a reply, and a thrown or rejected
+       * read is 'rejected', never 'timeout' (that reason belongs to the source's
+       * returned value). The caller's outer catch stays for genuine assembler
+       * errors and is not widened.
+       */
+      const readListenerHistory = async (): Promise<ListenerHistoryRead | null> => {
+        const listenerHistory = options.listenerHistory
+        if (listenerHistory === undefined) return null
+        try {
+          return await listenerHistory.recent({
+            sessionId: request.sessionId,
+            limit: request.contextLimits.maxTurns,
+            beforeEventId: request.selectedInput.eventId,
+          })
+        } catch {
+          return { turns: [], unavailable: 'rejected' }
+        }
+      }
+
       const assemble = async (): Promise<AssembledDialogueContext> => {
         try {
+          const listenerRead = await readListenerHistory()
+          historyUnavailable = listenerRead?.unavailable ?? null
+          /*
+           * An unavailable read contributes no turns at all, even when the source
+           * returned some; a successful read may legitimately be empty.
+           */
           const listenerTurns =
-            options.listenerHistory === undefined
+            listenerRead === null || listenerRead.unavailable !== null
               ? undefined
-              : await options.listenerHistory.recent(
-                  request.sessionId,
-                  request.contextLimits.maxTurns,
-                )
+              : listenerRead.turns
           /*
            * Working memory (issue #146 A07), closed-loop read. `observe` first
            * fulfils 'awaiting-reply' entries the audience has since answered
@@ -518,8 +560,8 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
            *
            * The selected input's own event is filtered here as well as in the
            * assembler: `observe` must not let the model's current input fulfil
-           * the entry that input is answering. The raw list still reaches
-           * assembly unchanged.
+           * the entry that input is answering. The list reaching assembly is the
+           * one the read produced: no turns when the read was unavailable.
            */
           const listenerTurnsForObserve = (listenerTurns ?? []).filter(
             (turn) => turn.eventId !== request.selectedInput.eventId,
@@ -556,7 +598,7 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
             ...(options.stateProfile === undefined
               ? {}
               : { stateProfile: options.stateProfile }),
-            ...(listenerTurns === undefined ? {} : { listenerTurns }),
+            listenerTurns,
             ...(workingMemoryEntries === undefined ? {} : { workingMemory: workingMemoryEntries }),
           })
         } catch (error) {

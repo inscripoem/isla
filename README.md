@@ -94,7 +94,24 @@ ISLA_DEPLOYMENT_MODULE=/absolute/path/to/deployment.ts pnpm runtime:production
 | `ISLA_STORAGE_DB_PATH` | SQLite database path; default `.cache/isla/isla.db`, kept outside OneDrive. |
 | `ISLA_RUNTIME_HOST`, `ISLA_RUNTIME_PORT` | Loopback bind address; default `127.0.0.1:4317`. |
 
-A complete live product deployment module has not yet been accepted. The retained synthesis factory uses the merged M1 PR33/34 interfaces; see the [physical synthesis handoff](docs/team/HANDOFF-M5-PHYSICAL-SYNTHESIS.en.md) for the shared adapter, originating gate and owned-release contract. The controlled deployment combines M3 rule selection and reaction with fixed WAV assets; live M4 text and selected model adapters remain owner deliverables. M5 owns dynamic audio HTTP/resource assembly and physical
+The reference live deployment is `src/runtime/deployments/reference-live.ts`. It reads its configuration from the same injected environment, fails startup when any required value is missing or invalid (naming the variables only, never their values), and wires the live text provider, Kokoro synthesis, the VTube Studio renderer and the audio registry. Its product acceptance is still pending; the module is the reviewable candidate, not an accepted live run.
+
+```sh
+ISLA_DEPLOYMENT_MODULE=src/runtime/deployments/reference-live.ts \
+ISLA_STORAGE_DB_PATH=.cache/isla/isla.db \
+ISLA_RUNTIME_HOST=127.0.0.1 ISLA_RUNTIME_PORT=4317 \
+pnpm runtime:production
+```
+
+`ISLA_VTS_HOTKEY_MAP` is a JSON object; every advertised action must have exactly one binding. The reference target uses the bundled `Hiyori_A` model (`00f9750080014d43bb398cd98e4f55ad`) and these three hotkey ids:
+
+```sh
+ISLA_VTS_HOTKEY_MAP='{"animation-1":"b66cf516d694446b9e1aafbcf16459a9","animation-2":"c28e206b5e3c4eb5be3c1dcee11f02c0","animation-3":"ad4e0bc1a58746a58002ad180692e649"}'
+```
+
+The `Hiyori_A` model id and the three hotkey ids are attributed to M1 observations on [issue #95](https://github.com/inscripoem/isla/issues/95); this PR did not re-measure them. `animation-1/2/3` map to `hiyori_m03/m06/m10.motion3.json`; the display names are the model's "My Animation 1/2/3". The host operator keeps the raw model, textures and motions outside the repository. The demo credits must carry Live2D's prescribed Hiyori copyright notice and use content that respects the character terms.
+
+The retained synthesis factory uses the merged M1 PR33/34 interfaces; see the [physical synthesis handoff](docs/team/HANDOFF-M5-PHYSICAL-SYNTHESIS.en.md) for the shared adapter, originating gate and owned-release contract. The controlled deployment combines M3 rule selection and reaction with fixed WAV assets; live M4 text and selected model adapters remain owner deliverables. M5 owns dynamic audio HTTP/resource assembly and physical
 provider lifecycle; M2 is the browser consumer. The module under
 `test/support/` is test-only and is used by the automated CLI suite, not by the
 product entry. SIGINT/SIGTERM perform the controlled shutdown: stop the transport,
@@ -116,14 +133,14 @@ Tests run locally without model services and exercise HTTP/WebSocket success, re
 
 ## Blocking gates (D7)
 
-The CI pipeline implements six gate checks plus the traceability fitness function; the design is recorded in [ADR-006](docs/architecture/adr/006-gate-tooling.md). G1 remains advisory, and G4 reports not run when its required evidence is absent.
+The CI pipeline implements six gate checks plus the traceability fitness function; the design is recorded in [ADR-006](docs/architecture/adr/006-gate-tooling.md) and its [enforcement delta](docs/architecture/delta/006-gate-enforcement.md). G1 uses recorded approval evidence once the approval record exists at the pull request's base and keeps the label rule (advisory) for older bases. G4 reports not run when there is no evidence at all, and fails a measured claim that has no evaluation table or no fixed conditions.
 
 | Gate | Enforced by |
 | --- | --- |
-| G1 — tests approved before implementation | the **`verify` job** (advisory step): the `tests-approved` label on a code/prompt pull request |
+| G1 — tests approved before implementation | the **`verify` job**: `docs/code-governance/test-approvals.yaml` must cover every changed code path and be committed before the first code commit (evidence mode); the `tests-approved` label remains the advisory rule for bases without the record |
 | G2 — static analysis + boundary | `pnpm typecheck && pnpm lint`; `pnpm test:readiness` (import/permission boundaries) |
 | G3 — requirements schema | `pnpm test:readiness` (registry validation) |
-| G4 — semantic evaluation | `pnpm gate:eval` — reports **not run** without an evaluation set + provider access (never a pass), and fails an evaluation table that omits the fixed conditions NFR-01 requires |
+| G4 — semantic evaluation | `pnpm gate:eval` — reports **not run** only when there is neither a table nor a claim; fails a table that omits the fixed conditions NFR-01 requires, a claim row with no value or conditions, and a measured prose claim with no evaluation table; reviewed exceptions expire in `gate-baseline.yaml` |
 | G5 — regression | `pnpm test` (all offline suites) |
 | G6 — AI-use log | `pnpm gate:ai-use-log` over the pull-request diff |
 | traceability | `pnpm test:trace` (INV-13: the chain is machine-checked; a changed frozen path passes only on a verified default-branch restoration for a feature-branch push) |

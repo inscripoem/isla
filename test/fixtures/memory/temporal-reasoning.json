@@ -1,0 +1,184 @@
+{
+  "corpusId": "temporal-reasoning",
+  "corpusVersion": 1,
+  "heldOutCaseIds": ["tr-02", "tr-05"],
+  "cases": [
+    {
+      "id": "tr-01",
+      "sessions": [
+        {
+          "sessionId": "tr-s1",
+          "turns": [
+            { "id": "tr-01-s1-t01", "speaker": "audience", "text": "I started learning the violin.", "atMs": 0 },
+            { "id": "tr-01-s1-t02", "speaker": "character", "text": "How are the strings treating you?", "atMs": 3000 },
+            { "id": "tr-01-s1-t03", "speaker": "audience", "text": "My fingers are sore but happy.", "atMs": 6000 }
+          ]
+        },
+        {
+          "sessionId": "tr-s2",
+          "turns": [
+            { "id": "tr-01-s2-t01", "speaker": "audience", "text": "Evening, keeper.", "atMs": 0 },
+            { "id": "tr-01-s2-t02", "speaker": "audience", "text": "I have been practicing the piano every night.", "atMs": 4000 },
+            { "id": "tr-01-s2-t03", "speaker": "character", "text": "Nightly practice is how fingers learn.", "atMs": 8000 }
+          ]
+        },
+        {
+          "sessionId": "tr-s3",
+          "turns": [
+            { "id": "tr-01-s3-t01", "speaker": "audience", "text": "Good evening again.", "atMs": 0 },
+            { "id": "tr-01-s3-t02", "speaker": "character", "text": "Welcome back.", "atMs": 3000 },
+            { "id": "tr-01-s3-t03", "speaker": "audience", "text": "What did I say I was practicing last time?", "atMs": 6000 }
+          ]
+        }
+      ],
+      "probes": [
+        { "question": "What did I say I was practicing last time?", "expected": ["tr-01-s2-t02"], "kind": "temporal" }
+      ]
+    },
+    {
+      "id": "tr-02",
+      "sessions": [
+        {
+          "sessionId": "tr-s1",
+          "turns": [
+            { "id": "tr-02-s1-t01", "speaker": "audience", "text": "I went to the mountain village of Pinewood.", "atMs": 0 },
+            { "id": "tr-02-s1-t02", "speaker": "character", "text": "Pinewood must have been cold.", "atMs": 3000 },
+            { "id": "tr-02-s1-t03", "speaker": "audience", "text": "Before that, I went to the lake town of Marsh.", "atMs": 6000 },
+            { "id": "tr-02-s1-t04", "speaker": "audience", "text": "Two trips in one month is a lot.", "atMs": 9000 }
+          ]
+        },
+        {
+          "sessionId": "tr-s2",
+          "turns": [
+            { "id": "tr-02-s2-t01", "speaker": "audience", "text": "I just returned from the coast town of Shorefield.", "atMs": 0 },
+            { "id": "tr-02-s2-t02", "speaker": "character", "text": "Salt air and long walks.", "atMs": 3000 },
+            { "id": "tr-02-s2-t03", "speaker": "audience", "text": "Exactly that.", "atMs": 6000 },
+            { "id": "tr-02-s2-t04", "speaker": "audience", "text": "Next month I plan to stay home.", "atMs": 9000 }
+          ]
+        },
+        {
+          "sessionId": "tr-s3",
+          "turns": [
+            { "id": "tr-02-s3-t01", "speaker": "audience", "text": "Tell me where I went before that trip.", "atMs": 0 },
+            { "id": "tr-02-s3-t02", "speaker": "character", "text": "Your journeys blur together.", "atMs": 3000 },
+            { "id": "tr-02-s3-t03", "speaker": "audience", "text": "They do, a little.", "atMs": 6000 }
+          ]
+        }
+      ],
+      "probes": [
+        { "question": "Where did I go before that trip?", "expected": ["tr-02-s1-t03"], "kind": "temporal" }
+      ]
+    },
+    {
+      "id": "tr-03",
+      "sessions": [
+        {
+          "sessionId": "tr-s1",
+          "turns": [
+            { "id": "tr-03-s1-t01", "speaker": "audience", "text": "I moved recently and I am still unpacking.", "atMs": 0 },
+            { "id": "tr-03-s1-t02", "speaker": "audience", "text": "Last year I lived in the town of Brookmere.", "atMs": 4000 },
+            { "id": "tr-03-s1-t03", "speaker": "character", "text": "Brookmere sounds like a sleepy place.", "atMs": 8000 },
+            { "id": "tr-03-s1-t04", "speaker": "audience", "text": "Sleepy is the right word.", "atMs": 12000 }
+          ]
+        },
+        {
+          "sessionId": "tr-s2",
+          "turns": [
+            { "id": "tr-03-s2-t01", "speaker": "audience", "text": "This year I am living near the harbour.", "atMs": 0 },
+            { "id": "tr-03-s2-t02", "speaker": "character", "text": "A change of scenery, then.", "atMs": 3000 },
+            { "id": "tr-03-s2-t03", "speaker": "audience", "text": "Where did I live last year?", "atMs": 6000 }
+          ]
+        }
+      ],
+      "probes": [
+        { "question": "Where did I live last year?", "expected": ["tr-03-s1-t02"], "kind": "temporal" }
+      ]
+    },
+    {
+      "id": "tr-04",
+      "sessions": [
+        {
+          "sessionId": "tr-s1",
+          "turns": [
+            { "id": "tr-04-s1-t01", "speaker": "audience", "text": "The hallway light is flickering.", "atMs": 0 },
+            { "id": "tr-04-s1-t02", "speaker": "character", "text": "A loose bulb, most likely.", "atMs": 3000 },
+            { "id": "tr-04-s1-t03", "speaker": "audience", "text": "I will ask my neighbour for a ladder.", "atMs": 6000 },
+            { "id": "tr-04-s1-t04", "speaker": "character", "text": "Careful on the step stool.", "atMs": 9000 },
+            { "id": "tr-04-s1-t05", "speaker": "audience", "text": "I promise to be careful.", "atMs": 12000 },
+            { "id": "tr-04-s1-t06", "speaker": "audience", "text": "The kitchen kettle is fine, at least.", "atMs": 15000 }
+          ]
+        },
+        {
+          "sessionId": "tr-s2",
+          "turns": [
+            { "id": "tr-04-s2-t01", "speaker": "audience", "text": "I tripped in the dark last night.", "atMs": 0 },
+            { "id": "tr-04-s2-t02", "speaker": "audience", "text": "As I said earlier, the lamp in the study is broken.", "atMs": 4000 },
+            { "id": "tr-04-s2-t03", "speaker": "audience", "text": "What did I say earlier about the broken lamp?", "atMs": 8000 }
+          ]
+        }
+      ],
+      "probes": [
+        { "question": "What did I say earlier about the broken lamp?", "expected": ["tr-04-s2-t02"], "kind": "temporal" }
+      ]
+    },
+    {
+      "id": "tr-05",
+      "sessions": [
+        {
+          "sessionId": "tr-s1",
+          "turns": [
+            { "id": "tr-05-s1-t01", "speaker": "audience", "text": "I had a busy Saturday.", "atMs": 0 },
+            { "id": "tr-05-s1-t02", "speaker": "audience", "text": "First I baked a loaf of rye bread.", "atMs": 4000 },
+            { "id": "tr-05-s1-t03", "speaker": "character", "text": "Warm bread is the best start.", "atMs": 8000 }
+          ]
+        },
+        {
+          "sessionId": "tr-s2",
+          "turns": [
+            { "id": "tr-05-s2-t01", "speaker": "audience", "text": "After that I painted the shed door blue.", "atMs": 0 },
+            { "id": "tr-05-s2-t02", "speaker": "character", "text": "Blue suits a shed.", "atMs": 4000 },
+            { "id": "tr-05-s2-t03", "speaker": "audience", "text": "I think so too.", "atMs": 8000 }
+          ]
+        },
+        {
+          "sessionId": "tr-s3",
+          "turns": [
+            { "id": "tr-05-s3-t01", "speaker": "audience", "text": "What did I do first?", "atMs": 0 },
+            { "id": "tr-05-s3-t02", "speaker": "audience", "text": "And what did I do after that?", "atMs": 4000 },
+            { "id": "tr-05-s3-t03", "speaker": "character", "text": "Bread, then paint.", "atMs": 8000 }
+          ]
+        }
+      ],
+      "probes": [
+        { "question": "What did I do first?", "expected": ["tr-05-s1-t02"], "kind": "temporal" },
+        { "question": "What did I do after that?", "expected": ["tr-05-s2-t01"], "kind": "temporal" }
+      ]
+    },
+    {
+      "id": "tr-06",
+      "sessions": [
+        {
+          "sessionId": "tr-s1",
+          "turns": [
+            { "id": "tr-06-s1-t01", "speaker": "audience", "text": "I am moving again.", "atMs": 0 },
+            { "id": "tr-06-s1-t02", "speaker": "character", "text": "Again? Where to?", "atMs": 3000 },
+            { "id": "tr-06-s1-t03", "speaker": "audience", "text": "To the town of Hollowell.", "atMs": 6000 }
+          ]
+        },
+        {
+          "sessionId": "tr-s2",
+          "turns": [
+            { "id": "tr-06-s2-t01", "speaker": "audience", "text": "I am settled in Hollowell now.", "atMs": 0 },
+            { "id": "tr-06-s2-t02", "speaker": "character", "text": "Is it quiet there?", "atMs": 4000 },
+            { "id": "tr-06-s2-t03", "speaker": "audience", "text": "Very. Before this one I lived in the town of Gullsport.", "atMs": 8000 },
+            { "id": "tr-06-s2-t04", "speaker": "character", "text": "Gullsport, Hollowell, and wherever next.", "atMs": 12000 },
+            { "id": "tr-06-s2-t05", "speaker": "audience", "text": "What town did I mention before this one?", "atMs": 16000 }
+          ]
+        }
+      ],
+      "probes": [
+        { "question": "What town did I mention before this one?", "expected": ["tr-06-s1-t03"], "kind": "temporal" }
+      ]
+    }
+  ]
+}

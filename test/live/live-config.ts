@@ -81,10 +81,16 @@ export function readLiveTextProviderConfig(env: NodeJS.ProcessEnv = process.env)
   const model = (env[LIVE_TEXT_PROVIDER_ENV.model] ?? '').trim()
   const apiKey = (env[LIVE_TEXT_PROVIDER_ENV.apiKey] ?? '').trim()
 
-  if (!/^https?:\/\//i.test(baseUrl)) {
+  // Same rule as the decision and JEV providers below, and the same rule the
+  // product deployment applies (`isHttpsOrLoopbackHttp` in
+  // src/runtime/deployments/reference-live-config.ts): https anywhere, plain
+  // http only on loopback, no embedded credentials, no fragment. A looser live
+  // rule would let the harness exercise a URL the deployment refuses.
+  const parsedBaseUrl = parseLoopbackSafeBaseUrl(baseUrl)
+  if (parsedBaseUrl === null) {
     return {
       available: false,
-      reason: `${LIVE_TEXT_PROVIDER_ENV.baseUrl} must be an http(s) URL`,
+      reason: `${LIVE_TEXT_PROVIDER_ENV.baseUrl} must be an https URL or loopback http (localhost, 127.0.0.1, [::1])`,
       config: null,
     }
   }
@@ -93,7 +99,7 @@ export function readLiveTextProviderConfig(env: NodeJS.ProcessEnv = process.env)
     available: true,
     reason: null,
     config: {
-      baseUrl: baseUrl.replace(/\/+$/, ''),
+      baseUrl: canonicalBaseUrl(parsedBaseUrl),
       model,
       apiKey,
     },
@@ -150,6 +156,15 @@ function parseLoopbackSafeBaseUrl(baseUrl: string): URL | null {
   return null
 }
 
+/**
+ * Canonical form of a validated base URL: the path keeps its query string,
+ * trailing path slashes are trimmed, and the fragment (already rejected) is
+ * never carried. Shared by every provider group so their output shape matches.
+ */
+function canonicalBaseUrl(parsedBaseUrl: URL): string {
+  return `${parsedBaseUrl.origin}${parsedBaseUrl.pathname.replace(/\/+$/, '')}${parsedBaseUrl.search}`
+}
+
 function readModelProviderConfig(
   env: NodeJS.ProcessEnv,
   providerEnv: LiveProviderEnv,
@@ -197,10 +212,7 @@ function readModelProviderConfig(
     available: true,
     reason: null,
     config: {
-      baseUrl: `${parsedBaseUrl.origin}${parsedBaseUrl.pathname.replace(
-        /\/+$/,
-        '',
-      )}${parsedBaseUrl.search}`,
+      baseUrl: canonicalBaseUrl(parsedBaseUrl),
       model,
       apiKey,
       ...(maxTokens === undefined ? {} : { maxTokens }),

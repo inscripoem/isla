@@ -1,0 +1,26 @@
+# Expiry-dated exemptions for the evidence gates (Tier 1).
+#
+# A baseline entry is an admission, not a fix. It suppresses one *identified*
+# violation until `expires`; on the first run after that date the gate fails again
+# and the owning entry must be corrected or the exemption renewed with a recorded
+# reason. Matching is by identity (kind + exact value), so a baseline cannot hide a
+# different violation, and a removed value that returns later is still a violation.
+#
+# Owner: M6. Reviewed: 2026-11-13 with the gate implementation.
+version: "1"
+items: []
+# Historical AI-use entries may cite commits that a fresh clone does not carry
+# (squash-merged work). Those are advisory, never failures, so they need no
+# exemption. Only a NEW entry is required to cite a commit reachable from HEAD.
+
+# Trace rows whose ADR cell cannot yet name a number. The key is the SHA-256 of
+# `requirement|component|interface`; editing any of those cells invalidates the
+# exemption, so the row cannot drift while it stays exempt.
+traceRows:
+  - key: "888c336c864ec6bf5b60da0ac012ba5e1fd33c70d6a226136dfd52b981d9cc3a"
+    expires: "2026-12-15"
+    reason: "INV-15 / FR-06 row links #25 coordination instead of an ADR; M5 owns the row"
+
+# Reviewed prose-claim exceptions. The key is the SHA-256 of `path|trimmed line`,
+# so editing the sentence invalidates the exemption.
+claims: []

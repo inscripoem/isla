@@ -474,7 +474,7 @@ export function ConsoleApp({
           })
         : null
 
-    void (async () => {
+    const bootstrapApplication = async (): Promise<void> => {
       try {
         const bootstrap: BootstrapSnapshot = await transport.bootstrap()
         if (cancelled) return
@@ -530,10 +530,19 @@ export function ConsoleApp({
         if (cancelled) return
         setState((current) => withConnection(current, 'error', identify(error)))
       }
-    })()
+    }
+
+    // React StrictMode mounts, runs effects, and immediately runs their cleanup
+    // in development. The zero-delay timer lets that discarded initial effect's
+    // cleanup cancel bootstrap before that mount starts a WebSocket.
+    const bootstrapTimer = setTimeout(() => {
+      if (cancelled) return
+      void bootstrapApplication()
+    }, 0)
 
     return () => {
       cancelled = true
+      clearTimeout(bootstrapTimer)
       unsubscribeApplication?.()
       unsubscribeBase?.()
       machineRef.current?.dispose('console unmounted')

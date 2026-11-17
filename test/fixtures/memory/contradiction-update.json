@@ -1,0 +1,172 @@
+{
+  "corpusId": "contradiction-update",
+  "corpusVersion": 1,
+  "heldOutCaseIds": ["cu-01", "cu-04"],
+  "cases": [
+    {
+      "id": "cu-01",
+      "sessions": [
+        {
+          "sessionId": "cu-s1",
+          "turns": [
+            { "id": "cu-01-s1-t01", "speaker": "audience", "text": "I live in Hangzhou, near the river.", "atMs": 0 },
+            { "id": "cu-01-s1-t02", "speaker": "character", "text": "A river city suits you.", "atMs": 3000 },
+            { "id": "cu-01-s1-t03", "speaker": "audience", "text": "The mornings there are foggy.", "atMs": 6000 }
+          ]
+        },
+        {
+          "sessionId": "cu-s2",
+          "turns": [
+            { "id": "cu-01-s2-t01", "speaker": "audience", "text": "I moved to Suzhou last month.", "atMs": 0 },
+            { "id": "cu-01-s2-t02", "speaker": "character", "text": "Then the boxes are yours to unpack.", "atMs": 4000 },
+            { "id": "cu-01-s2-t03", "speaker": "audience", "text": "Where do I live?", "atMs": 8000 }
+          ]
+        }
+      ],
+      "probes": [
+        { "question": "Where do I live?", "expected": ["cu-01-s2-t01"], "kind": "contradiction" }
+      ]
+    },
+    {
+      "id": "cu-02",
+      "sessions": [
+        {
+          "sessionId": "cu-s1",
+          "turns": [
+            { "id": "cu-02-s1-t01", "speaker": "audience", "text": "My favourite drink is black tea.", "atMs": 0 },
+            { "id": "cu-02-s1-t02", "speaker": "character", "text": "Plain and steady.", "atMs": 3000 },
+            { "id": "cu-02-s1-t03", "speaker": "audience", "text": "With a little milk.", "atMs": 6000 }
+          ]
+        },
+        {
+          "sessionId": "cu-s2",
+          "turns": [
+            { "id": "cu-02-s2-t01", "speaker": "audience", "text": "I have switched to lemonade.", "atMs": 0 },
+            { "id": "cu-02-s2-t02", "speaker": "character", "text": "Lemonade is a summer answer.", "atMs": 3000 },
+            { "id": "cu-02-s2-t03", "speaker": "audience", "text": "It is, and I love it.", "atMs": 6000 }
+          ]
+        },
+        {
+          "sessionId": "cu-s3",
+          "turns": [
+            { "id": "cu-02-s3-t01", "speaker": "audience", "text": "Actually, my favourite drink is cold ginger beer now.", "atMs": 0 },
+            { "id": "cu-02-s3-t02", "speaker": "character", "text": "Ginger beer is a bold choice.", "atMs": 3000 },
+            { "id": "cu-02-s3-t03", "speaker": "audience", "text": "It bites back a little.", "atMs": 6000 },
+            { "id": "cu-02-s3-t04", "speaker": "audience", "text": "What is my favourite drink?", "atMs": 9000 }
+          ]
+        }
+      ],
+      "probes": [
+        { "question": "What is my favourite drink?", "expected": ["cu-02-s3-t01"], "kind": "contradiction" }
+      ]
+    },
+    {
+      "id": "cu-03",
+      "sessions": [
+        {
+          "sessionId": "cu-s1",
+          "turns": [
+            { "id": "cu-03-s1-t01", "speaker": "audience", "text": "Let us meet on Tuesday.", "atMs": 0 },
+            { "id": "cu-03-s1-t02", "speaker": "character", "text": "Tuesday afternoon it is.", "atMs": 3000 },
+            { "id": "cu-03-s1-t03", "speaker": "audience", "text": "Two o'clock would work.", "atMs": 6000 },
+            { "id": "cu-03-s1-t04", "speaker": "audience", "text": "Actually, make it Thursday.", "atMs": 9000 },
+            { "id": "cu-03-s1-t05", "speaker": "audience", "text": "Same time, later in the week.", "atMs": 12000 }
+          ]
+        },
+        {
+          "sessionId": "cu-s2",
+          "turns": [
+            { "id": "cu-03-s2-t01", "speaker": "audience", "text": "I have my calendar open.", "atMs": 0 },
+            { "id": "cu-03-s2-t02", "speaker": "character", "text": "A Thursday meeting, then.", "atMs": 3000 },
+            { "id": "cu-03-s2-t03", "speaker": "audience", "text": "Which day did we settle on?", "atMs": 6000 }
+          ]
+        }
+      ],
+      "probes": [
+        { "question": "Which day did we settle on?", "expected": ["cu-03-s1-t04"], "kind": "contradiction" }
+      ]
+    },
+    {
+      "id": "cu-04",
+      "sessions": [
+        {
+          "sessionId": "cu-s1",
+          "turns": [
+            { "id": "cu-04-s1-t01", "speaker": "audience", "text": "My sister is helping me move.", "atMs": 0 },
+            { "id": "cu-04-s1-t02", "speaker": "character", "text": "Is her name Mabel, as I remember?", "atMs": 3000 },
+            { "id": "cu-04-s1-t03", "speaker": "audience", "text": "Close, but no.", "atMs": 6000 }
+          ]
+        },
+        {
+          "sessionId": "cu-s2",
+          "turns": [
+            { "id": "cu-04-s2-t01", "speaker": "character", "text": "Remind me of your sister's name.", "atMs": 0 },
+            { "id": "cu-04-s2-t02", "speaker": "audience", "text": "Her name is Della, not Mabel.", "atMs": 4000 },
+            { "id": "cu-04-s2-t03", "speaker": "character", "text": "Della. Noted properly this time.", "atMs": 8000 },
+            { "id": "cu-04-s2-t04", "speaker": "audience", "text": "What is my sister's name?", "atMs": 12000 }
+          ]
+        }
+      ],
+      "probes": [
+        { "question": "What is my sister's name?", "expected": ["cu-04-s2-t02"], "kind": "contradiction" }
+      ]
+    },
+    {
+      "id": "cu-05",
+      "sessions": [
+        {
+          "sessionId": "cu-s1",
+          "turns": [
+            { "id": "cu-05-s1-t01", "speaker": "audience", "text": "I work as a librarian.", "atMs": 0 },
+            { "id": "cu-05-s1-t02", "speaker": "character", "text": "A quiet trade.", "atMs": 3000 },
+            { "id": "cu-05-s1-t03", "speaker": "audience", "text": "My office is in the old mill building.", "atMs": 6000 }
+          ]
+        },
+        {
+          "sessionId": "cu-s2",
+          "turns": [
+            { "id": "cu-05-s2-t01", "speaker": "audience", "text": "I changed jobs this spring.", "atMs": 0 },
+            { "id": "cu-05-s2-t02", "speaker": "audience", "text": "I am a cartographer now.", "atMs": 4000 },
+            { "id": "cu-05-s2-t03", "speaker": "character", "text": "Maps instead of shelves.", "atMs": 8000 }
+          ]
+        },
+        {
+          "sessionId": "cu-s3",
+          "turns": [
+            { "id": "cu-05-s3-t01", "speaker": "audience", "text": "The office moved across town.", "atMs": 0 },
+            { "id": "cu-05-s3-t02", "speaker": "audience", "text": "My office is in Fenwick Street now.", "atMs": 4000 },
+            { "id": "cu-05-s3-t03", "speaker": "audience", "text": "What is my job now?", "atMs": 8000 }
+          ]
+        }
+      ],
+      "probes": [
+        { "question": "What is my job now?", "expected": ["cu-05-s2-t02"], "kind": "contradiction" },
+        { "question": "Which city is my office in?", "expected": ["cu-05-s3-t02"], "kind": "contradiction" }
+      ]
+    },
+    {
+      "id": "cu-06",
+      "sessions": [
+        {
+          "sessionId": "cu-s1",
+          "turns": [
+            { "id": "cu-06-s1-t01", "speaker": "audience", "text": "I keep bees in the back garden.", "atMs": 0 },
+            { "id": "cu-06-s1-t02", "speaker": "character", "text": "Busy neighbours, then.", "atMs": 3000 },
+            { "id": "cu-06-s1-t03", "speaker": "audience", "text": "They hum all summer.", "atMs": 6000 }
+          ]
+        },
+        {
+          "sessionId": "cu-s2",
+          "turns": [
+            { "id": "cu-06-s2-t01", "speaker": "audience", "text": "I do not keep bees anymore.", "atMs": 0 },
+            { "id": "cu-06-s2-t02", "speaker": "character", "text": "The garden will be quieter.", "atMs": 4000 },
+            { "id": "cu-06-s2-t03", "speaker": "audience", "text": "Do I still keep bees?", "atMs": 8000 }
+          ]
+        }
+      ],
+      "probes": [
+        { "question": "Do I still keep bees?", "expected": ["cu-06-s2-t01"], "kind": "contradiction" }
+      ]
+    }
+  ]
+}
