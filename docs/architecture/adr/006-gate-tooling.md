@@ -43,6 +43,12 @@ inside `pnpm test`, but are not named gates; G1/G4/G6 are absent). The course di
 - **G6** is `src/evaluation/ai-use-log-gate.ts` — a code/prompt change must also update
   `docs/ai-use-log.yaml` (INV-14), and must **add** an entry: the log at the base revision is compared
   with the head, so editing an existing entry does not satisfy it.
+- **G6 ancestry scope.** The pull request is the enforcement point for commit reachability: a new
+  entry's cited commits must be reachable from the PR head. A push to `main` is an integration event
+  — the squash merge orphans the branch commits — so CI supplies no base copy there, every merged
+  entry is treated as historical, and squash-orphaned branch commits do not fail main CI. Main
+  therefore enforces entry shape and the log-update rule; it does not re-adjudicate the ancestry the
+  PR gate already checked.
 - **G1** is an **advisory step inside the `verify` job**: it reads the `tests-approved` label on a
   pull request that changes code or prompts. It becomes blocking when the team agrees and branch
   protection requires `verify` — the check is the job, not a separately named check.

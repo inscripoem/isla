@@ -136,7 +136,15 @@ function countEntries(text: string): { count: number } | { error: string } {
   return { count: entries.length }
 }
 
-/** The log at the base revision, or null when the variable is unset. Set-but-missing throws. */
+/**
+ * The log at the base revision, or null when the variable is unset or empty.
+ * Set-but-missing throws.
+ *
+ * A null result is the push-integration scope: the run has no base copy, so the
+ * caller treats every entry as historical and checks only entry shape and the
+ * log-update rule. A pull request supplies the base and remains strict for the
+ * entries it adds; see `historicalBefore`.
+ */
 function readLogBase(env: NodeJS.ProcessEnv = process.env): string | null {
   const path = env[AI_USE_LOG_BASE_ENV]
   if (path === undefined || path.trim().length === 0) return null
@@ -180,6 +188,12 @@ export interface AiUseReferenceDeps {
    * work. Entries at or after it are new and must cite string commits
    * reachable from HEAD. Defaults to 0 (every entry is new) so a caller cannot
    * accidentally weaken the rule by omitting it.
+   *
+   * The scope is set by the base copy. A pull request supplies the base, so the
+   * entries the change adds stay strict: that run is where commit reachability is
+   * enforced. A push to main is an integration event whose squash orphans the
+   * branch commits, so CI supplies no base there; an absent or empty base marks
+   * every entry historical and main re-adjudicates no ancestry.
    */
   readonly historicalBefore?: number
   readonly caseIds: ReadonlySet<string> | null

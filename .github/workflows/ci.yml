@@ -158,7 +158,12 @@ jobs:
         if: always() && steps.install.outcome == 'success'
         env:
           CHANGED_FILES_FILE: .cache/changed-files.nul
-          AI_USE_LOG_BASE_FILE: .cache/ai-use-log.base.yaml
+          # The pull request is the ancestry enforcement point: G6 holds a new entry's
+          # cited commits to those reachable from the PR head. A push is an integration
+          # event — the squash merge orphans the branch commits — so no base copy is
+          # offered and the gate treats every entry as historical. Main enforces the
+          # entry shape and the log-update rule, not commit reachability.
+          AI_USE_LOG_BASE_FILE: "${{ github.event_name == 'pull_request' && '.cache/ai-use-log.base.yaml' || '' }}"
         run: pnpm gate:ai-use-log
 
       - name: G4 - semantic evaluation (reported not run without an evaluation set)
