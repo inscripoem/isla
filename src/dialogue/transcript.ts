@@ -1,9 +1,10 @@
 import type { AssembledTurn } from './context'
 import type { ListenerTurn } from './listener-history'
+import type { SalienceScore } from './salience'
 
 /** One merged transcript row: either an audience utterance or a confirmed reply. */
 export type TranscriptEntry =
-  | { role: 'listener'; turn: ListenerTurn }
+  | { role: 'listener'; turn: ListenerTurn; salience?: SalienceScore }
   | { role: 'character'; turn: AssembledTurn }
 
 /**
