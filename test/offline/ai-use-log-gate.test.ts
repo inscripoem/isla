@@ -288,6 +288,23 @@ entries:
     expect(violations.join(' ')).toContain('not reachable from HEAD')
   })
 
+  it('does not fail an unreachable commit when every entry is historical (a push integration)', () => {
+    // A push to main supplies no base copy, so the gate marks every entry historical.
+    // `fedcba9` exists in this clone but is not reachable from HEAD — exactly the state
+    // a squash merge leaves the branch commits in.
+    const text = log('[fedcba9]')
+    expect(
+      collectAiUseLogReferenceViolations(
+        text,
+        deps({ historicalBefore: Number.MAX_SAFE_INTEGER }),
+      ),
+    ).toEqual([])
+    // The default stays strict, so the pull request still rejects the same citation.
+    expect(collectAiUseLogReferenceViolations(text, deps()).join(' ')).toContain(
+      'not reachable from HEAD',
+    )
+  })
+
   it('fails closed when commit history is unavailable for a new entry', () => {
     const violations = collectAiUseLogReferenceViolations(
       log('[abcdef1]'),
