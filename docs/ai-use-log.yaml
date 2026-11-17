@@ -8484,7 +8484,7 @@ entries:
       rather than being inferred from the runtime source channel.
     requirements: [NFR-01, NFR-03]
     invariants: []
-    commits: [960bdbdcc09867e8589018dc680bbc1b98cc8377]
+    commits: [c753a580c78e04582c8581a117285f907563cb09]
     agent: build
     provider: self-api
     model: deepseek-v4-flash
@@ -8533,10 +8533,13 @@ entries:
       remain null with the recorded reason, and ADR-008 open decision row 3
       records the split: requestMessageId and eventId are produced per input,
       while the corpus sourceId mapping is the named follow-up "corpus
-      sourceId export".
+      sourceId export". M3's later review at 1887d8b found the
+      turn.started-to-dialogue.result interval contaminated by synthesis,
+      reaction, rendering and playback; the 2026-11-17 entry supersedes that
+      timing choice.
     requirements: [NFR-01, NFR-03]
     invariants: [INV-16]
-    commits: [a464c8072f77966e41db26f777301c16781b47bf]
+    commits: [22a311781c8e4c3ca69285b3ae62d0a367a83afc]
     agent: build
     provider: self-api
     model: deepseek-v4-flash
@@ -8565,15 +8568,75 @@ entries:
         37/37 focused, test:m5 263/263 and verify 1555/1555; the current
         counts include the merged main and the two new not-run tests.
       limits: >-
-        No live provider, browser playback, acoustic measurement, Windows run
-        or GitHub CI run was performed. The not-run observation channel is
-        in-memory only: a runner or companion producer must opt in before it
-        can consume it, and the recorded-run file still loses it by design.
-        sourceId remains null, so the companion correlation stays missing
-        until the named corpus sourceId export follow-up lands.
+        The branch was later pushed and both remote verify runs were green at
+        1887d8b. No live provider, browser playback, acoustic measurement or
+        Windows run was performed by this branch. The not-run observation
+        channel is in-memory only: a runner or companion producer must opt in
+        before it can consume it, and the recorded-run file still loses it by
+        design. sourceId remains null, so the companion correlation stays
+        missing until the named corpus sourceId export follow-up lands.
     scope: >-
       src/runtime/evaluation-adapter.ts, src/evaluation/comparison.ts,
       test/offline/m5-evaluation-adapter.test.ts,
       docs/architecture/adr/008-prepared-input-provenance.md and this log
       entry. No frozen contract, RecordedRunV1, storage, provider, companion
       schema, dependency or deployment change.
+
+  - date: "2026-11-17"
+    task: M5-101-dialogue-timing-boundary-fix
+    change: >-
+      Address M3's blocking review at 1887d8b. The adapter now reports every
+      stage timing as null: dialogue.result is persisted only after the
+      coordinator awaits the in-flight segment chain, so turn.started to
+      dialogue.result also contains M1 synthesis, M3 reaction, avatar rendering
+      and full audio playback, and no uncontaminated dialogue-completion
+      boundary is recorded. No measured stage value is claimed. The change also
+      guards an explicit empty inputs list from emitting a vacuous not-run
+      observation, marks admittedAtMs as observation-only, documents the
+      multi-input submitMs ambiguity, adds direct occurrence-index and
+      caller-mutation tests for not-run observations, and corrects the
+      evaluation-protocol timing notes. The protocol document remains
+      M6-owned; M6 confirmation is requested in the PR.
+    requirements: [NFR-01, NFR-03]
+    invariants: [INV-14, INV-16]
+    commits: [006dde747ce486ad64c907506195963e1bba477b]
+    agent: build
+    provider: self-api
+    model: deepseek-v4-flash
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    sessions: [ses_e15d0b969ffemGwBE9exO0nDdD]
+    supervision: >-
+      The orchestrating assistant (Claude Code) supervised the OpenCode build
+      session in a task-level configuration that disables oh-my-opencode-slim,
+      enables the build agent and denies shell, glob, grep, subagent and
+      external-directory access. The session had no shell tool, so the
+      orchestrator ran every test command outside it and the results below are
+      measured locally.
+    human_review: >-
+      Captain requested all local preparation and item-by-item review. M3's
+      review at 1887d8b requested changes; this fix is local only. Push, PR body
+      update and re-review requests await Captain approval. No agent merges.
+    transcript_record: >-
+      The genuine OpenCode session ses_e15d0b969ffemGwBE9exO0nDdD remains in
+      the local OpenCode store; the export is saved in
+      evidence/pr160-fix-20261117/SESSION.json outside the checkout, together
+      with the raw run stream.
+    verification:
+      base: b58a5adcb8b187e45eef05ece17834beaa0b3478
+      results: >-
+        Linux: pnpm typecheck exited 0; pnpm test:m5 passed 289/289;
+        pnpm test:m6 passed 343/343; pnpm verify exited 0 with 94 files /
+        2048 tests, lint and a successful build; git diff --check exited 0.
+      limits: >-
+        No live provider, browser playback, acoustic measurement, Windows run
+        or GitHub CI run was performed for this fix. The protocol correction
+        needs M6 confirmation because that document is M6-owned. The timing
+        fields stay null until a dialogue-generation completion boundary before
+        the first sink dispatch is recorded, which requires an M4/M5/M6 design
+        change and is not implemented here.
+    scope: >-
+      src/runtime/evaluation-adapter.ts, src/evaluation/comparison.ts,
+      test/offline/m5-evaluation-adapter.test.ts,
+      test/offline/m6-02-comparison.test.ts,
+      docs/architecture/evaluation-protocol.md and this log entry. No frozen
+      contract, RecordedRunV1, storage schema, provider or deployment change.
