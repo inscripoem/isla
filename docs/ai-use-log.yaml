@@ -8898,3 +8898,38 @@ entries:
       test/offline/m6-02-comparison.test.ts,
       docs/architecture/evaluation-protocol.md and this log entry. No frozen
       contract, RecordedRunV1, storage schema, provider or deployment change.
+
+  - date: "2026-11-18"
+    task: M2-174-p0-contrast
+    change: >-
+      Console-scoped WCAG AA contrast fixes C01-C06 for secondary text, alert
+      text, ribbon titles, status tags, the danger button and active tab, plus
+      the pending border and keyboard focus outline; the connection failure
+      detail near the page header now uses the alert style.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    opencode_version: "1.19.4"
+    launch_flags: [--agent, build, --format, json, --variant, xhigh]
+    sessions: [ses_e11a2463cffeUZU3U8mo3OYrNn]
+    supervision: >-
+      The M2 member directed this P0 contrast slice; this OpenCode session
+      authored the console CSS and TSX changes and this log entry.
+    human_review: >-
+      The M2 member approved the slice and a local commit; this session
+      performed no git operation.
+    transcript_record: >-
+      The raw CLI JSON output is retained outside the checkout.
+    verification:
+      base: b58a5ad
+      results: >-
+        macOS: pnpm test:m2 passed 1 file / 93 tests; pnpm typecheck exited 0;
+        pnpm lint exited 0; pnpm gate:ai-use-log passed.
+      independent: "Supervisor rerun on macOS after this session: pnpm test:m2 passed 93 tests in 1 file; pnpm verify passed 94 files / 2038 tests including typecheck, lint and build; pnpm gate:ai-use-log with AI_USE_LOG_BASE_FILE and the three changed files passed."
+    scope: >-
+      src/console/console.css, src/console/ConsoleApp.tsx and
+      docs/ai-use-log.yaml. Contracts, runtime, dialogue, performance, tests,
+      manifests and the animal-island-ui library remain untouched.
