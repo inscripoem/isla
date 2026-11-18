@@ -21,6 +21,31 @@ agent-induced bloat, evaluation debt, guardrail debt, human/cognitive debt.
 | DEBT-12 | hidden dependency | The append-only `docs/ai-use-log.yaml` conflicts on every code merge | the I1 PRs are blocked by a bookkeeping file, not by code; repeated rebases | M5/M6 | standing rebase rule; an ADR to split the log only if it recurs after the I1 batch |
 | DEBT-13 | evaluation debt | `condition-mismatch` cannot be evaluated: conditions are recorded per run, not per attempt | protocol §3 rule 5 is unimplemented | M4/M6 | per-attempt conditions, or an explicit recorded limitation |
 | DEBT-14 | evaluation debt | the recorded run carries no corpus identity (`FixedConditions` has no `corpusVersion`/`casesSha256`), so the label file's corpus tuple is checked only against the supplied manifest | a label file for one corpus can be joined to a run produced from another whenever the manifest matches the labels (#145) | M6/M3 | add a corpus field in a versioned run-schema decision (trigger: the first formal run, or a second corpus version); until then the operator supplies the run and the manifest together |
+| DEBT-15 | guardrail debt | G1 evidence mode (#158) blocks four delivery PRs without a pre-implementation approval record: #160 (`src/runtime/evaluation-adapter.ts`), #170/#171 (`src/dialogue/`), #175 (`src/console/`). Their pull-request `verify` runs fail only G1; no approval record covers the changed paths. | the required `verify` check is red, so merge needs a recorded exception plus an explicit ruleset bypass or ruleset change; G1 is not claimed as passed | CHANG Xuben (M5, team coordination) / M6 | one delivery-window exception; #160 first uses the G1 retroactivity fix; #170/#171/#175 require owner acknowledgment and all other gates; no retroactive TA record; future PRs need a TA record on `main` before implementation; expires 2026-11-30 |
+
+## G1 delivery exception — 2026-11-18
+
+Decision: CHANG Xuben (M5, team coordination) records a one-delivery exception for PRs #160, #170, #171 and #175. This accepts the G1 failure as debt; it does not make G1 pass and does not create or backdate an approval record.
+
+### Scope and evidence
+
+- #160: `src/runtime/evaluation-adapter.ts`; pull-request run `44302927637` fails only G1 with `no recorded approval covers src/runtime/evaluation-adapter.ts`.
+- #170: `src/dialogue/` (A03); pull-request run `44145390282` fails only the G1 step.
+- #171: `src/dialogue/` (A06); pull-request run `44146008624` fails only the G1 step.
+- #175: `src/console/ConsoleApp.tsx` and `src/console/console.css`; pull-request run `44294388233` fails only G1 with `no recorded approval covers src/console/ConsoleApp.tsx, src/console/console.css`.
+
+The corresponding push runs are green because G1 is skipped on push by design; they are not evidence that the pull-request gate passed.
+
+### Conditions
+
+1. Each PR keeps its visible red G1 check. This record does not claim that G1 passed.
+2. Merge requires the current `Protect Main` ruleset to permit it. The ruleset requires `verify`; the API currently reports one `RepositoryRole` bypass actor with `bypass_mode: pull_request`. Confirm that the actor is the repository-admin role before relying on it. If it is not usable, a ruleset change is required; this exception does not itself change the ruleset.
+3. Code review and every non-G1 gate must pass at the exact head.
+4. M4 acknowledges #170/#171 (issues #146) and M2 acknowledges #175 (issue #174).
+5. #160 first uses the G1 retroactivity fix based on the PR creation-time base ([#177](https://github.com/inscripoem/isla/issues/177)). This exception covers #160 only if that fix is not adopted before the delivery cut-off.
+6. No retroactive TA record is created, and no approval date is backdated. Future PRs require a TA record on `main` before implementation begins.
+
+Expiry: 2026-11-30 or final submission, whichever is earlier. This is a delivery-window exception, not a precedent for future gates.
 
 ## PR53 IPC literal follow-up
 
