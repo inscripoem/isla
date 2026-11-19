@@ -8974,3 +8974,52 @@ entries:
     scope: >-
       src/console/ConsoleApp.tsx and docs/ai-use-log.yaml only, no contracts,
       runtime, tests, manifests or the animal-island-ui library changed.
+
+  - date: "2026-11-19"
+    task: M2-174-c10-draft-preserved-on-refusal
+    change: >-
+      The operator's composer draft is now captured once as the raw draft at
+      the start of submitInput, while the existing trimmed text remains the
+      submitted payload. The draft is never cleared before dispatch: the
+      machine path clears it only after activeMachine.input() returns a
+      non-null id, and the legacy transport path clears it only when the ack
+      status is accepted, applied or duplicate. Clearing is functional and
+      guarded so it only empties the composer when it still holds the submitted
+      raw draft, preserving text typed while an async ack was pending. Every
+      failure branch (machine returns null, machine throws, transport ack is
+      rejected, transport throws) keeps the draft and restores the submitted
+      raw draft only when the composer is empty, so the operator can edit and
+      retry without overwriting text typed during the pending request. The
+      existing reducer calls, notifications and failed list item rendering are
+      unchanged, and no automatic retry or new component-external state was
+      added. No test was added: the offline suite has no DOM renderer and the
+      only fixture path that makes PerformerMachine.input() return null is a
+      disposed machine, which the console never calls into, so a refusal cannot
+      be forced from the existing fixtures; the refusal walk remains a manual
+      state check.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    opencode_version: "1.19.4"
+    launch_flags: [--agent, build, --format, json, --variant, xhigh]
+    sessions: [ses_e0bb942e0ffe3MV9iDqWJL9sOn]
+    supervision: >-
+      The M2 member directed this P1 slice and this OpenCode session authored the
+      console change and this log entry.
+    human_review: >-
+      The M2 member approved the slice and a local commit, and this session
+      performed no git operation.
+    transcript_record: >-
+      The raw CLI JSON output is retained outside the checkout.
+    verification:
+      base: ff21d8f
+      results: >-
+        Supervisor reruns pnpm test:m2, pnpm typecheck and pnpm lint, and the
+        refusal walk remains a manual state check because existing fixtures
+        cannot force a machine refusal.
+    scope: >-
+      src/console/ConsoleApp.tsx and docs/ai-use-log.yaml only, no tests,
+      contracts, runtime, manifests or the animal-island-ui library changed.

@@ -577,7 +577,8 @@ export function ConsoleApp({
   const submitInput = useCallback(async () => {
     const current = stateRef.current
     const session = current.session
-    const text = draft.trim()
+    const rawDraft = draft
+    const text = rawDraft.trim()
     const transport = transportRef.current
     if (transport === null || session === null || !canDispatch(current) || text.length === 0) return
     const message: InputSubmitMessage = {
@@ -588,30 +589,33 @@ export function ConsoleApp({
       kind: 'input.submit',
       payload: { source, text },
     }
+    const restoreDraft = () => setDraft((composer) => (composer.length === 0 ? rawDraft : composer))
     if (transport !== null && isApplicationTransport(transport)) {
       // The machine path never awaits a transport promise: the application
       // listener applies the acknowledgement when it arrives.
       const activeMachine = machineRef.current
       if (activeMachine === null || current.session?.retiring === true) return
       setState((previous) => withPendingInput(previous, message))
-      setDraft('')
       let accepted: string | null = null
       try {
         accepted = activeMachine.input(text, message.messageId, source)
       } catch (error) {
         setState((previous) => withInputFailure(previous, message.messageId, identify(error)))
         notificationOpen({ type: 'error', message: 'Input dispatch failed', description: identify(error) })
+        restoreDraft()
         return
       }
       if (accepted === null) {
         setState((previous) =>
           withInputFailure(previous, message.messageId, 'the performer machine refused the input'),
         )
+        restoreDraft()
+        return
       }
+      setDraft((composer) => (composer === rawDraft ? '' : composer))
       return
     }
     setState((previous) => withPendingInput(previous, message))
-    setDraft('')
     try {
       const ack = await transport.sendInput(message)
       setState((previous) => reduceInputAck(previous, ack))
@@ -622,7 +626,9 @@ export function ConsoleApp({
           description: `${ack.code}: ${ack.message}`,
           duration: 4,
         })
+        restoreDraft()
       } else {
+        setDraft((composer) => (composer === rawDraft ? '' : composer))
         notificationOpen({
           type: ack.status === 'accepted' ? 'success' : 'info',
           message: `Input ${ack.status}`,
@@ -633,6 +639,7 @@ export function ConsoleApp({
     } catch (error) {
       setState((previous) => withInputFailure(previous, message.messageId, identify(error)))
       notificationOpen({ type: 'error', message: 'Input dispatch failed', description: identify(error) })
+      restoreDraft()
     }
   }, [draft, nextId, source])
 
