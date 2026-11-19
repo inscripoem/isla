@@ -367,7 +367,11 @@ export interface AssembledTurn {
   scope: MemoryScope
   /** What the turn is about; defaults to `'utterance'`. See `MemoryEntry.kind`. */
   kind: MemoryKind
-  /** Which salience signals fired; empty for an unpinned turn. */
+  /**
+   * Which salience signals fired. Recorded for every scored character turn;
+   * the list is empty only when no signal fired, so an unpinned turn may still
+   * carry signals.
+   */
   salienceSignals: readonly SalienceSignal[]
   /**
    * True when the consistency scan (./consistency) found this turn contradicting
@@ -938,8 +942,15 @@ export async function assembleDialogueContext(
   // delivery timestamp - the same recorded limitation as the transcript pairing
   // note). Mention counts are per (sessionId, role='character') in utterance
   // order (the grouped-turn build order). Score first, then assign mentionCounts
-  // in a second pass, then finalize pinned/decayed fields.
+  // in a second pass, then finalize pinned/decayed fields. Counting is
+  // deliberately SYMMETRIC with the listener pass below: both count the full
+  // set the scorer can see, independent of caps and budgets; the character set
+  // is bounded by admission, the listener set by the read scope.
   {
+    // Mention counting is signal co-occurrence per the decision recorded in
+    // the SalienceInput.mentionCount comment in ./salience: an earlier
+    // same-session, same-role turn whose primary signal equals this turn's
+    // primary signal; entity/topic keys are out of scope (A10).
     const baseScores = allTurns.map((turn) => scoreSalience({ role: 'character', text: turn.text }))
     const mentionCounts = new Map<string, number>()
     for (let index = 0; index < allTurns.length; index += 1) {
@@ -1457,32 +1468,56 @@ export async function assembleDialogueContext(
   for (const entry of kept.exclusions) exclusions.push(entry)
 
   // Listener salience: score each surviving listener turn for the transcript and
-  // A04. Listener turns never enter character trim/pin logic. ageMs is relative
-  // to the newest observed listener activity (deterministic, no generation clock).
+  // A04. Listener turns never enter character trim/pin logic.
+  //
+  // Counting is pre-trim and deliberately SYMMETRIC with the character pass
+  // above: both count the full set the scorer can see, independent of caps and
+  // budgets; the character set is bounded by admission, the listener set is
+  // the full ordered read `orderedListenerTurns`, before the maxTurns cap and
+  // before the budget trim. The decay anchor `referenceMs` is the newest
+  // listener turn the source returned (a loop over `orderedListenerTurns`, not
+  // a spread): trimming drops oldest-first, which is why the previous
+  // implementation only accidentally looked stable. Mention counting is signal
+  // co-occurrence per the decision recorded in the SalienceInput.mentionCount
+  // comment in ./salience: an earlier same-session, same-role turn whose
+  // primary signal equals this turn's primary signal; entity/topic keys are out
+  // of scope (A10).
   const listenerSalienceByEventId = new Map<string, SalienceScore>()
-  if (survivingListenerTurns.length > 0) {
-    const referenceMs = Math.max(...survivingListenerTurns.map((t) => t.receivedAtMs))
-    const baseScores = survivingListenerTurns.map((turn) =>
-      scoreSalience({ role: 'listener', text: turn.text }),
-    )
+  if (orderedListenerTurns.length > 0) {
+    let referenceMs = Number.NEGATIVE_INFINITY
+    for (const turn of orderedListenerTurns) {
+      if (turn.receivedAtMs > referenceMs) referenceMs = turn.receivedAtMs
+    }
     const mentionCounts = new Map<string, number>()
-    for (let index = 0; index < survivingListenerTurns.length; index += 1) {
-      const turn = survivingListenerTurns[index]
-      const base = baseScores[index]
-      if (turn === undefined || base === undefined) continue
-      const key = `${turn.sessionId}\0listener`
+    const listenerPrecomputed = new Map<
+      string,
+      {
+        base: SalienceScore
+        primary: SalienceSignal | null
+        mentionCount: number
+        salience: SalienceScore
+      }
+    >()
+    for (const turn of orderedListenerTurns) {
+      const base = scoreSalience({ role: 'listener', text: turn.text })
       const primary = primarySignalOf('listener', base.signals)
+      const key = `${turn.sessionId}\0listener`
       const countKey = `${key}\0${primary ?? ''}`
       const mentionCount = primary === null ? 0 : (mentionCounts.get(countKey) ?? 0)
       if (primary !== null) mentionCounts.set(countKey, mentionCount + 1)
       const ageMs = referenceMs - turn.receivedAtMs
-      const salience = scoreSalience({
-        role: 'listener',
-        text: turn.text,
+      listenerPrecomputed.set(turn.eventId, {
+        base,
+        primary,
         mentionCount,
-        ageMs,
+        salience: scoreSalience({ role: 'listener', text: turn.text, mentionCount, ageMs }),
       })
-      listenerSalienceByEventId.set(turn.eventId, salience)
+    }
+    // Attach only for surviving turns: the transcript renders survivors, so a
+    // turn dropped by the cap or the budget keeps no salience entry.
+    for (const turn of survivingListenerTurns) {
+      const entry = listenerPrecomputed.get(turn.eventId)
+      if (entry !== undefined) listenerSalienceByEventId.set(turn.eventId, entry.salience)
     }
   }
 

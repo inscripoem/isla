@@ -35,7 +35,13 @@ export type SalienceSignal =
 export interface SalienceInput {
   role: SalienceRole
   text: string
-  /** Earlier same-session, same-role turns sharing this turn's primary signal. Absent = 0. */
+  /**
+   * Earlier same-session, same-role turns whose primary signal equals this
+   * turn's primary signal: SIGNAL CO-OCCURRENCE, not entity/topic repetition.
+   * Two turns about different subjects still count when they fire the same
+   * signal; entity/topic-aware counting is out of scope for the keyword
+   * scorer and belongs to the A10 episode round. Absent = 0.
+   */
   mentionCount?: number
   /**
    * Age of the turn in milliseconds relative to the reference moment.
@@ -104,8 +110,15 @@ const RELATIONSHIP_PATTERN =
 const EMOTION_PEAK_PATTERN =
   /崩溃(?:了|到)|开心死了|难受死了|笑死了|气死了|激动死了|哭了|破防了?|泪目|can'?t take it (?:anymore|anymore\.)|broke down|started (?:crying|tearing up)|i'?m so (?:happy|excited|angry|sad|upset)|over the moon/i
 
+/*
+ * Boundary signal for character turns. The bare CJK forms 不能 and 无法 were
+ * removed because they mark hedges (for example 这不能说明问题。); the
+ * first-person anchored forms 我不能 and 我无法 carry the refusal the
+ * scorer should see. The rest of the family (办不到|做不到|拒绝|禁止|恕不) and
+ * the English alternatives are unchanged.
+ */
 const BOUNDARY_PATTERN =
-  /不能|办不到|做不到|无法|拒绝|禁止|恕不|can'?t|won'?t|refuse to|not allowed/i
+  /我不能|我无法|办不到|做不到|拒绝|禁止|恕不|can'?t|won'?t|refuse to|not allowed/i
 
 /** True when the text names something concrete worth remembering. */
 function hasConcreteDetail(text: string): boolean {
@@ -178,14 +191,29 @@ export function scoreSalience(input: SalienceInput): SalienceScore {
     signals.push(entry.signal)
     weightedSum += entry.weight
   }
-  const mentionCount = input.mentionCount ?? 0
-  const mentionSteps = Math.min(mentionCount, SALIENCE_MENTION_CAP / SALIENCE_MENTION_STEP)
+  /*
+   * Mention bonus guard (Low 2): a negative or non-finite mentionCount
+   * contributes zero, so it can only lower nothing; an absent count stays 0.
+   */
+  const mentionCandidate = input.mentionCount
+  const mentionSteps =
+    typeof mentionCandidate === 'number' &&
+    Number.isFinite(mentionCandidate) &&
+    mentionCandidate > 0
+      ? Math.min(mentionCandidate, SALIENCE_MENTION_CAP / SALIENCE_MENTION_STEP)
+      : 0
   const score = Math.min(
     1,
     weightedSum / SALIENCE_MAX_SIGNAL_WEIGHT + SALIENCE_MENTION_STEP * mentionSteps,
   )
   const ageMs = input.ageMs
+  /*
+   * Decay anchor guard (Low 2): a non-finite age is treated as age unknown,
+   * so decayed === score; zero and negative ages decay to score as before.
+   */
   const decayed =
-    ageMs == null ? score : score * Math.exp(-Math.max(0, ageMs) / 86_400_000 / SALIENCE_DECAY_DAYS)
+    ageMs == null || !Number.isFinite(ageMs)
+      ? score
+      : score * Math.exp(-Math.max(0, ageMs) / 86_400_000 / SALIENCE_DECAY_DAYS)
   return { score, signals, decayed }
 }

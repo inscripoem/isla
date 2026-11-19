@@ -326,3 +326,247 @@ describe('M4-A03 listener salience integration', () => {
     )
   })
 })
+
+describe('M4-A03 Finding 1: recorded co-occurrence semantics', () => {
+  it('character history: the second turn keeps the documented co-occurrence bonus (0.333 + 0.05)', async () => {
+    const memory = createDeliveryMemoryStore()
+    await memory.commit(
+      fixtureCommitDelivery({
+        sessionId: FIXTURE_SESSION_ID,
+        turnId: 'turn-cats',
+        segmentId: 'turn-cats-seg-0',
+        textHash: 'hash-cats',
+        text: 'I have 3 cats.',
+      }),
+    )
+    await memory.commit(
+      fixtureCommitDelivery({
+        sessionId: FIXTURE_SESSION_ID,
+        turnId: 'turn-order',
+        segmentId: 'turn-order-seg-0',
+        textHash: 'hash-order',
+        text: 'The order is 2024-11-03.',
+      }),
+    )
+    const profile = resolveCharacterProfile('character-fixture', '1')
+    if (profile === null) throw new Error('fixture profile missing')
+    const view = await assembleDialogueContext({
+      request: fixtureDialogueRequest(),
+      profile,
+      history: memory,
+    })
+    const cats = view.turns.find((turn) => turn.text === 'I have 3 cats.')
+    const order = view.turns.find((turn) => turn.text === 'The order is 2024-11-03.')
+    /*
+     * Co-occurrence pin (Finding 1): the character pass counts earlier
+     * same-session, same-role turns whose primary signal equals this turn's
+     * primary signal, so the second turn is 0.333 (concrete-detail alone) +
+     * 0.05 - the bonus IS applied. This is the recorded decision: signal
+     * co-occurrence, not entity/topic repetition; an entity/topic key would be
+     * a breaking semantic change superseded by A10. The same scenario at the
+     * character role is the Finding 3 symmetry note (see the context.ts
+     * comments).
+     */
+    expect(cats?.salienceScore).toBeCloseTo(1 / 3, 6)
+    expect(order?.salienceScore).toBeCloseTo((1 / 3) + 0.05, 6)
+  })
+
+  it('differentiation negative: an earlier promise turn leaves the preference turn at 0.667', async () => {
+    const profile = resolveCharacterProfile('character-fixture', '1')
+    if (profile === null) throw new Error('fixture profile missing')
+    const view = await assembleDialogueContext({
+      request: fixtureDialogueRequest(),
+      profile,
+      history: createDeliveryMemoryStore(),
+      listenerTurns: [
+        {
+          eventId: 'evt-neg-1',
+          sessionId: FIXTURE_SESSION_ID,
+          text: '记住我们的约定。',
+          receivedAtMs: 0,
+          actorId: null,
+          trust: 'untrusted-content',
+        },
+        {
+          eventId: 'evt-neg-2',
+          sessionId: FIXTURE_SESSION_ID,
+          text: '我最喜欢草莓。',
+          receivedAtMs: 0,
+          actorId: null,
+          trust: 'untrusted-content',
+        },
+      ],
+    })
+    const listenerEntries = view.transcript.filter((entry) => entry.role === 'listener')
+    const preferenceTurn = listenerEntries.find((entry) => entry.turn.eventId === 'evt-neg-2')
+    // Different primary signals ('promise' then 'preference'): no mention
+    // bonus across different signals, so the preference turn stays at 2/3.
+    expect(preferenceTurn?.salience?.decayed).toBeCloseTo(2 / 3, 6)
+  })
+})
+
+describe('M4-A03 Finding 2: assembly-level mention cases', () => {
+  it('session isolation / per-(sessionId, role) keying: identical preference listener turns in two sessions score 0.667 each; second turn in the first session scores 0.717', async () => {
+    const profile = resolveCharacterProfile('character-fixture', '1')
+    if (profile === null) throw new Error('fixture profile missing')
+    const view = await assembleDialogueContext({
+      request: fixtureDialogueRequest(),
+      profile,
+      history: createDeliveryMemoryStore(),
+      listenerTurns: [
+        {
+          eventId: 'evt-iso-01',
+          sessionId: 'session-fixture-a',
+          text: '我最喜欢草莓。',
+          receivedAtMs: 0,
+          actorId: null,
+          trust: 'untrusted-content',
+        },
+        {
+          eventId: 'evt-iso-02',
+          sessionId: 'session-fixture-b',
+          text: '我最喜欢草莓。',
+          receivedAtMs: 0,
+          actorId: null,
+          trust: 'untrusted-content',
+        },
+        {
+          eventId: 'evt-iso-03',
+          sessionId: 'session-fixture-a',
+          text: '我最喜欢草莓。',
+          receivedAtMs: 0,
+          actorId: null,
+          trust: 'untrusted-content',
+        },
+      ],
+    })
+    const listenerEntries = view.transcript.filter((entry) => entry.role === 'listener')
+    const salienceOf = (eventId: string) =>
+      listenerEntries.find((entry) => entry.turn.eventId === eventId)?.salience
+    // Per-(sessionId, role) keying: session B's turn gets no bonus despite
+    // session A's earlier preference turn; session A's second turn gets it.
+    expect(salienceOf('evt-iso-01')?.decayed).toBeCloseTo(2 / 3, 6)
+    expect(salienceOf('evt-iso-02')?.decayed).toBeCloseTo(2 / 3, 6)
+    expect(salienceOf('evt-iso-03')?.decayed).toBeCloseTo(2 / 3 + 0.05, 6)
+  })
+
+  it('repeated preference turn at assembly level: first 0.667, second 0.717', async () => {
+    const profile = resolveCharacterProfile('character-fixture', '1')
+    if (profile === null) throw new Error('fixture profile missing')
+    const view = await assembleDialogueContext({
+      request: fixtureDialogueRequest(),
+      profile,
+      history: createDeliveryMemoryStore(),
+      listenerTurns: [
+        {
+          eventId: 'evt-repeat-1',
+          sessionId: FIXTURE_SESSION_ID,
+          text: '我最喜欢草莓。',
+          receivedAtMs: 0,
+          actorId: null,
+          trust: 'untrusted-content',
+        },
+        {
+          eventId: 'evt-repeat-2',
+          sessionId: FIXTURE_SESSION_ID,
+          text: '我最喜欢草莓。',
+          receivedAtMs: 0,
+          actorId: null,
+          trust: 'untrusted-content',
+        },
+      ],
+    })
+    const listenerEntries = view.transcript.filter((entry) => entry.role === 'listener')
+    const salienceOf = (eventId: string) =>
+      listenerEntries.find((entry) => entry.turn.eventId === eventId)?.salience
+    // The bonus survives the assembler path, unlike the clamped
+    // '我叫 Elleya' case in the existing integration test.
+    expect(salienceOf('evt-repeat-1')?.decayed).toBeCloseTo(2 / 3, 6)
+    expect(salienceOf('evt-repeat-2')?.decayed).toBeCloseTo(2 / 3 + 0.05, 6)
+  })
+})
+
+describe('M4-A03 Finding 3: pre-trim listener counting (budget-independent)', () => {
+  it('budget-70 drop: the budget-dropped older turn still contributes its mention; the survivor keeps 0.717', async () => {
+    const profile = resolveCharacterProfile('character-fixture', '1')
+    if (profile === null) throw new Error('fixture profile missing')
+    const view = await assembleDialogueContext({
+      request: fixtureDialogueRequest({ contextLimits: { maxTurns: 8, maxCharacters: 70 } }),
+      profile,
+      history: createDeliveryMemoryStore(),
+      listenerTurns: [
+        {
+          eventId: 'evt-drop-1',
+          sessionId: FIXTURE_SESSION_ID,
+          text: '我最喜欢草莓，也喜欢猫。',
+          receivedAtMs: 0,
+          actorId: null,
+          trust: 'untrusted-content',
+        },
+        {
+          eventId: 'evt-drop-2',
+          sessionId: FIXTURE_SESSION_ID,
+          text: '我最喜欢草莓，也喜欢猫。',
+          receivedAtMs: 0,
+          actorId: null,
+          trust: 'untrusted-content',
+        },
+      ],
+    })
+    /*
+     * Each listener line renders at 36 characters, so the two lines are 72
+     * and the budget-70 loop drops the OLDER turn (evt-drop-1) by budget.
+     * Counting is pre-trim, so the dropped turn still counts: the survivor
+     * keeps scoring 0.717 instead of the 0.667 that surviving-only counting
+     * would give.
+     */
+    expect(
+      view.listenerExclusions.some(
+        (entry) => entry.eventId === 'evt-drop-1' && entry.reason === 'listener-budget',
+      ),
+    ).toBe(true)
+    const listenerEntries = view.transcript.filter((entry) => entry.role === 'listener')
+    expect(listenerEntries).toHaveLength(1)
+    expect(listenerEntries[0]?.turn.eventId).toBe('evt-drop-2')
+    expect(listenerEntries[0]?.salience?.decayed).toBeCloseTo(2 / 3 + 0.05, 6)
+  })
+})
+
+describe('M4-A03 Low 1: boundary pattern precision', () => {
+  it('no longer fires boundary on the bare CJK hedges; keeps the first-person forms and the rest of the family', () => {
+    // Bare CJK forms mark hedges (这不能说明问题。): no boundary signal fires
+    // (the boundary signal is a character-catalog entry, so character role).
+    expect(scoreSalience({ role: 'character', text: '这不能说明问题。' }).signals).not.toContain(
+      'boundary',
+    )
+    expect(scoreSalience({ role: 'character', text: '不能这样。' }).signals).not.toContain(
+      'boundary',
+    )
+    expect(
+      scoreSalience({ role: 'character', text: '我不知道，不能确定。' }).signals,
+    ).not.toContain('boundary')
+    // The first-person anchored form still fires.
+    expect(scoreSalience({ role: 'character', text: '我不能答应你。' }).signals).toContain(
+      'boundary',
+    )
+  })
+})
+
+describe('M4-A03 Low 2: input clamping (mentionCount and ageMs)', () => {
+  it('mentionCount: -3 scores identically to mentionCount: 0', () => {
+    const negative = scoreSalience({ role: 'listener', text: '我最喜欢草莓。', mentionCount: -3 })
+    const zero = scoreSalience({ role: 'listener', text: '我最喜欢草莓。', mentionCount: 0 })
+    expect(negative.score).toBeCloseTo(zero.score, 6)
+    expect(negative.decayed).toBeCloseTo(zero.decayed, 6)
+    expect(negative.score).toBeCloseTo(2 / 3, 6)
+  })
+
+  it('ageMs: NaN yields decayed === score', () => {
+    const result = scoreSalience({
+      role: 'character',
+      text: 'Remember this: my birthday is 0603.',
+      ageMs: Number.NaN,
+    })
+    expect(result.decayed).toBe(result.score)
+  })
+})
