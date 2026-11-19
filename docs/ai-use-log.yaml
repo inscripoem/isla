@@ -8610,3 +8610,119 @@ entries:
       or physical-output claim; no merge, approval, dismissal or checkpoint
       acceptance is claimed. A04's recall-ranking consumption of the listener
       salience data is a later round.
+  - date: "2026-11-20"
+    task: M4-A03-review-fixes
+    branch: feat/m4-a03-salience-v2
+    change: >-
+      Resolve the three findings and five low items of M5's CHANGES_REQUESTED
+      review of PR #170 (2026-11-19, recorded at head 9390464), implementing
+      the reviewer's leaning on both decision points. Finding 1: the mention
+      count is recorded as SIGNAL CO-OCCURRENCE - the number of earlier
+      same-session, same-role turns whose primary signal equals this turn's
+      primary signal - explicitly NOT entity or topic repetition; two turns
+      about different subjects still count when they fire the same signal.
+      The decision is documented in the SalienceInput.mentionCount comment in
+      src/dialogue/salience.ts and named at both counting sites in
+      src/dialogue/context.ts, and it is pinned by negative tests: a
+      character history of "I have 3 cats." then "The order is 2024-11-03."
+      keeps the documented co-occurrence bonus on the second turn (about one
+      third plus the 0.05 step) with a comment noting that an entity or topic
+      key would be a breaking semantic change superseded by the A10 episode
+      round, and an earlier promise turn leaves a preference turn at its base
+      score with no cross-signal bonus. Finding 3: the listener mention
+      counts and the decay anchor move to the full ordered listener read
+      BEFORE the maxTurns cap and the budget trim, so a listener turn's score
+      is a property of the turn and the read scope, not of the assembly's
+      budget - symmetric with the character side, which already counts all
+      admitted turns (this also resolves the reviewer's asymmetry low item) -
+      and a budget-70 drop case pins that the surviving turn keeps the bonus
+      contributed by a budget-dropped turn's mention. Finding 2: the
+      assembly-level mention coverage that could not fail (the earlier
+      integration case used a 1.0-base turn whose bonus was clamped away) is
+      replaced by cases that assert the assembler's counting path directly:
+      session isolation and per-(sessionId, role) keying (0.667 / 0.667 /
+      0.717 across two sessions), a repeated preference turn at assembly
+      level (0.667 -> 0.717). Low items: the bare CJK 不能 and 无法
+      alternatives are removed from BOUNDARY_PATTERN in favour of the
+      first-person 我不能 and 我无法 with the bare-form removal reason
+      recorded in the pattern comment and negative hedge tests (these cannot
+      denote a boundary; "我不能答应你。" still fires); mentionCount and
+      ageMs are clamped against negative and non-finite inputs at the
+      exported API surface that A04 will consume (a negative mention count
+      scores identically to zero; NaN age yields decayed equal to score);
+      the Math.max spread over listener turns is replaced by a loop; the
+      AssembledTurn.salienceSignals field comment is corrected to the actual
+      semantics (signals are recorded for every scored character turn and
+      are empty only when nothing fired). Eight new cases appended to
+      test/offline/m4-salience-signals.test.ts (no new test file, manifest
+      unchanged); the decay constant, pin threshold, catalogs, weights and
+      the transcript attachment shape are unchanged. No change to
+      src/contracts/app, shared wire fields, src/runtime, src/storage, SQL,
+      prompts, package.json or AGENTS.md; no new dependency; no provider
+      call (NFR-04); scoring stays deterministic and recomputed per assembly
+      (NFR-03 A/B attribution preserved).
+    agent: opencode/build
+    sessions: [ses_e0b2daf72ffeIDplaObMbyFyrF]
+    requirements: [NFR-03, NFR-04]
+    invariants: []
+    cases: []
+    commits: [1f8e3f2abee1d2c4706694d62a017e8b472f3a28]
+    supervision: >-
+      The M4 supervisor mapped M5's 2026-11-19 CHANGES_REQUESTED review of
+      PR #170 into the English task book m4-impl/A03/taskbook-fixround.md,
+      implementing the reviewer's leaning on both decision points as the
+      user directed: the co-occurrence semantics is recorded and pinned by
+      negative tests rather than building an entity or topic key (which the
+      A03 proposal's own mitigation note and M5's review both point at the
+      A10 episode round), and the listener counting moved pre-trim so the
+      score is context-independent and symmetric with the character side.
+      The implementation session ses_e0b2daf72ffeIDplaObMbyFyrF wrote the
+      three changed files; the supervisor independently re-ran the gates and
+      reviewed the diff against the task book, including the reviewer's
+      measured regressions (the budget-70 drop case keeps 0.717 on the
+      survivor; the co-occurrence pair keeps its documented bonus). New
+      lines are ASCII. This AI-use entry is written by a separate genuine
+      OpenCode session per the 2026-11-15 tightened rule; that session's id
+      and raw stream are recorded outside the repository in
+      m4-impl/A03/opencode-sessions.md. The fix round adds two consecutive
+      commits to PR #170 (this log entry cites the real fix commit SHA); no
+      squash and no amend are used, and the branch is pushed with a normal
+      push on top of the reviewer-reviewed head.
+    transcript_record: >-
+      The fix-round implementation session retains its conversation in the
+      local OpenCode session store. Its record (title, session id, role) and
+      raw JSONL stream are kept outside the repository at
+      D:/isla-m4-05/m4-impl/A03/opencode-sessions.md and
+      D:/isla-m4-05/m4-impl/A03/fixround-session-raw.json (empty stderr).
+      The session writing this entry also retains its conversation there. No
+      export is stored in the repository and no credential appears in
+      repository files.
+    verification:
+      base: 4160570
+      reproduction: >-
+        Run from the worktree containing this round's changes
+        (feat/m4-a03-salience-v2 on 4160570, head including the earlier A03
+        round and this fix). pnpm typecheck -> exit 0; pnpm lint -> 0
+        warnings and 0 errors on 321 files; pnpm test:m4 -> 437 passed in 18
+        files (the pre-fix head measured 429, +8 new cases); pnpm test ->
+        2064 passed, 9 skipped and 1 failed in the full suite, the single
+        failure being the pre-existing Windows-host baseline
+        m6-02-provenance-command symlink case (reproduced on clean main in
+        earlier rounds and untouched by this branch); pnpm build -> exit 0;
+        the pnpm verify composite cannot run its nested pnpm invocation on
+        this host, so its four components were verified individually and the
+        remote verify run is the final authority; pnpm test:readiness and
+        pnpm test:trace -> exit 0; git diff --check -> clean. Gate G6 passes
+        only after this entry is appended with the real fix commit SHA. The
+        full suite and the remote verify run are the final authority.
+    scope: >-
+      The review-fix changes inside the already-touched A03 files, eight new
+      cases in the existing test file, and this AI-use entry. No new feature
+      surface: the co-occurrence semantics is recorded rather than changed,
+      the pre-trim counting changes no rendering, budget arithmetic or trim
+      ordering, and no shared contract, wire field, storage, SQL, runtime,
+      prompt, package.json or AGENTS.md change; no new dependency; no new
+      test file; no quality, latency, cost, live-provider or physical-output
+      claim; no merge, approval, dismissal or checkpoint acceptance is
+      claimed. Entity/topic-aware counting remains with the A10 episode
+      round.
