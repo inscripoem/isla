@@ -242,6 +242,11 @@
   outline-color: #1f6b62;
 }
 
+/* C12: title ribbon folds extend 7.7-10.6px below the box and overlapped the first content row. */
+.console [class*='animal-title'] {
+  margin-bottom: 12px;
+}
+
 @media (max-width: 768px) {
   .console {
     padding: var(--animal-spacing-lg) var(--animal-spacing-sm) var(--animal-spacing-xl);

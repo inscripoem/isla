@@ -8933,3 +8933,54 @@ entries:
       src/console/console.css, src/console/ConsoleApp.tsx and
       docs/ai-use-log.yaml. Contracts, runtime, dialogue, performance, tests,
       manifests and the animal-island-ui library remain untouched.
+
+  - date: "2026-11-20"
+    task: M2-174-c12-title-spacing
+    change: >-
+      Console-scoped C12 spacing from the #174 review: title ribbon folds
+      extend below their box and the title wrapper's zero bottom margin let the
+      folds touch the first content row. One scoped rule gives console title
+      elements a 12px bottom margin; no library, contract or other spacing
+      changed.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    opencode_version: "1.19.4"
+    launch_flags: [--agent, build, --format, json, --variant, xhigh, --auto]
+    sessions: [ses_e0aefc741ffe1BjjmW5XRh4ZRC]
+    supervision: >-
+      The M2 member directed this C12 slice. The documented V2 form
+      `-m personal-deepseek/deepseek-v4-flash#xhigh` returned UnknownError on
+      OpenCode 1.19.4 (session ses_e0af0a01dffe40Z1VODnVgmst5); the installed
+      CLI's `--variant xhigh` form then authored the rule and ran the M2 tests.
+      The failed attempt is recorded rather than hidden; this is the launch-flag
+      discrepancy already raised on #175.
+    human_review: >-
+      The M2 member authorized the slice and the local commit. Visual owner
+      confirmation for the #174 C12 row remains pending, as does the M4
+      co-judgement row.
+    transcript_record: >-
+      Exported with `opencode export` to
+      ~/.cache/isla-exports/m2-174-c12-ses_e0aefc741ffe1BjjmW5XRh4ZRC.json
+      outside the checkout.
+    verification:
+      base: b209b90
+      results: >-
+        macOS: pnpm test:m2 passed 1 file / 93 tests; pnpm typecheck exited 0;
+        pnpm lint reported 0 warnings and 0 errors.
+      independent: >-
+        Supervisor rerun on macOS: pnpm test:m2 passed 93 tests in 1 file;
+        pnpm verify passed 94 files / 2056 tests including typecheck, lint and
+        build. Gate run with a NUL-separated changed-file list over
+        src/console/console.css and docs/ai-use-log.yaml: push-integration
+        scope (no AI_USE_LOG_BASE_FILE) passed and reported the entry rule as
+        not verified; with the base set to HEAD the gate fails G6-02 on the
+        historical commit 4273673, which is unreachable in this
+        squash-merged clone and unrelated to this change.
+    scope: >-
+      src/console/console.css and docs/ai-use-log.yaml. ConsoleApp.tsx,
+      contracts, runtime, tests, manifests and the animal-island-ui library
+      remain untouched.
