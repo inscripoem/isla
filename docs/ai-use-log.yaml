@@ -8484,7 +8484,7 @@ entries:
       rather than being inferred from the runtime source channel.
     requirements: [NFR-01, NFR-03]
     invariants: []
-    commits: [c753a580c78e04582c8581a117285f907563cb09]
+    commits: [f63fd45ce630c15686b6361c357ab64a58d003e2]
     agent: build
     provider: self-api
     model: deepseek-v4-flash
@@ -8539,7 +8539,7 @@ entries:
       timing choice.
     requirements: [NFR-01, NFR-03]
     invariants: [INV-16]
-    commits: [22a311781c8e4c3ca69285b3ae62d0a367a83afc]
+    commits: [ffa289da39f59a0ce828e518133ecbcf9767e8c7]
     agent: build
     provider: self-api
     model: deepseek-v4-flash
@@ -8599,7 +8599,7 @@ entries:
       M6-owned; M6 confirmation is requested in the PR.
     requirements: [NFR-01, NFR-03]
     invariants: [INV-14, INV-16]
-    commits: [006dde747ce486ad64c907506195963e1bba477b]
+    commits: [e2575f49835a28a4d584aa9aca1d5f90a50e96bc]
     agent: build
     provider: self-api
     model: deepseek-v4-flash
