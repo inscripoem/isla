@@ -8931,7 +8931,9 @@ entries:
       base: dccca53
       results: >-
         Supervisor rerun after this session covers pnpm test:m2, pnpm typecheck,
-        pnpm lint and pnpm gate:ai-use-log.
+        pnpm lint and pnpm gate:ai-use-log. A headless Chrome walk of the built
+        console showed the diagnostics tag reads "not started" before the first
+        socket start and no "connecting" text is rendered.
     scope: >-
       src/console/ConsoleApp.tsx and docs/ai-use-log.yaml only, no contracts,
       runtime, tests, manifests or the animal-island-ui library changed.
@@ -8970,7 +8972,9 @@ entries:
       base: ba92fac
       results: >-
         Supervisor rerun after this session covers pnpm test:m2, pnpm typecheck
-        and pnpm lint.
+        and pnpm lint. A headless Chrome walk of the built console in the
+        transport-failure state showed the Reconnect button and its new-session
+        bootstrap hint, and pressing the button re-ran the bootstrap.
     scope: >-
       src/console/ConsoleApp.tsx and docs/ai-use-log.yaml only, no contracts,
       runtime, tests, manifests or the animal-island-ui library changed.
