@@ -8898,3 +8898,40 @@ entries:
       test/offline/m6-02-comparison.test.ts,
       docs/architecture/evaluation-protocol.md and this log entry. No frozen
       contract, RecordedRunV1, storage schema, provider or deployment change.
+      src/console/console.css, src/console/ConsoleApp.tsx and
+      docs/ai-use-log.yaml. Contracts, runtime, dialogue, performance, tests,
+      manifests and the animal-island-ui library remain untouched.
+
+  - date: "2026-11-19"
+    task: M2-174-c07-diagnostics-initial-state
+    change: >-
+      Made the diagnostics socket idle state truthful: socketState now starts as
+      'closed' and a socketStarted flag records whether the path button has ever
+      created a socket. The status Tag shows 'not started' before that first
+      start and the existing open/closed/error labels afterwards; the idle colour
+      is app-orange. No auto-connect was added.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    opencode_version: "1.19.4"
+    launch_flags: [--agent, build, --format, json, --variant, xhigh]
+    sessions: [ses_e0bf089f6ffeCodrP0zqHg3zbX]
+    supervision: >-
+      The M2 member directed this P1 slice and this OpenCode session authored the
+      console change and this log entry.
+    human_review: >-
+      The M2 member approved the slice and a local commit, and this session
+      performed no git operation.
+    transcript_record: >-
+      The raw CLI JSON output is retained outside the checkout.
+    verification:
+      base: dccca53
+      results: >-
+        Supervisor rerun after this session covers pnpm test:m2, pnpm typecheck,
+        pnpm lint and pnpm gate:ai-use-log.
+    scope: >-
+      src/console/ConsoleApp.tsx and docs/ai-use-log.yaml only, no contracts,
+      runtime, tests, manifests or the animal-island-ui library changed.

@@ -199,7 +199,8 @@ function DiagnosticsPanel() {
   const [health, setHealth] = useState<HealthView | null>(null)
   const [healthError, setHealthError] = useState<string | null>(null)
   const [healthLoading, setHealthLoading] = useState(true)
-  const [socketState, setSocketState] = useState<SocketState>('connecting')
+  const [socketState, setSocketState] = useState<SocketState>('closed')
+  const [socketStarted, setSocketStarted] = useState(false)
   const [socketError, setSocketError] = useState<string | null>(null)
   const [lastReply, setLastReply] = useState<string | null>(null)
   const [showHealth, setShowHealth] = useState(true)
@@ -240,6 +241,7 @@ function DiagnosticsPanel() {
     const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
     const socket = new WebSocket(`${scheme}://${window.location.host}${DIAGNOSTICS_PATH}`)
     socketRef.current = socket
+    setSocketStarted(true)
     socket.onopen = () => {
       setSocketState('open')
       setSocketError(null)
@@ -304,7 +306,11 @@ function DiagnosticsPanel() {
   }, [])
 
   const socketColor: StatusColor =
-    socketState === 'open' ? 'app-green' : socketState === 'error' ? 'app-red' : 'app-yellow'
+    socketState === 'open' ? 'app-green' : socketState === 'error' ? 'app-red' : 'app-orange'
+
+  // Before the operator clicks the path button no socket exists, so the idle label is
+  // 'not started' rather than 'closed': 'closed' would claim a connection that has ended.
+  const socketLabel = socketStarted ? socketState : 'not started'
 
   const healthRows: readonly (readonly [string, string])[] =
     health === null
@@ -354,7 +360,7 @@ function DiagnosticsPanel() {
         <div className="console__card-head">
           <Title size="middle">Diagnostics socket</Title>
           <Tag variant="soft" color={socketColor}>
-            {socketState}
+            {socketLabel}
           </Tag>
         </div>
         <div className="console__actions">
