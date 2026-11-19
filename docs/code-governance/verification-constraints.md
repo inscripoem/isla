@@ -163,15 +163,17 @@ Classic branch protection returns 404 for this repository; the ruleset is the en
 context matches the real check: the `verify` job (`.github/workflows/ci.yml:31-32`) is the only workflow, and
 both recorded check runs on `4e4f7cd` report `verify`, `success`, app `github-actions` id `15368`.
 
-**What blocks a merge.** Every step of that job: G2 typecheck + lint, G3 readiness, trace, G5 regression,
-G6 AI-use log, G4 evaluation gate and the build. A red step anywhere makes the required check red.
+**What blocks a merge.** Every step of that job: G1 test approval (for PRs created at or after the
+cutover), G2 typecheck + lint, G3 readiness, trace, G5 regression, G6 AI-use log, G4 evaluation gate and
+the build. A red step anywhere makes the required check red.
 
-**What does not block yet.** G1, test approval, on a base that does not carry
-`docs/code-governance/test-approvals.yaml`: the step runs `gate:test-approval advise`
-(`.github/workflows/ci.yml:100-115`) and cannot fail. On a base that carries the record, CI selects
-`evidence` mode, and a failing G1 step makes the required `verify` check red — so the cutover is what
-activates G1. ADR-006 D2 makes that activation a team decision; the code path exists, the decision is
-still owed before this branch merges.
+**G1 and the cutover.** The G1 step selects its mode from the pull request's creation time. A PR
+created before 2026-11-16T16:01:01Z selects the label/advise rule (the `tests-approved` label) and
+cannot fail. A PR created at or after the cutover selects `evidence` mode, and a failing G1 step makes
+the required `verify` check red. Missing or invalid timestamps fail closed to `evidence`. The values
+live in `src/evaluation/test-approval-gate.ts` and are passed by the `G1` step in
+`.github/workflows/ci.yml`. M6 records a time-boxed waiver for #170/#171/#175 through 2026-11-27 23:59
++08; it is a recorded exception, not a G1 pass, and it expires by the clock.
 
 **What this does not establish.**
 
