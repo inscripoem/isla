@@ -8416,3 +8416,54 @@ entries:
       only), docs/architecture/adr/006-gate-tooling.md,
       test/offline/ai-use-log-gate.test.ts and this log entry. No other gate
       rule, schema, dependency or application behaviour changed.
+  - date: "2026-11-19"
+    task: M6-177-g1-cutover
+    change: >-
+      Select G1's mode from the pull request creation time instead of the
+      current base tip. A PR created before the #158 cutover
+      (2026-11-16T16:01:01Z) keeps the tests-approved label/advise rule; a PR
+      created at or after it uses recorded-approval evidence; a missing or
+      invalid timestamp fails closed to evidence. Add an M6 time-boxed waiver
+      for #170/#171/#175 through 2026-11-27 23:59:59 Asia/Taipei; #160 uses the
+      permanent cutover rule. The waiver is a recorded exception, not evidence,
+      and does not create or backdate an approval record. Delta-006, the
+      proposal, README and verification-constraints are updated; the stale
+      DEBT-02/DEBT-09 G1 wording is corrected; the focused tests cover the
+      cutover boundary, fail-closed timestamps and the waiver expiry.
+    requirements: []
+    invariants: []
+    commits: ["5adc852c17c90d3b206a4b4a448b8f02805dd7ed"]
+    agent: build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      The M6 member approved the cutover correction, the time-boxed waiver and
+      the local branch/commits; the assistant implemented the gate, workflow,
+      tests and documentation, filled the AI-use commit reference and ran the
+      local checks. The member handles push, pull request and merge.
+    human_review: >-
+      M6 approved the selector fix and a PR-scoped waiver through 2026-11-27.
+      The waiver does not claim G1 passed and does not change the ruleset.
+    transcript_record: >-
+      The OpenCode session remains in the local store; no separate export was
+      created.
+    verification:
+      base: b58a5adcb8b187e45eef05ece17834beaa0b3478
+      results: >-
+        pnpm test:gates passed 6 files / 168 tests; pnpm typecheck passed;
+        pnpm verify passed 94 files / 2056 tests and a successful build; the
+        auto-mode simulations gave #160 pre-cutover advise, #170/#175 waiver
+        advise, and #999 post-cutover evidence failure.
+      limits: >-
+        No remote push, pull request or merge was performed; the AI-use commit
+        reference is filled after the member commits. The three waived PRs still
+        need their reviews, owner acknowledgements and the AI-use-log tail
+        resolution.
+    scope: >-
+      .github/workflows/ci.yml, src/evaluation/test-approval-gate.ts,
+      test/offline/test-approval-gate.test.ts,
+      docs/architecture/delta/006-gate-enforcement.md,
+      docs/code-governance/g1-test-approval-proposal.md,
+      docs/code-governance/verification-constraints.md,
+      docs/debt-register.md, README.md and this log entry. No
+      test-approvals.yaml, ruleset, dependency or other gate changed.
