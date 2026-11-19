@@ -8935,3 +8935,42 @@ entries:
     scope: >-
       src/console/ConsoleApp.tsx and docs/ai-use-log.yaml only, no contracts,
       runtime, tests, manifests or the animal-island-ui library changed.
+
+  - date: "2026-11-19"
+    task: M2-174-c08-reconnect-affordance
+    change: >-
+      Added an explicit Reconnect control for the operator after a lost
+      transport. A transportEpoch counter state is part of the setup effect's
+      dependency list, so bumping it tears down the existing cleanup and runs a
+      fresh bootstrap. The Reconnect button appears next to the connection status
+      whenever the connection is not open and resets the view state, machine
+      state, recovery acknowledgement, playback mount and draft before
+      incrementing the epoch, so no old session identity, receipt, input, event
+      or error is reused. A hint states that reconnect starts a new session
+      bootstrap and nothing from the previous session is replayed, resumed or
+      claimed. No automatic reconnect, retry, timer or resume logic was added.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    opencode_version: "1.19.4"
+    launch_flags: [--agent, build, --format, json, --variant, xhigh]
+    sessions: [ses_e0beb6cbaffeIHJt7iRi4ZaVC8]
+    supervision: >-
+      The M2 member directed this P1 slice and this OpenCode session authored the
+      console change and this log entry.
+    human_review: >-
+      The M2 member approved the slice and a local commit, and this session
+      performed no git operation.
+    transcript_record: >-
+      The raw CLI JSON output is retained outside the checkout.
+    verification:
+      base: ba92fac
+      results: >-
+        Supervisor rerun after this session covers pnpm test:m2, pnpm typecheck
+        and pnpm lint.
+    scope: >-
+      src/console/ConsoleApp.tsx and docs/ai-use-log.yaml only, no contracts,
+      runtime, tests, manifests or the animal-island-ui library changed.

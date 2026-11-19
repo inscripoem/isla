@@ -402,6 +402,7 @@ export function ConsoleApp({
   const [recoveryAcknowledged, setRecoveryAcknowledged] = useState(false)
   const [operatorRequestPending, setOperatorRequestPending] = useState(false)
   const [operatorRequestError, setOperatorRequestError] = useState<string | null>(null)
+  const [transportEpoch, setTransportEpoch] = useState(0)
 
   const transportRef = useRef<ConsoleTransportPort | null>(null)
   const playbackRef = useRef<PlaybackBinding | null>(null)
@@ -558,7 +559,16 @@ export function ConsoleApp({
       transportRef.current = null
       transport.close()
     }
-  }, [transportFactory, performerFactory, playbackFactory])
+  }, [transportFactory, performerFactory, playbackFactory, transportEpoch])
+
+  const reconnect = useCallback(() => {
+    setState(createInitialConsoleState())
+    setMachineState(null)
+    setRecoveryAcknowledged(false)
+    setPlaybackMounted(false)
+    setDraft('')
+    setTransportEpoch((epoch) => epoch + 1)
+  }, [])
 
   const dispatchable = canDispatch(state)
 
@@ -1188,7 +1198,18 @@ export function ConsoleApp({
           <span className="console__connection-label">{state.connection}</span>
           <span className="console__connection-detail">{connectionSummary}</span>
         </div>
-        {state.connectionDetail !== null && <p className="console__hint">{state.connectionDetail}</p>}
+        {state.connection !== 'open' && (
+          <div className="console__actions">
+            <Button size="small" icon={<RefreshIcon size={18} />} onClick={reconnect}>
+              Reconnect
+            </Button>
+            <p className="console__hint">
+              Reconnect starts a new session bootstrap. Nothing from the previous session is replayed, resumed or
+              claimed.
+            </p>
+          </div>
+        )}
+        {state.connectionDetail !== null && <p className="console__alert">{state.connectionDetail}</p>}
       </header>
 
       <Divider type="dashed-brown" />
