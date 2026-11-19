@@ -1,7 +1,7 @@
 # Delta-006 — Gate enforcement (G1, G4, G6, trace)
 
-Status: under review (M6). Date: 2026-11-13; review fixes 2026-11-14. ADR: ADR-006. Branch
-`m6-gate-enforcement`, pull request #158 (not merged). Revision type: **ADD-R** (enforcement added
+Status: merged in `9492070`; cutover correction 2026-11-19. Date: 2026-11-13; review fixes 2026-11-14. ADR: ADR-006.
+Branch `m6-gate-enforcement`, pull request #158. Revision type: **ADD-R** (enforcement added
 to existing gates; no interface, contract or schema change).
 
 ## Change
@@ -10,7 +10,8 @@ to existing gates; no interface, contract or schema change).
   An approval names its scope and tests; the commit that added the record must be an ancestor of the
   first code commit in the pull request. `approved_at` later than that commit is a violation.
   CI runs `evidence` only when the approval record exists **at the pull request's base**; otherwise the
-  existing `tests-approved` label rule runs in `advise`.
+  existing `tests-approved` label rule runs in `advise`. **Corrected 2026-11-19:** the base-presence
+  test was the defect; the mode is selected by the PR creation time. See “Cutover correction” below.
 - **G4 — claims need evidence.** The evaluation table gains a `Claim | Value | Conditions | Artifact`
   table; an empty value or conditions cell fails. `README.md` and `Report.md` are scanned for measured
   performance claims (`p95`, `p99`, `recall@`, `precision@`, `accuracy`, `tokens per`, `cost per`);
@@ -74,7 +75,7 @@ turns the test red.
 
 | Gate | Proves | Does not prove |
 | --- | --- | --- |
-| G1 | an approval record covering every changed code path existed in a commit **before** the first code commit, and its tests exist | that a human wrote or read it |
+| G1 (evidence mode) | an approval record covering every changed code path existed in a commit **before** the first code commit, and its tests exist | that a human wrote or read it; pre-cutover and waived PRs do not run this check |
 | G4 | a recorded claim has a value and names its conditions; an unqualified prose claim has a table | that the number is correct, or that an evaluation ran |
 | G6 | cited commits and ids exist in this repository | that the work was correct, or that a committed change was merged |
 | trace | the cited test title exists in the cited file; a row names an ADR or none | that the test is adequate, or that the row's prose is true |
@@ -105,23 +106,63 @@ need an exemption.
 
 `docs/code-governance/test-approvals.yaml` is committed before the implementation in this branch
 (`bf9c39f`). A pull request whose **base already carries** that file is gated on evidence; an older
-base keeps the label rule. No open pull request is retroactively failed.
+base keeps the label rule. No open pull request is retroactively failed. **Corrected 2026-11-19:**
+the second sentence was false in practice; `base.sha` follows the current tip. See “Cutover correction”
+below.
 
 **Adoption precondition (M5 review, 2026-11-14).** Merging this branch puts
 `docs/code-governance/test-approvals.yaml` on `main`. Every later pull request's base then carries it,
 so G1 switches from the label rule to `evidence` mode for the whole team. The ADR-006 D2 adoption
 decision must be recorded before or with that merge; this branch records the precondition and does not
 make the decision. On `push` events G1 is skipped by design, and the aggregate records
-`g1: skipped-by-design` — not-verified, never a pass.
+`g1: skipped-by-design` — not-verified, never a pass. **Corrected 2026-11-19:** the mode is
+selected by the PR creation time, not the base tip; see “Cutover correction” below.
+
+## Cutover correction — 2026-11-19 (M6, #177)
+
+**Finding.** The cutover above read `github.event.pull_request.base.sha`. That field follows the
+**current** tip of the base branch, not the base at pull-request creation: GitHub refreshes it on every
+push. When #158 merged, every open PR's base began to carry the register, so PRs opened before the
+cutover entered `evidence` mode without touching the register. #160 is the measured case: created
+2026-11-13T17:30:01Z; bases `78c7656` at creation, `205424f` at the last pre-activation push,
+`b58a5ad` on 2026-11-18; pull-request run `44302927637` fails G1 on
+`src/runtime/evaluation-adapter.ts`.
+
+**Rule (effective 2026-11-19).** G1 selects its mode from the pull request's **creation time**, compared
+with `G1_EVIDENCE_ACTIVATED_AT = 2026-11-16T16:01:01Z` (the #158 merge, `9492070`):
+
+- created before the cutover → the `tests-approved` label rule in `advise`;
+- created at or after the cutover → recorded-approval `evidence` mode;
+- missing or unparsable creation or activation time → `evidence` (fail closed).
+
+The current base tip is no longer a mode selector. The workflow passes
+`github.event.pull_request.created_at`; the gate prints the selected mode and reason.
+
+**Time-boxed waiver (M6, 2026-11-19).** PRs #170, #171 and #175 may use the label/advise rule through
+**2026-11-27 23:59:59 Asia/Taipei** (`G1_TIME_WAIVER_UNTIL = 2026-11-28T00:00:00+08:00`, the first
+instant after the window). #160 uses the permanent cutover rule and is not in the waiver. The waiver is
+a recorded exception, not evidence: the G1 step prints that it is a waiver, the check is green under the
+exception, and the gate does not claim evidence passed or create/backdate a TA record. After the expiry,
+a post-cutover PR returns to evidence. The M5 delivery exception in PR #176 (DEBT-15, pending) is a
+separate fallback record that assumes the red check stays visible. This M6 waiver instead makes G1
+green under an explicit, expiring exception; if both records are used, #176's condition 1 must be read
+as superseded for the waiver window and its author should update it. The waiver also removes the need
+to rely on the unverified repository-role bypass in #176 for #170/#171/#175 during the window. The
+waiver expires earlier.
+
+**Limits.** The cutover is PR-level: a pre-cutover PR keeps the label rule even for code written after
+2026-11-16 (#160's current head is such a case). That is the recorded policy choice, not a claim that
+the later code was approved. The waiver is debt, not a precedent; it does not change the ruleset, the
+`verify` requirement or any other gate. The three waived PRs still need their reviews, owner
+acknowledgements and the AI-use-log tail resolution.
 
 ## Limits
 
 - The gate cannot see authorship. A record can be written by an agent; review checks content.
 - The gates block pull-request merges to `main`: the active *Protect Main* ruleset requires the
   `verify` check (integration 15368, `bypass_actors: null`, `current_user_can_bypass: never`;
-  measured 2026-11-13). G1 still runs `advise` until the base carries `test-approvals.yaml`;
-  switching new bases to `evidence` is the team decision ADR-006 D2 records, and it is owed before
-  this branch merges. `do_not_enforce_on_create` exempts branch creation and
+  measured 2026-11-13). G1 uses the PR-creation cutover (see “Cutover correction”); the earlier
+  “advise until the base carries the record” wording is superseded. `do_not_enforce_on_create` exempts branch creation and
   `strict_required_status_checks_policy` is false, so a branch need not be up to date.
 - The G4 prose scan is a heuristic over two named files; a reviewed exception needs a baseline entry
   with an expiry, not a silent edit.

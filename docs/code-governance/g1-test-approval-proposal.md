@@ -119,7 +119,8 @@ Until then the step prints a warning and never fails a run, and changing it is a
 `docs/code-governance/test-approvals.yaml` for every pull request whose base carries that file. The
 mechanical switch is the merge of PR #158: the file lands on `main`, so every later pull-request base
 selects `evidence` mode in the G1 step. Bases that do not carry the file keep the label/advise rule, so
-no open pull request is retroactively failed.
+no open pull request is retroactively failed. **Corrected 2026-11-19:** the base-tip selector was the
+defect; the cutover is now selected by the PR creation time. See the correction below.
 
 ### Tally
 
@@ -146,6 +147,16 @@ as agreement.
 
 ### Consequence
 
-Merging PR #158 activates the evidence mode for every later pull request. The first approval record is
-`docs/code-governance/test-approvals.yaml`; a change that touches `src/` or `prompts/` must add or cite
-one.
+Merging PR #158 activates the evidence mode for every pull request **created at or after** the cutover.
+The first approval record is `docs/code-governance/test-approvals.yaml`; a change that touches `src/` or
+`prompts/` must add or cite one. PRs created before the cutover keep the label/advise rule. M6 also
+records a time-boxed waiver for #170/#171/#175 through 2026-11-27 23:59 +08; it is debt, not evidence,
+and does not create or backdate a record.
+
+### Correction — 2026-11-19
+
+The implementation read `github.event.pull_request.base.sha`, which follows the current base tip, so a
+PR opened before the cutover entered `evidence` mode as soon as `main` advanced. The selector is now
+`github.event.pull_request.created_at` compared with `2026-11-16T16:01:01Z`; a missing or invalid
+timestamp fails closed to `evidence`. #160 is the measured case. See Delta-006 “Cutover correction —
+2026-11-19” for the rule and the waiver limits.

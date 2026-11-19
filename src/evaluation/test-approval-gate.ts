@@ -70,6 +70,125 @@ export function runCli(input: TestApprovalInput, mode: GateMode): number {
 export const APPROVALS_PATH = 'docs/code-governance/test-approvals.yaml'
 
 /**
+ * The #158 cutover instant. A pull request created before this instant keeps the
+ * label/advise rule; one created at or after it is checked against the recorded
+ * approvals. The value is the #158 merge time (`9492070`, merged
+ * 2026-11-16T16:01:01Z). It is a fixed historical cutover, not the current base tip.
+ */
+export const G1_EVIDENCE_ACTIVATED_AT = '2026-11-16T16:01:01Z'
+
+/**
+ * M6 time-boxed waiver (2026-11-19). These pull requests may use the label/advise
+ * rule through 2026-11-27 23:59:59 Asia/Taipei. `G1_TIME_WAIVER_UNTIL` is the
+ * first instant AFTER the window, so all of 27 November is covered. A waiver is a
+ * recorded exception, not evidence: the G1 step must say so in its output.
+ */
+export const G1_TIME_WAIVER_PRS: readonly number[] = [170, 171, 175]
+export const G1_TIME_WAIVER_UNTIL = '2026-11-28T00:00:00+08:00'
+
+export type ApprovalMode = 'advise' | 'evidence'
+
+export type ApprovalModeReason =
+  | 'pre-cutover'
+  | 'post-cutover'
+  | 'created-at-unavailable'
+  | 'activated-at-unavailable'
+  | 'invalid-timestamp'
+
+export interface ApprovalModeSelection {
+  readonly mode: ApprovalMode
+  readonly reason: ApprovalModeReason
+}
+
+export type G1ModeReason = 'waiver' | ApprovalModeReason
+
+export interface G1ModeSelection {
+  readonly mode: ApprovalMode
+  readonly reason: G1ModeReason
+}
+
+/**
+ * The cutover rule, without git or the clock: a PR created before the recorded
+ * cutover keeps the label/advise rule; one created at or after it uses evidence.
+ * An unavailable or unparsable timestamp is not a reason to relax the gate, so it
+ * selects evidence.
+ */
+export function selectApprovalMode(input: {
+  readonly createdAt: string | null | undefined
+  readonly activatedAt: string | null | undefined
+}): ApprovalModeSelection {
+  const created = input.createdAt?.trim()
+  const activated = input.activatedAt?.trim()
+  if (created === undefined || created.length === 0) {
+    return { mode: 'evidence', reason: 'created-at-unavailable' }
+  }
+  if (activated === undefined || activated.length === 0) {
+    return { mode: 'evidence', reason: 'activated-at-unavailable' }
+  }
+  const createdMs = Date.parse(created)
+  const activatedMs = Date.parse(activated)
+  if (!Number.isFinite(createdMs) || !Number.isFinite(activatedMs)) {
+    return { mode: 'evidence', reason: 'invalid-timestamp' }
+  }
+  return createdMs < activatedMs
+    ? { mode: 'advise', reason: 'pre-cutover' }
+    : { mode: 'evidence', reason: 'post-cutover' }
+}
+
+/**
+ * The M6 time-boxed waiver: a listed PR may use the label/advise rule until the
+ * exclusive end instant. A missing number, an unknown PR, or an unreadable clock
+ * or end instant grants nothing.
+ */
+export function isTimeWaived(input: {
+  readonly prNumber: number | null
+  readonly now: string | Date
+  readonly prs?: readonly number[]
+  readonly until?: string
+}): boolean {
+  if (input.prNumber === null || !Number.isInteger(input.prNumber)) return false
+  const prs = input.prs ?? G1_TIME_WAIVER_PRS
+  if (!prs.includes(input.prNumber)) return false
+  const untilMs = Date.parse(input.until ?? G1_TIME_WAIVER_UNTIL)
+  const nowMs = input.now instanceof Date ? input.now.getTime() : Date.parse(input.now)
+  if (!Number.isFinite(untilMs) || !Number.isFinite(nowMs)) return false
+  return nowMs < untilMs
+}
+
+/**
+ * The mode the CI step should use. The explicit waiver is checked first because it
+ * is a recorded decision for named PRs; every other PR uses the cutover rule.
+ */
+export function decideApprovalMode(input: {
+  readonly createdAt: string | null | undefined
+  readonly activatedAt: string | null | undefined
+  readonly prNumber: number | null
+  readonly now: string | Date
+  readonly waiverPrs?: readonly number[]
+  readonly waiverUntil?: string
+}): G1ModeSelection {
+  if (
+    isTimeWaived({
+      prNumber: input.prNumber,
+      now: input.now,
+      ...(input.waiverPrs === undefined ? {} : { prs: input.waiverPrs }),
+      ...(input.waiverUntil === undefined ? {} : { until: input.waiverUntil }),
+    })
+  ) {
+    return { mode: 'advise', reason: 'waiver' }
+  }
+  return selectApprovalMode({ createdAt: input.createdAt, activatedAt: input.activatedAt })
+}
+
+function parsePrNumber(value: string | undefined): number | null {
+  if (value === undefined) return null
+  const trimmed = value.trim()
+  if (!/^\d+$/.test(trimmed)) return null
+  const parsed = Number(trimmed)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null
+}
+
+/**
  * A recorded test approval. The record is the durable form of the label: it can
  * carry a date, a scope and the tests that were agreed.
  *
@@ -308,68 +427,7 @@ export function collectApprovalEvidenceViolations(input: ApprovalEvidenceInput):
   return collectApprovalEvidenceFindings(input).map((finding) => finding.message)
 }
 
-function main(argv: readonly string[]): number {
-  const requested = argv[0]
-  const mode: GateMode = requested === 'enforce' ? 'enforce' : 'advise'
-  if (requested === 'evidence') {
-    const labelMode = collectTestApprovalViolations({
-      isPullRequest: process.env.GITHUB_EVENT_NAME === 'pull_request',
-      labels: [],
-      changedFiles: [],
-    })
-    void labelMode
-    const changedFiles = argv.length > 1 ? argv.slice(1) : readChangedFiles()
-    const base = process.env.GATE_BASE_SHA ?? mergeBase('origin/main')
-    const approvalsText = existsSync(APPROVALS_PATH) ? readFileSync(APPROVALS_PATH, 'utf8') : null
-    const parsed = approvalsText === null ? null : parseApprovals(approvalsText)
-    const violations: string[] = []
-    if (parsed !== null && !parsed.ok) {
-      violations.push(...parsed.errors)
-    }
-    const firstCode = firstCommitTouching(['src', 'prompts'], base)
-    violations.push(
-      ...collectApprovalEvidenceViolations({
-        isPullRequest: process.env.GITHUB_EVENT_NAME === 'pull_request',
-        changedFiles,
-        approvals: parsed !== null && parsed.ok ? parsed.approvals : null,
-        recordFirstTouch: firstCommitTouching([APPROVALS_PATH], base),
-        firstCodeCommit: firstCode,
-        firstCodeCommitTime: firstCode === null ? null : commitTime(firstCode),
-        isAncestor: isAncestorOf,
-        fileExists: (relative) => existsSync(relative),
-      }),
-    )
-    if (violations.length === 0) {
-      process.stdout.write('G1: recorded test approvals cover this change and predate implementation\n')
-      return 0
-    }
-    for (const violation of violations) process.stderr.write(`G1 (evidence): ${violation}\n`)
-    try {
-      const changed = argv.length > 1 ? argv.slice(1) : readChangedFiles()
-      const approvalsText = existsSync(APPROVALS_PATH) ? readFileSync(APPROVALS_PATH, 'utf8') : null
-      const parsed = approvalsText === null ? null : parseApprovals(approvalsText)
-      const firstCode = firstCommitTouching(['src', 'prompts'], base)
-      const paths = writeFindings(
-        collectApprovalEvidenceFindings({
-          isPullRequest: process.env.GITHUB_EVENT_NAME === 'pull_request',
-          changedFiles: changed,
-          approvals: parsed !== null && parsed.ok ? parsed.approvals : null,
-          recordFirstTouch: firstCommitTouching([APPROVALS_PATH], base),
-          firstCodeCommit: firstCode,
-          firstCodeCommitTime: firstCode === null ? null : commitTime(firstCode),
-          isAncestor: isAncestorOf,
-          fileExists: (relative) => existsSync(relative),
-        }),
-        { base, commit: firstCode },
-      )
-      for (const path of paths) process.stdout.write(`G1: failure record ${path}\n`)
-    } catch (error) {
-      process.stderr.write(
-        `G1: could not write the failure record: ${error instanceof Error ? error.message : String(error)}\n`,
-      )
-    }
-    return 1
-  }
+function runLabelMode(mode: GateMode, argv: readonly string[]): number {
   const labels = (process.env.PR_LABELS ?? '')
     .split(',')
     .map((label) => label.trim())
@@ -385,6 +443,101 @@ function main(argv: readonly string[]): number {
     },
     mode,
   )
+}
+
+function runEvidenceMode(argv: readonly string[]): number {
+  const changedFiles = argv.length > 1 ? argv.slice(1) : readChangedFiles()
+  const base = process.env.GATE_BASE_SHA ?? mergeBase('origin/main')
+  const approvalsText = existsSync(APPROVALS_PATH) ? readFileSync(APPROVALS_PATH, 'utf8') : null
+  const parsed = approvalsText === null ? null : parseApprovals(approvalsText)
+  const violations: string[] = []
+  if (parsed !== null && !parsed.ok) {
+    violations.push(...parsed.errors)
+  }
+  const firstCode = firstCommitTouching(['src', 'prompts'], base)
+  violations.push(
+    ...collectApprovalEvidenceViolations({
+      isPullRequest: process.env.GITHUB_EVENT_NAME === 'pull_request',
+      changedFiles,
+      approvals: parsed !== null && parsed.ok ? parsed.approvals : null,
+      recordFirstTouch: firstCommitTouching([APPROVALS_PATH], base),
+      firstCodeCommit: firstCode,
+      firstCodeCommitTime: firstCode === null ? null : commitTime(firstCode),
+      isAncestor: isAncestorOf,
+      fileExists: (relative) => existsSync(relative),
+    }),
+  )
+  if (violations.length === 0) {
+    process.stdout.write('G1: recorded test approvals cover this change and predate implementation\n')
+    return 0
+  }
+  for (const violation of violations) process.stderr.write(`G1 (evidence): ${violation}\n`)
+  try {
+    const changed = argv.length > 1 ? argv.slice(1) : readChangedFiles()
+    const approvalsText = existsSync(APPROVALS_PATH) ? readFileSync(APPROVALS_PATH, 'utf8') : null
+    const parsed = approvalsText === null ? null : parseApprovals(approvalsText)
+    const firstCode = firstCommitTouching(['src', 'prompts'], base)
+    const paths = writeFindings(
+      collectApprovalEvidenceFindings({
+        isPullRequest: process.env.GITHUB_EVENT_NAME === 'pull_request',
+        changedFiles: changed,
+        approvals: parsed !== null && parsed.ok ? parsed.approvals : null,
+        recordFirstTouch: firstCommitTouching([APPROVALS_PATH], base),
+        firstCodeCommit: firstCode,
+        firstCodeCommitTime: firstCode === null ? null : commitTime(firstCode),
+        isAncestor: isAncestorOf,
+        fileExists: (relative) => existsSync(relative),
+      }),
+      { base, commit: firstCode },
+    )
+    for (const path of paths) process.stdout.write(`G1: failure record ${path}\n`)
+  } catch (error) {
+    process.stderr.write(
+      `G1: could not write the failure record: ${error instanceof Error ? error.message : String(error)}\n`,
+    )
+  }
+  return 1
+}
+
+function runAutoMode(argv: readonly string[]): number {
+  const prNumber = parsePrNumber(process.env.PR_NUMBER)
+  const selection = decideApprovalMode({
+    createdAt: process.env.PR_CREATED_AT ?? null,
+    activatedAt: G1_EVIDENCE_ACTIVATED_AT,
+    prNumber,
+    now: new Date(),
+  })
+  const subject = prNumber === null ? 'this pull request' : `PR #${prNumber}`
+  if (selection.reason === 'waiver') {
+    process.stdout.write(
+      `G1: ${subject} is covered by the M6 time-boxed waiver through 2026-11-27 23:59 +08; using the label/advise rule (not evidence).\n`,
+    )
+    return runLabelMode('advise', argv)
+  }
+  if (selection.reason === 'pre-cutover') {
+    process.stdout.write(
+      `G1: ${subject} was created before the ${G1_EVIDENCE_ACTIVATED_AT} cutover; using the label/advise rule.\n`,
+    )
+    return runLabelMode('advise', argv)
+  }
+  if (selection.reason === 'post-cutover') {
+    process.stdout.write(
+      `G1: ${subject} was created at or after the ${G1_EVIDENCE_ACTIVATED_AT} cutover; using evidence mode.\n`,
+    )
+    return runEvidenceMode(argv)
+  }
+  process.stdout.write(
+    `G1: the pull-request creation time is unavailable or invalid (${selection.reason}); using evidence mode (fail closed).\n`,
+  )
+  return runEvidenceMode(argv)
+}
+
+function main(argv: readonly string[]): number {
+  const requested = argv[0]
+  if (requested === 'auto') return runAutoMode(argv)
+  if (requested === 'evidence') return runEvidenceMode(argv)
+  const mode: GateMode = requested === 'enforce' ? 'enforce' : 'advise'
+  return runLabelMode(mode, argv)
 }
 
 const invokedDirectly =
