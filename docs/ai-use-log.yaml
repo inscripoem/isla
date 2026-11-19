@@ -8432,7 +8432,7 @@ entries:
       cutover boundary, fail-closed timestamps and the waiver expiry.
     requirements: []
     invariants: []
-    commits: ["5adc852c17c90d3b206a4b4a448b8f02805dd7ed"]
+    commits: ["d4234f38c6616634ce6a84080877ed5b2621be34"]
     agent: build
     provider: opencode-go
     model: deepseek-v4.1-flash
