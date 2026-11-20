@@ -58,6 +58,20 @@ describe('style validation and repair', () => {
     }
   })
 
+  it('zero false kills: every tic-free repair fallback passes the default contract on its own', () => {
+    // A fallback that itself violates the contract is silently unusable: repair
+    // would reject it and the tic-collision case this exists for would lose its
+    // only escape hatch. Each line must be clean in isolation, and must not carry
+    // the tic it exists to avoid.
+    for (const intent of REPLY_INTENTS) {
+      const lines = CHARACTER_CONTENT.intentFallbackTemplates[intent as ReplyIntent]
+      for (const line of lines) {
+        expect(validateStyle([line], authoredContract), `fallback ${intent}`).toEqual([])
+        expect(line, `fallback ${intent} carries a tic`).not.toMatch(/hmph|nya/i)
+      }
+    }
+  })
+
   it('OOC self-reference: forbidden first-person form violates and authored templates do not', () => {
     const violations = validateStyle(['\u4eba\u5bb6 can help you.'], authoredContract)
     expect(violations).toContainEqual({
@@ -181,6 +195,55 @@ describe('style validation and repair', () => {
     const options = { replyIntent: 'support' as const }
     const repaired = repairStyledLines(['I can cure your illness with real magic.'], authoredContract, options)
     expect(repaired.lines[0]).toBe(CHARACTER_CONTENT.intentTemplates.support[0])
+  })
+
+  it('boundary fallback: a renumbered fact-contradiction does not block the repair', () => {
+    // `fact-contradiction` violations carry their array position as `rule`, so
+    // replacing a line renumbers the remaining findings. Keying the baseline on
+    // `rule` made a renumbered pre-existing contradiction look newly introduced,
+    // which refused a repair the template itself would have completed cleanly.
+    // Found by the A06 cross-review session (ses_e07bf27a9ffeCqh8XSq4oGHrH2 -
+    // recorded in docs/ai-use-log.yaml).
+    const options = {
+      replyIntent: 'support' as const,
+      standingFacts: ['Elleya is 151 cm tall', 'Elleya is 30 years old'],
+    }
+    const input = ['I can cure you. I am 160 cm tall.', 'I am 40 years old.']
+    const repaired = repairStyledLines(input, authoredContract, options)
+
+    // The boundary on line 0 must be resolved.
+    expect(repaired.report.fallbackUsed).toBe(true)
+    expect(repaired.report.unrepairedBoundaryLines).toEqual([])
+    const boundary = (lines: readonly string[]) =>
+      validateStyle(lines, authoredContract, options).filter((v) => v.kind === 'boundary')
+    expect(boundary(repaired.lines)).toEqual([])
+    // The untouched contradiction on line 1 is report-only and must still report.
+    expect(validateStyle(repaired.lines, authoredContract, options).some((v) => v.lineIndex === 1)).toBe(true)
+  })
+
+  it('boundary fallback: a pre-existing report-only violation does not veto the repair', () => {
+    // sentence-length and fact-contradiction are report-only at this stage. A
+    // line that hits a boundary AND is over the sentence limit must still get its
+    // boundary replaced; only the resolvable kinds decide acceptance.
+    const contract = deriveStyleContract(AUTHOR_CHARACTER_PROFILE, { maxSentenceChars: 20 })
+    const options = { replyIntent: 'support' as const }
+    const hit = 'I can cure your illness with real magic.'
+    expect(validateStyle([hit], contract, options).some((v) => v.kind === 'sentence-length')).toBe(true)
+
+    const repaired = repairStyledLines([hit], contract, options)
+    expect(repaired.report.fallbackUsed).toBe(true)
+    expect(repaired.lines[0]).not.toBe(hit)
+    expect(repaired.report.unrepairedBoundaryLines).toEqual([])
+  })
+
+  it('boundary fallback: reports an unrepaired boundary when no replyIntent is supplied', () => {
+    // The report field documents that this is what a no-intent call produces:
+    // `candidateTemplates` returns nothing, so the hit cannot be repaired.
+    const hit = 'I can cure your illness with real magic.'
+    const repaired = repairStyledLines([hit], authoredContract)
+    expect(repaired.lines[0]).toBe(hit)
+    expect(repaired.report.fallbackUsed).toBe(false)
+    expect(repaired.report.unrepairedBoundaryLines).toEqual([0])
   })
 
   it('boundary fallback: reports an unrepaired boundary instead of silently leaving it', () => {

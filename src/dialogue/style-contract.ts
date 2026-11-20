@@ -147,13 +147,13 @@ export interface DialogueStyleReport {
   repaired: boolean // any line changed by a repair
   fallbackUsed: boolean // any segment replaced by an intent template
   /**
-   * Boundary lines that still violate the contract after repair because no
-   * replacement candidate could be used without creating a new violation, or
-   * because the contract carries no fallbacks for the intent. `repaired` alone
-   * cannot express this: a run can repair one line and leave another, and a
-   * caller that only reads `repaired` would treat a partly unrepaired delivery
-   * as clean. Empty means every detected boundary hit was either resolved or
-   * was never repairable by design (no `replyIntent` supplied).
+   * Boundary lines that still violate the contract after repair, because either
+   * no replacement candidate could be used without creating a new violation, or
+   * the contract carries no fallbacks for the intent (which is also what a call
+   * with no `replyIntent` produces). `repaired` alone cannot express this: a run
+   * can repair one line and leave another, and a caller that only reads
+   * `repaired` would treat a partly unrepaired delivery as clean. Empty means
+   * every detected boundary hit was resolved.
    */
   unrepairedBoundaryLines: readonly number[]
 }
@@ -354,9 +354,18 @@ function candidateTemplates(
  * tic next to a tic on the following line, so the repaired output could fail
  * `validateStyle` while the report claimed success.
  *
- * The baseline is the violation set measured on the CURRENT lines, so a
- * pre-existing violation that this stage cannot fix is not held against every
- * candidate; only newly introduced violations reject one.
+ * Acceptance compares two things, both measured against the baseline taken on
+ * the CURRENT lines, so a violation this stage cannot fix never blocks a repair:
+ *
+ * - The replaced line must be clean of the kinds THIS stage resolves. Only
+ *   `boundary` and the kinds a replacement can influence are considered; a
+ *   report-only kind that was already present on that line (a long sentence, a
+ *   fact contradiction) is not the replacement's fault and must not veto it.
+ * - No violation may appear that the baseline did not already have, compared by
+ *   a STABLE key. `rule` is not usable for that: for `fact-contradiction` it is
+ *   the position in `scanContradictions`' output, which renumbers the moment a
+ *   line is replaced, so keying on it turns a renumbered pre-existing
+ *   contradiction into a phantom "introduced" one and refuses a valid repair.
  */
 function firstPassingTemplate(
   lines: readonly string[],
@@ -372,25 +381,50 @@ function firstPassingTemplate(
     replyIntent: options?.replyIntent,
     standingFacts: options?.standingFacts,
   }
-  const baselineKeys = new Set(baseline.map(violationKey))
+  const baselineKeys = new Set(baseline.map(stableViolationKey))
   for (const template of candidates) {
+    // Defensive only: a line reaches this function because it matched a boundary
+    // pattern, so a byte-identical candidate is rejected below anyway.
     if (template === lines[lineIndex]) continue
     const trial = [...lines]
     trial[lineIndex] = template
     const violations = validateStyle(trial, contract, checkOptions)
-    // Reject a candidate that leaves the replaced line violating, or that adds
-    // any violation the baseline did not already have anywhere in the stream.
-    const stillViolatesTarget = violations.some((v) => v.lineIndex === lineIndex)
+    // The replaced line must not still carry a violation this stage can resolve.
+    const resolvable = (v: StyleViolation): boolean =>
+      v.kind === 'boundary' || v.kind === 'tic-frequency' || v.kind === 'forbidden'
+    const stillViolatesTarget = violations.some(
+      (v) => v.lineIndex === lineIndex && resolvable(v),
+    )
     if (stillViolatesTarget) continue
-    const introduced = violations.some((v) => !baselineKeys.has(violationKey(v)))
+    const introduced = violations.some((v) => !baselineKeys.has(stableViolationKey(v)))
     if (introduced) continue
     return template
   }
   return null
 }
 
-/** Identity of one violation for baseline comparison (kind + line + rule). */
-function violationKey(violation: StyleViolation): string {
+/**
+ * Position-independent identity of one violation, used to decide whether a
+ * candidate introduced something new.
+ *
+ * `rule` is deliberately excluded for `kind`s whose rule string is an ordinal
+ * rather than a name (`fact-contradiction` uses the finding's array position).
+ * The key is the kind plus the line plus the rule ONLY when the rule is a stable
+ * discriminant; the `maxSentenceChars` / `tic` / `boundaryPatterns` / forbidden
+ * rules are stable names and keep theirs so two different rules on one line stay
+ * distinguishable.
+ */
+function stableViolationKey(violation: StyleViolation): string {
+  if (violation.kind === 'fact-contradiction') {
+    // The statement identity is not exposed on the violation, so the key is the
+    // kind and line alone. Two contradictions on ONE line therefore collide and
+    // the second cannot be told from the first; that is acceptable here because
+    // the only consequence is a candidate being treated as already-violating on
+    // a line the baseline already flagged, which the replaced line never is
+    // (repair replaces the whole line with a template that carries no
+    // contradictions of its own).
+    return `${violation.kind}|${violation.lineIndex}`
+  }
   return `${violation.kind}|${violation.lineIndex}|${violation.rule}`
 }
 
