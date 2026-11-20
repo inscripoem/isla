@@ -9056,12 +9056,12 @@ entries:
       separator; the delta against main is exactly one added entry.
     requirements: [NFR-03]
     invariants: [INV-14]
-    commits: [ffbae03fa1601c155b9c0ae46c378a753ad0f8d8, 9351317d037d7f5eac9a38930e131428127e914c, 3dff0b86b5f21f94495c3deaed75294534368cd0, be06988d7db74c7444e5977b9a4288cc8e64ea53, a7c1942b6c2de6f178e587bbc54465541fdc367c]
+    commits: [ffbae03fa1601c155b9c0ae46c378a753ad0f8d8, 9351317d037d7f5eac9a38930e131428127e914c, 3dff0b86b5f21f94495c3deaed75294534368cd0, be06988d7db74c7444e5977b9a4288cc8e64ea53, a7c1942b6c2de6f178e587bbc54465541fdc367c, a1c25c9917576c7bd5473d191be84b85f5ffc298]
     agent: opencode/build
     provider: cslabllm
     model: DeepSeek-V4-Flash
     model_cli_id: "cslabllm/CS5351/DeepSeek-V4-Flash"
-    sessions: [ses_e07bf27a9ffeCqh8XSq4oGHrH2, ses_e07b09de6ffey4eSJe2jzOF5LG, ses_e07a928d0ffe4eSpzXlagEEm2e, ses_e0745f73dffeGvx3C9CgVwWja7]
+    sessions: [ses_e07bf27a9ffeCqh8XSq4oGHrH2, ses_e07b09de6ffey4eSJe2jzOF5LG, ses_e07a928d0ffe4eSpzXlagEEm2e, ses_e0745f73dffeGvx3C9CgVwWja7, ses_e06ba3aa0ffe7evb6VIit7Ikgj]
     supervision: >-
       M5's review at 81d1c55 supplied the blocking finding and named the
       accepting-only-the-replaced-line weakness; the rounds recorded here
@@ -9081,6 +9081,29 @@ entries:
       no other caller, made the edit, and ran the style and dialogue suites
       itself; the supervising assistant re-ran typecheck, oxlint and the full M4
       suite before committing and rewrote no line of the session edit. 
+
+      The delivered src/ change was re-authored in OpenCode at a1c25c9, in
+      session ses_e06e1a493ffesriorAB1Kkyknl (agent build,
+      cslabllm/CS5351/DeepSeek-V4-Flash), which replaced
+      src/dialogue/style-contract.ts with its own implementation; only that file
+      changed, so the 18 acceptance tests are unchanged and still decide.
+      Equivalence beyond the tests was checked by restoring the previous
+      implementation, capturing 400 deterministic pseudo-random cases (35
+      exercised a boundary fallback, 6 left a boundary unrepaired, 38 carried a
+      fact-contradiction), restoring this implementation, and comparing every
+      field of validateStyle plus lines, violations, repaired, fallbackUsed and
+      unrepairedBoundaryLines: 400/400 identical. Two deliberate behaviour
+      changes were flagged by the session in its own review: the repair baseline
+      comparison became a multiset rather than a set, so a second contradiction
+      on one line cannot hide behind a shared key; and the baseline is scoped to
+      the lines a replacement can reach, because replacing a line renumbers
+      later findings. The second makes the cross-line contradiction check weaker
+      by construction - a candidate cannot be rejected for a contradiction
+      outside the window - and the session marked it High in its self review;
+      only fact-contradiction is unbounded and it is report-only at this stage,
+      so no repaired or scored output changes. Verified: m4-style 18/18;
+      test:m4 19 files / 455 tests; tsc -b exit 0; oxlint 0 warnings 0 errors
+      on 323 files.
 
       This entry was written by ses_e07a928d0ffe4eSpzXlagEEm2e and updated in
       place for this round. ses_e07b09de6ffey4eSJe2jzOF5LG is cited because it
