@@ -1,8 +1,8 @@
 # Evaluation thresholds — register
 
-Status: **proposal; every threshold value is `pending`; deterministic obligations are listed separately.** Date: 2026-11-09. Owner: M6.
+Status: **proposal; every threshold value is `pending`; deterministic obligations are listed separately.** Date: 2026-11-09; revised 2026-11-20 (pilot evidence recorded; no value changed). Owner: M6.
 Rule source: the evaluation protocol, **PR #142** (this proposal), §5.
-No threshold is approved, no baseline exists, no pilot has run, and no CP5 or G4 result is claimed.
+No threshold is approved, no baseline exists, and no CP5 or G4 result is claimed. One text-only pilot run exists (one case, one variant; local evidence `M6_KB/evidence/cp05/pilot-selection-001.*`); it is not a baseline.
 
 ## Rule
 
@@ -60,11 +60,13 @@ A single run without declared conditions does not fix a threshold.
 
 ## What this document does not claim
 
-No measured baseline, no pilot, no evaluation table, no G4 pass, no CP5 acceptance, and no label or
-rubric. It records the **shape** of the thresholds and the honest state of each value.
+No measured baseline, no evaluation table, no G4 pass, no CP5 acceptance, and no label or
+rubric. The one text-only pilot run is not a baseline and fixes no threshold. It records the
+**shape** of the thresholds and the honest state of each value.
 
 ## Verification
 
-Documentation only. `pnpm test:trace` and `pnpm test:readiness` pass on the head this lands at; no code,
-test, threshold or result is added. Every numeric token above is a statistic (`p95`) or an issue number,
-not a threshold value.
+Documentation only. The pilot result is recorded in `M6_KB/evidence/cp05/pilot-selection-001.*` (local,
+not committed); no code, test or threshold value is added here. `pnpm test:trace` and
+`pnpm test:readiness` pass on the head this lands at. Every numeric token above is a statistic (`p95`)
+or an issue number, not a threshold value.
