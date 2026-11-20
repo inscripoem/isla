@@ -8467,3 +8467,51 @@ entries:
       docs/code-governance/verification-constraints.md,
       docs/debt-register.md, README.md and this log entry. No
       test-approvals.yaml, ruleset, dependency or other gate changed.
+  - date: "2026-11-20"
+    task: M6-181-g1-waiver
+    change: >-
+      Add #181 to the existing M6 G1 time-boxed waiver through 2026-11-27
+      23:59:59 Asia/Taipei, because #181 is the CP04 M2 console UI-defect
+      slice (C07/C08/C10; C09 pending #182). The waiver remains G1-only and
+      PR-scoped; it does not accept CP04 or the C09 decision, and it changes no
+      other gate or the ruleset. Delta-006, README, the verification
+      constraints and the G1 proposal record the addition; any additional PR
+      must be requested explicitly to M5 (PM) and M6 (gate owner). The focused
+      test pins #181 as covered and keeps the expiry boundary.
+    requirements: []
+    invariants: []
+    commits: ["0c659862f185d3a467529ebc35a69f8a8beedcac"]
+    agent: build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    supervision: >-
+      The M6 member approved adding #181 to the existing waiver after
+      verifying the CP04 #74 M2 row and the #181/C09 state. The assistant made
+      the code, test and documentation edits, ran the focused and full
+      verification, and opened the PR. The member handles review and merge; no
+      agent merge.
+    human_review: >-
+      M6 approved the PR-scoped #181 addition and required explicit M5/M6
+      notification for any additional PR. The waiver is G1-only and expires
+      2026-11-27.
+    transcript_record: >-
+      The OpenCode session remains in the local store; no separate export was
+      created.
+    verification:
+      base: 4160570f5788c7af8e79ffd526561b8a244f0b38
+      results: >-
+        pnpm test:gates passed 6 files / 169 tests; pnpm verify passed 94 files
+        / 2057 tests with a successful build; the focused file passed 40 tests;
+        a mutation removing #181 made the explicit #181 test fail, then passed
+        after restore; git diff --check exited 0.
+      limits: >-
+        No CP04 acceptance or C09 decision is claimed. #181 still needs the
+        C09 decision (#182), a rebase, reviews and non-G1 gates. No remote
+        merge was performed.
+    scope: >-
+      src/evaluation/test-approval-gate.ts,
+      test/offline/test-approval-gate.test.ts,
+      docs/architecture/delta/006-gate-enforcement.md,
+      docs/code-governance/g1-test-approval-proposal.md,
+      docs/code-governance/verification-constraints.md, README.md and this log
+      entry. No test-approvals.yaml, ruleset, dependency or other gate changed.
