@@ -1,8 +1,23 @@
 import { MAX_DIALOGUE_SEGMENTS, REPLY_INTENTS } from '../contracts'
 import type { ReplyIntent } from '../contracts'
 import { scanContradictions } from './consistency'
-import type { ConsistencyStatement, StatementRef } from './consistency'
+import type { ConsistencyStatement } from './consistency'
 import type { CharacterProfile } from './persona'
+
+/**
+ * Character style contract: what a line must look like, what it may never say,
+ * and how a delivery is repaired without changing what the character means.
+ *
+ * Two surfaces share one model:
+ *   - `validateStyle` reports violations and never rewrites anything;
+ *   - `repairStyledLines` fixes only the mechanical kinds (forbidden spans, tic
+ *     spacing, boundary hits) and reports the rest, because a self-reference, a
+ *     long sentence or a contradiction with a standing fact cannot be corrected
+ *     without inventing content.
+ *
+ * Both are pure: no clock, no I/O, no randomness, no persona lookup at repair
+ * time. The same inputs always produce deep-equal outputs.
+ */
 
 export interface StyleContract {
   /** Profile the contract was derived for (provenance in the report). */
@@ -65,56 +80,6 @@ export const DEFAULT_STYLE_CONTRACT: Omit<StyleContract, 'profileId' | 'boundary
   ],
 }
 
-/**
- * Freezes the replacement candidates for every intent into one record, so a
- * derived contract carries its own fallbacks and repair never re-resolves the
- * profile registry. Cost is paid once per contract (measured ~4.3 us for the
- * full registry including tic-free variants); repair itself does no lookup.
- *
- * Speaking templates come first so the ordinary case keeps the character's
- * normal voice; tic-free authored fallbacks follow, and are what lets a tic
- * collision be resolved in-voice instead of by mechanically stripping a tic.
- */
-function freezeBoundaryFallbacks(
-  profile: CharacterProfile,
-): Readonly<Record<ReplyIntent, readonly string[]>> {
-  const out: Record<ReplyIntent, readonly string[]> = {
-    answer: [],
-    clarify: [],
-    acknowledge: [],
-    support: [],
-    playful: [],
-    'check-correction': [],
-  }
-  const speaking: Readonly<Record<ReplyIntent, readonly string[]>> =
-    profile.intentTemplates ?? ({} as Record<ReplyIntent, readonly string[]>)
-  const ticFree: Readonly<Record<ReplyIntent, readonly string[]>> =
-    profile.intentFallbackTemplates ?? ({} as Record<ReplyIntent, readonly string[]>)
-  for (const intent of REPLY_INTENTS) {
-    const lines: string[] = []
-    for (const line of speaking[intent] ?? []) {
-      if (!lines.includes(line)) lines.push(line)
-    }
-    for (const line of ticFree[intent] ?? []) {
-      if (!lines.includes(line)) lines.push(line)
-    }
-    out[intent] = lines
-  }
-  return out
-}
-
-export function deriveStyleContract(
-  profile: CharacterProfile,
-  overrides?: Partial<Omit<StyleContract, 'profileId'>>,
-): StyleContract {
-  return {
-    ...DEFAULT_STYLE_CONTRACT,
-    ...overrides,
-    profileId: profile.profileId,
-    boundaryFallbacks: overrides?.boundaryFallbacks ?? freezeBoundaryFallbacks(profile),
-  }
-}
-
 export type StyleViolationKind =
   | 'self-reference'
   | 'audience-address'
@@ -157,6 +122,14 @@ export interface DialogueStyleReport {
   unrepairedBoundaryLines: readonly number[]
 }
 
+/* ------------------------------------------------------------------------- *
+ * Pattern helpers
+ *
+ * RegExp objects carry `lastIndex` when they are global or sticky, so a shared
+ * contract pattern tested with `.test()` twice can answer differently the second
+ * time. Every test therefore runs on a fresh clone with the caller's flags.
+ * ------------------------------------------------------------------------- */
+
 function clonePattern(pattern: RegExp): RegExp {
   return new RegExp(pattern.source, pattern.flags)
 }
@@ -165,9 +138,11 @@ function globalPattern(pattern: RegExp): RegExp {
   return new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`)
 }
 
-function matchesAny(line: string, patterns: readonly RegExp[]): number {
+/** Index of the first pattern that matches, or -1. */
+function matchingPatternIndex(line: string, patterns: readonly RegExp[]): number {
   for (let index = 0; index < patterns.length; index += 1) {
-    if (clonePattern(patterns[index]).test(line)) return index
+    const pattern = patterns[index]
+    if (pattern !== undefined && clonePattern(pattern).test(line)) return index
   }
   return -1
 }
@@ -176,49 +151,105 @@ function collapseWhitespace(text: string): string {
   return text.replace(/[ \t]{2,}/g, ' ')
 }
 
-function removeAllMatches(line: string, patterns: readonly RegExp[]): { text: string; changed: boolean } {
+/** Removes every span matched by any forbidden pattern; whitespace is collapsed only if something changed. */
+function stripForbiddenSpans(
+  line: string,
+  patterns: readonly RegExp[],
+): { text: string; changed: boolean } {
   let text = line
-  let changed = false
   for (const pattern of patterns) {
-    const next = text.replace(globalPattern(pattern), '')
-    if (next !== text) {
-      text = next
-      changed = true
-    }
+    text = text.replace(globalPattern(pattern), '')
   }
-  if (changed) text = collapseWhitespace(text)
-  return { text, changed }
+  if (text === line) return { text: line, changed: false }
+  return { text: collapseWhitespace(text), changed: true }
 }
 
-function removePatternMatchOnce(line: string, pattern: RegExp): { text: string; changed: boolean } {
+/** Removes the first match of `pattern`; whitespace is collapsed only if something changed. */
+function stripOneMatch(line: string, pattern: RegExp): { text: string; changed: boolean } {
   const next = line.replace(pattern, '')
   if (next === line) return { text: line, changed: false }
   return { text: collapseWhitespace(next), changed: true }
 }
 
-function sentenceParts(line: string): readonly string[] {
+/** Sentences of a line, trimmed and without empty fragments (CJK and Latin terminators). */
+function sentencesOf(line: string): readonly string[] {
   return line
-    .split(/[\u3002\uff01\uff1f!?…]+|\.(?:\s|$)/)
+    .split(/[\u3002\uff01\uff1f!?\u2026]+|\.(?:\s|$)/)
     .map((part) => part.trim())
     .filter((part) => part.length > 0)
 }
 
-function ticViolatingCandidateIndexes(
+/* ------------------------------------------------------------------------- *
+ * Derivation
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Freezes the replacement candidates for every intent into one record, so a
+ * derived contract carries its own fallbacks and repair never re-resolves the
+ * profile registry.
+ *
+ * Speaking templates come first so the ordinary case keeps the character's
+ * normal voice; tic-free authored fallbacks follow, and are what lets a tic
+ * collision be resolved in-voice instead of by mechanically stripping a tic.
+ * Duplicates are dropped while preserving the first occurrence.
+ */
+function freezeBoundaryFallbacks(
+  profile: CharacterProfile,
+): Readonly<Record<ReplyIntent, readonly string[]>> {
+  const speaking = profile.intentTemplates
+  const ticFree = profile.intentFallbackTemplates
+  const frozen = {} as Record<ReplyIntent, readonly string[]>
+  for (const intent of REPLY_INTENTS) {
+    const lines: string[] = []
+    for (const line of speaking?.[intent] ?? []) {
+      if (!lines.includes(line)) lines.push(line)
+    }
+    for (const line of ticFree?.[intent] ?? []) {
+      if (!lines.includes(line)) lines.push(line)
+    }
+    frozen[intent] = lines
+  }
+  return frozen
+}
+
+export function deriveStyleContract(
+  profile: CharacterProfile,
+  overrides?: Partial<Omit<StyleContract, 'profileId'>>,
+): StyleContract {
+  return {
+    ...DEFAULT_STYLE_CONTRACT,
+    ...overrides,
+    profileId: profile.profileId,
+    boundaryFallbacks: overrides?.boundaryFallbacks ?? freezeBoundaryFallbacks(profile),
+  }
+}
+
+/* ------------------------------------------------------------------------- *
+ * Validation
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Candidate-line indexes whose tic breaks `minGapTurns`.
+ *
+ * The check runs over `[...recentTurns.slice(-minGapTurns), ...lines]` so a
+ * tic in the confirmed history still spaces the new delivery. Entries at or
+ * before the recent turns are context only; a violation is reported at the
+ * candidate index `windowIndex - recent.length`, and only when that is >= 0.
+ */
+function ticViolationIndexes(
   lines: readonly string[],
   contract: StyleContract,
   options?: StyleCheckOptions,
 ): readonly number[] {
   if (contract.tic === null) return []
-  const gap = contract.tic.minGapTurns
+  const { pattern: ticPattern, minGapTurns: gap } = contract.tic
   const recent = (options?.recentTurns ?? []).slice(-gap)
   const window = [...recent, ...lines]
-  const ticPattern = contract.tic.pattern
   const violations: number[] = []
   let lastTicIndex = -1
   for (let index = 0; index < window.length; index += 1) {
     const entry = window[index]
-    if (entry === undefined) continue
-    if (!clonePattern(ticPattern).test(entry)) continue
+    if (entry === undefined || !clonePattern(ticPattern).test(entry)) continue
     if (lastTicIndex >= 0 && index - lastTicIndex < gap) {
       const candidateIndex = index - recent.length
       if (candidateIndex >= 0) violations.push(candidateIndex)
@@ -228,45 +259,42 @@ function ticViolatingCandidateIndexes(
   return violations
 }
 
+/**
+ * Contradictions between candidate lines and the standing facts.
+ *
+ * Facts and lines are offered as one statement list so the existing scan does
+ * the comparing; only refs that point back at a candidate line become
+ * violations, and `rule` is the finding's position, never statement text. The
+ * scan is bounded internally and only findings it actually returned are
+ * reported.
+ */
 function factContradictionViolations(
   lines: readonly string[],
   standingFacts?: readonly string[],
 ): readonly StyleViolation[] {
   if (standingFacts === undefined || standingFacts.length === 0) return []
+  const sessionId = 'style-candidate'
   const statements: ConsistencyStatement[] = []
   for (let index = 0; index < standingFacts.length; index += 1) {
     const fact = standingFacts[index]
     if (fact === undefined) continue
-    statements.push({
-      ref: { kind: 'persona-fact', factIndex: index },
-      text: fact,
-    })
+    statements.push({ ref: { kind: 'persona-fact', factIndex: index }, text: fact })
   }
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index]
     if (line === undefined || line.length === 0) continue
-    statements.push({
-      ref: { kind: 'turn', sessionId: 'style-candidate', turnId: String(index) },
-      text: line,
-    })
+    statements.push({ ref: { kind: 'turn', sessionId, turnId: String(index) }, text: line })
   }
-  const result = scanContradictions({ statements })
+  const { findings } = scanContradictions({ statements })
   const violations: StyleViolation[] = []
-  // Respect incomplete scan and module bounds: only findings actually returned are reported.
-  for (let findingIndex = 0; findingIndex < result.findings.length; findingIndex += 1) {
-    const finding = result.findings[findingIndex]
+  for (let findingIndex = 0; findingIndex < findings.length; findingIndex += 1) {
+    const finding = findings[findingIndex]
     if (finding === undefined) continue
-    for (const ref of [finding.left, finding.right] as readonly StatementRef[]) {
-      if (ref.kind === 'turn' && ref.sessionId === 'style-candidate') {
-        const lineIndex = Number(ref.turnId)
-        if (Number.isInteger(lineIndex) && lineIndex >= 0 && lineIndex < lines.length) {
-          violations.push({
-            kind: 'fact-contradiction',
-            lineIndex,
-            rule: `finding:${findingIndex}`,
-          })
-        }
-      }
+    for (const ref of [finding.left, finding.right]) {
+      if (ref.kind !== 'turn' || ref.sessionId !== sessionId) continue
+      const lineIndex = Number(ref.turnId)
+      if (!Number.isInteger(lineIndex) || lineIndex < 0 || lineIndex >= lines.length) continue
+      violations.push({ kind: 'fact-contradiction', lineIndex, rule: `finding:${findingIndex}` })
     }
   }
   return violations
@@ -278,153 +306,167 @@ export function validateStyle(
   options?: StyleCheckOptions,
 ): readonly StyleViolation[] {
   const violations: StyleViolation[] = []
-
+  // Iteration order defines the output order and is part of the contract.
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const line = lines[lineIndex] ?? ''
-    const selfIndex = matchesAny(line, contract.selfReferenceViolations)
-    if (selfIndex >= 0) {
-      violations.push({ kind: 'self-reference', lineIndex, rule: `selfReferenceViolations:${selfIndex}` })
+    const index = matchingPatternIndex(line, contract.selfReferenceViolations)
+    if (index >= 0) {
+      violations.push({ kind: 'self-reference', lineIndex, rule: `selfReferenceViolations:${index}` })
     }
   }
-
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const line = lines[lineIndex] ?? ''
-    const addrIndex = matchesAny(line, contract.addressViolations)
-    if (addrIndex >= 0) {
-      violations.push({ kind: 'audience-address', lineIndex, rule: `addressViolations:${addrIndex}` })
+    const index = matchingPatternIndex(line, contract.addressViolations)
+    if (index >= 0) {
+      violations.push({ kind: 'audience-address', lineIndex, rule: `addressViolations:${index}` })
     }
   }
-
-  for (const lineIndex of ticViolatingCandidateIndexes(lines, contract, options)) {
+  for (const lineIndex of ticViolationIndexes(lines, contract, options)) {
     violations.push({ kind: 'tic-frequency', lineIndex, rule: 'tic' })
   }
-
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
-    const line = lines[lineIndex] ?? ''
-    for (const part of sentenceParts(line)) {
-      if (part.length > contract.maxSentenceChars) {
-        violations.push({ kind: 'sentence-length', lineIndex, rule: `maxSentenceChars:${contract.maxSentenceChars}` })
-        break
-      }
+    const tooLong = sentencesOf(lines[lineIndex] ?? '').some(
+      (sentence) => sentence.length > contract.maxSentenceChars,
+    )
+    if (tooLong) {
+      violations.push({
+        kind: 'sentence-length',
+        lineIndex,
+        rule: `maxSentenceChars:${contract.maxSentenceChars}`,
+      })
     }
   }
-
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
-    const line = lines[lineIndex] ?? ''
-    const forbiddenIndex = matchesAny(line, contract.forbiddenPatterns)
-    if (forbiddenIndex >= 0) {
-      violations.push({ kind: 'forbidden', lineIndex, rule: `forbiddenPatterns:${forbiddenIndex}` })
+    const index = matchingPatternIndex(lines[lineIndex] ?? '', contract.forbiddenPatterns)
+    if (index >= 0) {
+      violations.push({ kind: 'forbidden', lineIndex, rule: `forbiddenPatterns:${index}` })
     }
   }
-
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
-    const line = lines[lineIndex] ?? ''
-    const boundaryIndex = matchesAny(line, contract.boundaryPatterns)
-    if (boundaryIndex >= 0) {
-      violations.push({ kind: 'boundary', lineIndex, rule: `boundaryPatterns:${boundaryIndex}` })
+    const index = matchingPatternIndex(lines[lineIndex] ?? '', contract.boundaryPatterns)
+    if (index >= 0) {
+      violations.push({ kind: 'boundary', lineIndex, rule: `boundaryPatterns:${index}` })
     }
   }
-
   violations.push(...factContradictionViolations(lines, options?.standingFacts))
-
   return violations
 }
 
-function candidateTemplates(
-  contract: StyleContract,
-  options?: StyleCheckOptions,
-): readonly string[] {
-  if (options?.replyIntent === undefined) return []
-  // Read the frozen record on the contract. Repair must not re-resolve the
-  // profile registry: the contract is the single source of replacement text, so
-  // a derived contract keeps working when the registry changes, and an
-  // under-specified contract fails visibly (no candidates) instead of silently
-  // reaching into a global.
-  return contract.boundaryFallbacks[options.replyIntent] ?? []
+/* ------------------------------------------------------------------------- *
+ * Repair
+ * ------------------------------------------------------------------------- */
+
+/** Kinds a replacement candidate must not leave behind or introduce. */
+function isResolvableKind(kind: StyleViolationKind): boolean {
+  return kind === 'boundary' || kind === 'tic-frequency' || kind === 'forbidden'
 }
 
 /**
- * Finds the first replacement candidate for a boundary hit that does not
- * introduce ANY new violation anywhere in the segment stream.
+ * Identity of one violation that survives a renumbering, used to decide whether
+ * a candidate introduced something new.
  *
- * The previous implementation asked only whether the replaced line was still
- * itself violating. That is unsound because `tic-frequency` is decided across a
- * sliding window: a replacement can be clean on its own line while putting a
- * tic next to a tic on the following line, so the repaired output could fail
- * `validateStyle` while the report claimed success.
+ * `rule` is dropped for `kind`s whose rule string is an ordinal rather than a
+ * name: `fact-contradiction` uses the finding's array position, and replacing a
+ * line drops that line's findings, so every later finding - including one on an
+ * untouched line, or a second contradiction on an untouched line - shifts down
+ * and would look newly introduced. The rules of the other kinds are stable
+ * names and keep theirs, so two different rules on one line stay
+ * distinguishable.
  *
- * Acceptance compares two things, both measured against the baseline taken on
- * the CURRENT lines, so a violation this stage cannot fix never blocks a repair:
- *
- * - The replaced line must be clean of the kinds THIS stage resolves. Only
- *   `boundary` and the kinds a replacement can influence are considered; a
- *   report-only kind that was already present on that line (a long sentence, a
- *   fact contradiction) is not the replacement's fault and must not veto it.
- * - No violation may appear that the baseline did not already have, compared by
- *   a STABLE key. `rule` is not usable for that: for `fact-contradiction` it is
- *   the position in `scanContradictions`' output, which renumbers the moment a
- *   line is replaced, so keying on it turns a renumbered pre-existing
- *   contradiction into a phantom "introduced" one and refuses a valid repair.
+ * Two contradictions on one line still share a key, so identity there is the
+ * kind, the line and how many such violations the baseline showed on it.
  */
-function firstPassingTemplate(
-  lines: readonly string[],
-  lineIndex: number,
-  baseline: readonly StyleViolation[],
-  contract: StyleContract,
-  options?: StyleCheckOptions,
-): string | null {
-  const candidates = candidateTemplates(contract, options)
-  if (candidates.length === 0) return null
-  const checkOptions: StyleCheckOptions = {
-    recentTurns: options?.recentTurns,
-    replyIntent: options?.replyIntent,
-    standingFacts: options?.standingFacts,
+function stableViolationKey(violation: StyleViolation): string {
+  if (violation.kind === 'fact-contradiction') return `${violation.kind}|${violation.lineIndex}`
+  return `${violation.kind}|${violation.lineIndex}|${violation.rule}`
+}
+
+/**
+ * Violations on each line, for lines this repair repeatedly re-assesses.
+ */
+function groupByLine(violations: readonly StyleViolation[]): Map<number, StyleViolation[]> {
+  const grouped = new Map<number, StyleViolation[]>()
+  for (const violation of violations) {
+    const existing = grouped.get(violation.lineIndex)
+    if (existing === undefined) grouped.set(violation.lineIndex, [violation])
+    else existing.push(violation)
   }
-  const baselineKeys = new Set(baseline.map(stableViolationKey))
-  for (const template of candidates) {
-    // Defensive only: a line reaches this function because it matched a boundary
-    // pattern, so a byte-identical candidate is rejected below anyway.
-    if (template === lines[lineIndex]) continue
-    const trial = [...lines]
-    trial[lineIndex] = template
-    const violations = validateStyle(trial, contract, checkOptions)
-    // The replaced line must not still carry a violation this stage can resolve.
-    const resolvable = (v: StyleViolation): boolean =>
-      v.kind === 'boundary' || v.kind === 'tic-frequency' || v.kind === 'forbidden'
-    const stillViolatesTarget = violations.some(
-      (v) => v.lineIndex === lineIndex && resolvable(v),
-    )
-    if (stillViolatesTarget) continue
-    const introduced = violations.some((v) => !baselineKeys.has(stableViolationKey(v)))
-    if (introduced) continue
-    return template
+  return grouped
+}
+
+/** Maps every baseline key to how many times the baseline showed it. */
+function countViolations(violations: readonly StyleViolation[]): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const violation of violations) {
+    const key = stableViolationKey(violation)
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  return counts
+}
+
+/**
+ * A violation is introduced when its key occurs more often after than before.
+ * The after-list may be narrowed to the lines a replacement can affect.
+ */
+function findIntroducedViolation(
+  before: ReadonlyMap<string, number>,
+  after: readonly StyleViolation[],
+): StyleViolation | null {
+  const used = new Map<string, number>()
+  for (const violation of after) {
+    const key = stableViolationKey(violation)
+    const already = (used.get(key) ?? 0) + 1
+    used.set(key, already)
+    if (already > (before.get(key) ?? 0)) return violation
   }
   return null
 }
 
 /**
- * Position-independent identity of one violation, used to decide whether a
- * candidate introduced something new.
+ * First candidate for a boundary hit that can replace the whole line.
  *
- * `rule` is deliberately excluded for `kind`s whose rule string is an ordinal
- * rather than a name (`fact-contradiction` uses the finding's array position).
- * The key is the kind plus the line plus the rule ONLY when the rule is a stable
- * discriminant; the `maxSentenceChars` / `tic` / `boundaryPatterns` / forbidden
- * rules are stable names and keep theirs so two different rules on one line stay
- * distinguishable.
+ * Acceptance is judged against a baseline measured on the CURRENT lines, so a
+ * violation this stage cannot fix never vetoes a repair. A candidate must:
+ *
+ * - leave the replaced line free of the kinds this stage resolves. Report-only
+ *   kinds it already had (a long sentence, a contradiction) are not its fault;
+ * - introduce no violation in the WINDOW of lines this replacement can reach
+ *   (earlier candidates already placed, this line, the lines a tic gap away)
+ *   that the baseline did not already carry there by `stableViolationKey`.
+ *   Line-local checks are not enough: `tic-frequency` spans a window, so one
+ *   line's replacement can push a tic next to a tic on its neighbour. Lines
+ *   outside the window are untouched and re-report exactly what they did
+ *   before, so they cannot be evidence of an introduced violation - and with
+ *   `fact-contradiction` keyed on the line alone, findings on them can only
+ *   differ by renumbering, or by pairings the scan never got to.
  */
-function stableViolationKey(violation: StyleViolation): string {
-  if (violation.kind === 'fact-contradiction') {
-    // The statement identity is not exposed on the violation, so the key is the
-    // kind and line alone. Two contradictions on ONE line therefore collide and
-    // the second cannot be told from the first; that is acceptable here because
-    // the only consequence is a candidate being treated as already-violating on
-    // a line the baseline already flagged, which the replaced line never is
-    // (repair replaces the whole line with a template that carries no
-    // contradictions of its own).
-    return `${violation.kind}|${violation.lineIndex}`
+function firstAcceptableTemplate(
+  lines: readonly string[],
+  lineIndex: number,
+  windowLines: readonly number[],
+  baselineCounts: ReadonlyMap<string, number>,
+  candidates: readonly string[],
+  contract: StyleContract,
+  options: StyleCheckOptions | undefined,
+): string | null {
+  const window = new Set(windowLines)
+  const inWindow = (v: StyleViolation): boolean => window.has(v.lineIndex)
+  for (const template of candidates) {
+    // A line reaches this stage because it matched a boundary pattern, so a
+    // byte-identical candidate would be rejected below anyway; skipping it keeps
+    // the intent of "replace" explicit.
+    if (template === lines[lineIndex]) continue
+    const trial = [...lines]
+    trial[lineIndex] = template
+    const affected = validateStyle(trial, contract, options).filter(inWindow)
+    const leavesResolvable = affected.some(
+      (v) => v.lineIndex === lineIndex && isResolvableKind(v.kind),
+    )
+    if (leavesResolvable) continue
+    if (findIntroducedViolation(baselineCounts, affected) !== null) continue
+    return template
   }
-  return `${violation.kind}|${violation.lineIndex}|${violation.rule}`
+  return null
 }
 
 // Any change to a line counts as a repair, including one that empties the line
@@ -446,65 +488,93 @@ export function repairStyledLines(
   let fallbackUsed = false
   const unrepairedBoundaryLines: number[] = []
 
-  // 1. forbidden hits: remove every matched span, collapse doubled whitespace.
+  // Stage 1 - forbidden: remove every matched span in every line, collapse
+  // doubled whitespace, never remove the line itself.
   for (let lineIndex = 0; lineIndex < nextLines.length; lineIndex += 1) {
     const original = nextLines[lineIndex] ?? ''
-    const forbiddenIndex = matchesAny(original, contract.forbiddenPatterns)
-    if (forbiddenIndex < 0) continue
-    const result = removeAllMatches(original, contract.forbiddenPatterns)
-    if (result.text !== original) {
-      nextLines[lineIndex] = result.text
-      repaired = markEmptied(repaired, original, result.text)
-    }
+    if (matchingPatternIndex(original, contract.forbiddenPatterns) < 0) continue
+    const { text } = stripForbiddenSpans(original, contract.forbiddenPatterns)
+    if (text === original) continue
+    nextLines[lineIndex] = text
+    repaired = markEmptied(repaired, original, text)
   }
 
-  // 2. tic-frequency: keep first tic occurrence in each violating window and remove surplus.
-  if (contract.tic !== null) {
-    const ticPattern = contract.tic.pattern
-    let changed = true
-    while (changed) {
-      changed = false
-      const violating = ticViolatingCandidateIndexes(nextLines, contract, options)
-      if (violating.length === 0) break
-      const target = violating[0]
-      if (target === undefined) break
-      const original = nextLines[target] ?? ''
-      const result = removePatternMatchOnce(original, ticPattern)
-      if (result.changed) {
-        nextLines[target] = result.text
-        repaired = markEmptied(repaired, original, result.text)
-        changed = true
-      } else {
-        break
-      }
-    }
+  // Stage 2 - tic frequency: repeatedly take the first violating line and
+  // remove one tic from it, until the window is clean. Each pass sees the
+  // result of the previous one, so removing a tic can un-violate neighbours.
+  while (contract.tic !== null) {
+    const target = ticViolationIndexes(nextLines, contract, options)[0]
+    if (target === undefined) break
+    const original = nextLines[target] ?? ''
+    const { text, changed } = stripOneMatch(original, contract.tic.pattern)
+    // No match left to remove (cannot happen for a reported tic); stop rather
+    // than spin.
+    if (!changed) break
+    nextLines[target] = text
+    repaired = markEmptied(repaired, original, text)
   }
 
-  // 3. boundary hits: replace whole affected line with first passing intent template.
-  // The baseline is recomputed before each replacement so a candidate is judged
-  // against the stream as it stands, and an unresolved hit is recorded rather
-  // than silently left behind.
+  // Stage 3 - boundary: replace the whole line with the first acceptable
+  // candidate for the reply intent. A hit nothing can resolve is recorded, not
+  // hidden.
+  //
+  // Baselines are per line and are refreshed only for the lines a replacement
+  // can reach, so untouched lines are never re-scanned and cannot contribute a
+  // renumbered finding to the comparison. The tic gap bounds that reach: every
+  // other kind is line-local.
+  const candidates =
+    options?.replyIntent === undefined
+      ? []
+      : (contract.boundaryFallbacks[options.replyIntent] ?? [])
+  const gap = contract.tic?.minGapTurns ?? 0
+  const reach = Math.max(1, gap)
+  const baselineByLine = groupByLine(validateStyle(nextLines, contract, options))
   for (let lineIndex = 0; lineIndex < nextLines.length; lineIndex += 1) {
     const original = nextLines[lineIndex] ?? ''
-    if (matchesAny(original, contract.boundaryPatterns) < 0) continue
-    const baseline = validateStyle(nextLines, contract, options)
-    const replacement = firstPassingTemplate(nextLines, lineIndex, baseline, contract, options)
+    if (matchingPatternIndex(original, contract.boundaryPatterns) < 0) continue
+    // Lines already replaced earlier in this stage are part of the window: a
+    // later replacement can re-violate them, and that must veto it.
+    const placed: number[] = []
+    for (let earlier = lineIndex - 1; earlier >= 0; earlier -= 1) {
+      if (nextLines[earlier] !== capped[earlier]) placed.push(earlier)
+    }
+    const windowLines = [...placed]
+    for (let offset = -reach; offset <= reach; offset += 1) {
+      const at = lineIndex + offset
+      if (at >= 0 && at < nextLines.length) windowLines.push(at)
+    }
+    const baseline: StyleViolation[] = []
+    for (const line of windowLines) baseline.push(...(baselineByLine.get(line) ?? []))
+    const replacement = firstAcceptableTemplate(
+      nextLines,
+      lineIndex,
+      windowLines,
+      countViolations(baseline),
+      candidates,
+      contract,
+      options,
+    )
     if (replacement === null) {
-      // No candidate avoids a new violation, or the contract carries none for
-      // this intent. Record it so a caller cannot read a partly repaired
-      // delivery as clean.
       unrepairedBoundaryLines.push(lineIndex)
       continue
     }
-    if (replacement !== original) {
-      nextLines[lineIndex] = replacement
-      repaired = markEmptied(repaired, original, replacement)
-      fallbackUsed = true
+    nextLines[lineIndex] = replacement
+    repaired = markEmptied(repaired, original, replacement)
+    fallbackUsed = true
+    // Refresh the baselines of the reachable lines against the new lines; every
+    // other line was not touched, so its baseline cannot have changed.
+    const refreshed = groupByLine(validateStyle(nextLines, contract, options))
+    const touched = new Set(placed)
+    for (let offset = -reach; offset <= reach; offset += 1) {
+      const at = lineIndex + offset
+      if (at >= 0 && at < nextLines.length) touched.add(at)
     }
+    for (const line of touched) baselineByLine.set(line, refreshed.get(line) ?? [])
   }
 
-  // 4. self-reference, audience-address, sentence-length, fact-contradiction: report only.
-  // 5. Never change line count; emptied/non-substantive slots remain.
+  // Stage 4 - self-reference, audience-address, sentence-length and
+  // fact-contradiction are report-only: fixing them would mean writing new
+  // content. Line count and empty slots survive every stage.
   return {
     lines: nextLines,
     report: {
