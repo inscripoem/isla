@@ -38,10 +38,14 @@ import { recoveryControlView } from './recovery-control'
 import {
   canDispatch,
   createInitialConsoleState,
+  diagnosticsSocketLabel,
+  isDuplicateSubmit,
   reduceApplicationMessage,
   reduceControlAck,
+  reduceDiagnosticsSocket,
   reduceInputAck,
   reduceServerMessage,
+  settleDraftOnAck,
   withBootstrap,
   withConnection,
   withControlFailure,
@@ -55,8 +59,11 @@ import {
   withSubtitle,
   type ConnectionStatus,
   type ConsoleState,
+  type DiagnosticsSocketState,
+  type PendingDraft,
   type RequestOutcome,
 } from './console-state'
+import { runOperatorBootstrap } from './operator-bootstrap'
 import './console.css'
 
 const HEALTH_PATH = '/health'
@@ -155,8 +162,6 @@ interface HealthView {
   uptimeSec: number
 }
 
-type SocketState = 'connecting' | 'open' | 'closed' | 'error'
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -199,7 +204,7 @@ function DiagnosticsPanel() {
   const [health, setHealth] = useState<HealthView | null>(null)
   const [healthError, setHealthError] = useState<string | null>(null)
   const [healthLoading, setHealthLoading] = useState(true)
-  const [socketState, setSocketState] = useState<SocketState>('closed')
+  const [socketState, setSocketState] = useState<DiagnosticsSocketState>('closed')
   const [socketStarted, setSocketStarted] = useState(false)
   const [socketError, setSocketError] = useState<string | null>(null)
   const [lastReply, setLastReply] = useState<string | null>(null)
@@ -241,13 +246,14 @@ function DiagnosticsPanel() {
     const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
     const socket = new WebSocket(`${scheme}://${window.location.host}${DIAGNOSTICS_PATH}`)
     socketRef.current = socket
+    setSocketState((state) => reduceDiagnosticsSocket(state, 'start'))
     setSocketStarted(true)
     socket.onopen = () => {
-      setSocketState('open')
+      setSocketState((state) => reduceDiagnosticsSocket(state, 'open'))
       setSocketError(null)
     }
     socket.onclose = (event) => {
-      setSocketState('closed')
+      setSocketState((state) => reduceDiagnosticsSocket(state, 'close'))
       healthAbortRef.current?.abort()
       setHealth(null)
       setHealthLoading(false)
@@ -257,7 +263,7 @@ function DiagnosticsPanel() {
       }
     }
     socket.onerror = () => {
-      setSocketState('error')
+      setSocketState((state) => reduceDiagnosticsSocket(state, 'error'))
       setSocketError('diagnostics socket error')
       healthAbortRef.current?.abort()
       setHealth(null)
@@ -310,7 +316,7 @@ function DiagnosticsPanel() {
 
   // Before the operator clicks the path button no socket exists, so the idle label is
   // 'not started' rather than 'closed': 'closed' would claim a connection that has ended.
-  const socketLabel = socketStarted ? socketState : 'not started'
+  const socketLabel = diagnosticsSocketLabel(socketStarted, socketState)
 
   const healthRows: readonly (readonly [string, string])[] =
     health === null
@@ -409,6 +415,8 @@ export function ConsoleApp({
   const machineRef = useRef<PerformerMachine | null>(null)
   const stateRef = useRef(state)
   const counterRef = useRef(0)
+  const pendingDraftRef = useRef<PendingDraft | null>(null)
+  const transportEpochRef = useRef(0)
 
   // Mirror the latest view state for event handlers, which must read it outside
   // render. Writing the ref during render is not allowed.
@@ -466,6 +474,13 @@ export function ConsoleApp({
         ? null
         : application.onApplicationMessage((message) => {
             setState((current) => reduceApplicationMessage(current, message))
+            if (message.kind === 'input.ack') {
+              const pending = pendingDraftRef.current
+              if (pending !== null && message.payload.requestMessageId === pending.messageId) {
+                pendingDraftRef.current = null
+              }
+              setDraft((composer) => settleDraftOnAck(composer, pending, message.payload))
+            }
             if (!machineReady) {
               queued = [...queued, message]
               return
@@ -567,7 +582,12 @@ export function ConsoleApp({
     setRecoveryAcknowledged(false)
     setPlaybackMounted(false)
     setDraft('')
-    setTransportEpoch((epoch) => epoch + 1)
+    setOperatorRequestPending(false)
+    setOperatorRequestError(null)
+    pendingDraftRef.current = null
+    const nextEpoch = transportEpochRef.current + 1
+    transportEpochRef.current = nextEpoch
+    setTransportEpoch(nextEpoch)
   }, [])
 
   const dispatchable = canDispatch(state)
@@ -595,6 +615,7 @@ export function ConsoleApp({
       // listener applies the acknowledgement when it arrives.
       const activeMachine = machineRef.current
       if (activeMachine === null || current.session?.retiring === true) return
+      if (isDuplicateSubmit(text, pendingDraftRef.current)) return
       setState((previous) => withPendingInput(previous, message))
       let accepted: string | null = null
       try {
@@ -612,7 +633,7 @@ export function ConsoleApp({
         restoreDraft()
         return
       }
-      setDraft((composer) => (composer === rawDraft ? '' : composer))
+      pendingDraftRef.current = { messageId: message.messageId, text: rawDraft }
       return
     }
     setState((previous) => withPendingInput(previous, message))
@@ -724,24 +745,17 @@ export function ConsoleApp({
     if (requestOperatorToken === undefined) return
     const activeMachine = machineRef.current
     if (activeMachine === null) return
-    setOperatorRequestPending(true)
-    setOperatorRequestError(null)
-    let token: string
-    try {
-      token = await requestOperatorToken()
-    } catch {
-      // The token never enters an error message; only a generic failure is shown.
-      setOperatorRequestPending(false)
-      setOperatorRequestError('operator bootstrap failed')
-      return
-    }
-    setOperatorRequestPending(false)
-    try {
-      // The token is exchanged once and then discarded; it is never stored.
-      activeMachine.bootstrapOperator(token)
-    } catch {
-      setOperatorRequestError('operator bootstrap could not be sent')
-    }
+    const epoch = transportEpochRef.current
+    await runOperatorBootstrap({
+      requestToken: requestOperatorToken,
+      isCurrent: () => transportEpochRef.current === epoch,
+      onSubmit: (token) => activeMachine.bootstrapOperator(token),
+      onPending: setOperatorRequestPending,
+      onError: (failure) =>
+        setOperatorRequestError(
+          failure === 'token' ? 'operator bootstrap failed' : 'operator bootstrap could not be sent',
+        ),
+    })
   }, [requestOperatorToken])
 
   const requestRecovery = useCallback(() => {
