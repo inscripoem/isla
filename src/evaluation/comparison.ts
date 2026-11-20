@@ -59,10 +59,43 @@ export interface EvalCase {
   readonly labels?: { readonly intent?: string; readonly note?: string }
 }
 
+/** One prepared input's observed admission status (ADR-008 D3). */
+export type NotRunInputStatus =
+  | 'accepted'
+  | 'duplicate'
+  | 'rejected'
+  | 'no-acknowledgement'
+  | 'not-submitted'
+
+/**
+ * One prepared input observed before a case became a not-run. This is an
+ * in-memory channel only: `RecordedRunV1` never carries these fields, and the
+ * companion producer binds them to the run's not-run occurrence (ADR-008 D4).
+ */
+export interface NotRunInputObservation {
+  readonly requestMessageId: string | null
+  readonly eventId: string | null
+  readonly status: NotRunInputStatus
+  /** Observation-only adapter clock; never persisted to a recorded run. */
+  readonly admittedAtMs: number | null
+  readonly sourceId: string | null
+  readonly inputId: string | null
+  readonly identityReason: string | null
+}
+
 /** What one variant produced for one case. */
 export type VariantRun =
   | { readonly ran: true; readonly record: AttemptRecord }
-  | { readonly ran: false; readonly reason: string }
+  | {
+      readonly ran: false
+      readonly reason: string
+      /**
+       * Inputs the variant actually submitted and observed before stopping.
+       * Omitted when no input was submitted, including an explicit empty list;
+       * never part of the recorded run.
+       */
+      readonly inputs?: readonly NotRunInputObservation[]
+    }
 
 export interface ComparisonDeps {
   /**
@@ -78,10 +111,30 @@ export interface NotRunEntry {
   readonly reason: string
 }
 
+/**
+ * In-memory binding of observed inputs to one not-run occurrence. `occurrence`
+ * is the 1-based occurrence among the run's not-run entries for the pair, the
+ * same key the ADR-008 companion uses. It is deliberately separate from
+ * `NotRunEntry`, whose serialized shape stays exactly `variantId`, `caseId`,
+ * `reason`.
+ */
+export interface NotRunObservation {
+  readonly variantId: string
+  readonly caseId: string
+  readonly occurrence: number
+  readonly inputs: readonly NotRunInputObservation[]
+}
+
 export interface ComparisonRun {
   readonly records: readonly AttemptRecord[]
   /** Cases that were deliberately not attempted, with the reason. */
   readonly notRun: readonly NotRunEntry[]
+  /**
+   * Observed inputs for not-run cases, in runner order and bound by
+   * `(variantId, caseId, occurrence)`. In-memory only: `runBench` never copies
+   * this into `RecordedRunV1`; the companion producer consumes it (ADR-008 D4).
+   */
+  readonly notRunObservations?: readonly NotRunObservation[]
   readonly summary: ComparisonSummary
 }
 
@@ -108,6 +161,8 @@ export async function runComparison(
 ): Promise<ComparisonRun> {
   const records: AttemptRecord[] = []
   const notRun: NotRunEntry[] = []
+  const notRunObservations: NotRunObservation[] = []
+  const notRunOccurrences = new Map<string, number>()
 
   for (const variant of input.variants) {
     // A variant is "cold" until it has actually attempted something. A deliberately
@@ -142,10 +197,29 @@ export async function runComparison(
         records.push({ ...run.record, caseId: evalCase.id, variantId: variant.id, cold: !warmedUp })
         warmedUp = true
       } else {
+        const pair = JSON.stringify([variant.id, evalCase.id])
+        const occurrence = (notRunOccurrences.get(pair) ?? 0) + 1
+        notRunOccurrences.set(pair, occurrence)
         notRun.push({ variantId: variant.id, caseId: evalCase.id, reason: run.reason })
+        if (run.inputs !== undefined && run.inputs.length > 0) {
+          // The observations never join `notRun` itself, so the frozen recorded
+          // run shape cannot gain a field. Copy them so the caller cannot revise
+          // admission evidence through the returned object.
+          notRunObservations.push({
+            variantId: variant.id,
+            caseId: evalCase.id,
+            occurrence,
+            inputs: run.inputs.map((input) => ({ ...input })),
+          })
+        }
       }
     }
   }
 
-  return { records, notRun, summary: summarise(records) }
+  return {
+    records,
+    notRun,
+    ...(notRunObservations.length > 0 ? { notRunObservations } : {}),
+    summary: summarise(records),
+  }
 }

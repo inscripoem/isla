@@ -132,7 +132,8 @@ async function assembleWith(
 describe('M4 salience pinning', () => {
   it('keeps a pinned old turn over an unpinned newer one under budget pressure', async () => {
     const memory = createDeliveryMemoryStore()
-    // '- Remember this: my birthday is 0603.' renders at 37, pinned (promise+digit).
+    // v2 rule: character commitment+concrete-detail, base capped at 1, decayed == score (no age) and pinned.
+    // '- Remember this: my birthday is 0603.' renders at 37.
     await commitTurn(memory, 'turn-old', 'Remember this: my birthday is 0603.')
     await commitTurn(memory, 'turn-mid', 'A plain line about nothing much.')
     await commitTurn(memory, 'turn-new', 'Another plain reply for today.')
@@ -145,7 +146,7 @@ describe('M4 salience pinning', () => {
 
     expect(view.turns.map((turn) => turn.turnId)).toEqual(['turn-old', 'turn-new'])
     expect(view.turns[0]?.pinned).toBe(true)
-    expect(view.turns[0]?.salienceSignals).toContain('promise')
+    expect(view.turns[0]?.salienceSignals).toContain('commitment')
     expect(
       view.exclusions.some(
         (entry) => entry.turnId === 'turn-mid' && entry.reason === 'character-budget',
@@ -162,9 +163,9 @@ describe('M4 salience pinning', () => {
 
     const view = await assembleWith(memory)
     expect(view.turns).toHaveLength(4)
+    // v2 rule: pinned turns carry decayed >= threshold (decayed equals score for character turns with unknown age).
     expect(view.turns.every((turn) => turn.salienceScore >= SALIENCE_PIN_THRESHOLD)).toBe(true)
-    // Equal scores: the pin exists to protect early memories, so the newest of
-    // the four is the one that loses its pin.
+    // Equal decayed scores: stable sort keeps the older turn, so newest loses its pin.
     expect(view.turns.map((turn) => turn.pinned)).toEqual([
       ...Array<boolean>(MAX_PINNED_TURNS).fill(true),
       false,
@@ -192,9 +193,12 @@ describe('M4 salience pinning', () => {
   })
 
   it('scores no signal for empty or plain text', () => {
-    expect(scoreSalience('...!?').score).toBe(0)
-    expect(scoreSalience('We talked about the concert.').score).toBe(0)
-    expect(scoreSalience('记住我们的约定').score).toBeGreaterThanOrEqual(SALIENCE_PIN_THRESHOLD)
+    // v2 rule: API takes SalienceInput; character role for persona speech.
+    expect(scoreSalience({ role: 'character', text: '...!?' }).score).toBe(0)
+    expect(scoreSalience({ role: 'character', text: 'We talked about the concert.' }).score).toBe(0)
+    expect(
+      scoreSalience({ role: 'character', text: '记住我们的约定' }).decayed,
+    ).toBeGreaterThanOrEqual(SALIENCE_PIN_THRESHOLD)
   })
 
   it('is deterministic: the same history pins the same turns twice', async () => {
@@ -205,8 +209,9 @@ describe('M4 salience pinning', () => {
     const first = await assembleWith(memory)
     const second = await assembleWith(memory)
     expect(first.turns.map((turn) => turn.pinned)).toEqual(second.turns.map((turn) => turn.pinned))
-    expect(scoreSalience('Remember this: my birthday is 0603.')).toEqual(
-      scoreSalience('Remember this: my birthday is 0603.'),
+    // v2 rule: deterministic scoring with explicit role input.
+    expect(scoreSalience({ role: 'character', text: 'Remember this: my birthday is 0603.' })).toEqual(
+      scoreSalience({ role: 'character', text: 'Remember this: my birthday is 0603.' }),
     )
   })
 })
@@ -452,7 +457,7 @@ describe('M4 delivery-memory recall', () => {
     // Dropped by the window and recalled back: it shares 'loud' and 'concert'.
     await commitTurn(memory, 'old-concert', 'The loud concert was bright tonight.', 'archive-old')
     await commitTurn(memory, 'shared', 'A plain remark about the weather today.', 'archive-a')
-    // Pinned - the promise and the digits clear SALIENCE_PIN_THRESHOLD.
+    // v2 rule: character commitment+concrete-detail pins (decayed >= threshold, unknown age).
     await commitTurn(memory, 'shared', 'Remember this: my birthday is 0603.', 'archive-b')
     await commitTurn(memory, 'new', 'A plain reply for today.', 'live')
 
