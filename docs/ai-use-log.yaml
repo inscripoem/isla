@@ -9054,33 +9054,37 @@ entries:
       separator; the delta against main is exactly one added entry.
     requirements: [NFR-03]
     invariants: [INV-14]
-    commits: [ffbae03fa1601c155b9c0ae46c378a753ad0f8d8, 9351317d037d7f5eac9a38930e131428127e914c, 3dff0b86b5f21f94495c3deaed75294534368cd0, be06988d7db74c7444e5977b9a4288cc8e64ea53]
+    commits: [ffbae03fa1601c155b9c0ae46c378a753ad0f8d8, 9351317d037d7f5eac9a38930e131428127e914c, 3dff0b86b5f21f94495c3deaed75294534368cd0, be06988d7db74c7444e5977b9a4288cc8e64ea53, a7c1942b6c2de6f178e587bbc54465541fdc367c]
     agent: build
     provider: m4local
     model: deepseek-flash
-    sessions: [ses_e07bf27a9ffeCqh8XSq4oGHrH2, ses_e07b09de6ffey4eSJe2jzOF5LG, ses_e07a928d0ffe4eSpzXlagEEm2e]
+    sessions: [ses_e07bf27a9ffeCqh8XSq4oGHrH2, ses_e07b09de6ffey4eSJe2jzOF5LG, ses_e07a928d0ffe4eSpzXlagEEm2e, ses_e0745f73dffeGvx3C9CgVwWja7]
     supervision: >-
       M5's review at 81d1c55 supplied the blocking finding and named the
-      accepting-only-the-replaced-line weakness; these rounds address it. The
-      cross-review in ses_e07bf27a9ffeCqh8XSq4oGHrH2 was a separate read-only
-      OpenCode session (m4local/deepseek-flash): it read ffbae03, reported the
-      two Medium defects recorded above and made no edit.
+      accepting-only-the-replaced-line weakness; the rounds recorded here
+      address it. The cross-review in ses_e07bf27a9ffeCqh8XSq4oGHrH2 was a
+      separate read-only OpenCode session (m4local/deepseek-flash): it read
+      ffbae03, reported the two Medium defects recorded above and made no edit.
 
-      Disclosure, because the split matters for gate G6: the round 1 and round 2
-      code changes in this entry were NOT authored inside an OpenCode session.
-      They were written by the supervising assistant (Claude Code) directly in
-      the worktree, with the human member directing each slice and reviewing
-      every diff. AGENTS.md asks for application code to be authored through
-      genuine OpenCode sessions, so this entry records the deviation rather than
-      presenting the code as session-written. The two OpenCode sessions cited
-      above are real and did real work - a read-only cross-review that found two
-      real defects, and this entry authoring - but neither of them wrote the
-      source under src/.
+      Disclosure of how each part was authored, because the split matters
+      for G6. The round 1 and round 2 changes to style-contract.ts, persona.ts
+      and persona-content.ts were written by the supervising assistant
+      (Claude Code) directly in the worktree, not inside an OpenCode session.
+      M5 reviewed that technical result at e5c3dac and accepted it, then
+      requested changes on the authoring evidence alone. The final src/ change
+      on this branch - commit a7c1942, removing the dead markEmptied branches
+      and the import that only fed them - WAS authored in OpenCode session
+      ses_e0745f73dffeGvx3C9CgVwWja7 (agent build, m4local/deepseek-flash). That
+      session read the function, confirmed by grep that isSubstantiveSpeech had
+      no other caller, made the edit, and ran the style and dialogue suites
+      itself; the supervising assistant re-ran typecheck, oxlint and the full M4
+      suite before committing and rewrote no line of the session edit. The
+      earlier Claude Code edits are NOT presented as OpenCode work.
 
-      The entry itself was written by ses_e07a928d0ffe4eSpzXlagEEm2e. The
-      earlier authoring session ses_e07b09de6ffey4eSJe2jzOF5LG is cited because
-      it found the lost separator that broke the log; it correctly refused to
-      write into the broken file and produced no entry.
+      This entry was written by ses_e07a928d0ffe4eSpzXlagEEm2e and updated in
+      place for this round. ses_e07b09de6ffey4eSJe2jzOF5LG is cited because it
+      found the lost separator that broke this log; it refused to write into the
+      broken file and produced no entry of its own.
     human_review: >-
       M5 requested changes at 81d1c55; these two rounds and the merge repair
       remain under review and this entry claims no approval, dismissal or merge.
