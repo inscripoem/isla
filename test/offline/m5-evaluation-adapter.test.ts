@@ -8,6 +8,7 @@ import type {
   EventStorePort,
   HistoryQueryPort,
   ReactionPort,
+  RuntimeEvent,
   SelectionPort,
   SelectionRequest,
   TrustedControlContext,
@@ -19,7 +20,11 @@ import { createAudioResourceRegistry } from '../../src/performance/audio-resourc
 import type { AudioResolver } from '../../src/performance/browser/types'
 import { createMonotonicClock } from '../../src/runtime/clock'
 import type { RuntimeComposition } from '../../src/runtime/composition'
-import { createEvaluationAdapter } from '../../src/runtime/evaluation-adapter'
+import {
+  INPUT_IDENTITY_UNAVAILABLE_REASON,
+  createEvaluationAdapter,
+  deriveStageTimings,
+} from '../../src/runtime/evaluation-adapter'
 import type {
   EvaluationAttemptObservation,
   EvaluationConsumer,
@@ -35,6 +40,7 @@ import { createHistoryQuery } from '../../src/storage/history-query'
 import { createSqliteBackend, migrate, openDatabase } from '../../src/storage/sqlite'
 import { createFixtureReactionPort, createFixtureSelectionPort } from '../support/correct-ports'
 import { createControlledConsumer } from '../support/evaluation-consumer'
+import { fixtureRuntimeEvent } from '../support/fixture-data'
 import { createVirtualClock } from '../support/virtual-clock'
 import {
   M1_FIXTURE_SEGMENT_0_TEXT,
@@ -347,7 +353,11 @@ describe('M5 evaluation adapter through the M6 runner', () => {
       usage: { inputTokens: null, outputTokens: null, costUsd: null, usageMissing: true },
       failureReason: null,
     })
-    // Timing is a documented current limitation: budgets are not measurements.
+    // Only intervals with an uncontaminated recorded boundary are reported. The
+    // completed turn still keeps dialogue time null: `dialogue.result` follows
+    // the in-flight segment chain, so it would include synthesis, reaction,
+    // rendering and playback. There is no dispatched boundary, so the submit
+    // interval stays null rather than absorbing selection planning time.
     expect(record.timing).toEqual({
       submitMs: null,
       planMs: null,
@@ -500,6 +510,8 @@ describe('M5 evaluation adapter through the M6 runner', () => {
     expect(run.notRun[0].reason).toContain('mislabelled')
     expect(run.notRun[1].reason).toContain('no deployment peers are configured')
     expect(run.notRun[2].reason).toContain('cannot run')
+    // A not-run before any submission carries no observed inputs.
+    expect(run.notRunObservations).toBeUndefined()
     // Nothing was attempted: no session, no runtime, no provider call.
     expect(harness.sessions).toEqual([])
 
@@ -1845,6 +1857,27 @@ describe('M5 evaluation adapter prepared inputs', () => {
       text: 'viewer says case-1',
       actorId: 'evaluation-adapter',
     })
+    const sessionId = harness.sessions[0]
+    const observation = harness.observations[0]
+    expect(observation.inputs).toEqual([
+      {
+        requestMessageId: `${sessionId}-input-1`,
+        eventId: `event-${sessionId}-input-1`,
+        status: 'accepted',
+        admittedAtMs: expect.any(Number),
+        sourceId: null,
+        inputId: null,
+        identityReason: INPUT_IDENTITY_UNAVAILABLE_REASON,
+      },
+    ])
+    expect(observation.timings).toEqual({
+      submitMs: null,
+      planMs: null,
+      dialogueMs: null,
+      synthesisMs: null,
+      firstAudibleMs: null,
+      stopToSilenceMs: null,
+    })
   })
 
   it('admits the full ordered prepared batch before exactly one turn', async () => {
@@ -1918,6 +1951,19 @@ describe('M5 evaluation adapter prepared inputs', () => {
     const lastAcceptedSeq = Math.max(...accepted.map((event) => event.seq))
     const turn = events.find((event) => event.type === 'turn.started')
     expect(turn?.seq ?? -1).toBeGreaterThan(lastAcceptedSeq)
+
+    // No dispatched boundary is recorded, so the submit interval stays null.
+    // The multi-input batch also has several admissions and no boundary that
+    // says which one ended submission. Dialogue time stays null too: the
+    // dialogue result is persisted after the in-flight segment chain.
+    const observation = harness.observations[0]
+    expect(observation.inputs.map((input) => input.status)).toEqual(
+      Array.from({ length: 5 }, () => 'accepted'),
+    )
+    expect(observation.timings.submitMs).toBeNull()
+    expect(observation.timings.planMs).toBeNull()
+    expect(observation.timings.dialogueMs).toBeNull()
+    expect(run.records[0].timing).toEqual(observation.timings)
   })
 
   it('refuses invalid prepared plans before any runtime or provider work', async () => {
@@ -2015,6 +2061,7 @@ describe('M5 evaluation adapter prepared inputs', () => {
       prepared('local-audience', 'kept one', 'viewer-1'),
       prepared('cohost-text', 'kept two', 'cohost-2'),
       prepared('local-audience', 'refused three', 'viewer-3'),
+      prepared('local-audience', 'never sent four', 'viewer-4'),
     ]
     const adapter = buildAdapter(
       harness,
@@ -2043,7 +2090,7 @@ describe('M5 evaluation adapter prepared inputs', () => {
     expect(run.records).toHaveLength(1)
     expect(run.records[0].outcome).toBe('failed')
     expect(run.records[0].failureReason).toContain('skipped runTurn')
-    expect(run.records[0].failureReason).toContain('only 2 of 3')
+    expect(run.records[0].failureReason).toContain('only 2 of 4')
     expect(run.records[0].failureReason).toContain('too many pending inputs')
     expect(run.records[0].failureReason).toContain('a partial batch is never run')
 
@@ -2054,6 +2101,48 @@ describe('M5 evaluation adapter prepared inputs', () => {
     expect(observation.portInvocations.selection).toBe(0)
     expect(observation.deliveries).toEqual([])
 
+    // The stopped batch keeps every prepared input in submission order: two
+    // admitted, one rejected acknowledgement, one never sent.
+    const sessionId = harness.sessions[0]
+    expect(observation.inputs.map((input) => input.status)).toEqual([
+      'accepted',
+      'accepted',
+      'rejected',
+      'not-submitted',
+    ])
+    expect(observation.inputs[0]).toMatchObject({
+      requestMessageId: `${sessionId}-input-1`,
+      eventId: `event-${sessionId}-input-1`,
+      admittedAtMs: expect.any(Number),
+      sourceId: null,
+      inputId: null,
+      identityReason: INPUT_IDENTITY_UNAVAILABLE_REASON,
+    })
+    expect(observation.inputs[2]).toMatchObject({
+      requestMessageId: `${sessionId}-input-3`,
+      eventId: null,
+      admittedAtMs: expect.any(Number),
+    })
+    expect(observation.inputs[3]).toEqual({
+      requestMessageId: null,
+      eventId: null,
+      status: 'not-submitted',
+      admittedAtMs: null,
+      sourceId: null,
+      inputId: null,
+      identityReason: INPUT_IDENTITY_UNAVAILABLE_REASON,
+    })
+    // No turn started, so every stage interval is unobservable.
+    expect(observation.timings).toEqual({
+      submitMs: null,
+      planMs: null,
+      dialogueMs: null,
+      synthesisMs: null,
+      firstAudibleMs: null,
+      stopToSilenceMs: null,
+    })
+    expect(run.records[0].timing).toEqual(observation.timings)
+
     // The accepted inputs remain as retained admission evidence.
     const events = await harness.store.readSession(harness.sessions[0])
     const accepted = events.filter((event) => event.type === 'input.accepted')
@@ -2063,6 +2152,403 @@ describe('M5 evaluation adapter prepared inputs', () => {
     ])
     expect(events.some((event) => event.type === 'turn.started')).toBe(false)
     expect(events.some((event) => event.type === 'provider.call')).toBe(false)
+  })
+})
+
+/**
+ * Admission export and observable timings. The adapter records what the runtime
+ * acknowledged, in submission order, and reports only an uncontaminated
+ * interval whose two endpoints are recorded. Every stage stays null:
+ * `submitMs` has no dispatched boundary, `planMs` has no selection-entry
+ * boundary, and `dialogueMs` would include the in-flight segment chain
+ * (synthesis, reaction, rendering and playback) because `dialogue.result` is
+ * persisted after it.
+ */
+describe('M5 evaluation adapter admission export and observable timings', () => {
+  const prepared = (
+    source: PreparedEvaluationInput['source'],
+    text: string,
+    actorId: string,
+  ): PreparedEvaluationInput => ({ source, text, actorId })
+
+  it('exports the accepted acknowledgement and keeps dialogue time null', async () => {
+    const clock = createVirtualClock(1_000)
+    const harness = createHarness(clock)
+    const selectionBase = createFixtureSelectionPort()
+    const reactionBase = createFixtureReactionPort()
+    let reactionAdvanced = false
+    const selection: SelectionPort = {
+      async select(request, context) {
+        clock.advance(7)
+        return selectionBase.select(request, context)
+      },
+    }
+    const reaction: ReactionPort = {
+      async decide(request, context) {
+        if (!reactionAdvanced) {
+          reactionAdvanced = true
+          clock.advance(5)
+        }
+        return reactionBase.decide(request, context)
+      },
+    }
+    const adapter = buildAdapter(
+      harness,
+      [{ variant: VARIANT, peers: fixturePeers(harness, { selection, reaction }) }],
+      { consumer: autoConsumer({ receiptPrefix: 'timed' }) },
+    )
+
+    const run = await runComparison(
+      { variants: [VARIANT], cases: [evalCase('case-timed')] },
+      { runVariant: adapter.runVariant },
+    )
+
+    expect(run.notRun).toEqual([])
+    expect(run.records).toHaveLength(1)
+    expect(run.records[0].outcome).toBe('completed')
+    const sessionId = harness.sessions[0]
+    const observation = harness.observations[0]
+    expect(observation.inputs).toEqual([
+      {
+        requestMessageId: `${sessionId}-input-1`,
+        eventId: `event-${sessionId}-input-1`,
+        status: 'accepted',
+        admittedAtMs: 1_000,
+        sourceId: null,
+        inputId: null,
+        identityReason: INPUT_IDENTITY_UNAVAILABLE_REASON,
+      },
+    ])
+    // Selection advances the clock by 7 before `turn.started`, which is after
+    // the plan is persisted. Submission ends at a dispatched boundary, not at
+    // `turn.started`, so that 7 ms is neither submission nor planning time and
+    // both intervals stay null. The first reaction advances 5 ms between
+    // `turn.started` and `dialogue.result`, but that interval also contains the
+    // rest of the segment chain, so it is not reported as M4 dialogue time.
+    expect(observation.timings).toEqual({
+      submitMs: null,
+      planMs: null,
+      dialogueMs: null,
+      synthesisMs: null,
+      firstAudibleMs: null,
+      stopToSilenceMs: null,
+    })
+    expect(run.records[0].timing).toEqual(observation.timings)
+  })
+
+  it('records a duplicate acknowledgement without a second input.accepted event', async () => {
+    const harness = createHarness()
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const media = createControlledMediaDriver({ autoEvents: true })
+    const consumer = createControlledConsumer({
+      media,
+      resolver,
+      receiptPrefix: 'duplicate',
+      onAttach: (composition) => {
+        const endpoint = composition.coordinator.endpoint
+        const original = endpoint.submitInput.bind(endpoint)
+        let calls = 0
+        // Admit the message once, then return the runtime's duplicate answer;
+        // the adapter observes only the duplicate acknowledgement.
+        endpoint.submitInput = async (message, context) => {
+          calls += 1
+          if (calls === 1) await original(message, context)
+          return original(message, context)
+        }
+      },
+    })
+    consumerCleanups.push(() => consumer.detach())
+    const adapter = buildAdapter(
+      harness,
+      [{ variant: VARIANT, peers: fixturePeers(harness) }],
+      { consumer },
+    )
+
+    const run = await runComparison(
+      { variants: [VARIANT], cases: [evalCase('case-duplicate')] },
+      { runVariant: adapter.runVariant },
+    )
+
+    expect(run.records).toHaveLength(1)
+    expect(run.records[0].outcome).toBe('completed')
+    const sessionId = harness.sessions[0]
+    const observation = harness.observations[0]
+    expect(observation.inputs).toHaveLength(1)
+    expect(observation.inputs[0]).toMatchObject({
+      requestMessageId: `${sessionId}-input-1`,
+      eventId: `event-${sessionId}-input-1`,
+      status: 'duplicate',
+      sourceId: null,
+      inputId: null,
+      identityReason: INPUT_IDENTITY_UNAVAILABLE_REASON,
+    })
+    const events = await harness.store.readSession(sessionId)
+    expect(events.filter((event) => event.type === 'input.accepted')).toHaveLength(1)
+    // No dispatched boundary is recorded, so the submit interval stays null.
+    // Dialogue time also stays null because `dialogue.result` follows the
+    // in-flight segment chain.
+    expect(observation.timings.submitMs).toBeNull()
+    expect(observation.timings.planMs).toBeNull()
+    expect(observation.timings.dialogueMs).toBeNull()
+  })
+
+  it('records a thrown submission as no-acknowledgement and never runs the stopped batch', async () => {
+    const harness = createHarness()
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const media = createControlledMediaDriver({ autoEvents: true })
+    const consumer = createControlledConsumer({
+      media,
+      resolver,
+      receiptPrefix: 'no-ack',
+      onAttach: (composition) => {
+        const endpoint = composition.coordinator.endpoint
+        const original = endpoint.submitInput.bind(endpoint)
+        let calls = 0
+        endpoint.submitInput = async (message, context) => {
+          calls += 1
+          if (calls === 2) throw new Error('ack transport failed')
+          return original(message, context)
+        }
+      },
+    })
+    consumerCleanups.push(() => consumer.detach())
+    const batch: PreparedEvaluationInput[] = [
+      prepared('local-audience', 'acked one', 'viewer-1'),
+      prepared('cohost-text', 'lost two', 'cohost-2'),
+      prepared('local-audience', 'never sent three', 'viewer-3'),
+    ]
+    const adapter = buildAdapter(
+      harness,
+      [{ variant: VARIANT, peers: fixturePeers(harness) }],
+      { consumer, input: { mode: 'prepared', resolve: () => batch } },
+    )
+
+    const run = await runComparison(
+      { variants: [VARIANT], cases: [evalCase('case-no-ack')] },
+      { runVariant: adapter.runVariant },
+    )
+
+    expect(run.notRun).toEqual([])
+    expect(run.records).toHaveLength(1)
+    expect(run.records[0].outcome).toBe('failed')
+    expect(run.records[0].failureReason).toContain('could not admit case input 2 of 3')
+    expect(run.records[0].failureReason).toContain('skipped runTurn')
+    const sessionId = harness.sessions[0]
+    const observation = harness.observations[0]
+    expect(observation.inputs.map((input) => input.status)).toEqual([
+      'accepted',
+      'no-acknowledgement',
+      'not-submitted',
+    ])
+    expect(observation.inputs[1]).toEqual({
+      requestMessageId: `${sessionId}-input-2`,
+      eventId: null,
+      status: 'no-acknowledgement',
+      admittedAtMs: null,
+      sourceId: null,
+      inputId: null,
+      identityReason: INPUT_IDENTITY_UNAVAILABLE_REASON,
+    })
+    expect(observation.inputs[2].requestMessageId).toBeNull()
+    const events = await harness.store.readSession(sessionId)
+    expect(events.some((event) => event.type === 'turn.started')).toBe(false)
+    expect(observation.timings).toEqual({
+      submitMs: null,
+      planMs: null,
+      dialogueMs: null,
+      synthesisMs: null,
+      firstAudibleMs: null,
+      stopToSilenceMs: null,
+    })
+  })
+
+  it('exposes retained input observations when the first prepared input is rejected', async () => {
+    const harness = createHarness()
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const consumer = createControlledConsumer({
+      media: createControlledMediaDriver({ autoEvents: true }),
+      resolver,
+      receiptPrefix: 'first-rejected',
+      onAttach: (composition) => {
+        const endpoint = composition.coordinator.endpoint
+        const original = endpoint.submitInput.bind(endpoint)
+        // Submitting on the previous epoch is refused by the real coordinator,
+        // so the first prepared input is rejected before any selection.
+        endpoint.submitInput = (message, context) =>
+          original({ ...message, epoch: message.epoch - 1 }, context)
+      },
+    })
+    consumerCleanups.push(() => consumer.detach())
+    const batch: PreparedEvaluationInput[] = [
+      prepared('local-audience', 'rejected one', 'viewer-1'),
+      prepared('cohost-text', 'never sent two', 'cohost-2'),
+    ]
+    const adapter = buildAdapter(
+      harness,
+      [{ variant: VARIANT, peers: fixturePeers(harness) }],
+      { consumer, input: { mode: 'prepared', resolve: () => batch } },
+    )
+
+    const run = await runComparison(
+      { variants: [VARIANT], cases: [evalCase('case-first-rejected')] },
+      { runVariant: adapter.runVariant },
+    )
+
+    expect(run.records).toEqual([])
+    expect(run.notRun).toHaveLength(1)
+    expect(run.notRun[0].reason).toContain('rejected before selection')
+    // The frozen recorded not-run entry gains no field.
+    expect(Object.keys(run.notRun[0]).sort()).toEqual(['caseId', 'reason', 'variantId'])
+    const sessionId = harness.sessions[0]
+    expect(run.notRunObservations).toEqual([
+      {
+        variantId: VARIANT.id,
+        caseId: 'case-first-rejected',
+        occurrence: 1,
+        inputs: [
+          {
+            requestMessageId: `${sessionId}-input-1`,
+            eventId: null,
+            status: 'rejected',
+            admittedAtMs: expect.any(Number),
+            sourceId: null,
+            inputId: null,
+            identityReason: INPUT_IDENTITY_UNAVAILABLE_REASON,
+          },
+          {
+            requestMessageId: null,
+            eventId: null,
+            status: 'not-submitted',
+            admittedAtMs: null,
+            sourceId: null,
+            inputId: null,
+            identityReason: INPUT_IDENTITY_UNAVAILABLE_REASON,
+          },
+        ],
+      },
+    ])
+    // Zero selection: the rejection happened before any provider work.
+    expect(harness.observations).toEqual([])
+  })
+
+  it('exposes retained input observations when the first submission throws', async () => {
+    const harness = createHarness()
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const consumer = createControlledConsumer({
+      media: createControlledMediaDriver({ autoEvents: true }),
+      resolver,
+      receiptPrefix: 'first-threw',
+      onAttach: (composition) => {
+        const endpoint = composition.coordinator.endpoint
+        endpoint.submitInput = async () => {
+          throw new Error('ack transport failed')
+        }
+      },
+    })
+    consumerCleanups.push(() => consumer.detach())
+    const batch: PreparedEvaluationInput[] = [
+      prepared('local-audience', 'lost one', 'viewer-1'),
+      prepared('cohost-text', 'never sent two', 'cohost-2'),
+    ]
+    const adapter = buildAdapter(
+      harness,
+      [{ variant: VARIANT, peers: fixturePeers(harness) }],
+      { consumer, input: { mode: 'prepared', resolve: () => batch } },
+    )
+
+    const run = await runComparison(
+      { variants: [VARIANT], cases: [evalCase('case-first-threw')] },
+      { runVariant: adapter.runVariant },
+    )
+
+    expect(run.records).toEqual([])
+    expect(run.notRun).toHaveLength(1)
+    expect(run.notRun[0].reason).toContain('could not admit case input 1 of 2')
+    expect(Object.keys(run.notRun[0]).sort()).toEqual(['caseId', 'reason', 'variantId'])
+    const sessionId = harness.sessions[0]
+    expect(run.notRunObservations).toEqual([
+      {
+        variantId: VARIANT.id,
+        caseId: 'case-first-threw',
+        occurrence: 1,
+        inputs: [
+          {
+            requestMessageId: `${sessionId}-input-1`,
+            eventId: null,
+            status: 'no-acknowledgement',
+            admittedAtMs: null,
+            sourceId: null,
+            inputId: null,
+            identityReason: INPUT_IDENTITY_UNAVAILABLE_REASON,
+          },
+          {
+            requestMessageId: null,
+            eventId: null,
+            status: 'not-submitted',
+            admittedAtMs: null,
+            sourceId: null,
+            inputId: null,
+            identityReason: INPUT_IDENTITY_UNAVAILABLE_REASON,
+          },
+        ],
+      },
+    ])
+    expect(harness.observations).toEqual([])
+  })
+
+  describe('deriveStageTimings', () => {
+    const event = (type: string, seq: number, timestampMs: number): RuntimeEvent =>
+      fixtureRuntimeEvent({ type, seq, timestampMs })
+
+    it('returns every stage null when endpoints are missing or repeated', () => {
+      expect(deriveStageTimings([])).toEqual({
+        submitMs: null,
+        planMs: null,
+        dialogueMs: null,
+        synthesisMs: null,
+        firstAudibleMs: null,
+        stopToSilenceMs: null,
+      })
+      const repeatedDialogue = deriveStageTimings([
+        event('turn.started', 1, 10),
+        event('dialogue.result', 2, 20),
+        event('dialogue.result', 3, 30),
+      ])
+      expect(repeatedDialogue.dialogueMs).toBeNull()
+      const missingDialogue = deriveStageTimings([
+        event('turn.started', 1, 0),
+        event('selection.plan', 2, 4),
+      ])
+      expect(missingDialogue.dialogueMs).toBeNull()
+      // Submission and planning have no recorded boundary even when every
+      // admission and selection event is present.
+      expect(missingDialogue.submitMs).toBeNull()
+      expect(missingDialogue.planMs).toBeNull()
+    })
+
+    it('keeps dialogue time null even when both endpoints are recorded and ordered', () => {
+      const timings = deriveStageTimings([
+        event('input.accepted', 1, 0),
+        event('selection.plan', 2, 7),
+        event('turn.started', 3, 9),
+        event('dialogue.result', 4, 21),
+      ])
+      // `turn.started` -> `dialogue.result` looks measurable, but the coordinator
+      // persists `dialogue.result` only after it awaits the in-flight segment
+      // chain. Reporting 12 ms would attribute synthesis, reaction, rendering and
+      // playback to M4, so the uncontaminated interval does not exist and the
+      // adapter keeps null rather than inventing a boundary.
+      expect(timings.submitMs).toBeNull()
+      expect(timings.planMs).toBeNull()
+      expect(timings.dialogueMs).toBeNull()
+      expect(timings.synthesisMs).toBeNull()
+      expect(timings.firstAudibleMs).toBeNull()
+      expect(timings.stopToSilenceMs).toBeNull()
+    })
   })
 })
 

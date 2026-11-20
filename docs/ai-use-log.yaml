@@ -8726,3 +8726,175 @@ entries:
       claim; no merge, approval, dismissal or checkpoint acceptance is
       claimed. Entity/topic-aware counting remains with the A10 episode
       round.
+  - date: "2026-11-14"
+    task: M5-101-admission-acknowledgement-export-and-timings
+    change: >-
+      The M5 evaluation adapter now exports one admission record per prepared
+      input with the acknowledgement's request message id, event id, status and
+      admission clock, plus explicit not-submitted and no-acknowledgement
+      states. It derives only the stage timings whose endpoints the runtime
+      persists: submitMs (input.accepted to turn.started) and dialogueMs
+      (selection.plan to dialogue.result). planMs is reported null because the
+      coordinator currently persists selection.plan before turn.started, so
+      the interval is reversed; synthesisMs, firstAudibleMs and
+      stopToSilenceMs stay null because no start/end pair or browser/acoustic
+      evidence exists. sourceId and inputId stay null with a recorded reason
+      rather than being inferred from the runtime source channel.
+    requirements: [NFR-01, NFR-03]
+    invariants: []
+    commits: [f63fd45ce630c15686b6361c357ab64a58d003e2]
+    agent: build
+    provider: self-api
+    model: deepseek-v4-flash
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    sessions: [ses_e2a38207affeQcB6p3jfyqLn3t]
+    supervision: >-
+      Codex supervised the OpenCode build session in a temporary per-worktree
+      configuration that disables oh-my-opencode-slim and enables the build
+      agent. The session had no shell tool, so Codex ran every test command
+      outside the session and the results below are measured locally.
+    human_review: >-
+      The change is local only; push and pull-request creation await Captain
+      approval. No agent merges.
+    transcript_record: >-
+      The genuine OpenCode session ses_e2a38207affeQcB6p3jfyqLn3t remains in
+      the local OpenCode store; the raw export has not yet been copied outside
+      the checkout.
+    verification:
+      base: c8605e217283d9af12fb0545671d89aa507fa211
+      results: >-
+        Linux: the focused m5-evaluation-adapter test passed 37/37; test:m5
+        passed 263/263; typecheck and lint exited 0; pnpm verify exited 0 with
+        1555/1555 tests in 74 files and a successful build.
+      limits: >-
+        No live provider, browser playback or acoustic measurement was run.
+        planMs remains null until a coordinator event-order change is reviewed,
+        and a batch with zero accepted inputs still has no inputs channel
+        because the observation callback fires only for attempts.
+    scope: >-
+      src/runtime/evaluation-adapter.ts and
+      test/offline/m5-evaluation-adapter.test.ts only. No src/contracts file,
+      RecordedRunV1, storage, provider or companion schema changed.
+
+  - date: "2026-11-16"
+    task: M5-101-admission-export-review-fixes
+    change: >-
+      Address M6's two blocking findings and M4's timing correction on the
+      admission export. A zero-accepted not-run now retains the prepared
+      inputs that were submitted and observed (a rejected or unacknowledged
+      submission plus the unsent tail) on an in-memory channel bound by
+      variant, case and occurrence; RecordedRunV1 and its notRun entries keep
+      exactly variantId, caseId and reason. dialogueMs now runs from
+      turn.started to dialogue.result; submitMs and planMs stay null until the
+      runtime records a dispatched or selection-entry boundary, so selection
+      planning time is not attributed to submission. sourceId and inputId
+      remain null with the recorded reason, and ADR-008 open decision row 3
+      records the split: requestMessageId and eventId are produced per input,
+      while the corpus sourceId mapping is the named follow-up "corpus
+      sourceId export". M3's later review at 1887d8b found the
+      turn.started-to-dialogue.result interval contaminated by synthesis,
+      reaction, rendering and playback; the 2026-11-17 entry supersedes that
+      timing choice.
+    requirements: [NFR-01, NFR-03]
+    invariants: [INV-16]
+    commits: [ffa289da39f59a0ce828e518133ecbcf9767e8c7]
+    agent: build
+    provider: self-api
+    model: deepseek-v4-flash
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    sessions: [ses_e1f744d59ffeVohxjXwKLapXp9]
+    supervision: >-
+      The orchestrating assistant (Claude Code) supervised the OpenCode build
+      session in the repository's task-level configuration, which disables
+      oh-my-opencode-slim and enables the build agent. The session had no
+      shell tool, so the orchestrator ran every test command outside the
+      session and the results below are measured locally.
+    human_review: >-
+      Captain requested the review fixes and authorized local work. The change
+      is local only; push, PR body update and re-review requests await Captain
+      approval. No agent merges.
+    transcript_record: >-
+      The genuine OpenCode session ses_e1f744d59ffeVohxjXwKLapXp9 remains in
+      the local OpenCode store; the raw export has not yet been copied outside
+      the checkout.
+    verification:
+      base: 205424f663bb9da87d5dd690825d9972be10f0f2
+      results: >-
+        Linux: pnpm typecheck exited 0; pnpm test:m5 passed 265/265; pnpm test
+        passed 85 files / 1837 tests; pnpm lint exited 0; pnpm verify exited 0
+        with a successful build. The pre-fix M6 review figures at c61b31d were
+        37/37 focused, test:m5 263/263 and verify 1555/1555; the current
+        counts include the merged main and the two new not-run tests.
+      limits: >-
+        The branch was later pushed and both remote verify runs were green at
+        1887d8b. No live provider, browser playback, acoustic measurement or
+        Windows run was performed by this branch. The not-run observation
+        channel is in-memory only: a runner or companion producer must opt in
+        before it can consume it, and the recorded-run file still loses it by
+        design. sourceId remains null, so the companion correlation stays
+        missing until the named corpus sourceId export follow-up lands.
+    scope: >-
+      src/runtime/evaluation-adapter.ts, src/evaluation/comparison.ts,
+      test/offline/m5-evaluation-adapter.test.ts,
+      docs/architecture/adr/008-prepared-input-provenance.md and this log
+      entry. No frozen contract, RecordedRunV1, storage, provider, companion
+      schema, dependency or deployment change.
+
+  - date: "2026-11-17"
+    task: M5-101-dialogue-timing-boundary-fix
+    change: >-
+      Address M3's blocking review at 1887d8b. The adapter now reports every
+      stage timing as null: dialogue.result is persisted only after the
+      coordinator awaits the in-flight segment chain, so turn.started to
+      dialogue.result also contains M1 synthesis, M3 reaction, avatar rendering
+      and full audio playback, and no uncontaminated dialogue-completion
+      boundary is recorded. No measured stage value is claimed. The change also
+      guards an explicit empty inputs list from emitting a vacuous not-run
+      observation, marks admittedAtMs as observation-only, documents the
+      multi-input submitMs ambiguity, adds direct occurrence-index and
+      caller-mutation tests for not-run observations, and corrects the
+      evaluation-protocol timing notes. The protocol document remains
+      M6-owned; M6 confirmation is requested in the PR.
+    requirements: [NFR-01, NFR-03]
+    invariants: [INV-14, INV-16]
+    commits: [e2575f49835a28a4d584aa9aca1d5f90a50e96bc]
+    agent: build
+    provider: self-api
+    model: deepseek-v4-flash
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    sessions: [ses_e15d0b969ffemGwBE9exO0nDdD]
+    supervision: >-
+      The orchestrating assistant (Claude Code) supervised the OpenCode build
+      session in a task-level configuration that disables oh-my-opencode-slim,
+      enables the build agent and denies shell, glob, grep, subagent and
+      external-directory access. The session had no shell tool, so the
+      orchestrator ran every test command outside it and the results below are
+      measured locally.
+    human_review: >-
+      Captain requested all local preparation and item-by-item review. M3's
+      review at 1887d8b requested changes; this fix is local only. Push, PR body
+      update and re-review requests await Captain approval. No agent merges.
+    transcript_record: >-
+      The genuine OpenCode session ses_e15d0b969ffemGwBE9exO0nDdD remains in
+      the local OpenCode store; the export is saved in
+      evidence/pr160-fix-20261117/SESSION.json outside the checkout, together
+      with the raw run stream.
+    verification:
+      base: b58a5adcb8b187e45eef05ece17834beaa0b3478
+      results: >-
+        Linux: pnpm typecheck exited 0; pnpm test:m5 passed 289/289;
+        pnpm test:m6 passed 343/343; pnpm verify exited 0 with 94 files /
+        2048 tests, lint and a successful build; git diff --check exited 0.
+      limits: >-
+        No live provider, browser playback, acoustic measurement, Windows run
+        or GitHub CI run was performed for this fix. The protocol correction
+        needs M6 confirmation because that document is M6-owned. The timing
+        fields stay null until a dialogue-generation completion boundary before
+        the first sink dispatch is recorded, which requires an M4/M5/M6 design
+        change and is not implemented here.
+    scope: >-
+      src/runtime/evaluation-adapter.ts, src/evaluation/comparison.ts,
+      test/offline/m5-evaluation-adapter.test.ts,
+      test/offline/m6-02-comparison.test.ts,
+      docs/architecture/evaluation-protocol.md and this log entry. No frozen
+      contract, RecordedRunV1, storage schema, provider or deployment change.

@@ -1,6 +1,12 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { runComparison, type EvalCase, type Variant, type VariantRun } from '../../src/evaluation/comparison'
+import {
+  runComparison,
+  type EvalCase,
+  type NotRunInputObservation,
+  type Variant,
+  type VariantRun,
+} from '../../src/evaluation/comparison'
 import type { AttemptRecord } from '../../src/evaluation/metrics'
 import { SYNTHETIC_CASES, SYNTHETIC_VARIANT, syntheticRunVariant } from '../support/m6-02-synthetic'
 
@@ -193,5 +199,92 @@ describe('runComparison — module boundary', () => {
     expect(imports.length).toBeGreaterThan(0)
     expect(imports.some((path) => path.includes('runtime') || path.includes('dialogue'))).toBe(false)
     expect(imports).toEqual(['./metrics'])
+  })
+})
+
+describe('runComparison — not-run observation occurrence index', () => {
+  function submittedInput(requestMessageId: string): NotRunInputObservation {
+    return {
+      requestMessageId,
+      eventId: `event-${requestMessageId}`,
+      status: 'accepted',
+      admittedAtMs: 10,
+      sourceId: null,
+      inputId: null,
+      identityReason: 'test identity reason',
+    }
+  }
+
+  it('numbers repeated (variantId, caseId) pairs across unobserved and observed not-runs', async () => {
+    const repeated: EvalCase = { id: 'case-repeat', input: 'repeat' }
+    const second: Variant = { id: 'v2', kind: 'model', combined: false }
+    const calls = new Map<string, number>()
+    const run = await runComparison(
+      { variants: [VARIANT, second], cases: [repeated, repeated, repeated] },
+      {
+        runVariant: async (variant, evalCase) => {
+          const pair = `${variant.id}\u0000${evalCase.id}`
+          const occurrence = (calls.get(pair) ?? 0) + 1
+          calls.set(pair, occurrence)
+          if (occurrence === 1) {
+            // A refusal before submission observes no inputs, but it still
+            // consumes the pair's first occurrence.
+            return { ran: false, reason: 'refused before submission' }
+          }
+          return {
+            ran: false,
+            reason: `stopped at occurrence ${occurrence}`,
+            inputs: [submittedInput(`${variant.id}-${occurrence}`)],
+          }
+        },
+      },
+    )
+
+    expect(run.notRun).toHaveLength(6)
+    expect(
+      run.notRunObservations?.map((entry) => [entry.variantId, entry.caseId, entry.occurrence]),
+    ).toEqual([
+      ['v1', 'case-repeat', 2],
+      ['v1', 'case-repeat', 3],
+      ['v2', 'case-repeat', 2],
+      ['v2', 'case-repeat', 3],
+    ])
+    expect(run.notRunObservations?.map((entry) => entry.inputs[0]?.requestMessageId)).toEqual([
+      'v1-2',
+      'v1-3',
+      'v2-2',
+      'v2-3',
+    ])
+  })
+
+  it('copies observed inputs so caller mutation cannot revise the result', async () => {
+    const provided = submittedInput('original')
+    const run = await runComparison(
+      { variants: [VARIANT], cases: [CASE] },
+      { runVariant: async () => ({ ran: false, reason: 'stopped', inputs: [provided] }) },
+    )
+
+    const returned = run.notRunObservations?.[0]?.inputs[0]
+    if (returned === undefined) throw new Error('missing not-run observation')
+    expect(returned).toEqual(provided)
+    expect(returned).not.toBe(provided)
+    // Mutating the caller's object after the run does not revise the result.
+    ;(provided as { requestMessageId: string }).requestMessageId = 'mutated-original'
+    expect(returned.requestMessageId).toBe('original')
+    // Mutating the returned copy does not revise the caller's object either.
+    ;(returned as { status: string }).status = 'rejected'
+    expect(provided.status).toBe('accepted')
+  })
+
+  it('omits an empty inputs list instead of emitting a vacuous observation', async () => {
+    const run = await runComparison(
+      { variants: [VARIANT], cases: [CASE] },
+      { runVariant: async () => ({ ran: false, reason: 'nothing submitted', inputs: [] }) },
+    )
+
+    expect(run.notRun).toEqual([
+      { variantId: 'v1', caseId: 'case-1', reason: 'nothing submitted' },
+    ])
+    expect(run.notRunObservations).toBeUndefined()
   })
 })
