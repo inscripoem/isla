@@ -130,14 +130,78 @@ describe('style validation and repair', () => {
     expect(noIntent.lines[0]).toBe(boundaryLine)
     expect(noIntent.report.violations.some((v) => v.kind === 'boundary')).toBe(true)
 
+    // Every candidate for this intent is rejected by the contract: the speaking
+    // template and the tic-free fallback both contain "nya", which this override
+    // makes a boundary hit. Repair must keep the original line and report it.
     const impossible = deriveStyleContract(AUTHOR_CHARACTER_PROFILE, {
       boundaryPatterns: [/cure/i, /nya/i],
+      boundaryFallbacks: {
+        answer: [],
+        clarify: ['Wait, you have not given me enough details yet, nya. What exactly happened?'],
+        acknowledge: [],
+        support: [],
+        playful: [],
+        'check-correction': [],
+      },
     })
     const allViolate = repairStyledLines([boundaryLine], impossible, { replyIntent: 'clarify' })
-    // clarify has one template containing "nya", so every candidate replacement violates this contract.
     expect(allViolate.lines[0]).toBe(boundaryLine)
     expect(allViolate.report.fallbackUsed).toBe(false)
     expect(allViolate.report.violations.some((v) => v.kind === 'boundary')).toBe(true)
+    // ...and the report must say the boundary is still unrepaired after repair.
+    expect(allViolate.report.unrepairedBoundaryLines).toEqual([0])
+  })
+
+  it('boundary fallback: does not create a new tic violation on an adjacent line', () => {
+    // The defect M5 found on #171: `firstPassingTemplate` accepted a candidate by
+    // asking only whether the REPLACED line was clean. The `support` speaking
+    // template ends in "nya", and the following line already carries "nya", so
+    // the old code produced output that failed validateStyle while reporting a
+    // successful repair. Repair must produce output that validates.
+    const input = ['I can cure your illness with real magic.', 'Another one, nya.']
+    const options = { replyIntent: 'support' as const }
+
+    const repaired = repairStyledLines(input, authoredContract, options)
+
+    expect(validateStyle(repaired.lines, authoredContract, options)).toEqual([])
+    expect(repaired.report.unrepairedBoundaryLines).toEqual([])
+    // The tic-free fallback was what made this resolvable, so the replacement
+    // must not carry the tic.
+    expect(repaired.lines[0]).toBe(CHARACTER_CONTENT.intentFallbackTemplates.support[0])
+    expect(repaired.lines[0]).not.toMatch(/nya|hmph/i)
+    // The untouched line keeps its own tic and its content.
+    expect(repaired.lines[1]).toBe('Another one, nya.')
+    // Line count is an invariant of this stage.
+    expect(repaired.lines).toHaveLength(2)
+  })
+
+  it('boundary fallback: prefers spoken voice when no tic collides', () => {
+    // With no adjacent tic the ordinary speaking template is still chosen, so
+    // the tic-free fallback does not displace the character's normal voice.
+    const options = { replyIntent: 'support' as const }
+    const repaired = repairStyledLines(['I can cure your illness with real magic.'], authoredContract, options)
+    expect(repaired.lines[0]).toBe(CHARACTER_CONTENT.intentTemplates.support[0])
+  })
+
+  it('boundary fallback: reports an unrepaired boundary instead of silently leaving it', () => {
+    // No candidate exists for this intent, so the hit cannot be repaired. The
+    // line stays as-is and the report must name it; `repaired: false` alone
+    // cannot distinguish "nothing to do" from "could not do it".
+    const noFallback = deriveStyleContract(AUTHOR_CHARACTER_PROFILE, {
+      boundaryFallbacks: {
+        answer: [],
+        clarify: [],
+        acknowledge: [],
+        support: [],
+        playful: [],
+        'check-correction': [],
+      },
+    })
+    const hit = 'I can cure your illness with real magic.'
+    const result = repairStyledLines([hit], noFallback, { replyIntent: 'support' })
+    expect(result.lines[0]).toBe(hit)
+    expect(result.report.fallbackUsed).toBe(false)
+    expect(result.report.unrepairedBoundaryLines).toEqual([0])
   })
 
   it('fact contradiction: reports contradiction against standing fact and does not repair', () => {

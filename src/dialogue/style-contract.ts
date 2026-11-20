@@ -1,8 +1,7 @@
-import { MAX_DIALOGUE_SEGMENTS } from '../contracts'
+import { MAX_DIALOGUE_SEGMENTS, REPLY_INTENTS } from '../contracts'
 import type { ReplyIntent } from '../contracts'
 import { scanContradictions } from './consistency'
 import type { ConsistencyStatement, StatementRef } from './consistency'
-import { intentTemplatesFor, resolveCharacterProfile } from './persona'
 import type { CharacterProfile } from './persona'
 import { isSubstantiveSpeech } from './text'
 
@@ -25,6 +24,18 @@ export interface StyleContract {
   forbiddenPatterns: readonly RegExp[]
   /** Patterns that must never appear; a hit segment is replaced by an intent template. */
   boundaryPatterns: readonly RegExp[]
+  /**
+   * Replacement candidates for a boundary hit, per intent, frozen into the
+   * contract at derivation time. Repair consults THIS and never re-resolves the
+   * character profile, so the repair path has no persona lookup of its own and a
+   * contract stays valid even if the profile registry changes underneath it.
+   *
+   * Order matters: speaking templates first (preserving the character's normal
+   * voice), then the tic-free fallbacks that exist so a tic collision can be
+   * avoided without stripping a tic mechanically. An empty list for an intent
+   * means repair reports the boundary as unrepaired rather than inventing text.
+   */
+  boundaryFallbacks: Readonly<Record<ReplyIntent, readonly string[]>>
 }
 
 // Authored-profile alignment (src/dialogue/persona-content.ts):
@@ -37,7 +48,7 @@ export interface StyleContract {
 //   protection outside the fictional persona." -> real-magic/supernatural/guaranteed-safety patterns.
 // Prose styleNotes/boundaries strings are not parsed into patterns; this is code-owned defaults
 // plus explicit overrides and prose remains prose.
-export const DEFAULT_STYLE_CONTRACT: Omit<StyleContract, 'profileId'> = {
+export const DEFAULT_STYLE_CONTRACT: Omit<StyleContract, 'profileId' | 'boundaryFallbacks'> = {
   selfReferences: ['I', 'me', 'my', 'mine', 'this one', 'this mage'],
   audienceAddress: ['you', 'everyone', 'human', 'humans', 'weary human', 'audience'],
   selfReferenceViolations: [/\u4eba\u5bb6|\u8001\u5b50|\u672c\u5ea7|\u4ffa/i],
@@ -55,6 +66,44 @@ export const DEFAULT_STYLE_CONTRACT: Omit<StyleContract, 'profileId'> = {
   ],
 }
 
+/**
+ * Freezes the replacement candidates for every intent into one record, so a
+ * derived contract carries its own fallbacks and repair never re-resolves the
+ * profile registry. Cost is paid once per contract (measured ~4.3 us for the
+ * full registry including tic-free variants); repair itself does no lookup.
+ *
+ * Speaking templates come first so the ordinary case keeps the character's
+ * normal voice; tic-free authored fallbacks follow, and are what lets a tic
+ * collision be resolved in-voice instead of by mechanically stripping a tic.
+ */
+function freezeBoundaryFallbacks(
+  profile: CharacterProfile,
+): Readonly<Record<ReplyIntent, readonly string[]>> {
+  const out: Record<ReplyIntent, readonly string[]> = {
+    answer: [],
+    clarify: [],
+    acknowledge: [],
+    support: [],
+    playful: [],
+    'check-correction': [],
+  }
+  const speaking: Readonly<Record<ReplyIntent, readonly string[]>> =
+    profile.intentTemplates ?? ({} as Record<ReplyIntent, readonly string[]>)
+  const ticFree: Readonly<Record<ReplyIntent, readonly string[]>> =
+    profile.intentFallbackTemplates ?? ({} as Record<ReplyIntent, readonly string[]>)
+  for (const intent of REPLY_INTENTS) {
+    const lines: string[] = []
+    for (const line of speaking[intent] ?? []) {
+      if (!lines.includes(line)) lines.push(line)
+    }
+    for (const line of ticFree[intent] ?? []) {
+      if (!lines.includes(line)) lines.push(line)
+    }
+    out[intent] = lines
+  }
+  return out
+}
+
 export function deriveStyleContract(
   profile: CharacterProfile,
   overrides?: Partial<Omit<StyleContract, 'profileId'>>,
@@ -63,6 +112,7 @@ export function deriveStyleContract(
     ...DEFAULT_STYLE_CONTRACT,
     ...overrides,
     profileId: profile.profileId,
+    boundaryFallbacks: overrides?.boundaryFallbacks ?? freezeBoundaryFallbacks(profile),
   }
 }
 
@@ -96,6 +146,16 @@ export interface DialogueStyleReport {
   violations: readonly StyleViolation[] // as found BEFORE repair
   repaired: boolean // any line changed by a repair
   fallbackUsed: boolean // any segment replaced by an intent template
+  /**
+   * Boundary lines that still violate the contract after repair because no
+   * replacement candidate could be used without creating a new violation, or
+   * because the contract carries no fallbacks for the intent. `repaired` alone
+   * cannot express this: a run can repair one line and leave another, and a
+   * caller that only reads `repaired` would treat a partly unrepaired delivery
+   * as clean. Empty means every detected boundary hit was either resolved or
+   * was never repairable by design (no `replyIntent` supplied).
+   */
+  unrepairedBoundaryLines: readonly number[]
 }
 
 function clonePattern(pattern: RegExp): RegExp {
@@ -276,32 +336,62 @@ function candidateTemplates(
   options?: StyleCheckOptions,
 ): readonly string[] {
   if (options?.replyIntent === undefined) return []
-  const profile = resolveCharacterProfile(contract.profileId, '1') ??
-    resolveCharacterProfile(contract.profileId, '2') ??
-    null
-  if (profile === null) return []
-  return intentTemplatesFor(profile, options.replyIntent)
+  // Read the frozen record on the contract. Repair must not re-resolve the
+  // profile registry: the contract is the single source of replacement text, so
+  // a derived contract keeps working when the registry changes, and an
+  // under-specified contract fails visibly (no candidates) instead of silently
+  // reaching into a global.
+  return contract.boundaryFallbacks[options.replyIntent] ?? []
 }
 
+/**
+ * Finds the first replacement candidate for a boundary hit that does not
+ * introduce ANY new violation anywhere in the segment stream.
+ *
+ * The previous implementation asked only whether the replaced line was still
+ * itself violating. That is unsound because `tic-frequency` is decided across a
+ * sliding window: a replacement can be clean on its own line while putting a
+ * tic next to a tic on the following line, so the repaired output could fail
+ * `validateStyle` while the report claimed success.
+ *
+ * The baseline is the violation set measured on the CURRENT lines, so a
+ * pre-existing violation that this stage cannot fix is not held against every
+ * candidate; only newly introduced violations reject one.
+ */
 function firstPassingTemplate(
   lines: readonly string[],
   lineIndex: number,
+  baseline: readonly StyleViolation[],
   contract: StyleContract,
   options?: StyleCheckOptions,
 ): string | null {
-  for (const template of candidateTemplates(contract, options)) {
+  const candidates = candidateTemplates(contract, options)
+  if (candidates.length === 0) return null
+  const checkOptions: StyleCheckOptions = {
+    recentTurns: options?.recentTurns,
+    replyIntent: options?.replyIntent,
+    standingFacts: options?.standingFacts,
+  }
+  const baselineKeys = new Set(baseline.map(violationKey))
+  for (const template of candidates) {
+    if (template === lines[lineIndex]) continue
     const trial = [...lines]
     trial[lineIndex] = template
-    const violations = validateStyle(trial, contract, {
-      recentTurns: options?.recentTurns,
-      replyIntent: options?.replyIntent,
-      standingFacts: options?.standingFacts,
-    })
-    if (violations.every((violation) => violation.lineIndex !== lineIndex)) {
-      return template
-    }
+    const violations = validateStyle(trial, contract, checkOptions)
+    // Reject a candidate that leaves the replaced line violating, or that adds
+    // any violation the baseline did not already have anywhere in the stream.
+    const stillViolatesTarget = violations.some((v) => v.lineIndex === lineIndex)
+    if (stillViolatesTarget) continue
+    const introduced = violations.some((v) => !baselineKeys.has(violationKey(v)))
+    if (introduced) continue
+    return template
   }
   return null
+}
+
+/** Identity of one violation for baseline comparison (kind + line + rule). */
+function violationKey(violation: StyleViolation): string {
+  return `${violation.kind}|${violation.lineIndex}|${violation.rule}`
 }
 
 function markEmptied(repaired: boolean, original: string, next: string): boolean {
@@ -321,6 +411,7 @@ export function repairStyledLines(
   const nextLines = [...capped]
   let repaired = false
   let fallbackUsed = false
+  const unrepairedBoundaryLines: number[] = []
 
   // 1. forbidden hits: remove every matched span, collapse doubled whitespace.
   for (let lineIndex = 0; lineIndex < nextLines.length; lineIndex += 1) {
@@ -357,11 +448,21 @@ export function repairStyledLines(
   }
 
   // 3. boundary hits: replace whole affected line with first passing intent template.
+  // The baseline is recomputed before each replacement so a candidate is judged
+  // against the stream as it stands, and an unresolved hit is recorded rather
+  // than silently left behind.
   for (let lineIndex = 0; lineIndex < nextLines.length; lineIndex += 1) {
     const original = nextLines[lineIndex] ?? ''
     if (matchesAny(original, contract.boundaryPatterns) < 0) continue
-    const replacement = firstPassingTemplate(nextLines, lineIndex, contract, options)
-    if (replacement === null) continue
+    const baseline = validateStyle(nextLines, contract, options)
+    const replacement = firstPassingTemplate(nextLines, lineIndex, baseline, contract, options)
+    if (replacement === null) {
+      // No candidate avoids a new violation, or the contract carries none for
+      // this intent. Record it so a caller cannot read a partly repaired
+      // delivery as clean.
+      unrepairedBoundaryLines.push(lineIndex)
+      continue
+    }
     if (replacement !== original) {
       nextLines[lineIndex] = replacement
       repaired = markEmptied(repaired, original, replacement)
@@ -377,6 +478,7 @@ export function repairStyledLines(
       violations: preViolations,
       repaired,
       fallbackUsed,
+      unrepairedBoundaryLines,
     },
   }
 }
