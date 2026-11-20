@@ -3,7 +3,6 @@ import type { ReplyIntent } from '../contracts'
 import { scanContradictions } from './consistency'
 import type { ConsistencyStatement, StatementRef } from './consistency'
 import type { CharacterProfile } from './persona'
-import { isSubstantiveSpeech } from './text'
 
 export interface StyleContract {
   /** Profile the contract was derived for (provenance in the report). */
@@ -428,11 +427,11 @@ function stableViolationKey(violation: StyleViolation): string {
   return `${violation.kind}|${violation.lineIndex}|${violation.rule}`
 }
 
+// Any change to a line counts as a repair, including one that empties the line
+// or leaves it non-substantive; those outcomes do not alter the result, so the
+// decision reduces to whether the line changed at all.
 function markEmptied(repaired: boolean, original: string, next: string): boolean {
-  if (original === next) return repaired
-  if (next.length === 0) return true
-  if (!isSubstantiveSpeech(next)) return true
-  return true
+  return repaired || original !== next
 }
 
 export function repairStyledLines(
