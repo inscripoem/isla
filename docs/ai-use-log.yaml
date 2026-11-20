@@ -8881,6 +8881,7 @@ entries:
       test/offline/m6-02-comparison.test.ts,
       docs/architecture/evaluation-protocol.md and this log entry. No frozen
       contract, RecordedRunV1, storage schema, provider or deployment change.
+  - date: "2026-11-17"
     task: M4-A06-style-contract
     branch: feat/m4-a06-style-contract
     change: >-
