@@ -8898,3 +8898,188 @@ entries:
       test/offline/m6-02-comparison.test.ts,
       docs/architecture/evaluation-protocol.md and this log entry. No frozen
       contract, RecordedRunV1, storage schema, provider or deployment change.
+
+  - date: "2026-11-18"
+    task: M2-174-p0-contrast
+    change: >-
+      Console-scoped WCAG AA contrast fixes C01-C06 for secondary text, alert
+      text, ribbon titles, status tags, the danger button and active tab, plus
+      the pending border and keyboard focus outline; the connection failure
+      detail near the page header now uses the alert style.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    opencode_version: "1.19.4"
+    launch_flags: [--agent, build, --format, json, --variant, xhigh]
+    sessions: [ses_e11a2463cffeUZU3U8mo3OYrNn]
+    supervision: >-
+      The M2 member directed this P0 contrast slice; this OpenCode session
+      authored the console CSS and TSX changes and this log entry.
+    human_review: >-
+      The M2 member approved the slice and a local commit; this session
+      performed no git operation.
+    transcript_record: >-
+      The raw CLI JSON output is retained outside the checkout.
+    verification:
+      base: b58a5ad
+      results: >-
+        macOS: pnpm test:m2 passed 1 file / 93 tests; pnpm typecheck exited 0;
+        pnpm lint exited 0; pnpm gate:ai-use-log passed.
+      independent: "Supervisor rerun on macOS after this session: pnpm test:m2 passed 93 tests in 1 file; pnpm verify passed 94 files / 2038 tests including typecheck, lint and build; pnpm gate:ai-use-log with AI_USE_LOG_BASE_FILE and the three changed files passed."
+    scope: >-
+      src/console/console.css, src/console/ConsoleApp.tsx and
+      docs/ai-use-log.yaml. Contracts, runtime, dialogue, performance, tests,
+      manifests and the animal-island-ui library remain untouched.
+
+  - date: "2026-11-20"
+    task: M2-174-c12-title-spacing
+    change: >-
+      Console-scoped C12 spacing from the #174 review: title ribbon folds
+      extend below their box and the title wrapper's zero bottom margin let the
+      folds touch the first content row. One scoped rule gives console title
+      elements a 12px bottom margin; no library, contract or other spacing
+      changed.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    opencode_version: "1.19.4"
+    launch_flags: [--agent, build, --format, json, --variant, xhigh, --auto]
+    sessions: [ses_e0aefc741ffe1BjjmW5XRh4ZRC]
+    supervision: >-
+      The M2 member directed this C12 slice. The documented V2 form
+      `-m personal-deepseek/deepseek-v4-flash#xhigh` returned UnknownError on
+      OpenCode 1.19.4 (session ses_e0af0a01dffe40Z1VODnVgmst5); the installed
+      CLI's `--variant xhigh` form then authored the rule and ran the M2 tests.
+      The failed attempt is recorded rather than hidden; this is the launch-flag
+      discrepancy already raised on #175.
+    human_review: >-
+      The M2 member authorized the slice and the local commit. Visual owner
+      confirmation for the #174 C12 row remains pending, as does the M4
+      co-judgement row.
+    transcript_record: >-
+      Exported with `opencode export` to
+      ~/.cache/isla-exports/m2-174-c12-ses_e0aefc741ffe1BjjmW5XRh4ZRC.json
+      outside the checkout.
+    verification:
+      base: b209b90
+      results: >-
+        macOS: pnpm test:m2 passed 1 file / 93 tests; pnpm typecheck exited 0;
+        pnpm lint reported 0 warnings and 0 errors.
+      independent: >-
+        Supervisor rerun on macOS: pnpm test:m2 passed 93 tests in 1 file;
+        pnpm verify passed 94 files / 2056 tests including typecheck, lint and
+        build. Gate run with a NUL-separated changed-file list over
+        src/console/console.css and docs/ai-use-log.yaml: push-integration
+        scope (no AI_USE_LOG_BASE_FILE) passed and reported the entry rule as
+        not verified; with the base set to HEAD the gate fails G6-02 on the
+        historical commit 4273673, which is unreachable in this
+        squash-merged clone and unrelated to this change.
+    scope: >-
+      src/console/console.css and docs/ai-use-log.yaml. ConsoleApp.tsx,
+      contracts, runtime, tests, manifests and the animal-island-ui library
+      remain untouched.
+
+  - date: "2026-11-20"
+    task: M2-174-responsive-facts
+    change: >-
+      One console-scoped responsive fix from the #174 visual review, CSS only.
+      Below 768px the facts grid keeps its label and value on one row (minmax
+      columns, smaller gap, no dd bottom margin) so long Session and Recovery
+      lists stay paired; below 340px the pair stacks with a bold
+      primary-coloured label, because two columns break values like
+      session-console-demo mid-word.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    opencode_version: "1.19.4"
+    launch_flags: [--agent, build, --format, json, --variant, xhigh, --auto]
+    sessions: [ses_e0a7d316cffe2d3cVvi5Y4G8Jk]
+    supervision: >-
+      The M2 member approved the two CSS fixes and then asked for the OpenCode
+      publication step. The documented V2 `#xhigh` model form was skipped after
+      the UnknownError recorded in the C12 entry above; the installed CLI's
+      `--variant xhigh` form authored the rules. The supervisor reverted the
+      working copy before the session so the CSS was actually authored in
+      OpenCode, then reviewed the diff and reran the checks.
+    human_review: >-
+      The M2 member authorized the fixes and publication to the existing #175
+      branch. Visual owner confirmation for the #174 rows and the final merge
+      remain with the human reviewer.
+    transcript_record: >-
+      Exported with `opencode export` to
+      ~/.cache/isla-exports/m2-174-responsive-ses_e0a7d316cffe2d3cVvi5Y4G8Jk.json
+      outside the checkout.
+    verification:
+      base: b948a79
+      results: >-
+        macOS: pnpm test:m2 passed 1 file / 93 tests. Supervisor Playwright
+        checks of the fixture console at 320, 360, 390, 768 and 1280px:
+        scrollWidth equals clientWidth at every width with no element past the
+        viewport, facts label and value share a row from 360px up and stack
+        below 340px.
+      independent: >-
+        Supervisor rerun on macOS: pnpm test:m2 passed 93 tests in 1 file;
+        pnpm verify passed 94 files / 2056 tests including typecheck, lint and
+        build.
+    scope: >-
+      The facts responsive rules in src/console/console.css and
+      docs/ai-use-log.yaml. ConsoleApp.tsx, contracts, runtime, tests, manifests
+      and the animal-island-ui library remain untouched.
+
+  - date: "2026-11-20"
+    task: M2-174-ribbon-clamp
+    change: >-
+      One console-scoped responsive fix from the #174 visual review, CSS only.
+      Title ribbons shrink at or below 480px (clamp with !important for the
+      library's inline font size; the back and fold decorations are em-based)
+      so their overhang no longer scrolls the page by 29px at 390px or clips
+      long card titles. The clamp floor was raised to 15px so the tightest
+      ribbon keeps clearance to the right edge at 320px.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    opencode_version: "1.19.4"
+    launch_flags: [--agent, build, --format, json, --variant, xhigh, --auto]
+    sessions: [ses_e06a70d22ffehZQHVTTZpgJJUX]
+    supervision: >-
+      This M2 follow-up session raised the clamp floor from 14px to 15px and
+      split the former combined responsive entry into a facts entry and a clamp
+      entry; the supervisor measured clearance and ran the checks.
+    human_review: >-
+      The M2 member directed the split and the 15px floor after M4's C09 review;
+      visual owner confirmation for the #174 rows and the final merge remain
+      with the human reviewer.
+    transcript_record: >-
+      Exported with `opencode export` to
+      ~/.cache/isla-exports/m2-174-c09-clamp-ses_e06a70d22ffehZQHVTTZpgJJUX.json
+      outside the checkout.
+    verification:
+      base: e32bf1a
+      results: >-
+        macOS: pnpm test:m2 passed 1 file / 93 tests. On the built root page in
+        headless Chromium, with the 15px floor the tightest ribbon at 320px
+        kept 22.28px clearance to the right edge, and scrollWidth equalled
+        clientWidth at 320, 340, 360, 375, 390 and 480px. In the 481-768px band
+        the library's 20px font applies and there is no horizontal overflow, so
+        that band is baseline-covered rather than covered by this fix.
+      independent: >-
+        Supervisor rerun on macOS: pnpm test:m2 passed 93 tests in 1 file;
+        pnpm verify passed 94 files / 2084 tests including typecheck, lint and
+        build. A headless Chromium check of the rebuilt page confirmed the 15px
+        floor, 22.28px clearance at 320px and no horizontal overflow.
+    scope: >-
+      The 480px ribbon font clamp in src/console/console.css and
+      docs/ai-use-log.yaml. ConsoleApp.tsx, contracts, runtime, tests, manifests
+      and the animal-island-ui library remain untouched.

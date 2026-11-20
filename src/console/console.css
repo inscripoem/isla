@@ -1,13 +1,15 @@
 /*
- * Console layout glue only.
+ * Console layout glue.
  *
- * Every colour, spacing, radius and font value comes from the animal-island-ui
- * design tokens, so the console follows the component library instead of
- * fighting it. Component internals (button, input, select, card, tabs) are not
- * restyled here.
+ * Colours still come from the animal-island-ui design tokens, and spacing,
+ * radius and font values follow the component library. Component internals are
+ * not restyled except for the documented WCAG AA contrast overrides below
+ * (C01-C06, issue #174). Each override keeps the library's shape, padding,
+ * markup and component variants; only the failing palette values change.
  */
 
 .console {
+  --animal-text-color-secondary: #75644a; /* C01 */
   max-width: 960px;
   margin: 0 auto;
   padding: var(--animal-spacing-xl) var(--animal-spacing-md) calc(var(--animal-spacing-xl) * 2);
@@ -105,7 +107,7 @@
   padding: var(--animal-spacing-sm) var(--animal-spacing-md);
   border-radius: var(--animal-border-radius-sm);
   background: var(--animal-bg-color-secondary);
-  color: var(--animal-error-color);
+  color: #a63a3a; /* C02 */
 }
 
 .console__list {
@@ -130,7 +132,7 @@
 
 /* An in-flight request is visibly provisional, never reported as settled. */
 .console__list-item--pending {
-  border-color: var(--animal-focus-yellow);
+  border-color: #8a5608; /* C06 */
 }
 
 .console__list-text {
@@ -175,17 +177,119 @@
   overflow-wrap: anywhere;
 }
 
+/*
+ * C03-C06: console-scoped WCAG AA overrides. These reuse the library's compiled
+ * class prefixes so every existing instance is covered. The library itself, its
+ * markup, shape, padding and component variants are unchanged.
+ */
+
+/* C03: ribbon text, white on #27d039 was 2.07:1. */
+.console [class*='animal-ribbon-'] {
+  --rt: #115017;
+}
+
+/* C04: status tag palettes that fail AA. */
+.console [class*='animal-color-app-yellow-soft'] {
+  color: #7a5200;
+}
+
+.console [class*='animal-color-app-orange-soft'] {
+  color: #8a3a00;
+}
+
+.console [class*='animal-color-app-blue-outlined'] {
+  color: #3c4b8f;
+  border-color: #3c4b8f;
+}
+
+.console [class*='animal-color-app-yellow-outlined'] {
+  color: #8a6410;
+  border-color: #8a6410;
+}
+
+.console [class*='animal-color-app-teal-outlined'] {
+  color: #1f6b56;
+  border-color: #1f6b56;
+}
+
+/* C05: danger button text and border, #e05a5a was 3.4:1 on the cream surface. */
+.console [class*='animal-btn-danger'] {
+  color: #a63a3a;
+  border-color: #a63a3a;
+}
+
+.console [class*='animal-btn-danger']:hover:not(:disabled) {
+  color: #a63a3a;
+  border-color: #a63a3a;
+}
+
+.console [class*='animal-btn-danger']:active:not(:disabled) {
+  color: #a63a3a;
+  border-color: #a63a3a;
+}
+
+/* C05: active tab item and label, #fff9e3 on #0cc0b5 was 2.16:1. */
+.console [class*='animal-tabItem'][class*='animal-active'] {
+  color: #0a3330;
+}
+
+.console [class*='animal-active'] [class*='animal-tabLabel'] {
+  color: #0a3330;
+}
+
+/* C06: keyboard focus outline colour; the library keeps width and offset. */
+.console :focus-visible {
+  outline-color: #1f6b62;
+}
+
+/* C12: title ribbon folds extend 7.7-10.6px below the box and overlapped the first content row. */
+.console [class*='animal-title'] {
+  margin-bottom: 12px;
+}
+
 @media (max-width: 768px) {
   .console {
     padding: var(--animal-spacing-lg) var(--animal-spacing-sm) var(--animal-spacing-xl);
   }
 
   .facts {
-    grid-template-columns: 1fr;
-    gap: var(--animal-spacing-xs);
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+    gap: var(--animal-spacing-xs) var(--animal-spacing-sm);
   }
 
   .facts dd {
-    margin-bottom: var(--animal-spacing-xs);
+    margin-bottom: 0;
+  }
+}
+
+/*
+ * The ribbon font size is set inline by the library, so an !important override
+ * is required to shrink it and, with the em-based decorations, the overhang.
+ */
+@media (max-width: 480px) {
+  .console [class*='animal-ribbon-'] {
+    font-size: clamp(15px, 4.4vw, 20px) !important;
+  }
+
+  .console__header [class*='animal-ribbon-'] {
+    font-size: clamp(20px, 6vw, 24px) !important;
+  }
+}
+
+/* Below 340px two columns are too narrow and long values break mid-word. */
+@media (max-width: 340px) {
+  .facts {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .facts dt {
+    margin-top: var(--animal-spacing-sm);
+    color: var(--animal-text-color);
+    font-weight: 600;
+  }
+
+  .facts dd {
+    margin-top: var(--animal-spacing-xs);
   }
 }

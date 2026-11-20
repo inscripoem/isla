@@ -1182,7 +1182,7 @@ export function ConsoleApp({
           <span className="console__connection-label">{state.connection}</span>
           <span className="console__connection-detail">{connectionSummary}</span>
         </div>
-        {state.connectionDetail !== null && <p className="console__hint">{state.connectionDetail}</p>}
+        {state.connectionDetail !== null && <p className="console__alert">{state.connectionDetail}</p>}
       </header>
 
       <Divider type="dashed-brown" />
