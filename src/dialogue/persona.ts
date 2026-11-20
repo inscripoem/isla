@@ -48,6 +48,14 @@ export interface CharacterProfile {
   standingFacts?: readonly string[]
   /** An absent field means the character has nothing to say for any intent. */
   intentTemplates?: Readonly<Record<ReplyIntent, readonly string[]>>
+  /**
+   * Tic-free lines used ONLY by style repair when a boundary hit must be
+   * replaced and no speaking template can be used without creating a new
+   * `tic-frequency` violation. Never spoken in the normal order. An absent field
+   * means the profile has no in-voice fallback, and repair reports the boundary
+   * as unrepaired rather than inventing text.
+   */
+  intentFallbackTemplates?: Readonly<Record<ReplyIntent, readonly string[]>>
   boundaries?: readonly string[]
   /**
    * A `harness` profile is test scaffolding; an `author` profile comes from
@@ -89,6 +97,7 @@ export const AUTHOR_CHARACTER_PROFILE: CharacterProfile = {
   styleNotes: CHARACTER_CONTENT.styleNotes,
   standingFacts: CHARACTER_CONTENT.standingFacts,
   intentTemplates: CHARACTER_CONTENT.intentTemplates,
+  intentFallbackTemplates: CHARACTER_CONTENT.intentFallbackTemplates,
   boundaries: CHARACTER_CONTENT.boundaries,
   origin: 'author',
 }
@@ -606,6 +615,30 @@ export function collectPersonaContentIssues(content: PersonaContent): readonly s
       }
       if (hasPlaceholder(line)) {
         issues.push(`intentTemplates["${intent}"] still contains a placeholder: "${line}"`)
+      }
+    }
+  }
+
+  // Tic-free repair fallbacks are optional, but a present entry must be sound:
+  // these lines can be spoken, so an empty or placeholder line would surface in
+  // a repaired delivery rather than fail early.
+  const fallbacks = content.intentFallbackTemplates
+  if (fallbacks !== undefined) {
+    for (const intent of REPLY_INTENTS) {
+      const lines = fallbacks[intent]
+      if (lines === undefined) {
+        issues.push(`intentFallbackTemplates is missing the "${intent}" intent`)
+        continue
+      }
+      for (const line of lines) {
+        if (!isSubstantiveSpeech(line)) {
+          issues.push(
+            `intentFallbackTemplates["${intent}"] has a line with no speakable content: "${line}"`,
+          )
+        }
+        if (hasPlaceholder(line)) {
+          issues.push(`intentFallbackTemplates["${intent}"] still contains a placeholder: "${line}"`)
+        }
       }
     }
   }
