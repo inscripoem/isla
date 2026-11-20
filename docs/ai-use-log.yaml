@@ -9012,3 +9012,104 @@ entries:
       physical-output claim; no merge, approval, dismissal or checkpoint
       acceptance is claimed. DialogueStyleReport is M4-owned; any M2 display
       would be a separate diagnostic protocol proposal coordinated by M5.
+
+  - date: "2026-11-20"
+    task: M4-A06-style-contract-repair-soundness
+    branch: feat/m4-a06-style-contract
+    change: >-
+      Fix M5's blocking review at 81d1c55 and the two Medium findings that a
+      read-only cross-review of the first fix returned. The v0 repair accepted
+      a candidate boundary replacement by validating only the replaced line,
+      but tic-frequency is decided across a sliding window of the recent turns
+      plus the candidate lines, so a replacement could create a violation on
+      the adjacent line and the repaired output then failed validateStyle while
+      the report said the repair succeeded. Round 1 (ffbae03) compares the whole
+      output stream against a whole-stream baseline, freezes the replacement
+      candidates into the contract as boundaryFallbacks so repair no longer
+      calls resolveCharacterProfile, adds the report field
+      unrepairedBoundaryLines, and hand-authors tic-free boundary fallbacks in
+      src/dialogue/persona-content.ts as intentFallbackTemplates, kept out of
+      intentTemplates so spoken lines are unchanged. Round 1 is not presented
+      as correct: the cross-review session ses_e07bf27a9ffeCqh8XSq4oGHrH2
+      (OpenCode, m4local/deepseek-flash, read-only review of ffbae03, verdict
+      sound with notes) found two Medium defects. First, fact-contradiction
+      violations carry their array position as rule, so replacing a line
+      renumbers them and a renumbered pre-existing contradiction looked newly
+      introduced, refusing a valid repair. Second, the target-line check
+      rejected any violation on the replaced line, including report-only kinds
+      (sentence-length, fact-contradiction), contradicting the stated intent.
+      It also noted a document/behaviour mismatch for unrepairedBoundaryLines
+      when no replyIntent is given, a defensive-only identical-candidate guard,
+      and that the zero-false-kills invariant did not cover the new fallbacks.
+      Round 2 (3dff0b8) adds stableViolationKey(), which drops the ordinal for
+      fact-contradiction, scopes the target-line check to the resolvable kinds
+      (boundary, tic-frequency, forbidden), corrects the document and adds four
+      tests, each verified to fail against the pre-review logic before it was
+      committed. The main merge (9351317) conflicted only in the log tail, and
+      resolving it by concatenation dropped one " - " date separator, collapsing
+      two mappings; yaml@2.9.1 refused the file with eight 'Map keys must be
+      unique' errors. The first entry-authoring session
+      (ses_e07b09de6ffey4eSJe2jzOF5LG) found the defect, stopped and asked
+      instead of writing into a broken file, and be06988 restores the
+      separator; the delta against main is exactly one added entry.
+    requirements: [NFR-03]
+    invariants: [INV-14]
+    commits: [ffbae03fa1601c155b9c0ae46c378a753ad0f8d8, 9351317d037d7f5eac9a38930e131428127e914c, 3dff0b86b5f21f94495c3deaed75294534368cd0, be06988d7db74c7444e5977b9a4288cc8e64ea53]
+    agent: build
+    provider: m4local
+    model: deepseek-flash
+    sessions: [ses_e07bf27a9ffeCqh8XSq4oGHrH2, ses_e07b09de6ffey4eSJe2jzOF5LG, ses_e07a928d0ffe4eSpzXlagEEm2e]
+    supervision: >-
+      M5's review at 81d1c55 supplied the blocking finding and named the
+      accepting-only-the-replaced-line weakness; these rounds address it. The
+      cross-review in ses_e07bf27a9ffeCqh8XSq4oGHrH2 was a separate read-only
+      OpenCode session (m4local/deepseek-flash): it read ffbae03, reported the
+      two Medium defects recorded above and made no edit.
+
+      Disclosure, because the split matters for gate G6: the round 1 and round 2
+      code changes in this entry were NOT authored inside an OpenCode session.
+      They were written by the supervising assistant (Claude Code) directly in
+      the worktree, with the human member directing each slice and reviewing
+      every diff. AGENTS.md asks for application code to be authored through
+      genuine OpenCode sessions, so this entry records the deviation rather than
+      presenting the code as session-written. The two OpenCode sessions cited
+      above are real and did real work - a read-only cross-review that found two
+      real defects, and this entry authoring - but neither of them wrote the
+      source under src/.
+
+      The entry itself was written by ses_e07a928d0ffe4eSpzXlagEEm2e. The
+      earlier authoring session ses_e07b09de6ffey4eSJe2jzOF5LG is cited because
+      it found the lost separator that broke the log; it correctly refused to
+      write into the broken file and produced no entry.
+    human_review: >-
+      M5 requested changes at 81d1c55; these two rounds and the merge repair
+      remain under review and this entry claims no approval, dismissal or merge.
+      A human team member performs the final merge; no agent merges, enables
+      auto-merge, enqueues a merge or triggers one through a CLI, API, browser
+      or automation.
+    transcript_record: >-
+      The cross-review conversation ses_e07bf27a9ffeCqh8XSq4oGHrH2 and the
+      entry-authoring conversation ses_e07b09de6ffey4eSJe2jzOF5LG are retained
+      in the local OpenCode store; no raw export was copied outside the checkout
+      for this entry, and no credential appears in repository files.
+    verification:
+      base: be06988d7db74c7444e5977b9a4288cc8e64ea53
+      results: >-
+        Windows 11, Node 24.21.0, pnpm 12.11.2: the m4-style suite passed 18/18;
+        pnpm test:m4 passed 19 files / 455 tests; pnpm typecheck exited 0; pnpm
+        lint (oxlint) reported 0 warnings and 0 errors on 323 files. Cost on
+        this host: repair cost rose from 5.65 to 10.87 microseconds per call
+        because the whole-stream baseline is rechecked, while
+        deriveStyleContract costs 0.53 microseconds once per contract. The G6
+        ai-use-log gate passed with the changed-file list supplied and main's
+        log as the base.
+      limits: >-
+        No live provider, browser or CI run was performed for this slice, and no
+        acoustic, latency, cost or user-visible effect is claimed.
+        repairStyledLines still has no production caller, so the evidence is
+        test-level only.
+    scope: >-
+      src/dialogue/style-contract.ts, src/dialogue/persona.ts,
+      src/dialogue/persona-content.ts, test/offline/m4-style.test.ts and this
+      log entry. No frozen contract, storage schema, provider or deployment
+      change.
