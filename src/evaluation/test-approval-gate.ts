@@ -83,7 +83,7 @@ export const G1_EVIDENCE_ACTIVATED_AT = '2026-11-16T16:01:01Z'
  * first instant AFTER the window, so all of 27 November is covered. A waiver is a
  * recorded exception, not evidence: the G1 step must say so in its output.
  */
-export const G1_TIME_WAIVER_PRS: readonly number[] = [170, 171, 175]
+export const G1_TIME_WAIVER_PRS: readonly number[] = [170, 171, 175, 181]
 export const G1_TIME_WAIVER_UNTIL = '2026-11-28T00:00:00+08:00'
 
 export type ApprovalMode = 'advise' | 'evidence'
