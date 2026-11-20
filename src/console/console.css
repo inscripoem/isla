@@ -253,11 +253,29 @@
   }
 
   .facts {
-    grid-template-columns: 1fr;
-    gap: var(--animal-spacing-xs);
+    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+    gap: var(--animal-spacing-xs) var(--animal-spacing-sm);
   }
 
   .facts dd {
-    margin-bottom: var(--animal-spacing-xs);
+    margin-bottom: 0;
+  }
+}
+
+/* Below 340px two columns are too narrow and long values break mid-word. */
+@media (max-width: 340px) {
+  .facts {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .facts dt {
+    margin-top: var(--animal-spacing-sm);
+    color: var(--animal-text-color);
+    font-weight: 600;
+  }
+
+  .facts dd {
+    margin-top: var(--animal-spacing-xs);
   }
 }

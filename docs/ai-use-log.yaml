@@ -8984,3 +8984,53 @@ entries:
       src/console/console.css and docs/ai-use-log.yaml. ConsoleApp.tsx,
       contracts, runtime, tests, manifests and the animal-island-ui library
       remain untouched.
+
+  - date: "2026-11-20"
+    task: M2-174-responsive-facts
+    change: >-
+      One console-scoped responsive fix from the #174 visual review, CSS only.
+      Below 768px the facts grid keeps its label and value on one row (minmax
+      columns, smaller gap, no dd bottom margin) so long Session and Recovery
+      lists stay paired; below 340px the pair stacks with a bold
+      primary-coloured label, because two columns break values like
+      session-console-demo mid-word.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    opencode_version: "1.19.4"
+    launch_flags: [--agent, build, --format, json, --variant, xhigh, --auto]
+    sessions: [ses_e0a7d316cffe2d3cVvi5Y4G8Jk]
+    supervision: >-
+      The M2 member approved the two CSS fixes and then asked for the OpenCode
+      publication step. The documented V2 `#xhigh` model form was skipped after
+      the UnknownError recorded in the C12 entry above; the installed CLI's
+      `--variant xhigh` form authored the rules. The supervisor reverted the
+      working copy before the session so the CSS was actually authored in
+      OpenCode, then reviewed the diff and reran the checks.
+    human_review: >-
+      The M2 member authorized the fixes and publication to the existing #175
+      branch. Visual owner confirmation for the #174 rows and the final merge
+      remain with the human reviewer.
+    transcript_record: >-
+      Exported with `opencode export` to
+      ~/.cache/isla-exports/m2-174-responsive-ses_e0a7d316cffe2d3cVvi5Y4G8Jk.json
+      outside the checkout.
+    verification:
+      base: b948a79
+      results: >-
+        macOS: pnpm test:m2 passed 1 file / 93 tests. Supervisor Playwright
+        checks of the fixture console at 320, 360, 390, 768 and 1280px:
+        scrollWidth equals clientWidth at every width with no element past the
+        viewport, facts label and value share a row from 360px up and stack
+        below 340px.
+      independent: >-
+        Supervisor rerun on macOS: pnpm test:m2 passed 93 tests in 1 file;
+        pnpm verify passed 94 files / 2056 tests including typecheck, lint and
+        build.
+    scope: >-
+      The facts responsive rules in src/console/console.css and
+      docs/ai-use-log.yaml. ConsoleApp.tsx, contracts, runtime, tests, manifests
+      and the animal-island-ui library remain untouched.
