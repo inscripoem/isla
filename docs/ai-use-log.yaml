@@ -9031,7 +9031,7 @@ entries:
       src/dialogue/persona-content.ts as intentFallbackTemplates, kept out of
       intentTemplates so spoken lines are unchanged. Round 1 is not presented
       as correct: the cross-review session ses_e07bf27a9ffeCqh8XSq4oGHrH2
-      (OpenCode, m4local/deepseek-flash, read-only review of ffbae03, verdict
+      (OpenCode, cslabllm/CS5351/DeepSeek-V4-Flash, read-only review of ffbae03, verdict
       sound with notes) found two Medium defects. First, fact-contradiction
       violations carry their array position as rule, so replacing a line
       renumbers them and a renumbered pre-existing contradiction looked newly
@@ -9056,15 +9056,15 @@ entries:
     invariants: [INV-14]
     commits: [ffbae03fa1601c155b9c0ae46c378a753ad0f8d8, 9351317d037d7f5eac9a38930e131428127e914c, 3dff0b86b5f21f94495c3deaed75294534368cd0, be06988d7db74c7444e5977b9a4288cc8e64ea53, a7c1942b6c2de6f178e587bbc54465541fdc367c]
     agent: opencode/build
-    provider: m4local
-    model: deepseek-flash
-    model_cli_id: "m4local/deepseek-flash"
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    model_cli_id: "cslabllm/CS5351/DeepSeek-V4-Flash"
     sessions: [ses_e07bf27a9ffeCqh8XSq4oGHrH2, ses_e07b09de6ffey4eSJe2jzOF5LG, ses_e07a928d0ffe4eSpzXlagEEm2e, ses_e0745f73dffeGvx3C9CgVwWja7]
     supervision: >-
       M5's review at 81d1c55 supplied the blocking finding and named the
       accepting-only-the-replaced-line weakness; the rounds recorded here
       address it. The cross-review in ses_e07bf27a9ffeCqh8XSq4oGHrH2 was a
-      separate read-only OpenCode session (m4local/deepseek-flash): it read
+      separate read-only OpenCode session (cslabllm/CS5351/DeepSeek-V4-Flash): it read
       ffbae03, reported the two Medium defects recorded above and made no edit.
 
       Disclosure of how each part was authored, because the split matters
@@ -9075,7 +9075,7 @@ entries:
       requested changes on the authoring evidence alone. The final src/ change
       on this branch - commit a7c1942, removing the dead markEmptied branches
       and the import that only fed them - WAS authored in OpenCode session
-      ses_e0745f73dffeGvx3C9CgVwWja7 (agent build, m4local/deepseek-flash). That
+      ses_e0745f73dffeGvx3C9CgVwWja7 (agent build, cslabllm/CS5351/DeepSeek-V4-Flash). That
       session read the function, confirmed by grep that isSubstantiveSpeech had
       no other caller, made the edit, and ran the style and dialogue suites
       itself; the supervising assistant re-ran typecheck, oxlint and the full M4
