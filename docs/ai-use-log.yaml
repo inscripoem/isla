@@ -9055,9 +9055,10 @@ entries:
     requirements: [NFR-03]
     invariants: [INV-14]
     commits: [ffbae03fa1601c155b9c0ae46c378a753ad0f8d8, 9351317d037d7f5eac9a38930e131428127e914c, 3dff0b86b5f21f94495c3deaed75294534368cd0, be06988d7db74c7444e5977b9a4288cc8e64ea53, a7c1942b6c2de6f178e587bbc54465541fdc367c]
-    agent: build
+    agent: opencode/build
     provider: m4local
     model: deepseek-flash
+    model_cli_id: "m4local/deepseek-flash"
     sessions: [ses_e07bf27a9ffeCqh8XSq4oGHrH2, ses_e07b09de6ffey4eSJe2jzOF5LG, ses_e07a928d0ffe4eSpzXlagEEm2e, ses_e0745f73dffeGvx3C9CgVwWja7]
     supervision: >-
       M5's review at 81d1c55 supplied the blocking finding and named the
