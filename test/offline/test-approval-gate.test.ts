@@ -2,8 +2,14 @@ import { describe, expect, it } from 'vitest'
 import {
   collectApprovalEvidenceViolations,
   collectTestApprovalViolations,
+  decideApprovalMode,
+  G1_EVIDENCE_ACTIVATED_AT,
+  G1_TIME_WAIVER_PRS,
+  G1_TIME_WAIVER_UNTIL,
+  isTimeWaived,
   parseApprovals,
   runCli,
+  selectApprovalMode,
   TEST_APPROVAL_LABEL,
   type ApprovalEvidenceInput,
   type ApprovalRecord,
@@ -131,6 +137,154 @@ describe('G1 evidence: recorded approval predates implementation (Tier 1, 1.1)',
 
   it('accepts an approval that came from before the diff range', () => {
     expect(collectApprovalEvidenceViolations(input({ recordFirstTouch: null }))).toEqual([])
+  })
+})
+
+describe('G1 cutover: mode by PR creation time (Tier 1, #177)', () => {
+  const cutover = G1_EVIDENCE_ACTIVATED_AT
+
+  it('keeps the label rule for a PR created before the cutover', () => {
+    expect(
+      selectApprovalMode({ createdAt: '2026-11-13T17:30:01Z', activatedAt: cutover }),
+    ).toEqual({ mode: 'advise', reason: 'pre-cutover' })
+  })
+
+  it('uses evidence for a PR created after the cutover', () => {
+    expect(
+      selectApprovalMode({ createdAt: '2026-11-18T11:24:14Z', activatedAt: cutover }),
+    ).toEqual({ mode: 'evidence', reason: 'post-cutover' })
+  })
+
+  it('treats the cutover instant itself as post-cutover', () => {
+    expect(selectApprovalMode({ createdAt: cutover, activatedAt: cutover })).toEqual({
+      mode: 'evidence',
+      reason: 'post-cutover',
+    })
+  })
+
+  it('handles an offset timestamp at the cutover boundary', () => {
+    expect(
+      selectApprovalMode({ createdAt: '2026-11-16T17:01:01+01:00', activatedAt: cutover }),
+    ).toEqual({ mode: 'evidence', reason: 'post-cutover' })
+  })
+
+  it('fails closed when the PR creation time is missing', () => {
+    expect(selectApprovalMode({ createdAt: null, activatedAt: cutover })).toEqual({
+      mode: 'evidence',
+      reason: 'created-at-unavailable',
+    })
+    expect(selectApprovalMode({ createdAt: '   ', activatedAt: cutover })).toEqual({
+      mode: 'evidence',
+      reason: 'created-at-unavailable',
+    })
+  })
+
+  it('fails closed when the activation time is missing', () => {
+    expect(selectApprovalMode({ createdAt: '2026-11-13T17:30:01Z', activatedAt: null })).toEqual({
+      mode: 'evidence',
+      reason: 'activated-at-unavailable',
+    })
+  })
+
+  it('fails closed when either timestamp is unparsable', () => {
+    expect(selectApprovalMode({ createdAt: 'not-a-date', activatedAt: cutover })).toEqual({
+      mode: 'evidence',
+      reason: 'invalid-timestamp',
+    })
+    expect(
+      selectApprovalMode({ createdAt: '2026-11-13T17:30:01Z', activatedAt: 'not-a-date' }),
+    ).toEqual({ mode: 'evidence', reason: 'invalid-timestamp' })
+  })
+})
+
+describe('G1 time-boxed waiver through 2026-11-27 (Tier 1, #176)', () => {
+  const beforeExpiry = '2026-11-19T00:00:00Z'
+  const atLastSecond = '2026-11-27T23:59:59+08:00'
+  const atExpiry = '2026-11-28T00:00:00+08:00'
+
+  it('waives the named PRs before the expiry', () => {
+    for (const prNumber of G1_TIME_WAIVER_PRS) {
+      expect(isTimeWaived({ prNumber, now: beforeExpiry })).toBe(true)
+    }
+  })
+
+  it('accepts a Date clock', () => {
+    expect(isTimeWaived({ prNumber: 170, now: new Date(beforeExpiry) })).toBe(true)
+  })
+
+  it('covers the last second of 27 November Asia/Taipei', () => {
+    expect(isTimeWaived({ prNumber: 170, now: atLastSecond })).toBe(true)
+  })
+
+  it('stops at the first instant after the window', () => {
+    expect(isTimeWaived({ prNumber: 170, now: atExpiry })).toBe(false)
+    expect(G1_TIME_WAIVER_UNTIL).toBe(atExpiry)
+  })
+
+  it('does not waive an unlisted PR or a missing PR number', () => {
+    expect(isTimeWaived({ prNumber: 160, now: beforeExpiry })).toBe(false)
+    expect(isTimeWaived({ prNumber: 999, now: beforeExpiry })).toBe(false)
+    expect(isTimeWaived({ prNumber: null, now: beforeExpiry })).toBe(false)
+  })
+
+  it('grants nothing when the clock or end instant is unreadable', () => {
+    expect(isTimeWaived({ prNumber: 170, now: 'not-a-date' })).toBe(false)
+    expect(isTimeWaived({ prNumber: 170, now: beforeExpiry, until: 'not-a-date' })).toBe(false)
+  })
+
+  it('applies the waiver before the cutover rule for a named PR', () => {
+    expect(
+      decideApprovalMode({
+        createdAt: '2026-11-18T11:24:14Z',
+        activatedAt: G1_EVIDENCE_ACTIVATED_AT,
+        prNumber: 170,
+        now: beforeExpiry,
+      }),
+    ).toEqual({ mode: 'advise', reason: 'waiver' })
+  })
+
+  it('applies the recorded waiver even when the creation time is unavailable', () => {
+    expect(
+      decideApprovalMode({
+        createdAt: null,
+        activatedAt: G1_EVIDENCE_ACTIVATED_AT,
+        prNumber: 170,
+        now: beforeExpiry,
+      }),
+    ).toEqual({ mode: 'advise', reason: 'waiver' })
+  })
+
+  it('keeps #160 on the permanent pre-cutover rule, not the waiver', () => {
+    expect(
+      decideApprovalMode({
+        createdAt: '2026-11-13T17:30:01Z',
+        activatedAt: G1_EVIDENCE_ACTIVATED_AT,
+        prNumber: 160,
+        now: beforeExpiry,
+      }),
+    ).toEqual({ mode: 'advise', reason: 'pre-cutover' })
+  })
+
+  it('returns a post-cutover PR to evidence after the waiver expires', () => {
+    expect(
+      decideApprovalMode({
+        createdAt: '2026-11-18T11:24:14Z',
+        activatedAt: G1_EVIDENCE_ACTIVATED_AT,
+        prNumber: 175,
+        now: atExpiry,
+      }),
+    ).toEqual({ mode: 'evidence', reason: 'post-cutover' })
+  })
+
+  it('does not let the waiver hide an unknown creation time for an unlisted PR', () => {
+    expect(
+      decideApprovalMode({
+        createdAt: null,
+        activatedAt: G1_EVIDENCE_ACTIVATED_AT,
+        prNumber: 999,
+        now: beforeExpiry,
+      }),
+    ).toEqual({ mode: 'evidence', reason: 'created-at-unavailable' })
   })
 })
 
