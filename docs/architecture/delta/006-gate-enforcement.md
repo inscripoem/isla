@@ -138,23 +138,29 @@ with `G1_EVIDENCE_ACTIVATED_AT = 2026-11-16T16:01:01Z` (the #158 merge, `9492070
 The current base tip is no longer a mode selector. The workflow passes
 `github.event.pull_request.created_at`; the gate prints the selected mode and reason.
 
-**Time-boxed waiver (M6, 2026-11-19).** PRs #170, #171 and #175 may use the label/advise rule through
-**2026-11-27 23:59:59 Asia/Taipei** (`G1_TIME_WAIVER_UNTIL = 2026-11-28T00:00:00+08:00`, the first
-instant after the window). #160 uses the permanent cutover rule and is not in the waiver. The waiver is
-a recorded exception, not evidence: the G1 step prints that it is a waiver, the check is green under the
-exception, and the gate does not claim evidence passed or create/backdate a TA record. After the expiry,
-a post-cutover PR returns to evidence. The M5 delivery exception in PR #176 (DEBT-15, pending) is a
-separate fallback record that assumes the red check stays visible. This M6 waiver instead makes G1
-green under an explicit, expiring exception; if both records are used, #176's condition 1 must be read
-as superseded for the waiver window and its author should update it. The waiver also removes the need
-to rely on the unverified repository-role bypass in #176 for #170/#171/#175 during the window. The
-waiver expires earlier.
+**Time-boxed waiver (M6, 2026-11-19; #181 added 2026-11-22).** PRs #170, #171, #175 and #181 may use the
+label/advise rule through **2026-11-27 23:59:59 Asia/Taipei** (`G1_TIME_WAIVER_UNTIL =
+2026-11-28T00:00:00+08:00`, the first instant after the window). #160 uses the permanent cutover rule and
+is not in the waiver. #181 is the CP04 M2 console UI-defect slice and is covered by this waiver only for
+G1; this is not a CP04 acceptance or a console-scope decision. #181 merged in `6d8f8d2`. The waiver is a
+recorded exception, not evidence: the G1 step
+prints that it is a waiver, the check is green under the exception, and the gate does not claim evidence
+passed or create/backdate a TA record. After the expiry, a post-cutover PR returns to evidence. The M5
+delivery exception in PR #176 (DEBT-15, pending) remains scoped to #170/#171/#175 and is the fallback
+after expiry; #181 is not part of #176. This M6 waiver instead makes G1 green under an explicit,
+expiring exception; if both records are used, #176's condition 1 must be read as superseded for the
+waiver window and its author should update it. The waiver also removes the need to rely on the
+unverified repository-role bypass in #176 for the covered PRs during the window. The waiver expires
+earlier.
+
+**Governance.** This waiver is PR-scoped. Any additional PR that needs G1 relief must be requested
+explicitly to M5 (PM) and M6 (gate owner); do not extend or reuse this exception silently.
 
 **Limits.** The cutover is PR-level: a pre-cutover PR keeps the label rule even for code written after
 2026-11-16 (#160's current head is such a case). That is the recorded policy choice, not a claim that
 the later code was approved. The waiver is debt, not a precedent; it does not change the ruleset, the
-`verify` requirement or any other gate. The three waived PRs still need their reviews, owner
-acknowledgements and the AI-use-log tail resolution.
+`verify` requirement or any other gate. The waiver is historical for merged or closed PRs; #171 remains
+open. It does not accept CP04 or any console scope.
 
 ## Limits
 
