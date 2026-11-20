@@ -16,6 +16,13 @@ describe('reference text harness (#103 pilot)', () => {
     expect(parsed.spec.meta.runId).toBe('pilot-selection-001')
     expect(parsed.spec.cases.map((evalCase) => evalCase.id)).toEqual(['selection-001'])
     expect(parsed.spec.conditions.textSource).toBe('provider')
+    expect(parsed.spec.conditions.history).toEqual({
+      source: 'local',
+      recordSet: 'empty set (no prior turns)',
+    })
+    expect(parsed.spec.conditions.modelVersion).toContain('requested')
+    expect(parsed.spec.conditions.modelVersion).toContain('unconfirmed')
+    expect(parsed.spec.conditions.workload).toContain('message-001')
   })
 
   it('refuses a missing provider base URL instead of falling back', () => {
