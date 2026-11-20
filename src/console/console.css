@@ -262,6 +262,20 @@
   }
 }
 
+/*
+ * The ribbon font size is set inline by the library, so an !important override
+ * is required to shrink it and, with the em-based decorations, the overhang.
+ */
+@media (max-width: 480px) {
+  .console [class*='animal-ribbon-'] {
+    font-size: clamp(15px, 4.4vw, 20px) !important;
+  }
+
+  .console__header [class*='animal-ribbon-'] {
+    font-size: clamp(20px, 6vw, 24px) !important;
+  }
+}
+
 /* Below 340px two columns are too narrow and long values break mid-word. */
 @media (max-width: 340px) {
   .facts {

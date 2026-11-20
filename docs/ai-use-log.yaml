@@ -9034,3 +9034,52 @@ entries:
       The facts responsive rules in src/console/console.css and
       docs/ai-use-log.yaml. ConsoleApp.tsx, contracts, runtime, tests, manifests
       and the animal-island-ui library remain untouched.
+
+  - date: "2026-11-20"
+    task: M2-174-ribbon-clamp
+    change: >-
+      One console-scoped responsive fix from the #174 visual review, CSS only.
+      Title ribbons shrink at or below 480px (clamp with !important for the
+      library's inline font size; the back and fold decorations are em-based)
+      so their overhang no longer scrolls the page by 29px at 390px or clips
+      long card titles. The clamp floor was raised to 15px so the tightest
+      ribbon keeps clearance to the right edge at 320px.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    opencode_version: "1.19.4"
+    launch_flags: [--agent, build, --format, json, --variant, xhigh, --auto]
+    sessions: [ses_e06a70d22ffehZQHVTTZpgJJUX]
+    supervision: >-
+      This M2 follow-up session raised the clamp floor from 14px to 15px and
+      split the former combined responsive entry into a facts entry and a clamp
+      entry; the supervisor measured clearance and ran the checks.
+    human_review: >-
+      The M2 member directed the split and the 15px floor after M4's C09 review;
+      visual owner confirmation for the #174 rows and the final merge remain
+      with the human reviewer.
+    transcript_record: >-
+      Exported with `opencode export` to
+      ~/.cache/isla-exports/m2-174-c09-clamp-ses_e06a70d22ffehZQHVTTZpgJJUX.json
+      outside the checkout.
+    verification:
+      base: e32bf1a
+      results: >-
+        macOS: pnpm test:m2 passed 1 file / 93 tests. On the built root page in
+        headless Chromium, with the 15px floor the tightest ribbon at 320px
+        kept 22.28px clearance to the right edge, and scrollWidth equalled
+        clientWidth at 320, 340, 360, 375, 390 and 480px. In the 481-768px band
+        the library's 20px font applies and there is no horizontal overflow, so
+        that band is baseline-covered rather than covered by this fix.
+      independent: >-
+        Supervisor rerun on macOS: pnpm test:m2 passed 93 tests in 1 file;
+        pnpm verify passed 94 files / 2084 tests including typecheck, lint and
+        build. A headless Chromium check of the rebuilt page confirmed the 15px
+        floor, 22.28px clearance at 320px and no horizontal overflow.
+    scope: >-
+      The 480px ribbon font clamp in src/console/console.css and
+      docs/ai-use-log.yaml. ConsoleApp.tsx, contracts, runtime, tests, manifests
+      and the animal-island-ui library remain untouched.
