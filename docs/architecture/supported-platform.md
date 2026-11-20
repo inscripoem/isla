@@ -23,7 +23,8 @@ The live target is the configuration observed in M1's Windows run at
   (`00f9750080014d43bb398cd98e4f55ad`), the product plugin identity `Isla Runtime` / `CS5351 Isla`,
   and the three pinned `animation-1/2/3` hotkeys.
 - Kokoro voice `af_heart`; the OpenAI-compatible `deepseek-flash` text source configured for the
-  deployment.
+  deployment. This is the deployment's configured provider; this record makes no quality claim about
+  it.
 - Stock `src/runtime/production-cli.ts` with
   `ISLA_DEPLOYMENT_MODULE=src/runtime/deployments/reference-live.ts`, a fresh SQLite database, and
   the real audio resource route.
@@ -60,9 +61,11 @@ dialogue, deterministic rule selection/reaction, Kokoro synthesis, the audio res
 VTS-backed renderer with the three pinned actions, operator Stop/cancellation, durable SQLite
 persistence and recovery.
 
-No new user-visible feature is planned after CP04. The X01–X09 backlog is deferred and outside the
-submission scope unless separately approved. After this freeze, changes are limited to demonstrated
-defect fixes and evidence/documentation corrections.
+No new user-visible feature is planned after CP04. X01, X02 and X07 are implemented and merged
+(#159, #163, #157) but are not wired into the reference deployment, so they add no live behavior to
+the frozen scope. X03, X04, X05, X06, X08 and X09 are deferred and outside the submission scope unless
+separately approved. After this freeze, changes are limited to demonstrated defect fixes and
+evidence/documentation corrections.
 
 ## 6. Reproduction and acceptance
 

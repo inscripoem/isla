@@ -44,8 +44,9 @@ spoken history.
 - **Retention and deletion.** There is no automatic expiry and no default retention period.
   `deleteOlderThan(audienceId, days, nowMs)` is operator-called, audience-scoped, and leaves
   `events` and `deliveries` append-only; one audience's retention cannot remove another audience's
-  rows (C-78). Retraction is a withdrawal marker plus recall suppression, not row deletion;
-  physical erasure and a user-facing forget action are not implemented in v0.2.
+  rows (C-78). Retraction is defined as a withdrawal marker plus recall suppression and is not
+  implemented in v0.2; it remains distinct from deletion. Physical erasure and a user-facing forget
+  action are also not implemented.
 - **Budgets are not retention.** `maxTurns` and `maxCharacters` only drop content from a rendered
   context; they do not delete stored evidence.
 
@@ -60,12 +61,12 @@ append-only evidence.
 | --- | --- | --- |
 | Untrusted control refused (C-07) | `test/conformance/runtime.conformance.ts::untrusted-control-refused`; `docs/req/trace.en.md` marks C-07 implemented | implemented verifier |
 | Consent/durable gate, unowned/refused/conflict (C-76) | `test/offline/m6-memory-store.test.ts` — insert-once binding, durable/consent refusal, owner/derived gate | passing |
-| Session-scoped state and audience conflict (C-77) | `test/offline/m6-memory-store.test.ts` — state read-back, stale-version conflict, audience immutability, state under a non-durable binding | passing; two-session seed pending |
+| Session-scoped state and audience conflict (C-77) | `test/offline/m6-memory-store.test.ts` — state read-back, stale-version conflict, audience immutability, state under a non-durable binding | passing; a two-session seed would add a cross-session replay case, not change the current audience-conflict verifier |
 | Audience-scoped deletion/retention leaves evidence (C-78) | `test/offline/m6-memory-store.test.ts` — cross-table delete, unchanged evidence counts, per-audience retention, audience export scope | passing |
 | Operator Stop settles to idle without replay | [M1 six browser receipts](https://github.com/inscripoem/isla/issues/97#issuecomment-6918501769) and [M1 Windows live evidence](https://github.com/inscripoem/isla/issues/96#issuecomment-6920647994) | observed on the live target |
 
-Commands and results at the current main tree: `pnpm test:m6` → 22 files / 340 tests passed;
-`pnpm verify` → 94 files / 2038 tests, typecheck, lint and build passed.
+Commands and results at `main` `e32bf1a6`: `pnpm test:m6` → 22 files / 343 tests passed;
+`pnpm verify` → 94 files / 2084 tests, typecheck, lint and build passed.
 
 ## 5. Gaps and limits
 
