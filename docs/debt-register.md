@@ -21,6 +21,33 @@ agent-induced bloat, evaluation debt, guardrail debt, human/cognitive debt.
 | DEBT-12 | hidden dependency | The append-only `docs/ai-use-log.yaml` conflicts on every code merge | the I1 PRs are blocked by a bookkeeping file, not by code; repeated rebases | M5/M6 | standing rebase rule; an ADR to split the log only if it recurs after the I1 batch |
 | DEBT-13 | evaluation debt | `condition-mismatch` cannot be evaluated: conditions are recorded per run, not per attempt | protocol §3 rule 5 is unimplemented | M4/M6 | per-attempt conditions, or an explicit recorded limitation |
 | DEBT-14 | evaluation debt | the recorded run carries no corpus identity (`FixedConditions` has no `corpusVersion`/`casesSha256`), so the label file's corpus tuple is checked only against the supplied manifest | a label file for one corpus can be joined to a run produced from another whenever the manifest matches the labels (#145) | M6/M3 | add a corpus field in a versioned run-schema decision (trigger: the first formal run, or a second corpus version); until then the operator supplies the run and the manifest together |
+| DEBT-15 | guardrail debt | G1 evidence mode (#158) left #170/#171/#175 without a pre-implementation approval record. #160 was also affected but is resolved by the #178 cutover fix. | the #178 waiver makes G1 green as an explicit exception through 2026-11-27; after the waiver this fallback record expires on 2026-11-30 or at submission, whichever is earlier, and G1 would be red again unless evidence or a ruleset change exists; G1 is not claimed as passed | CHANG Xuben (M5, team coordination) / M6 | active fallback for #170/#171/#175 only; #160 out via #178; #170/#171 require M4's #146 acknowledgement; M2 acknowledged #175 on #174; #181 is outside this exception; no retroactive TA record; future PRs need a TA record on `main` before implementation |
+
+## G1 fallback exception — 2026-11-18
+
+Decision: CHANG Xuben (M5, team coordination) records a one-delivery fallback exception for PRs #170, #171 and #175. #160 is resolved by #178 and is not part of the active exception. This record accepts the G1 failure as debt; it does not make G1 evidence pass and does not create or backdate an approval record.
+
+### Scope and evidence
+
+- #160: `src/runtime/evaluation-adapter.ts`; resolved by #178 (merged as `d4234f38c6616634ce6a84080877ed5b2621be34`), which selects G1 mode by PR creation time. Historical run `44302927637` failed only G1 before that fix.
+- #170: `src/dialogue/` (A03); pull-request run `44145390282` fails only the G1 step.
+- #171: `src/dialogue/` (A06); pull-request run `44146008624` fails only the G1 step.
+- #175: `src/console/ConsoleApp.tsx` and `src/console/console.css`; pull-request run `44294388233` fails only G1 with `no recorded approval covers src/console/ConsoleApp.tsx, src/console/console.css`.
+
+The corresponding push runs are green because G1 is skipped on push by design; they are not evidence that the pull-request gate passed.
+
+### Conditions
+
+1. #178 merged as `d4234f38c6616634ce6a84080877ed5b2621be34`; the waiver is active for #170/#171/#175 through 2026-11-27 23:59:59 +08. The G1 step is green as an explicit exception and prints that it is a waiver. This record is the fallback after expiry or if the waiver is not used; it does not claim G1 evidence passed.
+2. M6's token reports no usable ruleset bypass (`bypass_actors: null`, `current_user_can_bypass: never`), matching DEBT-09; no bypass is assumed. The #178 waiver removes the need for one during its window; otherwise a ruleset change would be required. This exception does not itself change the ruleset.
+3. Code review and every non-G1 gate must pass at the exact head.
+4. M4 acknowledges #170/#171 (issues #146). M2 acknowledged #175 on issue #174 at 2026-11-19T13:25Z, at `dccca53`. M4's #146 acknowledgement is still owed; PR reviews do not replace it.
+5. #160 is resolved by #178 and is out of DEBT-15; no CP08 trigger applies.
+6. No retroactive TA record is created, and no approval date is backdated. Future PRs require a TA record on `main` before implementation begins.
+
+Scope note: PR #181 (console P1 C07-C10) is outside DEBT-15 and needs its own G1 handling; this record does not cover it.
+
+Expiry: 2026-11-30 or final submission, whichever is earlier. The #178 waiver expires earlier (2026-11-27 23:59:59 +08); after that the evidence rule returns. This is a delivery-window exception, not a precedent for future gates.
 
 ## PR53 IPC literal follow-up
 
