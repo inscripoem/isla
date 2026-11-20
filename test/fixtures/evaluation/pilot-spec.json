@@ -3,13 +3,13 @@
   "conditions": {
     "hardware": "local macOS host",
     "providers": ["cs-project-ai.rkd.icu group/deepseek-flash"],
-    "workload": "m3-selection-v1.1 selection-001; text path, audio substituted",
+    "workload": "m3-selection-v1.1 selection-001 / message-001; text path, audio substituted",
     "coldWarm": "cold",
     "persona": { "profileId": "Elleya", "version": "2" },
-    "modelVersion": "group/deepseek-flash",
+    "modelVersion": "group/deepseek-flash (requested; served unconfirmed)",
     "promptVersion": "openai-compatible-v1",
     "textBudget": { "maxCharacters": 2000, "accounting": "rendered characters" },
-    "history": { "source": "durable", "recordSet": "fresh session (no prior turns)" },
+    "history": { "source": "local", "recordSet": "empty set (no prior turns)" },
     "textSource": "provider",
     "clock": "wall",
     "recall": { "supplied": false, "maxTurns": null }
