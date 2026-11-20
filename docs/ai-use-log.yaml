@@ -8898,3 +8898,184 @@ entries:
       test/offline/m6-02-comparison.test.ts,
       docs/architecture/evaluation-protocol.md and this log entry. No frozen
       contract, RecordedRunV1, storage schema, provider or deployment change.
+      src/console/console.css, src/console/ConsoleApp.tsx and
+      docs/ai-use-log.yaml. Contracts, runtime, dialogue, performance, tests,
+      manifests and the animal-island-ui library remain untouched.
+
+  - date: "2026-11-19"
+    task: M2-174-c07-diagnostics-initial-state
+    change: >-
+      Made the diagnostics socket idle state truthful: socketState now starts as
+      'closed' and a socketStarted flag records whether the path button has ever
+      created a socket. The status Tag shows 'not started' before that first
+      start and the existing open/closed/error labels afterwards; the idle colour
+      is app-orange. No auto-connect was added.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    opencode_version: "1.19.4"
+    launch_flags: [--agent, build, --format, json, --variant, xhigh]
+    sessions: [ses_e0bf089f6ffeCodrP0zqHg3zbX]
+    supervision: >-
+      The M2 member directed this P1 slice and this OpenCode session authored the
+      console change and this log entry.
+    human_review: >-
+      The M2 member approved the slice and a local commit, and this session
+      performed no git operation.
+    transcript_record: >-
+      The raw CLI JSON output is retained outside the checkout.
+    verification:
+      base: e32bf1a
+      results: >-
+        Supervisor rerun after this session covers pnpm test:m2, pnpm typecheck,
+        pnpm lint and pnpm gate:ai-use-log. A headless Chrome walk of the built
+        console showed the diagnostics tag reads "not started" before the first
+        socket start and no "connecting" text is rendered.
+    scope: >-
+      src/console/ConsoleApp.tsx and docs/ai-use-log.yaml only, no contracts,
+      runtime, tests, manifests or the animal-island-ui library changed.
+
+  - date: "2026-11-19"
+    task: M2-174-c08-reconnect-affordance
+    change: >-
+      Added an explicit Reconnect control for the operator after a lost
+      transport. A transportEpoch counter state is part of the setup effect's
+      dependency list, so bumping it tears down the existing cleanup and runs a
+      fresh bootstrap. The Reconnect button appears next to the connection status
+      whenever the connection is not open and resets the view state, machine
+      state, recovery acknowledgement, playback mount and draft before
+      incrementing the epoch, so no old session identity, receipt, input, event
+      or error is reused. A hint states that reconnect starts a new session
+      bootstrap and nothing from the previous session is replayed, resumed or
+      claimed. No automatic reconnect, retry, timer or resume logic was added.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    opencode_version: "1.19.4"
+    launch_flags: [--agent, build, --format, json, --variant, xhigh]
+    sessions: [ses_e0beb6cbaffeIHJt7iRi4ZaVC8]
+    supervision: >-
+      The M2 member directed this P1 slice and this OpenCode session authored the
+      console change and this log entry.
+    human_review: >-
+      The M2 member approved the slice and a local commit, and this session
+      performed no git operation.
+    transcript_record: >-
+      The raw CLI JSON output is retained outside the checkout.
+    verification:
+      base: 2f266cc
+      results: >-
+        Supervisor rerun after this session covers pnpm test:m2, pnpm typecheck
+        and pnpm lint. A headless Chrome walk of the built console in the
+        transport-failure state showed the Reconnect button and its new-session
+        bootstrap hint, and pressing the button re-ran the bootstrap.
+    scope: >-
+      src/console/ConsoleApp.tsx and docs/ai-use-log.yaml only, no contracts,
+      runtime, tests, manifests or the animal-island-ui library changed.
+
+  - date: "2026-11-19"
+    task: M2-174-c10-draft-preserved-on-refusal
+    change: >-
+      The operator's composer draft is now captured once as the raw draft at
+      the start of submitInput, while the existing trimmed text remains the
+      submitted payload. The draft is never cleared before dispatch: the
+      machine path clears it only after activeMachine.input() returns a
+      non-null id, and the legacy transport path clears it only when the ack
+      status is accepted, applied or duplicate. Clearing is functional and
+      guarded so it only empties the composer when it still holds the submitted
+      raw draft, preserving text typed while an async ack was pending. Every
+      failure branch (machine returns null, machine throws, transport ack is
+      rejected, transport throws) keeps the draft and restores the submitted
+      raw draft only when the composer is empty, so the operator can edit and
+      retry without overwriting text typed during the pending request. The
+      existing reducer calls, notifications and failed list item rendering are
+      unchanged, and no automatic retry or new component-external state was
+      added. No test was added: the offline suite has no DOM renderer and the
+      only fixture path that makes PerformerMachine.input() return null is a
+      disposed machine, which the console never calls into, so a refusal cannot
+      be forced from the existing fixtures; the refusal walk remains a manual
+      state check.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    opencode_version: "1.19.4"
+    launch_flags: [--agent, build, --format, json, --variant, xhigh]
+    sessions: [ses_e0bb942e0ffe3MV9iDqWJL9sOn]
+    supervision: >-
+      The M2 member directed this P1 slice and this OpenCode session authored the
+      console change and this log entry.
+    human_review: >-
+      The M2 member approved the slice and a local commit, and this session
+      performed no git operation.
+    transcript_record: >-
+      The raw CLI JSON output is retained outside the checkout.
+    verification:
+      base: fc4fbaa
+      results: >-
+        Supervisor reruns pnpm test:m2, pnpm typecheck and pnpm lint, and the
+        refusal walk remains a manual state check because existing fixtures
+        cannot force a machine refusal.
+    scope: >-
+      src/console/ConsoleApp.tsx and docs/ai-use-log.yaml only, no tests,
+      contracts, runtime, manifests or the animal-island-ui library changed.
+
+  - date: "2026-11-20"
+    task: M2-174-p1-review-followup
+    change: >-
+      The C09 wrap commit ff21d8f was dropped from the branch during rebase, and
+      C09 stays with the clamp shipped in #175. An input.ack now settles the
+      composer through settleDraftOnAck only for its own requestMessageId,
+      clearing the pending draft ref on a match and leaving a newer edit
+      untouched; the machine path refuses a still-pending duplicate submission
+      through isDuplicateSubmit and records the pending submission after the
+      machine accepts it. The diagnostics socket reports connecting immediately
+      after the WebSocket is constructed and routes open, error and close
+      through the shared reducer, with the label computed by
+      diagnosticsSocketLabel. Operator bootstrap now runs through
+      runOperatorBootstrap behind a transport epoch fence so a stale token
+      result writes neither pending, submit nor error state.
+    requirements: [FR-05, NFR-04]
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    opencode_version: "1.19.4"
+    launch_flags: [--agent, build, --format, json, --variant, xhigh, --auto]
+    sessions: [ses_e04dbbeb3ffetcJ6Idw3OGeUh3]
+    supervision: >-
+      The M2 member directed this follow-up; the C09 wrap commit ff21d8f was
+      dropped from the branch by the supervisor during rebase, and this
+      OpenCode session authored the ConsoleApp, console-state,
+      operator-bootstrap and test changes and this entry.
+    human_review: >-
+      The M2 member directed the slice. The handoff stays with M1, M5 and M4
+      for producer and consumer review, and a human team member performs the
+      final merge; this session performed no git operation.
+    transcript_record: >-
+      ~/.cache/isla-exports/m2-181-followup-ses_e04dbbeb3ffetcJ6Idw3OGeUh3.json
+      (exported outside the checkout)
+    verification:
+      base: 73a7db3
+      results: >-
+        test/offline/m2-console.test.ts gained 8 node cases (socket state and
+        label, draft settlement, duplicate submit, operator-bootstrap fence);
+        pnpm test:m2 passed 101 tests in 1 file; pnpm verify passed 94 files /
+        2092 tests with 0 lint warnings and 0 errors. No live transport or
+        browser walk was performed for the new connecting and pending states.
+      independent: >-
+        supervisor rerun on macOS confirmed 101/101 M2 tests and 94 files /
+        2046 tests in verify.
+    scope: >-
+      src/console/ConsoleApp.tsx, src/console/console-state.ts,
+      src/console/operator-bootstrap.ts, src/console/console.css and
+      docs/ai-use-log.yaml only.

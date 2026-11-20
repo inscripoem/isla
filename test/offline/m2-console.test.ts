@@ -20,11 +20,15 @@ import {
 import {
   canDispatch,
   createInitialConsoleState,
+  diagnosticsSocketLabel,
+  isDuplicateSubmit,
   reduceApplicationMessage,
   reduceControlAck,
+  reduceDiagnosticsSocket,
   reduceInputAck,
   reduceServerMessage,
   reduceSessionFrontier,
+  settleDraftOnAck,
   withBootstrap,
   withConnection,
   withPendingControl,
@@ -48,6 +52,7 @@ import {
 import {
   OperatorBootstrapError,
   requestOperatorBootstrap,
+  runOperatorBootstrap,
 } from '../../src/console/operator-bootstrap'
 import { createPlaybackBinding } from '../../src/console/player-binding'
 import { collectConsoleViolations } from '../conformance/console.conformance'
@@ -3248,5 +3253,122 @@ describe('console performer machine recovery guards', () => {
     expect(receipts).toHaveLength(1)
     expect(receipts[0]).toEqual(receiptFrame?.message.payload)
     machine.dispose('test complete')
+  })
+})
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
+describe('M2 #181 review follow-up (FR-05, NFR-04)', () => {
+  it('reports the diagnostics socket lifecycle and label honestly', () => {
+    expect(reduceDiagnosticsSocket('closed', 'start')).toBe('connecting')
+    expect(reduceDiagnosticsSocket('connecting', 'open')).toBe('open')
+    expect(reduceDiagnosticsSocket('open', 'error')).toBe('error')
+    expect(reduceDiagnosticsSocket('error', 'close')).toBe('closed')
+    expect(diagnosticsSocketLabel(false, 'closed')).toBe('not started')
+    expect(diagnosticsSocketLabel(true, 'connecting')).toBe('connecting')
+  })
+
+  it('settles a draft only for its own submission and never overwrites a newer edit', () => {
+    const pending = { messageId: 'msg-1', text: 'hello' }
+    const accepted = { requestMessageId: 'msg-1', status: 'accepted' as const }
+    const rejected = { requestMessageId: 'msg-1', status: 'rejected' as const }
+    const duplicate = { requestMessageId: 'msg-1', status: 'duplicate' as const }
+
+    expect(settleDraftOnAck('hello', pending, { ...accepted, requestMessageId: 'msg-2' })).toBe('hello')
+    expect(settleDraftOnAck('hello', pending, accepted)).toBe('')
+    expect(settleDraftOnAck('hello!', pending, accepted)).toBe('hello!')
+    expect(settleDraftOnAck('', pending, rejected)).toBe('hello')
+    expect(settleDraftOnAck('hello!', pending, rejected)).toBe('hello!')
+    expect(settleDraftOnAck('hello', pending, duplicate)).toBe('')
+    expect(settleDraftOnAck('hello!', pending, duplicate)).toBe('hello!')
+  })
+
+  it('detects only a still-pending duplicate submission', () => {
+    const pending = { messageId: 'msg-1', text: 'hello world' }
+    expect(isDuplicateSubmit('  hello world  ', pending)).toBe(true)
+    expect(isDuplicateSubmit('hello', pending)).toBe(false)
+    expect(isDuplicateSubmit('hello world', null)).toBe(false)
+  })
+
+  it('runs a current operator bootstrap through pending, submit and success', async () => {
+    const calls: string[] = []
+    await runOperatorBootstrap({
+      requestToken: async () => 'token',
+      isCurrent: () => true,
+      onSubmit: (token) => calls.push(`submit:${token}`),
+      onPending: (pending) => calls.push(`pending:${pending}`),
+      onError: (failure) => calls.push(`error:${failure}`),
+    })
+    expect(calls).toEqual(['pending:true', 'pending:false', 'submit:token'])
+  })
+
+  it('reports a token failure while current after clearing pending', async () => {
+    const calls: string[] = []
+    await runOperatorBootstrap({
+      requestToken: async () => {
+        throw new Error('no token')
+      },
+      isCurrent: () => true,
+      onSubmit: () => calls.push('submit'),
+      onPending: (pending) => calls.push(`pending:${pending}`),
+      onError: (failure) => calls.push(`error:${failure}`),
+    })
+    expect(calls).toEqual(['pending:true', 'pending:false', 'error:token'])
+  })
+
+  it('writes nothing when a token rejection becomes stale', async () => {
+    const gate = deferred<string>()
+    let current = true
+    const calls: string[] = []
+    const run = runOperatorBootstrap({
+      requestToken: () => gate.promise,
+      isCurrent: () => current,
+      onSubmit: () => calls.push('submit'),
+      onPending: (pending) => calls.push(`pending:${pending}`),
+      onError: (failure) => calls.push(`error:${failure}`),
+    })
+    current = false
+    gate.reject(new Error('stale token'))
+    await run
+    expect(calls).toEqual(['pending:true'])
+  })
+
+  it('never submits or clears pending when a token resolves stale', async () => {
+    const gate = deferred<string>()
+    let current = true
+    const calls: string[] = []
+    const run = runOperatorBootstrap({
+      requestToken: () => gate.promise,
+      isCurrent: () => current,
+      onSubmit: () => calls.push('submit'),
+      onPending: (pending) => calls.push(`pending:${pending}`),
+      onError: (failure) => calls.push(`error:${failure}`),
+    })
+    current = false
+    gate.resolve('token')
+    await run
+    expect(calls).toEqual(['pending:true'])
+  })
+
+  it('reports a submit failure while current', async () => {
+    const calls: string[] = []
+    await runOperatorBootstrap({
+      requestToken: async () => 'token',
+      isCurrent: () => true,
+      onSubmit: () => {
+        throw new Error('submit failed')
+      },
+      onPending: (pending) => calls.push(`pending:${pending}`),
+      onError: (failure) => calls.push(`error:${failure}`),
+    })
+    expect(calls).toEqual(['pending:true', 'pending:false', 'error:submit'])
   })
 })
