@@ -9107,14 +9107,14 @@ entries:
     launch_flags: [--agent, build, --format, json, --variant, xhigh]
     sessions: [ses_e010e789affeNUAkBFW70sYaxs]
     supervision: >-
-      The M2 member directed the slice — scope limited to src/console/, the
-      mascot removed, the existing design primitives reused, and the load-time
-      and over-design problems fixed. OpenCode authored the design, fx and
-      pages modules, the ConsoleApp layout rewrite and this entry.
+      The M2 member set the slice: scope limited to src/console/, the mascot
+      removed, the existing design primitives reused, and the load-time and
+      over-design problems fixed. OpenCode authored the design, fx and pages
+      modules, the ConsoleApp layout rewrite and this entry.
     human_review: >-
-      The M2 member reviewed the result and requested this record. Visual
-      sign-off for the #174 rows is requested in #182; a human team member
-      performs the final merge and no agent merged anything.
+      The M2 member reviewed the result. Visual sign-off for the #174 rows is
+      requested in #182; a human team member performs the final merge and no
+      agent merged anything.
     transcript_record: >-
       OpenCode session ses_e010e789affeNUAkBFW70sYaxs is exported to
       ~/Library/Caches/isla-opencode-exports/ outside the checkout.
