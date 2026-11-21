@@ -9113,3 +9113,41 @@ entries:
     scope: >-
       src/evaluation/test-approval-gate.ts and docs/ai-use-log.yaml. No
       console source changed.
+  - date: "2026-11-22"
+    task: M2-174-p1-draft-settlement
+    branch: fix/m2-174-p1-state
+    change: >-
+      Fix two P2 review findings from M1 on PR #181. A rejected input
+      acknowledgement no longer refills a composer the operator deliberately
+      cleared: settleDraftOnAck only clears on an accepted or duplicate ack
+      while the composer still holds the acknowledged text, and never writes
+      on rejection. The legacy transport branch now refuses an identical
+      submission that is still pending and records its draft, so two Enter
+      presses produce one request instead of two. The offline expectation for
+      settleDraftOnAck changes with the rule.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    supervision: >-
+      The M2 member asked for the review findings to be fixed and chose the
+      two-P2 scope. OpenCode made the edits and wrote this entry.
+    human_review: >-
+      The M2 member asked for this fix. M1 requested the changes and is asked
+      to re-review; a human team member performs the final merge and no agent
+      merged anything.
+    transcript_record: >-
+      OpenCode session recorded locally; the branch commits carry the change.
+    verification:
+      base: e32bf1a
+      results: >-
+        pnpm exec tsc -b passed; pnpm test:m2 passed 101 tests in 1 file;
+        pnpm gate:ai-use-log passed. No browser regression was added for the
+        legacy double-Enter case; the offline suite has no DOM harness.
+      independent: >-
+        None; a single operator ran the local checks on this machine.
+    scope: >-
+      src/console/console-state.ts, src/console/ConsoleApp.tsx,
+      test/offline/m2-console.test.ts and docs/ai-use-log.yaml.
