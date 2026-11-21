@@ -1,191 +1,98 @@
 /*
- * Console layout glue only.
+ * Console layout glue — Isla Nightloom cockpit.
  *
- * Every colour, spacing, radius and font value comes from the animal-island-ui
- * design tokens, so the console follows the component library instead of
- * fighting it. Component internals (button, input, select, card, tabs) are not
- * restyled here.
+ * The design system lives in ./design/: tokens, night-sky depth layers,
+ * component primitives and the cockpit shell. This file only imports them
+ * and keeps the console-scoped glue classes the browser fixtures and
+ * acceptance scripts rely on (.console__* and dl.facts, whose component
+ * styles live in design/components.css).
  */
 
-.console {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: var(--animal-spacing-xl) var(--animal-spacing-md) calc(var(--animal-spacing-xl) * 2);
-  display: flex;
-  flex-direction: column;
-  gap: var(--animal-spacing-lg);
-  font-family: var(--animal-font-family);
-  font-size: var(--animal-font-size-base);
-  line-height: var(--animal-line-height-base);
-  color: var(--animal-text-color);
-  text-align: left;
-}
-
-.console__header {
-  display: flex;
-  flex-direction: column;
-  gap: var(--animal-spacing-sm);
-}
-
-.console__subtitle {
-  margin: 0;
-  color: var(--animal-text-color-secondary);
-}
-
-.console__connection {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--animal-spacing-sm);
-}
-
-.console__connection-label {
-  font-size: var(--animal-font-size-sm);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.console__connection-detail {
-  color: var(--animal-text-color-secondary);
-}
-
-.console__stack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--animal-spacing-md);
-}
-
-.console__card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--animal-spacing-sm);
-  margin-bottom: var(--animal-spacing-sm);
-}
-
-.console__form {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--animal-spacing-md);
-  margin-top: var(--animal-spacing-sm);
-}
-
-.console__field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--animal-spacing-xs);
-  width: 100%;
-  max-width: 420px;
-}
-
-.console__label {
-  font-size: var(--animal-font-size-sm);
-  font-weight: 700;
-  color: var(--animal-text-color);
-}
+@import './design/tokens.css';
+@import './design/base.css';
+@import './design/components.css';
+@import './design/layout.css';
 
 .console__actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--animal-spacing-sm);
+  gap: var(--isla-space-sm);
+  margin-bottom: var(--isla-space-sm);
 }
 
-.console__hint {
-  margin: 0;
-  font-size: var(--animal-font-size-sm);
-  color: var(--animal-text-color-secondary);
+.console__actions--check {
+  align-items: flex-start;
+  margin-top: var(--isla-space-sm);
 }
 
-.console__alert {
-  margin: var(--animal-spacing-sm) 0 0;
-  padding: var(--animal-spacing-sm) var(--animal-spacing-md);
-  border-radius: var(--animal-border-radius-sm);
-  background: var(--animal-bg-color-secondary);
-  color: var(--animal-error-color);
+.console__actions--big .isla-btn {
+  padding: 10px 26px;
+  font-size: var(--isla-fs-lg);
 }
 
-.console__list {
-  list-style: none;
-  margin: var(--animal-spacing-sm) 0 0;
-  padding: 0;
+.console__form {
   display: flex;
   flex-direction: column;
-  gap: var(--animal-spacing-xs);
+  align-items: stretch;
+  gap: var(--isla-space-md);
+  margin: var(--isla-space-xs) 0 var(--isla-space-sm);
 }
 
-.console__list-item {
+.console__field {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--animal-spacing-sm);
-  padding: var(--animal-spacing-sm) var(--animal-spacing-md);
-  border-radius: var(--animal-border-radius-sm);
-  border: var(--animal-border-width) solid transparent;
-  background: var(--animal-bg-color-secondary);
-}
-
-/* An in-flight request is visibly provisional, never reported as settled. */
-.console__list-item--pending {
-  border-color: var(--animal-focus-yellow);
-}
-
-.console__list-text {
-  flex: 1 1 180px;
+  flex-direction: column;
+  gap: var(--isla-space-xs);
+  width: 100%;
   min-width: 0;
-  overflow-wrap: anywhere;
 }
 
-.console__list-meta {
-  font-size: var(--animal-font-size-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--animal-text-color-secondary);
+.console__label {
+  font-size: var(--isla-fs-xs);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: var(--isla-track-caps);
+  color: var(--isla-muted);
 }
 
-.console__list-detail {
-  flex-basis: 100%;
-  font-size: var(--animal-font-size-sm);
-  color: var(--animal-text-color-secondary);
-  overflow-wrap: anywhere;
+.console__events {
+  margin-top: var(--isla-space-sm);
 }
 
 .console__footnote {
   margin: 0;
-  font-size: var(--animal-font-size-sm);
-  color: var(--animal-text-color-secondary);
+  font-size: var(--isla-fs-sm);
+  color: var(--isla-muted);
+  text-align: center;
 }
 
-.facts {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: var(--animal-spacing-xs) var(--animal-spacing-md);
-  margin: 0;
+/* Fixture-driven demo helper markup (test/browser/console.tsx). */
+
+.console__batch-helper {
+  padding: 8px 18px;
+  border: var(--isla-border-hairline) solid rgba(255, 212, 107, 0.55);
+  border-radius: var(--isla-radius-pill);
+  background: var(--isla-yellow-soft);
+  color: var(--isla-yellow);
+  font-family: var(--isla-font);
+  font-size: var(--isla-fs-md);
+  font-weight: 700;
+  box-shadow: 0 0 14px var(--isla-yellow-glow);
 }
 
-.facts dt {
-  color: var(--animal-text-color-secondary);
+.console__batch-helper:hover {
+  transform: translateY(-1px);
 }
 
-.facts dd {
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
+/* The stage box: a real 16:9 live window. */
+.console__stagebox {
+  flex: none;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  min-height: 0;
+  max-height: 620px;
 }
 
-@media (max-width: 768px) {
-  .console {
-    padding: var(--animal-spacing-lg) var(--animal-spacing-sm) var(--animal-spacing-xl);
-  }
-
-  .facts {
-    grid-template-columns: 1fr;
-    gap: var(--animal-spacing-xs);
-  }
-
-  .facts dd {
-    margin-bottom: var(--animal-spacing-xs);
-  }
+.console__stagewall .console__stagebox {
+  flex: none;
 }

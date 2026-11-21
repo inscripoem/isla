@@ -1,0 +1,522 @@
+/*
+ * Isla Nightloom console — cockpit shell layout.
+ *
+ * The console is a single-screen streaming cockpit, not a scrolling
+ * document: a slim HUD header, then a deck that pairs the always-on
+ * stage wall with the operator panel column. Under 1100px the deck
+ * stacks and the whole page scrolls naturally.
+ *
+ * Acceptance hooks preserved: .console__header (with .console__hint and
+ * .console__connection-detail), .console__connection-label, main.console.
+ */
+
+/* --------------------------------------------------------------- *
+ * Shell: full-viewport cockpit.
+ * --------------------------------------------------------------- */
+
+.console {
+  --console-gutter: clamp(10px, 2vw, 24px);
+  height: auto;
+  min-height: 100dvh;
+  max-width: none;
+  margin: 0 auto;
+  padding: var(--isla-space-sm) var(--console-gutter) var(--isla-space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--isla-space-md);
+  font-family: var(--isla-font);
+  font-size: var(--isla-fs-base);
+  line-height: var(--isla-lh);
+  color: var(--isla-ink);
+  text-align: left;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* --------------------------------------------------------------- *
+ * HUD header: glass capsule bar with the gradient brand.
+ * --------------------------------------------------------------- */
+
+.console__header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--isla-space-sm) var(--isla-space-lg);
+  padding: var(--isla-space-sm) var(--isla-space-lg);
+  background: var(--isla-glass);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
+  border: var(--isla-border-hairline) solid var(--isla-line);
+  border-radius: var(--isla-radius-lg);
+  box-shadow: var(--isla-shadow-ambient), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  min-width: 0;
+  flex: none;
+}
+
+/* Gradient hairline across the top edge. */
+.console__header::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 10%;
+  right: 10%;
+  height: 1.5px;
+  background: var(--isla-glow-line);
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.isla-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--isla-space-sm);
+  min-width: 0;
+}
+
+.isla-brand__mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--isla-yellow);
+}
+
+.isla-brand__text {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: var(--isla-fs-display);
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
+  /* Gradient display type: sky -> pink -> cream. */
+  background: linear-gradient(100deg, var(--isla-sky) 0%, var(--isla-pink) 55%, var(--isla-yellow) 110%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.isla-brand__text em {
+  font-style: normal;
+  opacity: 0.55;
+}
+
+.isla-brand__sub {
+  display: block;
+  font-size: var(--isla-fs-xs);
+  font-weight: 700;
+  letter-spacing: var(--isla-track-caps);
+  text-transform: uppercase;
+  color: var(--isla-muted);
+}
+
+/* Connection pill: glowing dot + status word. */
+.isla-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  border: var(--isla-border-hairline) solid var(--live-line, var(--isla-line));
+  border-radius: var(--isla-radius-pill);
+  background: var(--live-bg, var(--isla-sky-soft));
+  color: var(--live-fg, var(--isla-sky));
+  font-size: var(--isla-fs-sm);
+  font-weight: 800;
+  letter-spacing: var(--isla-track-caps);
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: 0 0 14px var(--live-glow, transparent);
+  transition: background-color var(--isla-dur-base) var(--isla-ease-out), color var(--isla-dur-base) var(--isla-ease-out);
+}
+
+.isla-live__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  animation: isla-live-blink 1.4s var(--isla-ease-in-out) infinite;
+}
+
+@keyframes isla-live-blink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.8); }
+}
+
+.isla-live--open { --live-bg: var(--isla-sky-soft); --live-fg: var(--isla-sky); --live-line: rgba(90, 168, 240, 0.5); --live-glow: var(--isla-sky-glow); }
+.isla-live--connecting { --live-bg: var(--isla-yellow-soft); --live-fg: var(--isla-yellow); --live-line: rgba(255, 212, 107, 0.5); --live-glow: var(--isla-yellow-glow); }
+.isla-live--closed { --live-bg: var(--isla-orange-soft); --live-fg: var(--isla-orange); --live-line: rgba(255, 161, 89, 0.5); --live-glow: rgba(255, 161, 89, 0.4); }
+.isla-live--error { --live-bg: var(--isla-red-soft); --live-fg: var(--isla-red); --live-line: rgba(255, 107, 129, 0.5); --live-glow: rgba(255, 107, 129, 0.4); }
+.isla-live--connecting .isla-live__dot,
+.isla-live--closed .isla-live__dot,
+.isla-live--error .isla-live__dot {
+  animation: none;
+}
+
+.isla-header__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--isla-space-xs);
+  margin-left: auto;
+}
+
+.console__connection {
+  display: inline-flex;
+  align-items: center;
+}
+
+.console__connection-detail {
+  flex-basis: 100%;
+  font-family: var(--isla-font-mono);
+  font-size: var(--isla-fs-xs);
+  color: var(--isla-muted);
+  overflow-wrap: anywhere;
+}
+
+.console__header .console__hint {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--isla-fs-sm);
+  color: var(--isla-red);
+  overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------------- *
+ * Deck: stage wall + operator panel column.
+ * --------------------------------------------------------------- */
+
+.console__deck {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+  gap: var(--isla-space-md);
+  align-items: start;
+  min-height: 0;
+}
+
+/* Cinema mode: the stage keeps the light, the chrome dims (player toggle). */
+.console__deck.is-cinema .console__panels {
+  opacity: 0.12;
+  filter: blur(3px) saturate(0.5);
+  pointer-events: none;
+  transition: opacity var(--isla-dur-slow) var(--isla-ease-out), filter var(--isla-dur-slow) var(--isla-ease-out);
+}
+
+.console__deck.is-cinema .console__stagestrip {
+  opacity: 0.35;
+  transition: opacity var(--isla-dur-slow) var(--isla-ease-out);
+}
+
+@media (max-width: 1100px) {
+  .console {
+    height: auto;
+    min-height: 100dvh;
+  }
+
+  .console__deck {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* --------------------------------------------------------------- *
+ * Stage wall: the always-on performance column.
+ * --------------------------------------------------------------- */
+
+.console__stagewall {
+  display: flex;
+  flex-direction: column;
+  gap: var(--isla-space-md);
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The pipeline runs as a single compact row above the stage. */
+.console__piperow {
+  border: var(--isla-border-hairline) solid var(--isla-line);
+  border-radius: var(--isla-radius-md);
+  background: var(--isla-surface-dim);
+  padding: var(--isla-space-xs) var(--isla-space-md);
+}
+
+.console__piperow .isla-pipe-node {
+  flex: 1 1 0;
+  min-width: 44px;
+}
+
+.console__piperow .isla-pipe__bullet {
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
+}
+
+.console__piperow .isla-pipe__label {
+  font-size: 9px;
+}
+
+.console__piperow .isla-pipe-node::before {
+  top: 13px;
+}
+
+/* Status window: one rotating message, expandable to the exact records. */
+.console__statuswin {
+  border: var(--isla-border-hairline) solid var(--isla-line);
+  border-radius: var(--isla-radius-md);
+  background: var(--isla-surface-dim);
+  padding: var(--isla-space-sm) var(--isla-space-md);
+  overflow: hidden;
+}
+
+.console__statuswin-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--isla-space-sm);
+  width: 100%;
+  padding: 10px var(--isla-space-md);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.console__statuswin-msg {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--isla-space-md);
+  min-width: 0;
+  flex: 1;
+}
+
+.console__statuswin-tick {
+  font-size: var(--isla-fs-md);
+  font-weight: 700;
+  color: var(--isla-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: isla-status-tick var(--isla-dur-slow) var(--isla-ease-out);
+}
+
+@keyframes isla-status-tick {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.console__statuswin-dots {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.console__statuswin-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--isla-line);
+  transition: background-color var(--isla-dur-fast) var(--isla-ease-out);
+}
+
+.console__statuswin-dot.is-here {
+  background: var(--isla-pink);
+  box-shadow: 0 0 8px var(--isla-pink-glow);
+}
+
+.console__statuswin-bar .isla-collapse__chevron {
+  margin-left: auto;
+  border-color: var(--isla-muted);
+}
+
+.console__statuswin-detail {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--isla-dur-slow) var(--isla-ease-out);
+}
+
+.console__statuswin-detail.is-open {
+  grid-template-rows: 1fr;
+}
+
+.console__statuswin-inner {
+  overflow: hidden;
+  min-height: 0;
+  padding: 0 var(--isla-space-md);
+}
+
+.console__statuswin-detail.is-open .console__statuswin-inner {
+  padding-bottom: var(--isla-space-sm);
+}
+
+.console__stagebox {
+  flex: 1 1 auto;
+  min-height: 280px;
+}
+
+
+/* --------------------------------------------------------------- *
+ * Panel column: the operator surfaces, scrolling inside the cockpit.
+ * --------------------------------------------------------------- */
+
+.console__panels {
+  display: flex;
+  flex-direction: column;
+  gap: var(--isla-space-md);
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Glass panels carry overflow:hidden, so without this they would shrink
+ * into the scroll container instead of scrolling. */
+.console__panels > * {
+  flex: none;
+}
+
+.console__stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--isla-space-md);
+  min-width: 0;
+}
+
+/* --------------------------------------------------------------- *
+ * Page/section transitions + entrance stagger.
+ * --------------------------------------------------------------- */
+
+.console__page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--isla-space-md);
+  min-width: 0;
+  animation: isla-page-in var(--isla-dur-page) var(--isla-ease-out);
+}
+
+@keyframes isla-page-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.isla-rise {
+  animation: isla-rise-in var(--isla-dur-enter) var(--isla-ease-out) both;
+  animation-delay: calc(var(--i, 0) * 80ms);
+}
+
+.isla-rise--focus {
+  animation-name: isla-rise-focus;
+}
+
+@keyframes isla-rise-in {
+  from { opacity: 0; transform: translateY(22px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes isla-rise-focus {
+  from { opacity: 0; transform: translateY(22px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Stagger indices across a section stack. */
+.console__stack > :nth-child(1) { --i: 0; }
+.console__stack > :nth-child(2) { --i: 1; }
+.console__stack > :nth-child(3) { --i: 2; }
+.console__stack > :nth-child(4) { --i: 3; }
+.console__stack > :nth-child(5) { --i: 4; }
+.console__stack > .isla-grid-2 > :nth-child(1) { --i: 0; }
+.console__stack > .isla-grid-2 > :nth-child(2) { --i: 1; }
+
+.isla-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(460px, 100%), 1fr));
+  gap: var(--isla-space-md);
+  min-width: 0;
+}
+
+/* --------------------------------------------------------------- *
+ * Responsive voice.
+ * --------------------------------------------------------------- */
+
+@media (max-width: 560px) {
+  .console {
+    padding: var(--isla-space-sm) var(--isla-space-sm) var(--isla-space-lg);
+  }
+
+  .isla-brand__text {
+    font-size: var(--isla-fs-2xl);
+    white-space: normal;
+    flex-wrap: wrap;
+  }
+
+  .isla-brand {
+    flex-wrap: wrap;
+  }
+
+  .isla-brand__sub {
+    flex-basis: 100%;
+    white-space: normal;
+  }
+
+  .isla-live {
+    padding: 5px 12px;
+  }
+
+  .console__stagebox {
+    min-height: 240px;
+  }
+}
+
+
+/* Live-room label chips carry the particle dot inline. */
+.isla-pipe__label,
+.isla-stage__state {
+  display: inline-flex;
+  align-items: center;
+}
+
+@media (max-width: 560px) {
+  .isla-brand__face--kanban .isla-kanban {
+    transform: scale(0.62);
+    transform-origin: center;
+  }
+
+  .isla-brand__studio {
+    font-size: var(--isla-fs-2xl);
+  }
+}
+
+
+/* --------------------------------------------------------------- *
+ * Brand band: the Isla Studio lockup floats in the blank sky strip
+ * at the very top of the page — above the HUD header, not inside it.
+ * --------------------------------------------------------------- */
+
+.console__brandband {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--isla-space-xs);
+}
+
+/* The signature board spans the whole row; its height follows the
+ * drawing's aspect so the strokes always reach edge to edge. */
+.console__brandband .isla-brand__flip {
+  width: 100%;
+  /* Override the base flip height; the drawing centers itself inside. */
+  height: clamp(150px, 15.5vw, 200px);
+}
+
+/* The cast spreads across the full-width board on the flip side. */
+.console__brandband .isla-brand__face--kanban {
+  justify-content: space-evenly;
+  gap: 0;
+}
+
+@media (max-width: 560px) {
+  /* Below the stroke ratio, letterbox instead of shrinking to a sliver. */
+  .console__brandband .isla-brand__flip {
+    aspect-ratio: auto;
+    height: clamp(72px, 22vw, 104px);
+  }
+
+  .console__brandband .isla-brand__face--kanban {
+    gap: clamp(8px, 3vw, 24px);
+  }
+}

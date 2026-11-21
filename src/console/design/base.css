@@ -1,0 +1,226 @@
+/*
+ * Global console chrome — the Nightloom sky, selection, scrollbar, focus,
+ * custom cursor and reduced-motion handling.
+ *
+ * The fixed background (behind everything) is deliberately cheap to paint:
+ *   1. night wash — static layered gradients
+ *   2. star field — two dot scales, one slow opacity twinkle
+ *   3. aurora — two blurred bands, transform-only pointer parallax
+ *   4. sakura petal canvas (fx/petals.tsx mounts its own fixed canvas)
+ * No animated blur filters, no hue-rotate loops, no extra canvas layers.
+ */
+
+body {
+  background: var(--isla-page);
+  color: var(--isla-ink);
+  font-family: var(--isla-font);
+}
+
+.isla-depth {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.isla-depth__wash {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(820px 560px at 12% -8%, rgba(64, 96, 190, 0.3), transparent 70%),
+    radial-gradient(760px 540px at 92% 2%, rgba(200, 70, 140, 0.2), transparent 72%),
+    radial-gradient(900px 640px at 55% 116%, rgba(120, 80, 200, 0.18), transparent 74%),
+    linear-gradient(180deg, #10142a 0%, #131033 48%, var(--isla-page-deep) 100%);
+}
+
+/* Star field: two dot scales, twinkling at a slow shared rate. */
+.isla-depth__stars {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.85) 1px, transparent 1.4px),
+    radial-gradient(circle, rgba(255, 255, 255, 0.5) 0.7px, transparent 1.1px);
+  background-size: 220px 190px, 120px 130px;
+  background-position: 20px 30px, 70px 10px;
+  animation: isla-star-twinkle 9s var(--isla-ease-in-out) infinite;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.7) 55%, rgba(0, 0, 0, 0.3) 100%);
+  mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.7) 55%, rgba(0, 0, 0, 0.3) 100%);
+}
+
+@keyframes isla-star-twinkle {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 0.5; }
+}
+
+/* Aurora: two blurred bands. The parallax is a transform on the wrapper,
+ * so the blurred bands themselves are never repainted on pointer move. */
+.isla-depth__aurora {
+  position: absolute;
+  inset: -10%;
+  transform: translate3d(calc(var(--isla-mx) * -18px), calc(var(--isla-my) * -12px), 0);
+  transition: transform 900ms var(--isla-ease-out);
+}
+
+.isla-depth__ribbon {
+  position: absolute;
+  height: 200px;
+  width: 130%;
+  border-radius: 999px;
+  filter: blur(64px);
+  opacity: 0.26;
+}
+
+.isla-depth__ribbon--sky {
+  top: 6%;
+  left: -18%;
+  background: linear-gradient(100deg, transparent, rgba(90, 168, 240, 0.5) 35%, rgba(120, 90, 240, 0.35) 65%, transparent 88%);
+}
+
+.isla-depth__ribbon--pink {
+  bottom: 8%;
+  right: -24%;
+  background: linear-gradient(80deg, transparent, rgba(255, 123, 184, 0.4) 42%, rgba(255, 212, 107, 0.22) 70%, transparent 92%);
+}
+
+/* --------------------------------------------------------------- *
+ * Sakura petal canvas (fx/petals.tsx). Fixed above the background
+ * but below the content.
+ * --------------------------------------------------------------- */
+
+.isla-petal-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.console {
+  /* The cockpit sits above the petal canvas. */
+  position: relative;
+  z-index: 1;
+}
+
+/* --------------------------------------------------------------- *
+ * Selection, scrollbar, focus
+ * --------------------------------------------------------------- */
+
+.console ::selection {
+  background: rgba(255, 123, 184, 0.55);
+  color: #fff;
+}
+
+.console :focus-visible {
+  outline: 2px solid var(--isla-sky);
+  outline-offset: 2px;
+  border-radius: var(--isla-radius-xs);
+}
+
+.console * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--isla-sky) transparent;
+}
+
+.console ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.console ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.console ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--isla-sky), var(--isla-pink));
+  border-radius: var(--isla-radius-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* --------------------------------------------------------------- *
+ * Custom cursor (fx/cursor.tsx): a precise dot and a soft trailing
+ * ring that morphs over interactive targets. Fine pointers only.
+ * --------------------------------------------------------------- */
+
+body.isla-cursor-active,
+body.isla-cursor-active * {
+  cursor: none !important;
+}
+
+.isla-cursor {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9999;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.isla-cursor__dot {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+  will-change: transform;
+}
+
+.isla-cursor__ring {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px;
+  border-radius: 50%;
+  border: 1.5px solid var(--isla-pink);
+  background: rgba(255, 123, 184, 0.06);
+  transition: width var(--isla-dur-fast) var(--isla-ease-out), height var(--isla-dur-fast) var(--isla-ease-out),
+    margin var(--isla-dur-fast) var(--isla-ease-out), background-color var(--isla-dur-fast) var(--isla-ease-out),
+    border-color var(--isla-dur-fast) var(--isla-ease-out);
+}
+
+.isla-cursor--press .isla-cursor__ring {
+  width: 20px;
+  height: 20px;
+  margin: -10px 0 0 -10px;
+  border-color: #fff;
+}
+
+.isla-cursor--link .isla-cursor__ring {
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  background: rgba(90, 168, 240, 0.12);
+  border-color: var(--isla-sky);
+}
+
+.isla-cursor--text .isla-cursor__ring {
+  width: 3px;
+  height: 28px;
+  margin: -14px 0 0 -1.5px;
+  border-radius: var(--isla-radius-xs);
+  border-color: var(--isla-sky);
+  background: rgba(255, 255, 255, 0.65);
+}
+
+/* --------------------------------------------------------------- *
+ * Reduced motion: every animation and smooth transition collapses;
+ * state changes stay legible without any motion.
+ * --------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .console *,
+  .console *::before,
+  .console *::after,
+  .isla-depth * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
