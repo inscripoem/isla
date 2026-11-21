@@ -9166,3 +9166,33 @@ entries:
     scope: >-
       src/evaluation/test-approval-gate.ts and docs/ai-use-log.yaml. No
       console source changed.
+
+  - date: "2026-11-22"
+    task: M2-VIS-V2-DANMAKU
+    branch: feat/m2-console-nightloom-v2
+    change: >-
+      Each stage danmaku comment now drifts across the stage once instead of
+      looping. A one-line CSS change: the drift animation runs a single
+      iteration and keeps its end position.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    supervision: >-
+      The M2 member reported that the local-audience danmaku repeats and asked
+      for a single pass. OpenCode made the edit and wrote this entry.
+    human_review: >-
+      The M2 member asked for this change. A human team member performs the
+      final merge and no agent merged anything.
+    transcript_record: >-
+      OpenCode session recorded locally; the branch commits carry the change.
+    verification:
+      base: e32bf1a
+      results: >-
+        pnpm test:m2 passed; the change is CSS-only and no TypeScript changed.
+      independent: >-
+        None; a single operator ran the local checks on this machine.
+    scope: >-
+      src/console/design/components.css and docs/ai-use-log.yaml.

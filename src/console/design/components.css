@@ -1327,7 +1327,7 @@
   border: var(--isla-border-hairline) solid var(--isla-line-soft);
   border-radius: var(--isla-radius-pill);
   padding: 3px 12px;
-  animation: isla-danmaku-drift var(--drift, 11s) linear infinite;
+  animation: isla-danmaku-drift var(--drift, 11s) linear 1 forwards;
   animation-delay: var(--drift-delay, 0s);
 }
 
