@@ -636,9 +636,13 @@ export function ConsoleApp({
       pendingDraftRef.current = { messageId: message.messageId, text: rawDraft }
       return
     }
+    if (isDuplicateSubmit(text, pendingDraftRef.current)) return
+    pendingDraftRef.current = { messageId: message.messageId, text: rawDraft }
     setState((previous) => withPendingInput(previous, message))
     try {
       const ack = await transport.sendInput(message)
+      const pending = pendingDraftRef.current
+      if (pending !== null && pending.messageId === message.messageId) pendingDraftRef.current = null
       setState((previous) => reduceInputAck(previous, ack))
       if (ack.status === 'rejected') {
         notificationOpen({
@@ -647,7 +651,6 @@ export function ConsoleApp({
           description: `${ack.code}: ${ack.message}`,
           duration: 4,
         })
-        restoreDraft()
       } else {
         setDraft((composer) => (composer === rawDraft ? '' : composer))
         notificationOpen({
@@ -660,6 +663,8 @@ export function ConsoleApp({
     } catch (error) {
       setState((previous) => withInputFailure(previous, message.messageId, identify(error)))
       notificationOpen({ type: 'error', message: 'Input dispatch failed', description: identify(error) })
+      const pending = pendingDraftRef.current
+      if (pending !== null && pending.messageId === message.messageId) pendingDraftRef.current = null
       restoreDraft()
     }
   }, [draft, nextId, source])

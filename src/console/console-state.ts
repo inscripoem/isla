@@ -300,10 +300,10 @@ export interface PendingDraft {
 
 /**
  * The honesty rule for draft settlement: one acknowledgement settles only its
- * own submission, and a newer edit is never overwritten. A mismatched ack
- * leaves the composer untouched; an accepted or duplicate ack clears the draft
- * only while it still holds the acknowledged text; a rejected ack restores that
- * text only into an empty composer.
+ * own submission; a newer edit is never overwritten; an accepted or duplicate
+ * ack clears the draft only while it still holds the acknowledged text; a
+ * rejected ack leaves the composer exactly as the operator left it, so a
+ * deliberate clear stays cleared.
  */
 export function settleDraftOnAck(
   composer: string,
@@ -314,7 +314,6 @@ export function settleDraftOnAck(
   if (ack.status === 'accepted' || ack.status === 'duplicate') {
     return composer === pending.text ? '' : composer
   }
-  if (ack.status === 'rejected') return composer === '' ? pending.text : composer
   return composer
 }
 

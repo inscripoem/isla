@@ -3285,7 +3285,8 @@ describe('M2 #181 review follow-up (FR-05, NFR-04)', () => {
     expect(settleDraftOnAck('hello', pending, { ...accepted, requestMessageId: 'msg-2' })).toBe('hello')
     expect(settleDraftOnAck('hello', pending, accepted)).toBe('')
     expect(settleDraftOnAck('hello!', pending, accepted)).toBe('hello!')
-    expect(settleDraftOnAck('', pending, rejected)).toBe('hello')
+    // an empty composer is a deliberate clear and a rejection must not refill it
+    expect(settleDraftOnAck('', pending, rejected)).toBe('')
     expect(settleDraftOnAck('hello!', pending, rejected)).toBe('hello!')
     expect(settleDraftOnAck('hello', pending, duplicate)).toBe('')
     expect(settleDraftOnAck('hello!', pending, duplicate)).toBe('hello!')
