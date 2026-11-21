@@ -9151,3 +9151,36 @@ entries:
     scope: >-
       src/console/console-state.ts, src/console/ConsoleApp.tsx,
       test/offline/m2-console.test.ts and docs/ai-use-log.yaml.
+  - date: "2026-11-22"
+    task: M2-174-p1-recovery-ack
+    branch: fix/m2-174-p1-state
+    change: >-
+      The recovery acknowledgement in the console is offered for any connected
+      current session whose machine has not been disposed, so the fixture demo
+      can be acknowledged. Sending a recovery request still requires an
+      attached performer, operator authority, the acknowledgement and no
+      pending request.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    supervision: >-
+      The M2 member reported the dead checkbox and asked for the acknowledgement
+      to work. OpenCode made the edits and wrote this entry.
+    human_review: >-
+      The M2 member asked for this change. M1 requested changes on this branch
+      and is asked to re-review; a human team member performs the final merge.
+    transcript_record: >-
+      OpenCode session recorded locally; the branch commits carry the change.
+    verification:
+      base: e32bf1a
+      results: >-
+        pnpm exec tsc -b passed; pnpm test:m2 passed; isolated check that the
+        fixture demo enables the acknowledgement checkbox.
+      independent: >-
+        None; a single operator ran the local checks on this machine.
+    scope: >-
+      src/console/recovery-control.ts, test/offline/m2-console.test.ts and
+      docs/ai-use-log.yaml.

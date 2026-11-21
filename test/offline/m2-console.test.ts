@@ -3155,22 +3155,25 @@ describe('console recovery eligibility', () => {
       available: false,
       requestable: false,
     })
+  })
+
+  it('offers the acknowledgement without a machine or performer/operator authority', () => {
     expect(recoveryControlView({ ...connected, machine: null })).toEqual({
-      available: false,
+      available: true,
+      requestable: false,
+    })
+    expect(recoveryControlView({ ...connected, machine: { ...connectedMachine, performer: false } })).toEqual({
+      available: true,
+      requestable: false,
+    })
+    expect(recoveryControlView({ ...connected, machine: { ...connectedMachine, operator: false } })).toEqual({
+      available: true,
       requestable: false,
     })
   })
 
-  it('withdraws both controls after disposal or without performer/operator authority', () => {
+  it('withdraws both controls after disposal', () => {
     expect(recoveryControlView({ ...connected, machine: { ...connectedMachine, disposed: true } })).toEqual({
-      available: false,
-      requestable: false,
-    })
-    expect(recoveryControlView({ ...connected, machine: { ...connectedMachine, performer: false } })).toEqual({
-      available: false,
-      requestable: false,
-    })
-    expect(recoveryControlView({ ...connected, machine: { ...connectedMachine, operator: false } })).toEqual({
       available: false,
       requestable: false,
     })
