@@ -9079,3 +9079,37 @@ entries:
       src/console/ConsoleApp.tsx, src/console/console-state.ts,
       src/console/operator-bootstrap.ts, src/console/console.css and
       docs/ai-use-log.yaml only.
+  - date: "2026-11-22"
+    task: M2-174-p1-g1-waiver
+    branch: fix/m2-174-p1-state
+    change: >-
+      Extend the time-boxed G1 waiver to pull request 181, the M2 state
+      completeness fix for the #174 P1 rows, so its pull-request event uses
+      the label/advise rule through the existing 2026-11-27 window. A waiver
+      is a recorded exception, not evidence; the G1 step still prints which
+      rule it used.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    supervision: >-
+      The M2 member chose this route after the G1 scope-miss was reported.
+      OpenCode made the edit and wrote this entry.
+    human_review: >-
+      The M2 member approved adding 181 to the waiver list. A human team
+      member performs the final merge and no agent merged anything.
+    transcript_record: >-
+      OpenCode session recorded locally; the branch commits carry the change.
+    verification:
+      base: e32bf1a
+      results: >-
+        pnpm gate:test-approval auto with GITHUB_EVENT_NAME=pull_request and
+        PR_NUMBER=181 prints the waiver rule and exits 0; pnpm test:m2 and
+        pnpm gate:ai-use-log pass.
+      independent: >-
+        None; a single operator ran the local checks on this machine.
+    scope: >-
+      src/evaluation/test-approval-gate.ts and docs/ai-use-log.yaml. No
+      console source changed.
