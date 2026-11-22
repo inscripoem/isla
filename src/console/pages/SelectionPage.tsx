@@ -54,35 +54,63 @@ export function PipelineStepper({ stage }: { readonly stage: WaitingStage }) {
 export function SelectionSection({ selection }: { readonly selection: SelectionView }) {
   const plan = selection.plan
 
-  const selectionRows: readonly (readonly [string, ReactNode])[] = [
-    ['Waiting stage', <FactChip key="ws" value={selection.stage} />],
-    ['Plan disposition', <FactChip key="pd" value={plan === null ? 'none' : plan.disposition} />],
-    ['Selected event ids', <FactChip key="se" value={plan === null ? 'none' : plan.selectedEventIds.join(', ') || 'none'} />],
-    ['Reply intent', <FactChip key="ri" value={plan === null ? 'none' : (plan.replyIntent ?? 'none')} />],
-    ['Plan reason code', <FactChip key="pr" value={plan === null ? 'none' : plan.reasonCode} />],
-    ['Plan synthetic', <FactChip key="ps" value={plan === null ? 'unknown' : plan.synthetic ? 'yes' : 'no'} />],
-    ['Turn reply intent', <FactChip key="tr" value={selection.replyIntent === null ? 'none' : selection.replyIntent.replyIntent} />],
-    [
-      'Turn id',
-      <FactChip key="ti" value={selection.replyIntent === null ? 'none' : selection.replyIntent.turnId === null ? 'not reported' : selection.replyIntent.turnId} />,
-    ],
-    [
-      'Delivery classification',
-      <FactChip key="dc" value={selection.serverDelivery === null ? 'none' : selection.serverDelivery.classification} />,
-    ],
-    [
-      'Delivery output',
-      <FactChip key="do" value={selection.serverDelivery === null ? 'none' : selection.serverDelivery.outputId === null ? 'not reported' : selection.serverDelivery.outputId} />,
-    ],
-    [
-      'Delivery turn',
-      <FactChip key="dt" value={selection.serverDelivery === null ? 'none' : selection.serverDelivery.turnId === null ? 'not reported' : selection.serverDelivery.turnId} />,
-    ],
-    [
-      'Delivery segment',
-      <FactChip key="ds" value={selection.serverDelivery === null ? 'none' : selection.serverDelivery.segmentId === null ? 'not reported' : selection.serverDelivery.segmentId} />,
-    ],
+  type SelectionFact = {
+    readonly label: string
+    readonly value: string
+    readonly tone?: 'ok' | 'bad' | 'plain'
+    readonly noneNeutral?: boolean
+  }
+  // Raw values live beside the chips so the records modal and its search can
+  // use the reported strings instead of a React element.
+  const selectionFacts: readonly SelectionFact[] = [
+    { label: 'Waiting stage', value: selection.stage },
+    { label: 'Plan disposition', value: plan === null ? 'none' : plan.disposition, noneNeutral: true },
+    { label: 'Selected event ids', value: plan === null ? 'none' : plan.selectedEventIds.join(', ') || 'none', noneNeutral: true },
+    { label: 'Reply intent', value: plan === null ? 'none' : (plan.replyIntent ?? 'none'), noneNeutral: true },
+    { label: 'Plan reason code', value: plan === null ? 'none' : plan.reasonCode, noneNeutral: true },
+    {
+      label: 'Plan synthetic',
+      value: plan === null ? 'unknown' : plan.synthetic ? 'yes' : 'no',
+      // A synthetic plan is an M5 fallback: 'yes' warns, 'no' is the normal case.
+      tone: plan === null || !plan.synthetic ? 'plain' : 'bad',
+    },
+    {
+      label: 'Turn reply intent',
+      value: selection.replyIntent === null ? 'none' : selection.replyIntent.replyIntent,
+      noneNeutral: true,
+    },
+    {
+      label: 'Turn id',
+      value: selection.replyIntent === null ? 'none' : selection.replyIntent.turnId === null ? 'not reported' : selection.replyIntent.turnId,
+      noneNeutral: true,
+    },
+    {
+      label: 'Delivery classification',
+      value: selection.serverDelivery === null ? 'none' : selection.serverDelivery.classification,
+      noneNeutral: true,
+    },
+    {
+      label: 'Delivery output',
+      value: selection.serverDelivery === null ? 'none' : selection.serverDelivery.outputId === null ? 'not reported' : selection.serverDelivery.outputId,
+      noneNeutral: true,
+    },
+    {
+      label: 'Delivery turn',
+      value: selection.serverDelivery === null ? 'none' : selection.serverDelivery.turnId === null ? 'not reported' : selection.serverDelivery.turnId,
+      noneNeutral: true,
+    },
+    {
+      label: 'Delivery segment',
+      value: selection.serverDelivery === null ? 'none' : selection.serverDelivery.segmentId === null ? 'not reported' : selection.serverDelivery.segmentId,
+      noneNeutral: true,
+    },
   ]
+  const selectionRows: readonly (readonly [string, ReactNode])[] = selectionFacts.map(
+    (fact): readonly [string, ReactNode] => [
+      fact.label,
+      <FactChip key={fact.label} value={fact.value} tone={fact.tone} noneNeutral={fact.noneNeutral} />,
+    ],
+  )
 
   return (
     <Card
@@ -98,11 +126,11 @@ export function SelectionSection({ selection }: { readonly selection: SelectionV
         onClick={() =>
           showRecords(
             'Plan and Delivery Facts — all records',
-            selectionRows.map((entry) => ({
-              glyph: (entry[0].startsWith('Delivery') ? 'package' : 'route') as GlyphName,
-              title: entry[0],
-              meta: typeof entry[1] === 'string' ? entry[1] : '',
-              type: entry[0].startsWith('Delivery') ? 'Delivery' : 'Plan',
+            selectionFacts.map((fact) => ({
+              glyph: (fact.label.startsWith('Delivery') ? 'package' : 'route') as GlyphName,
+              title: fact.label,
+              meta: fact.value,
+              type: fact.label.startsWith('Delivery') ? 'Delivery' : 'Plan',
             })),
           )
         }

@@ -904,14 +904,25 @@ const FACT_HIDDEN = new Set(['true', 'false', 'none'])
  * cross / neutral particle plus the value. Protocol words the browser
  * acceptance reads verbatim stay exactly as reported; true/false/none
  * collapse into the icon with the raw word kept for assistive tech and
- * the conformance scripts.
+ * the conformance scripts. `tone` overrides the word sets when a value's
+ * polarity is not the generic one (for example a synthetic plan is a
+ * fallback, not a success), and `noneNeutral` keeps `none` readable as a
+ * neutral state instead of hiding it behind a red cross.
  */
-export function FactChip({ value }: { readonly value: string }) {
-  const hidden = FACT_HIDDEN.has(value)
+export function FactChip({
+  value,
+  tone,
+  noneNeutral = false,
+}: {
+  readonly value: string
+  readonly tone?: 'ok' | 'bad' | 'plain'
+  readonly noneNeutral?: boolean
+}) {
+  const hidden = FACT_HIDDEN.has(value) && !(noneNeutral && value === 'none')
   // true/false/none collapse into a check or cross with the raw word kept
   // hidden for the conformance scripts and assistive tech.
-  const ok = hidden ? value === 'true' : FACT_OK.has(value)
-  const bad = hidden ? value !== 'true' : FACT_BAD.has(value)
+  const ok = tone !== undefined ? tone === 'ok' : hidden ? value === 'true' : FACT_OK.has(value)
+  const bad = tone !== undefined ? tone === 'bad' : hidden ? value !== 'true' : FACT_BAD.has(value)
   return (
     <span className={`fact-chip ${ok ? 'is-ok' : bad ? 'is-bad' : 'is-plain'}`.trim()}>
       <StateIcon ok={ok} plain={!ok && !bad} />
