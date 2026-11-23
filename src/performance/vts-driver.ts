@@ -250,17 +250,6 @@ export function createVtsRenderer(deps: VtsRendererDeps): VtsRenderer {
       return { ok: false, stage: 'failed', reasonCode: CAPABILITY_REASON.unauthorized }
     }
 
-    const current = await client.currentModel(signal)
-    if (current.kind !== 'ok') return handleFailure(current)
-    state = stopped()
-    if (state !== null) return state
-    if (!current.data.modelLoaded) {
-      return { ok: false, stage: 'failed', reasonCode: CAPABILITY_REASON.modelUnavailable }
-    }
-    if (current.data.modelID !== modelId) {
-      return { ok: false, stage: 'failed', reasonCode: CAPABILITY_REASON.modelMismatch }
-    }
-
     const hotkeys = await client.hotkeysInCurrentModel(signal)
     if (hotkeys.kind !== 'ok') return handleFailure(hotkeys)
     state = stopped()
