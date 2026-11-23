@@ -1285,9 +1285,17 @@ describe('M1 actual player failure paths (T04)', () => {
     },
   )
 
-  it('keeps play_failed for ordinary errors, message-only NotAllowedError text and a differently named DOMException', async () => {
+  it('keeps play_failed for ordinary errors, unreadable names, message-only NotAllowedError text and a differently named DOMException', async () => {
     const cases = [
       { name: 'ordinary Error', error: new Error('fixture detail') },
+      {
+        name: 'unreadable name getter',
+        error: Object.defineProperty({}, 'name', {
+          get() {
+            throw new Error('unreadable name')
+          },
+        }),
+      },
       { name: 'message-only mention', error: new Error('NotAllowedError: fixture message') },
       {
         name: 'different DOMException name',
