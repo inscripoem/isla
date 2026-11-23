@@ -375,15 +375,20 @@ are rejected before any effect instead of being coerced.
 The controller never invokes a renderer. Actual playback is evidenced only by a
 current handle's `playing` event; a fulfilled `play()` promise is not a start.
 `ended` after an observed start settles `completed`; `ended` without a start
-settles `failed`/`start_unobserved`; resolver rejection, load throw, play
-rejection and media error settle `failed`. A single terminal-selection guard
-arbitrates ended/error/abort/cancel races.
+settles `failed`/`start_unobserved`; resolver rejection, load throw and media
+error settle `failed`. A synchronous `play()` throw or rejected `play()` Promise
+settles `failed`/`play_not_allowed` when that value's `name` is exactly
+`NotAllowedError`. Other play errors settle `failed`/`play_failed`. The first
+selected terminal is retained, so a later play rejection cannot replace an
+earlier terminal. A single terminal-selection guard arbitrates
+ended/error/abort/cancel races.
 
 Cleanup invalidates callbacks before unsubscribing, detaching and releasing the
 lease. A successful detach clears the active slot and reports idle. A failed
 detach quarantines the handle and lease, reports a fault, refuses new work and
-keeps `idle` false; a cancel then settles `failed`/`cleanup_failed`, while an
-already-observed natural completion is preserved as the delivery fact.
+keeps `idle` false. On a failed detach, `cleanup_failed` takes precedence over
+the earlier terminal reason, while an already-observed natural completion is
+preserved as the delivery fact.
 `dispose()` prevents future admission, settles the active operation and may
 retry quarantined cleanup; a successful retry releases the retained lease once,
 while a failing retry keeps `idle` false and admission disabled.
@@ -671,12 +676,15 @@ once, and abort listeners and timers are removed on every outcome. A correlated
 protocol `APIError` is a refusal; raw error messages and transport exception text
 never enter observations or logs.
 
-Each dispatch rechecks, in order, `APIStateResponse` `active` and
-`currentSessionAuthenticated` (never a caller-supplied trust boolean),
-`CurrentModelResponse` `modelLoaded`/`modelID`, and
-`HotkeysInCurrentModelResponse` `modelLoaded`/`modelID` plus the exact configured
-`hotkeyID` for that currently loaded model. Only then is one
-`HotkeyTriggerRequest` with that exact id sent. A missing/unavailable mapping,
+Each successful dispatch sends three requests in order, an `APIStateRequest`, a
+`HotkeysInCurrentModelRequest` with `{}` data, and one `HotkeyTriggerRequest`.
+The trigger is sent only after the dispatch validates `APIStateResponse` `active`
+and `currentSessionAuthenticated` (never a caller-supplied trust boolean) and
+then checks the inventory's `modelLoaded`/`modelID` against the configured model
+and the exact configured `hotkeyID` on every dispatch. The inventory reply is
+the fresh current-model check, so ordinary dispatch sends no separate
+`CurrentModelRequest`, while the standalone protocol client still exposes
+`currentModel()` for direct callers. A missing/unavailable mapping,
 model mismatch, unauthenticated or inactive API, disappeared hotkey or invalidated
 instance means zero trigger calls. One dispatch is admitted per driver instance;
 a concurrent dispatch fails `vts_busy` with no queue and no extra request.
@@ -686,7 +694,7 @@ reported only as `accepted`. It never becomes `started` or `completed`; the
 mapped renderer additionally refuses an acceptance-only completion claim. A
 known `APIError` refusal settles `failed`. An already-aborted dispatch guarantees
 zero protocol sends and settles `cancelled`. An abort or expiry during preflight
-may already have sent read-only API/model/hotkey queries, but it guarantees zero
+may already have sent read-only API and inventory queries, but it guarantees zero
 trigger requests. The low-level driver can report `cancelled` before trigger; the
 existing generic mapped-renderer abort race can conservatively report `unknown`
 before the driver resolves, so the mapped wrapper does not always return
