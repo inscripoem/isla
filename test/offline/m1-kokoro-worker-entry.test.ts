@@ -460,9 +460,11 @@ describe('M1-02 worker entry lifecycle (B02, actual entry)', () => {
     // than making a second copy of it.
     const providerOwned = harness.providerOwnedSamples()
     expect(providerOwned).not.toBeNull()
-    expect(providerOwned).not.toBe(sdkSamples)
+    // Compare identities explicitly: Vitest may try to inspect the detached
+    // provider-owned TypedArray when producing a structural diff.
+    expect(providerOwned === sdkSamples).toBe(false)
     expect(providerOwned!.byteLength).toBe(0)
-    expect(providerOwned!.buffer).toBe(transfer[0])
+    expect(providerOwned!.buffer === transfer[0]).toBe(true)
     // The dedicated owned copy's buffer is detached in the sender.
     const ownedMessage = transferred[0]!.message as { samples: Float32Array }
     expect(ownedMessage.samples.buffer).toBe(transfer[0])
