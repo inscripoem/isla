@@ -1177,6 +1177,40 @@ describe('M1 actual player bootstrap configuration validation (T03)', () => {
 })
 
 describe('M1 actual player failure paths (T04)', () => {
+  type PlayFailureDelivery = 'throw' | 'reject'
+  type NamedPlayMedia = ReturnType<typeof createControlledMediaDriver> & {
+    playAttempts(): number
+  }
+
+  /**
+   * Wraps the controlled media driver so play() fails with one chosen error
+   * either synchronously or through its returned promise. The real controller
+   * still owns subscription, load, detach and lease release.
+   */
+  function createNamedPlayMedia(
+    delivery: PlayFailureDelivery,
+    error: unknown,
+  ): NamedPlayMedia {
+    const media = createControlledMediaDriver()
+    const createControlled = media.create.bind(media)
+    let attempts = 0
+    return {
+      ...media,
+      playAttempts: () => attempts,
+      create() {
+        const handle = createControlled()
+        return {
+          ...handle,
+          play() {
+            attempts += 1
+            if (delivery === 'throw') throw error
+            return Promise.reject(error)
+          },
+        }
+      },
+    }
+  }
+
   it('fails when the resolver rejects and never creates media', async () => {
     const resolver = createControlledResolver()
     resolver.setAutoReject(new Error('missing resource'))
@@ -1207,6 +1241,119 @@ describe('M1 actual player failure paths (T04)', () => {
     kit.resolver.resolveNext()
     await microtasks()
     await expect(execution).resolves.toMatchObject({ stage: 'failed', reasonCode: 'play_failed' })
+  })
+
+  it.each([
+    { mode: 'throw', label: 'synchronously throws' },
+    { mode: 'reject', label: 'rejects' },
+  ] as const)(
+    'classifies a named NotAllowedError that play() $label as play_not_allowed',
+    async ({ mode: delivery }) => {
+      const media = createNamedPlayMedia(
+        delivery,
+        new DOMException('fixture detail', 'NotAllowedError'),
+      )
+      const kit = createActualPlayerKit({ media })
+      const command = fixturePerformanceCommand({
+        outputId: `play-not-allowed-${delivery}`,
+        epoch: 1,
+      })
+      const execution = kit.controller.execute(command, { signal: createCallContext().signal })
+      kit.resolver.resolveNext()
+      await microtasks()
+      const handle = kit.media.current()
+      expect(media.playAttempts()).toBe(1)
+
+      const receipt = await execution
+      await microtasks()
+      expect(receipt).toMatchObject({
+        stage: 'failed',
+        reasonCode: 'play_not_allowed',
+        outputId: command.outputId,
+        epoch: command.epoch,
+      })
+      expect(kit.observed.map((r) => r.stage)).toEqual(['accepted', 'failed'])
+      const terminals = terminalFacts(kit.observed)
+      expect(terminals).toHaveLength(1)
+      expect(terminals[0]?.reasonCode).toBe('play_not_allowed')
+      expect(JSON.stringify(receipt)).not.toContain('fixture detail')
+      expect(handle?.unsubscribeCount()).toBe(1)
+      expect(handle?.detachCount()).toBe(1)
+      expect(kit.resolver.leases()[0]?.releaseCount()).toBe(1)
+      expect(kit.controller.status().idle).toBe(true)
+    },
+  )
+
+  it('keeps play_failed for ordinary errors, message-only NotAllowedError text and a differently named DOMException', async () => {
+    const cases = [
+      { name: 'ordinary Error', error: new Error('fixture detail') },
+      { name: 'message-only mention', error: new Error('NotAllowedError: fixture message') },
+      {
+        name: 'different DOMException name',
+        error: new DOMException('fixture detail', 'NotSupportedError'),
+      },
+    ]
+    for (const delivery of ['throw', 'reject'] as const) {
+      for (const testCase of cases) {
+        const media = createNamedPlayMedia(delivery, testCase.error)
+        const kit = createActualPlayerKit({ media })
+        const execution = kit.controller.execute(
+          fixturePerformanceCommand({ outputId: `play-negative-${delivery}` }),
+          { signal: createCallContext().signal },
+        )
+        kit.resolver.resolveNext()
+        await microtasks()
+
+        const receipt = await execution
+        await microtasks()
+        expect(receipt, `${testCase.name}/${delivery}`).toMatchObject({
+          stage: 'failed',
+          reasonCode: 'play_failed',
+        })
+        expect(terminalFacts(kit.observed), `${testCase.name}/${delivery}`).toHaveLength(1)
+        expect(kit.controller.status().idle, `${testCase.name}/${delivery}`).toBe(true)
+      }
+    }
+  })
+
+  it('reports cleanup_failed for a named play error when detach fails, then releases once on dispose retry', async () => {
+    const resolver = createControlledResolver()
+    const media = createControlledMediaDriver({ holdPlay: true, detachResult: false })
+    const kit = createActualPlayerKit({ resolver, media })
+    const command = fixturePerformanceCommand({ outputId: 'play-cleanup', epoch: 1 })
+    const execution = kit.controller.execute(command, { signal: createCallContext().signal })
+    kit.resolver.resolveNext()
+    await microtasks()
+    const handle = kit.media.current()
+    expect(handle?.playCount()).toBe(1)
+
+    handle?.rejectPlay(new DOMException('fixture detail', 'NotAllowedError'))
+    const receipt = await execution
+    await microtasks()
+    expect(receipt).toMatchObject({
+      stage: 'failed',
+      reasonCode: 'cleanup_failed',
+      outputId: command.outputId,
+      epoch: command.epoch,
+    })
+    const terminals = terminalFacts(kit.observed)
+    expect(terminals).toHaveLength(1)
+    expect(terminals[0]).toMatchObject({ stage: 'failed', reasonCode: 'cleanup_failed' })
+    expect(kit.controller.status().idle).toBe(false)
+    const lease = kit.resolver.leases()[0]
+    expect(lease?.releaseCount()).toBe(0)
+    expect(handle?.detachCount()).toBe(1)
+
+    kit.media.setDetachResult(true)
+    kit.controller.dispose()
+    expect(kit.controller.status().idle).toBe(true)
+    expect(lease?.releaseCount()).toBe(1)
+    expect(handle?.detachCount()).toBe(2)
+    await expect(execution).resolves.toBe(receipt)
+    expect(terminalFacts(kit.observed)).toHaveLength(1)
+
+    kit.controller.dispose()
+    expect(lease?.releaseCount()).toBe(1)
   })
 
   it('fails on a media error event', async () => {
@@ -1489,6 +1636,40 @@ describe('M1 actual player terminal races and observer isolation (T06)', () => {
     await microtasks()
     await expect(execution).resolves.toBe(cancelled)
     expect(kit.observed.map((r) => r.stage)).toEqual(['accepted', 'cancelled'])
+    expect(kit.faults).toEqual([])
+  })
+
+  it('keeps the cancelled terminal when a pending play promise later rejects with a named NotAllowedError', async () => {
+    const resolver = createControlledResolver()
+    const media = createControlledMediaDriver({ holdPlay: true })
+    const kit = createActualPlayerKit({ resolver, media })
+    const execution = kit.controller.execute(fixturePerformanceCommand(), {
+      signal: createCallContext().signal,
+    })
+    kit.resolver.resolveNext()
+    await microtasks()
+    const handle = kit.media.current()
+    expect(handle?.playCount()).toBe(1)
+    expect(handle?.playSettled()).toBe(false)
+
+    const cancelled = await kit.controller.cancel({
+      requestId: 'c-hold-named-reject',
+      revokedEpoch: 1,
+      newEpoch: 2,
+    })
+    expect(cancelled).toMatchObject({ stage: 'cancelled' })
+    await expect(execution).resolves.toBe(cancelled)
+
+    handle?.rejectPlay(new DOMException('fixture detail', 'NotAllowedError'))
+    expect(handle?.playSettled()).toBe(true)
+    await microtasks()
+    await expect(execution).resolves.toBe(cancelled)
+    expect(kit.observed.map((r) => r.stage)).toEqual(['accepted', 'cancelled'])
+    expect(terminalFacts(kit.observed)).toHaveLength(1)
+    expect(handle?.unsubscribeCount()).toBe(1)
+    expect(handle?.detachCount()).toBe(1)
+    expect(kit.resolver.leases()[0]?.releaseCount()).toBe(1)
+    expect(kit.controller.status().idle).toBe(true)
     expect(kit.faults).toEqual([])
   })
 
