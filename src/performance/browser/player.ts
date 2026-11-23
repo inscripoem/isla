@@ -74,6 +74,18 @@ function sameCommand(left: PerformanceCommand, right: PerformanceCommand): boole
   )
 }
 
+// play() can reject with any value, including one whose name cannot be read.
+function playFailureReason(error: unknown): 'play_not_allowed' | 'play_failed' {
+  if (typeof error !== 'object' || error === null) return 'play_failed'
+  try {
+    return (error as { name?: unknown }).name === 'NotAllowedError'
+      ? 'play_not_allowed'
+      : 'play_failed'
+  } catch {
+    return 'play_failed'
+  }
+}
+
 /**
  * A single-output browser playback controller.
  *
@@ -374,14 +386,16 @@ export function createPlaybackController(deps: PlaybackDeps): PlaybackController
     let playPromise: Promise<void>
     try {
       playPromise = withinSyncBoundary(() => handle.play())
-    } catch {
+    } catch (error) {
       commitPendingTerminal(operation)
-      if (!operation.terminalChosen) settleTerminal(operation, 'failed', 'play_failed')
+      if (!operation.terminalChosen) {
+        settleTerminal(operation, 'failed', playFailureReason(error))
+      }
       return
     }
-    Promise.resolve(playPromise).catch(() => {
+    Promise.resolve(playPromise).catch((error) => {
       if (operation.invalidated) return
-      settleTerminal(operation, 'failed', 'play_failed')
+      settleTerminal(operation, 'failed', playFailureReason(error))
     })
     // `play()` may synchronously deliver a terminal event or abort the owner.
     commitPendingTerminal(operation)
