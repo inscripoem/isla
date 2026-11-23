@@ -4,12 +4,16 @@
  * The guard is an apply-only Proxy over the actual callable tokenizer returned by
  * `AutoTokenizer.from_pretrained`. The real `kokoro-js` generate path invokes its
  * tokenizer synchronously and destructures `input_ids` from the returned object
- * (`const { input_ids } = this.tokenizer(...)`), so the guard's sole effect is to
- * forward the exact supplied phoneme string to the original callable while
- * cloning the caller's options and forcing `truncation:false`, then to inspect
- * the complete returned `input_ids` tensor synchronously. An over-limit encoding
- * is refused with the existing `KokoroProviderError('input_too_long')` before the
- * SDK can dispatch the model; an accepted encoding is returned unchanged.
+ * (`const { input_ids } = this.tokenizer(...)`), so the guard forwards the exact
+ * supplied phoneme string to the original callable and clones the caller's
+ * options, forcing `truncation:false`. Blank or whitespace-only phonemes are
+ * refused before that call. After the synchronous encoding is validated, a
+ * boundary-only pair `[0, 0]`/`[0n, 0n]` is refused as invalid phoneme material,
+ * and an over-limit encoding is refused with the existing
+ * `KokoroProviderError('input_too_long')` before the SDK can dispatch the model.
+ * Invalid phoneme material is a plain `Error`, so the existing adapter maps it to
+ * its ordinary provider-failure reason rather than `input_too_long`; an accepted
+ * encoding is returned unchanged.
  *
  * The guard never slices, decodes or re-tokenizes a prefix, never uses a
  * character heuristic and never mutates the original tokenizer or the caller's
@@ -50,6 +54,18 @@ export type KokoroCallableTokenizer = (
 
 function malformed(detail: string): Error {
   return new Error(`m1-kokoro-guard: ${detail}`)
+}
+
+/**
+ * The pinned tokenizer emits this two-token pair for phoneme input with no
+ * content. Only the exact pair is rejected; longer legitimate sequences that
+ * happen to contain zero ids are returned unchanged.
+ */
+function isBoundaryOnlyPair(data: ArrayLike<number | bigint>, sequence: number): boolean {
+  if (sequence !== 2) return false
+  const first = data[0]
+  const second = data[1]
+  return (first === 0 || first === 0n) && (second === 0 || second === 0n)
 }
 
 function isThenable(value: unknown): value is { then: unknown } {
@@ -121,6 +137,11 @@ export function createGuardedTokenizer(
       const text = argArray[0]
       const provided = argArray[1]
       if (typeof text !== 'string') throw malformed('tokenizer text must be a string')
+      // Blank phoneme material has no content to tokenize; refusing it here keeps
+      // the tokenizer and model out of the path entirely.
+      if (text.trim().length === 0) {
+        throw malformed('invalid phoneme material: text is blank or whitespace')
+      }
       // Clone the caller's options and override only the truncation flag; the
       // SDK's own options object is never mutated.
       const options: Record<string, unknown> =
@@ -139,6 +160,12 @@ export function createGuardedTokenizer(
         throw malformed('tokenizer must return its encoding synchronously, not a Promise')
       }
       const length = sequenceLength(result)
+      const data = (result as KokoroTokenizerEncoding).input_ids.data
+      // A nonblank request can still tokenize to the contentless boundary pair;
+      // refuse it before the model sees it, without touching longer sequences.
+      if (isBoundaryOnlyPair(data, length)) {
+        throw malformed('invalid phoneme material: token ids are boundary-only [0, 0]')
+      }
       if (length > maxTokens) throw new KokoroProviderError('input_too_long')
       return result as KokoroTokenizerEncoding
     },

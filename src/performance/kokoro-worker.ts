@@ -110,6 +110,7 @@ async function runKokoroWorker(config: KokoroProviderConfig): Promise<void> {
   let shuttingDown = false
   let disposeRequested = false
   let shutdownPromise: Promise<void> | null = null
+  let transportFault = false
 
   // The physical generation's own settlement signal. A dispose defers model
   // disposal and process exit by awaiting it, so an admitted job finishes its
@@ -150,27 +151,53 @@ async function runKokoroWorker(config: KokoroProviderConfig): Promise<void> {
       // finish its single result path before disposing the model and exiting.
       if (generationSettled !== null) await generationSettled
       await disposeOnce()
-      process.exit(0)
+      // Read the fault after the drain and disposal: a broken result path found
+      // while the generation was settling must still make this a failed exit.
+      process.exit(transportFault ? 1 : 0)
     })()
     return shutdownPromise
   }
 
+  /**
+   * A transport that cannot carry even a correlated failure is fatal. Record the
+   * fault and close admission; before readiness, initialization settlement then
+   * disposes once and exits with failure through the normal shutdown gate.
+   */
+  const failTransport = (): void => {
+    transportFault = true
+    disposeRequested = true
+    if (!initialized) return
+    void shutdown()
+  }
+
+  /** Post one failure result; a throw is a fatal transport fault, never retried. */
+  const sendFailure = (message: KokoroWorkerOutboundMessage): void => {
+    try {
+      send(message)
+    } catch {
+      failTransport()
+    }
+  }
+
   // Shutdown may only begin once initialization has actually settled; a dispose
-  // during initialization closes admission but waits for that settlement first.
+  // or fatal transport fault during initialization closes admission but waits
+  // for that settlement first.
   const maybeShutdown = (): void => {
-    if (!disposeRequested || !initialized) return
+    if (!initialized || (!disposeRequested && !transportFault)) return
     void shutdown()
   }
 
   const handleGenerate = async (jobId: number, input: KokoroProviderInput): Promise<void> => {
     const active = provider
     if (active === null || shuttingDown || disposeRequested) {
-      send({ kind: 'result', jobId, ok: false, error: 'worker is not accepting generation' })
+      // A refusal reply that cannot be posted is fatal but still closes admission
+      // without freeing a physical job that the host may be holding.
+      sendFailure({ kind: 'result', jobId, ok: false, error: 'worker is not accepting generation' })
       return
     }
     if (busy) {
       // Defensive single-job admission: async handlers must not overlap.
-      send({ kind: 'result', jobId, ok: false, error: 'worker busy' })
+      sendFailure({ kind: 'result', jobId, ok: false, error: 'worker busy' })
       return
     }
     beginGeneration()
@@ -179,15 +206,22 @@ async function runKokoroWorker(config: KokoroProviderConfig): Promise<void> {
       // A dedicated owned copy keeps any SDK-owned view intact; only this copy's
       // buffer is transferred, never the SDK's own buffer.
       const samples = new Float32Array(audio.samples)
-      send(
-        { kind: 'result', jobId, ok: true, sampleRate: audio.sampleRate, samples },
-        [samples.buffer as ArrayBuffer],
-      )
+      try {
+        send(
+          { kind: 'result', jobId, ok: true, sampleRate: audio.sampleRate, samples },
+          [samples.buffer as ArrayBuffer],
+        )
+      } catch (sendError) {
+        // The success payload could not be posted. Publish exactly one
+        // correlated failure when the fallback still works; otherwise the
+        // transport is fatal and this generation exits through the drain.
+        sendFailure({ kind: 'result', jobId, ok: false, error: describeError(sendError) })
+      }
     } catch (error) {
       if (error instanceof KokoroProviderError) {
-        send({ kind: 'result', jobId, ok: false, code: error.code })
+        sendFailure({ kind: 'result', jobId, ok: false, code: error.code })
       } else {
-        send({ kind: 'result', jobId, ok: false, error: describeError(error) })
+        sendFailure({ kind: 'result', jobId, ok: false, error: describeError(error) })
       }
     } finally {
       endGeneration()
@@ -196,7 +230,11 @@ async function runKokoroWorker(config: KokoroProviderConfig): Promise<void> {
 
   port.on('message', (value: unknown) => {
     if (isGenerateMessage(value)) {
-      void handleGenerate(value.jobId, value.input)
+      // Consume an unexpected handler rejection so a broken event path cannot
+      // surface as an unhandled rejection; it is a fatal transport fault.
+      void handleGenerate(value.jobId, value.input).catch(() => {
+        failTransport()
+      })
       return
     }
     if (isDisposeMessage(value)) {

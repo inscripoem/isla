@@ -97,6 +97,7 @@ export function createVtsConnectionHandle(
   let listenerReleaseFailed = false
   let closeForwarded = false
   let errorForwarded = false
+  let pendingError = false
   let closeTimer: ReturnType<typeof setTimeout> | null = null
 
   let resolveCompletion!: (completion: VtsConnectionCompletion) => void
@@ -145,10 +146,20 @@ export function createVtsConnectionHandle(
     return !listenerReleaseFailed
   }
 
-  function forwardError(): void {
-    if (physicalClosed || errorForwarded) return
+  function deliverError(): void {
+    if (subscriber === null || errorForwarded) return
+    pendingError = false
     errorForwarded = true
     forward({ type: 'error' })
+  }
+
+  function forwardError(): void {
+    if (physicalClosed || errorForwarded) return
+    if (subscriber === null) {
+      pendingError = true
+      return
+    }
+    deliverError()
   }
 
   function onMessage(...args: unknown[]): void {
@@ -225,11 +236,15 @@ export function createVtsConnectionHandle(
       }
       subscriber = listener
       let active = true
-      return () => {
+      const release = (): void => {
         if (!active) return
         active = false
         if (subscriber === listener) subscriber = null
       }
+      // The subscriber is installed before a pending safe error is delivered
+      // synchronously.
+      if (pendingError) deliverError()
+      return release
     },
     dispose: initiateClose,
   }
