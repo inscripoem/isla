@@ -8956,3 +8956,35 @@ entries:
         The browser probe used fixed audio and controlled dialogue and
         renderer dependencies. Acoustic timings remain unmeasured. The
         local candidate is ready for independent review.
+
+  - date: "2026-11-24"
+    task: M1-01 browser media cleanup after a listener removal failure
+    branch: fix/m1-audit-internal
+    change: >-
+      Keep the owned audio URL until DOM listener cleanup succeeds. A failed
+      detach can retry with the same URL. A successful retry revokes it once.
+    requirements: [FR-04, FR-05]
+    invariants: [INV-01]
+    cases: [C-04]
+    commits: ["4a6288aa02c5ff38568f80760b203c57c152952c"]
+    agent: OpenCode V2 build
+    provider: deepseek
+    model: deepseek-flash
+    variant: max
+    model_cli_id: "deepseek/deepseek-flash#max"
+    sessions: [ses_df68ffeeeffewsI89e0LSWArY7]
+    supervision: >-
+      An independent reviewer reproduced premature revocation by failing the
+      first removal of the ended listener. OpenCode added the regression test
+      first. Codex observed its failure on the previous implementation, then
+      requested the listener and URL cleanup order change in the same session.
+    verification: >-
+      All four focused DOM driver tests passed. An independent probe using a
+      native Blob URL verified readability after the failed detach, one
+      revocation on successful retry and no late events after cleanup.
+    related_case_evidence: >-
+      C-73 in the preceding adapter entry refers to the existing production
+      CLI consumer tests in test/offline/production-cli.test.ts. On Windows
+      that suite passed 11 tests, including pending and failed owned release
+      over IPC, and skipped four signal tests. The M1 Worker double-post
+      failure is exercised separately in test/offline/m1-kokoro-worker-entry.test.ts.
