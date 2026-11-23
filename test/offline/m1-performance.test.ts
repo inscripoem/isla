@@ -140,6 +140,7 @@ import {
   createM1VtsRendererKit,
   fixtureVtsApiError,
   fixtureVtsResponse,
+  fixtureVtsResponseFor,
 } from '../support/m1-vts-kit'
 import { createVtsConnectionHandle } from '../../src/performance/vts-connection'
 import { pairVtsConnection } from '../../src/performance/vts-pairing'
@@ -4900,11 +4901,16 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
     const requests = kit.peer.transport.requests()
     expect(requests.map((request) => request.messageType)).toEqual([
       'APIStateRequest',
-      'CurrentModelRequest',
       'HotkeysInCurrentModelRequest',
       'HotkeyTriggerRequest',
     ])
-    expect(requests.at(-1)?.data).toEqual({ hotkeyID: M1_VTS_FIXTURE_HOTKEY_SMILE })
+    const inventoryRequest = requests.find(
+      (request) => request.messageType === 'HotkeysInCurrentModelRequest',
+    )
+    expect(inventoryRequest?.data).toEqual({})
+    const triggers = requests.filter((request) => request.messageType === 'HotkeyTriggerRequest')
+    expect(triggers).toHaveLength(1)
+    expect(triggers[0]?.data).toEqual({ hotkeyID: M1_VTS_FIXTURE_HOTKEY_SMILE })
     const requestIds = requests.map((request) => request.requestID)
     expect(new Set(requestIds).size).toBe(requestIds.length)
     for (const requestId of requestIds) {
@@ -4934,7 +4940,8 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
       name: string
       mutate: (state: ReturnType<typeof createFixtureVtsPeer>['state']) => void
       reasonCode: string
-      requestCount: number
+      requestTypes: string[]
+      hotkeyListed: boolean
     }> = [
       {
         name: 'inactive API',
@@ -4942,7 +4949,8 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
           state.active = false
         },
         reasonCode: 'vts_api_inactive',
-        requestCount: 1,
+        requestTypes: ['APIStateRequest'],
+        hotkeyListed: true,
       },
       {
         name: 'unauthenticated session',
@@ -4950,55 +4958,53 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
           state.currentSessionAuthenticated = false
         },
         reasonCode: 'vts_session_unauthorized',
-        requestCount: 1,
+        requestTypes: ['APIStateRequest'],
+        hotkeyListed: true,
       },
       {
-        name: 'no current model',
-        mutate: (state) => {
-          state.currentModelLoaded = false
-        },
-        reasonCode: 'vts_model_unavailable',
-        requestCount: 2,
-      },
-      {
-        name: 'different current model',
-        mutate: (state) => {
-          state.currentModelID = 'fixture-other-model'
-        },
-        reasonCode: 'vts_model_mismatch',
-        requestCount: 2,
-      },
-      {
-        name: 'no hotkey model',
+        name: 'unloaded inventory model with no available hotkeys',
         mutate: (state) => {
           state.hotkeysModelLoaded = false
+          state.hotkeysModelID = ''
+          state.availableHotkeys = []
         },
         reasonCode: 'vts_model_unavailable',
-        requestCount: 3,
+        requestTypes: ['APIStateRequest', 'HotkeysInCurrentModelRequest'],
+        hotkeyListed: false,
       },
       {
-        name: 'different hotkey model',
+        name: 'mismatched inventory model that still lists the configured hotkey',
         mutate: (state) => {
           state.hotkeysModelID = 'fixture-other-model'
         },
         reasonCode: 'vts_model_mismatch',
-        requestCount: 3,
+        requestTypes: ['APIStateRequest', 'HotkeysInCurrentModelRequest'],
+        hotkeyListed: true,
       },
       {
-        name: 'missing configured hotkey',
+        name: 'matching model with only the configured hotkey removed',
         mutate: (state) => {
+          state.hotkeysModelLoaded = true
+          state.hotkeysModelID = M1_VTS_FIXTURE_MODEL_ID
           state.availableHotkeys = state.availableHotkeys.filter(
             (hotkey) => hotkey.hotkeyID !== M1_VTS_FIXTURE_HOTKEY_SMILE,
           )
         },
         reasonCode: 'vts_hotkey_missing',
-        requestCount: 3,
+        requestTypes: ['APIStateRequest', 'HotkeysInCurrentModelRequest'],
+        hotkeyListed: false,
       },
     ]
 
     for (const scenario of scenarios) {
       const peer = createFixtureVtsPeer()
       scenario.mutate(peer.state)
+      expect(
+        peer.state.availableHotkeys.some(
+          (hotkey) => hotkey.hotkeyID === M1_VTS_FIXTURE_HOTKEY_SMILE,
+        ),
+        scenario.name,
+      ).toBe(scenario.hotkeyListed)
       const kit = createM1VtsRendererKit({ peer })
       const receipt = await kit.renderer.renderer.execute(
         fixturePerformanceCommand({ actionId: 'smile' }),
@@ -5007,8 +5013,7 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
       expect(receipt, scenario.name).toMatchObject({ stage: 'failed', reasonCode: scenario.reasonCode })
       expect(performanceReceiptSchema.safeParse(receipt).success).toBe(true)
       const types = peer.transport.requests().map((request) => request.messageType)
-      expect(types, scenario.name).toHaveLength(scenario.requestCount)
-      expect(types, scenario.name).not.toContain('HotkeyTriggerRequest')
+      expect(types, scenario.name).toEqual(scenario.requestTypes)
     }
   })
 
@@ -5019,8 +5024,13 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
       createCallContext(),
     )
     expect(first).toMatchObject({ stage: 'accepted' })
+    expect(
+      kit.peer.state.availableHotkeys.some(
+        (hotkey) => hotkey.hotkeyID === M1_VTS_FIXTURE_HOTKEY_SMILE,
+      ),
+    ).toBe(true)
 
-    kit.peer.state.currentModelID = 'fixture-other-model'
+    kit.peer.state.hotkeysModelID = 'fixture-other-model'
     const second = await kit.renderer.renderer.execute(
       fixturePerformanceCommand({ actionId: 'smile' }),
       createCallContext(),
@@ -5028,12 +5038,16 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
     expect(second).toMatchObject({ stage: 'failed', reasonCode: 'vts_model_mismatch' })
     expect(kit.peer.transport.requests().map((request) => request.messageType)).toEqual([
       'APIStateRequest',
-      'CurrentModelRequest',
       'HotkeysInCurrentModelRequest',
       'HotkeyTriggerRequest',
       'APIStateRequest',
-      'CurrentModelRequest',
+      'HotkeysInCurrentModelRequest',
     ])
+    expect(
+      kit.peer.transport
+        .requests()
+        .filter((request) => request.messageType === 'HotkeyTriggerRequest'),
+    ).toHaveLength(1)
   })
 
   it('treats a correlated wrong type, malformed data or malformed APIError as protocol failure', async () => {
@@ -5073,6 +5087,69 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
         'HotkeyTriggerRequest',
       )
     }
+  })
+
+  it('fails a correlated malformed inventory reply as a protocol error while ignoring a foreign request ID', async () => {
+    const peer = createFixtureVtsPeer()
+    peer.transport.setHoldTypes(['HotkeysInCurrentModelRequest'])
+    const kit = createM1VtsRendererKit({ peer })
+    const execution = kit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile' }),
+      createCallContext(),
+    )
+    await microtasks()
+    expect(peer.transport.requests().map((request) => request.messageType)).toEqual([
+      'APIStateRequest',
+      'HotkeysInCurrentModelRequest',
+    ])
+    const inventoryRequest = peer.transport.pendingRequests()[0]
+    expect(inventoryRequest?.messageType).toBe('HotkeysInCurrentModelRequest')
+
+    let settled = false
+    void execution.then(() => {
+      settled = true
+    })
+    const sendsBeforeForeignReply = peer.transport.sendCount()
+    expect(peer.transport.hasListener()).toBe(true)
+    expect(
+      peer.transport.emit(
+        fixtureVtsResponse(
+          inventoryRequest!,
+          'HotkeysInCurrentModelResponse',
+          { availableHotkeys: 'still-not-a-list' },
+          { requestID: 'vts-unrelated' },
+        ),
+      ),
+    ).toBe(true)
+    await microtasks()
+    expect(settled).toBe(false)
+    expect(peer.transport.sendCount()).toBe(sendsBeforeForeignReply)
+    expect(
+      peer.transport
+        .requests()
+        .filter((request) => request.messageType === 'HotkeyTriggerRequest'),
+    ).toHaveLength(0)
+
+    peer.transport.respondTo(
+      inventoryRequest!,
+      fixtureVtsResponse(inventoryRequest!, 'HotkeysInCurrentModelResponse', {
+        modelLoaded: true,
+        modelID: M1_VTS_FIXTURE_MODEL_ID,
+        availableHotkeys: 'not-a-list',
+      }),
+    )
+    const receipt = await execution
+    expect(receipt).toMatchObject({ stage: 'failed', reasonCode: 'vts_protocol_error' })
+    expect(peer.transport.requests().map((request) => request.messageType)).toEqual([
+      'APIStateRequest',
+      'HotkeysInCurrentModelRequest',
+    ])
+    expect(peer.transport.sendCount()).toBe(2)
+    expect(
+      peer.transport
+        .requests()
+        .filter((request) => request.messageType === 'HotkeyTriggerRequest'),
+    ).toHaveLength(0)
   })
 
   it('ignores malformed envelopes and wrong request IDs instead of settling or rejecting', async () => {
@@ -5184,6 +5261,107 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
     expect(peer.transport.sendCount()).toBe(1)
     kit.renderer.dispose()
   })
+
+  it.each([
+    ['APIStateRequest', 1],
+    ['HotkeysInCurrentModelRequest', 2],
+  ] as const)(
+    'ignores a late %s preflight reply from an aborted dispatch',
+    async (messageType, requestCount) => {
+      const peer = createFixtureVtsPeer()
+      peer.transport.setHoldTypes([messageType])
+      const kit = createM1VtsRendererKit({ peer })
+
+      const firstContext = createCallContext()
+      const first = kit.renderer.driver.dispatch(
+        M1_VTS_FIXTURE_HOTKEY_SMILE,
+        firstContext.signal,
+      )
+      await microtasks()
+      const firstRequests = peer.transport.requests()
+      expect(firstRequests).toHaveLength(requestCount)
+      expect(firstRequests.map((request) => request.messageType)).toEqual(
+        messageType === 'APIStateRequest'
+          ? ['APIStateRequest']
+          : ['APIStateRequest', 'HotkeysInCurrentModelRequest'],
+      )
+      const oldRequest = firstRequests.at(-1)!
+      expect(oldRequest.messageType).toBe(messageType)
+      expect(
+        peer.transport
+          .pendingRequests()
+          .some((request) => request.requestID === oldRequest.requestID),
+      ).toBe(true)
+
+      firstContext.abort()
+      await expect(first).resolves.toMatchObject({
+        stage: 'cancelled',
+        reasonCode: 'aborted_before_trigger',
+      })
+      expect(peer.transport.requests()).toHaveLength(requestCount)
+      expect(
+        peer.transport
+          .requests()
+          .filter((request) => request.messageType === 'HotkeyTriggerRequest'),
+      ).toHaveLength(0)
+
+      const freshContext = createCallContext()
+      const fresh = kit.renderer.driver.dispatch(
+        M1_VTS_FIXTURE_HOTKEY_SMILE,
+        freshContext.signal,
+      )
+      await microtasks()
+      const pendingOfType = peer.transport
+        .pendingRequests()
+        .filter((request) => request.messageType === messageType)
+      expect(pendingOfType).toHaveLength(2)
+      expect(pendingOfType[0]?.requestID).toBe(oldRequest.requestID)
+      const freshRequest = pendingOfType[1]!
+      expect(freshRequest.requestID).not.toBe(oldRequest.requestID)
+
+      let freshSettled = false
+      void fresh.then(() => {
+        freshSettled = true
+      })
+      const sendsBeforeLateReply = peer.transport.sendCount()
+      expect(
+        peer.transport.respondTo(oldRequest, fixtureVtsResponseFor(oldRequest, peer.state)),
+      ).toBe(true)
+      await microtasks()
+      expect(freshSettled).toBe(false)
+      expect(peer.transport.sendCount()).toBe(sendsBeforeLateReply)
+      expect(
+        peer.transport
+          .requests()
+          .filter((request) => request.messageType === 'HotkeyTriggerRequest'),
+      ).toHaveLength(0)
+
+      expect(
+        peer.transport.respondTo(freshRequest, fixtureVtsResponseFor(freshRequest, peer.state)),
+      ).toBe(true)
+      await expect(fresh).resolves.toMatchObject({
+        stage: 'accepted',
+        reasonCode: null,
+      })
+      const freshSequence = peer.transport
+        .requests()
+        .slice(requestCount)
+        .map((request) => request.messageType)
+      expect(freshSequence).toEqual([
+        'APIStateRequest',
+        'HotkeysInCurrentModelRequest',
+        'HotkeyTriggerRequest',
+      ])
+      const triggers = peer.transport
+        .requests()
+        .filter((request) => request.messageType === 'HotkeyTriggerRequest')
+      expect(triggers).toHaveLength(1)
+      expect(triggers[0]?.data).toEqual({
+        hotkeyID: M1_VTS_FIXTURE_HOTKEY_SMILE,
+      })
+      kit.renderer.dispose()
+    },
+  )
 
   it('holds post-trigger abort, close and error as unknown without retry or replay', async () => {
     for (const mode of ['abort', 'close', 'error'] as const) {
@@ -5651,9 +5829,8 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
     ])
 
     // Mutate the caller-owned dependency object while its read-only APIState
-    // query is held, and make the peer report a different loaded model.
+    // query is held, and make the inventory report a different loaded model.
     ;(deps as { modelId: string }).modelId = 'fixture-other-model'
-    peer.state.currentModelID = 'fixture-other-model'
     peer.state.hotkeysModelID = 'fixture-other-model'
     peer.transport.setAutoRespond(true)
     expect(peer.transport.releaseNext()?.messageType).toBe('APIStateRequest')
