@@ -203,9 +203,11 @@ async function runKokoroWorker(config: KokoroProviderConfig): Promise<void> {
     beginGeneration()
     try {
       const audio = await active.generate(input)
-      // A dedicated owned copy keeps any SDK-owned view intact; only this copy's
-      // buffer is transferred, never the SDK's own buffer.
-      const samples = new Float32Array(audio.samples)
+      // The provider's raw-audio boundary (`toKokoroRawAudio`) already returns a
+      // dedicated owned copy, so transfer that exact buffer. Copying again here
+      // would add an avoidable allocation and leave the provider's ownership
+      // boundary untested.
+      const samples = audio.samples
       try {
         send(
           { kind: 'result', jobId, ok: true, sampleRate: audio.sampleRate, samples },

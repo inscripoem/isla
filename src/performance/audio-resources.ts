@@ -136,7 +136,6 @@ interface Entry {
   voiceProfileVersion: string
   format: string
   byteLength: number
-  bytes: Uint8Array
   blob: Blob
   registeredAtMs: number
   expiresAtMs: number
@@ -355,7 +354,6 @@ export function createAudioResourceRegistry(
         voiceProfileVersion: snapshot.voiceProfileVersion,
         format: snapshot.format,
         byteLength: snapshot.byteLength,
-        bytes: snapshot.bytes,
         blob,
         registeredAtMs,
         expiresAtMs: registeredAtMs + retentionMs,
