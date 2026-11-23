@@ -82,8 +82,10 @@ export const G1_EVIDENCE_ACTIVATED_AT = '2026-11-16T16:01:01Z'
  * rule through 2026-11-27 23:59:59 Asia/Taipei. `G1_TIME_WAIVER_UNTIL` is the
  * first instant AFTER the window, so all of 27 November is covered. A waiver is a
  * recorded exception, not evidence: the G1 step must say so in its output.
+ * PR 181 (the M2 #174 P1 state-completeness fix) was added on 2026-11-22 at
+ * the M2 member's request, inside the same window.
  */
-export const G1_TIME_WAIVER_PRS: readonly number[] = [170, 171, 175]
+export const G1_TIME_WAIVER_PRS: readonly number[] = [170, 171, 175, 181]
 export const G1_TIME_WAIVER_UNTIL = '2026-11-28T00:00:00+08:00'
 
 export type ApprovalMode = 'advise' | 'evidence'

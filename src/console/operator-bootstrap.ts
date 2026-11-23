@@ -151,3 +151,43 @@ export async function requestOperatorBootstrap(
     if (externalSignal !== undefined) externalSignal.removeEventListener('abort', abortFromExternal)
   }
 }
+
+/** Which step of the operator bootstrap exchange failed. */
+export type OperatorBootstrapFailure = 'token' | 'submit'
+
+export interface OperatorBootstrapAttempt {
+  readonly requestToken: () => Promise<string>
+  readonly isCurrent: () => boolean
+  readonly onSubmit: (token: string) => void
+  readonly onPending: (pending: boolean) => void
+  readonly onError: (failure: OperatorBootstrapFailure) => void
+}
+
+/**
+ * Run one operator bootstrap exchange against the generation that started it.
+ *
+ * The honesty rule: a stale attempt never writes into the new generation and
+ * never clears the new attempt's pending state. Once the exchange is no longer
+ * current, the token result is dropped without a pending, submit or error
+ * write; only the start of the attempt is reported before the await.
+ */
+export async function runOperatorBootstrap(attempt: OperatorBootstrapAttempt): Promise<void> {
+  attempt.onPending(true)
+  let token: string
+  try {
+    token = await attempt.requestToken()
+  } catch {
+    if (!attempt.isCurrent()) return
+    attempt.onPending(false)
+    attempt.onError('token')
+    return
+  }
+  if (!attempt.isCurrent()) return
+  attempt.onPending(false)
+  try {
+    attempt.onSubmit(token)
+  } catch {
+    if (!attempt.isCurrent()) return
+    attempt.onError('submit')
+  }
+}

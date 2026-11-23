@@ -254,6 +254,78 @@ export function canDispatch(state: ConsoleState): boolean {
   return !state.session.retiring
 }
 
+/** Diagnostics protocol 1 socket state. It is a local transport fact only. */
+export type DiagnosticsSocketState = 'connecting' | 'open' | 'closed' | 'error'
+
+/** The lifecycle events the diagnostics socket panel can report. */
+export type DiagnosticsSocketEvent = 'start' | 'open' | 'error' | 'close'
+
+/**
+ * Reduce one diagnostics socket event onto the last known state. Starting a
+ * socket reports `connecting` before the handshake completes, and every other
+ * transition stays local: no server reply can claim a socket is open.
+ */
+export function reduceDiagnosticsSocket(
+  state: DiagnosticsSocketState,
+  event: DiagnosticsSocketEvent,
+): DiagnosticsSocketState {
+  switch (event) {
+    case 'start':
+      return 'connecting'
+    case 'open':
+      return 'open'
+    case 'error':
+      return 'error'
+    case 'close':
+      return 'closed'
+    default:
+      return state
+  }
+}
+
+/**
+ * Label the diagnostics socket honestly. Before the operator starts a socket,
+ * `not started` is shown instead of `closed`, which would claim a connection
+ * that never existed.
+ */
+export function diagnosticsSocketLabel(started: boolean, state: DiagnosticsSocketState): string {
+  return started ? state : 'not started'
+}
+
+/** The composer submission currently awaiting an acknowledgement. */
+export interface PendingDraft {
+  readonly messageId: string
+  readonly text: string
+}
+
+/**
+ * The honesty rule for draft settlement: one acknowledgement settles only its
+ * own submission; a newer edit is never overwritten; an accepted or duplicate
+ * ack clears the draft only while it still holds the acknowledged text; a
+ * rejected ack leaves the composer exactly as the operator left it, so a
+ * deliberate clear stays cleared.
+ */
+export function settleDraftOnAck(
+  composer: string,
+  pending: PendingDraft | null,
+  ack: Pick<InputAck, 'requestMessageId' | 'status'>,
+): string {
+  if (pending === null || ack.requestMessageId !== pending.messageId) return composer
+  if (ack.status === 'accepted' || ack.status === 'duplicate') {
+    return composer === pending.text ? '' : composer
+  }
+  return composer
+}
+
+/**
+ * Guard against double submission. A composer is a duplicate only while it
+ * still matches the pending submission after trimming, so a newer edit is a
+ * distinct submission again.
+ */
+export function isDuplicateSubmit(composer: string, pending: PendingDraft | null): boolean {
+  return pending !== null && composer.trim() === pending.text.trim()
+}
+
 function keepNewest<T>(entries: readonly T[], entry: T): readonly T[] {
   const next = entries.length >= MAX_LOG_ENTRIES ? entries.slice(entries.length - MAX_LOG_ENTRIES + 1) : [...entries]
   next.push(entry)
