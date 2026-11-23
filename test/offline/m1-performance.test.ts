@@ -1759,9 +1759,14 @@ describe('M1 browser DOM media driver', () => {
     playCount = 0
     removedAttributeCount = 0
     private pauseThrows = false
+    private removeThrowsFor: string | null = null
 
     setPauseThrows(value: boolean): void {
       this.pauseThrows = value
+    }
+
+    failNextRemove(type: string): void {
+      this.removeThrowsFor = type
     }
 
     override addEventListener(
@@ -1780,6 +1785,10 @@ describe('M1 browser DOM media driver', () => {
       listener: EventListener | EventListenerObject,
       options?: EventListenerOptions | boolean,
     ): void {
+      if (this.removeThrowsFor === type) {
+        this.removeThrowsFor = null
+        throw new Error(`fixture ${type} listener removal failure`)
+      }
       const listeners = this.removed.get(type) ?? new Set<EventListener | EventListenerObject>()
       listeners.add(listener)
       this.removed.set(type, listeners)
@@ -1939,6 +1948,40 @@ describe('M1 browser DOM media driver', () => {
       expect(dom.revoked).toEqual(['blob:fixture-1'])
       expect(handle.detach()).toBe(true)
       expect(dom.revoked).toHaveLength(1)
+    } finally {
+      dom.restore()
+    }
+  })
+
+  it('retains the object URL when ended listener removal fails once and revokes it once on retry', () => {
+    const dom = installDomFakes()
+    try {
+      const handle = createDomMediaDriver().create()
+      const events: MediaEvent[] = []
+      handle.subscribe((event) => events.push(event))
+      const element = dom.elements[0]
+      expect(element).toBeDefined()
+      if (element === undefined) return
+
+      handle.load(new Blob([new Uint8Array([4])]))
+      expect(element.src).toBe('blob:fixture-1')
+
+      element.failNextRemove('ended')
+      expect(handle.detach()).toBe(false)
+      expect(dom.revoked).toEqual([])
+
+      expect(handle.detach()).toBe(true)
+      expect(dom.revoked).toEqual(['blob:fixture-1'])
+
+      const observed = events.length
+      element.dispatchEvent(new Event('playing'))
+      element.dispatchEvent(new Event('ended'))
+      element.dispatchEvent(new Event('error'))
+      expect(events).toHaveLength(observed)
+
+      expect(handle.detach()).toBe(true)
+      expect(dom.revoked).toHaveLength(1)
+      expect(element.pauseCount).toBe(2)
     } finally {
       dom.restore()
     }

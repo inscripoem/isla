@@ -81,8 +81,8 @@ class DomMediaHandle implements MediaHandle {
       this.element.pause()
       this.element.removeAttribute('src')
       this.element.load()
-      this.revokeObjectUrl()
       this.removeOwnedListeners()
+      this.revokeObjectUrl()
       this.detached = true
       return true
     } catch {
