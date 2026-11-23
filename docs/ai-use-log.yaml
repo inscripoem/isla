@@ -9184,3 +9184,80 @@ entries:
     scope: >-
       src/console/recovery-control.ts, test/offline/m2-console.test.ts and
       docs/ai-use-log.yaml.
+
+  - date: "2026-11-24"
+    task: M1 validate the VTS model from each hotkey inventory
+    branch: fix/m1-vts-preflight-play-errors
+    change: >-
+      Each successful dispatch checks the API state, validates the current
+      model and configured hotkey in a fresh inventory, and triggers once.
+      The standalone currentModel query remains available to direct callers.
+    requirements: [FR-03]
+    invariants: [INV-02]
+    cases: [C-06]
+    commits:
+      - "7078af1f22074bf99b45d24b3fd3c9cea3c24153"
+      - "23ace4bbcbeed7c88a37a97df350d1d337fa9044"
+      - "20bf16d79e0ca977e186d97b01afa92ebb651cc6"
+    agent: OpenCode V2 build
+    provider: deepseek
+    model: deepseek-flash
+    variant: max
+    model_cli_id: "deepseek/deepseek-flash#max"
+    sessions:
+      - "ses_df60599a8ffemjdTjcltliBSz5"
+      - "ses_df5fb99e6ffeqPCURU318H4YEm"
+      - "ses_df5faa3f1ffeu4e1OHPg1IIzFC"
+    supervision: >-
+      M1 approved the tests in TA-003. OpenCode wrote the regression tests,
+      driver change and adapter documentation. Codex reviewed the diff and
+      reran the controlled peer and consumer suites.
+    verification:
+      base: 6d8f8d27185121346c34134ca6aad822ba1ce63f
+      source_candidate: 20bf16d79e0ca977e186d97b01afa92ebb651cc6
+      results: >-
+        Six VTS assertions failed against the original driver. The updated
+        driver passed all six, including the three-request sequence, refusals,
+        per-dispatch model changes and stale replies during both preflight
+        requests. The peer counted requests. Device latency was unmeasured.
+
+  - date: "2026-11-24"
+    task: M1 classify playback permission refusals
+    branch: fix/m1-vts-preflight-play-errors
+    change: >-
+      A synchronous throw or a rejected play promise with the exact error
+      name NotAllowedError produces failed/play_not_allowed. Other values
+      produce play_failed. A prior Stop retains its cancelled receipt, and
+      cleanup_failed takes precedence when detachment fails.
+    requirements: [FR-04, FR-05]
+    invariants: [INV-01]
+    cases: [C-04]
+    commits:
+      - "84ab90ca5b0b209312d4d304ec868b650e286056"
+      - "8a6dd58f6fc8262a58dcebdfaa545f4ea7b158e8"
+      - "abe0a38b63dde68bbf9b435e0831a3318a6f1dca"
+      - "20bf16d79e0ca977e186d97b01afa92ebb651cc6"
+    agent: OpenCode V2 build
+    provider: deepseek
+    model: deepseek-flash
+    variant: max
+    model_cli_id: "deepseek/deepseek-flash#max"
+    sessions:
+      - "ses_df60599a8ffemjdTjcltliBSz5"
+      - "ses_df5fb99d0ffe16cGoeA7ltrGSt"
+      - "ses_df5faa3f1ffeu4e1OHPg1IIzFC"
+    supervision: >-
+      M1 approved the tests in TA-003. OpenCode wrote the tests, player
+      change and documentation. Review identified a throwing name getter
+      that left the first draft pending. The supervisor reproduced the
+      timeout before OpenCode corrected the classification.
+    verification:
+      base: 6d8f8d27185121346c34134ca6aad822ba1ce63f
+      source_candidate: 20bf16d79e0ca977e186d97b01afa92ebb651cc6
+      results: >-
+        Both permission cases failed on the original player and passed on
+        the candidate. Controlled media also verified cleanup retry and a
+        Stop followed by a late rejection. On Windows the combined changes
+        passed all 313 M1 tests, 108 consumer tests, 12 composition tests
+        and 47 readiness tests. The test project typechecked. Full verify
+        passed with 2096 tests passing and nine skipped across 95 files.
