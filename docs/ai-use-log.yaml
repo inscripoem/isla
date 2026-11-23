@@ -8898,3 +8898,61 @@ entries:
       test/offline/m6-02-comparison.test.ts,
       docs/architecture/evaluation-protocol.md and this log entry. No frozen
       contract, RecordedRunV1, storage schema, provider or deployment change.
+
+  - date: "2026-11-24"
+    task: M1-01 and M1-02 adapter boundary repairs
+    branch: fix/m1-audit-internal
+    change: >-
+      Validate bundled Kokoro voices and content-bearing phoneme tensors,
+      forward pending VTS transport errors across the pairing handoff, and
+      preserve Worker exit, playback receipt, and DOM cleanup boundaries.
+      Align fixed audio reference validation and improve WAV copying,
+      registry storage, Worker transfer ownership, and the optional offline
+      expression window. Document the reference deployment and module scope.
+    requirements: [FR-03, FR-04, FR-05, NFR-06]
+    invariants: [INV-01, INV-02]
+    cases: [C-01, C-04, C-06, C-10, C-11, C-73]
+    commits:
+      - "3a73cc097cfa99468211e9cb278ac70577bf7b87"
+      - "cb456272313aaac5a76afdd64d64fce6bb7aed71"
+      - "46d3bcb62a0d721db12830be8a7679f2c99b50df"
+      - "9d4578549f58367f15cc6704bd2f0a9758be653f"
+    agent: OpenCode V2 build
+    provider: deepseek
+    model: deepseek-flash
+    variant: max
+    model_cli_id: "deepseek/deepseek-flash#max"
+    sessions:
+      - ses_df6c10256ffeUU4k7uEZiaIa48
+      - ses_df6c1026cffeGbySjSLqsXezNk
+      - ses_df6b3b0d0ffeJGJh9rlWjv5WUP
+      - ses_df6b3a4a1ffe2SCVNJas38Jb8H
+      - ses_df6b3b0e0ffeOATLHuNJ8Dt6Vs
+      - ses_df6b3b0edffeMZq50J1bIVNg2A
+      - ses_df6ac366fffeTiyxt8jm4H13t6
+      - ses_df6b12239ffetr5tmoNnc7V8mT
+    supervision: >-
+      Human M1 recorded TA-002 before the code commits. Codex coordinated
+      separate OpenCode V2 test and implementation sessions, then reran
+      the checks. The test-first checkpoint exposed 25 failures against
+      the original implementation. A later test-only correction compared
+      transferred buffer identities without inspecting a detached view.
+    transcript_record: >-
+      Original event streams and session exports were retained outside the
+      checkout. Assistant metadata was verified as deepseek, deepseek-flash,
+      max, and build across all sessions.
+    verification:
+      base: 48e13c2715d8e06bc935c44696fde409085fbb01
+      source_candidate: 9d4578549f58367f15cc6704bd2f0a9758be653f
+      browser_candidate: 46d3bcb62a0d721db12830be8a7679f2c99b50df
+      results: >-
+        Windows Node 24.14.1 and pnpm 11.25.0: M1 345 passed, composition
+        12 passed, readiness 47 passed, seven consumer suites 259 passed
+        and four skipped, test-project typecheck passed, and pnpm verify
+        passed with 2119 tests passed and nine skipped across 95 files.
+        The root browser probe observed cancellation of the second output
+        and preserved the first completed delivery in SQLite.
+      limits: >-
+        The browser probe used fixed audio and controlled dialogue and
+        renderer dependencies. Acoustic timings remain unmeasured. The
+        local candidate is ready for independent review.
