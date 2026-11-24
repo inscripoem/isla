@@ -59,7 +59,7 @@ export async function createProductionDeployment(
           actions: mappings.map((mapping) => ({
             actionId: mapping.actionId,
             description: `${mapping.actionId} local acceptance`,
-            observability: 'observable' as const,
+            observability: 'acceptance-only' as const,
             parameterBounds: [],
           })),
         },
