@@ -20,6 +20,8 @@ const HEADER_BYTES = 44
 const BLOCK_ALIGN = CHANNELS * (BITS_PER_SAMPLE / 8)
 /** Largest value representable in an unsigned 32-bit RIFF/WAVE header field. */
 const UINT32_MAX = 0xffffffff
+/** True on hosts whose typed-array storage uses little-endian byte order. */
+const TYPED_ARRAY_LITTLE_ENDIAN = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1
 
 function writeAscii(view: DataView, offset: number, text: string): void {
   for (let index = 0; index < text.length; index += 1) {
@@ -63,10 +65,20 @@ export function encodeMonoFloat32Wav(samples: Float32Array, sampleRate: number):
   view.setUint16(34, BITS_PER_SAMPLE, true)
   writeAscii(view, 36, 'data')
   view.setUint32(40, dataBytes, true)
-  let offset = HEADER_BYTES
-  for (let index = 0; index < samples.length; index += 1) {
-    view.setFloat32(offset, samples[index], true)
-    offset += 4
+  if (TYPED_ARRAY_LITTLE_ENDIAN) {
+    // The 44-byte header keeps the payload naturally 4-byte aligned. Writing
+    // through a little-endian Float32Array view copies each sample directly and
+    // preserves its canonical IEEE-754 bit pattern, including signed zero,
+    // subnormals and other finite values.
+    new Float32Array(buffer, HEADER_BYTES, samples.length).set(samples)
+  } else {
+    // Big-endian hosts cannot reuse the typed-array storage directly; keep the
+    // explicit little-endian DataView writes for the canonical WAV layout.
+    let offset = HEADER_BYTES
+    for (let index = 0; index < samples.length; index += 1) {
+      view.setFloat32(offset, samples[index], true)
+      offset += 4
+    }
   }
   return new Uint8Array(buffer)
 }
