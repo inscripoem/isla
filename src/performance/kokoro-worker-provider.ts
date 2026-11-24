@@ -205,10 +205,12 @@ export async function createKokoroWorkerProvider(
    * job is preserved and rejected only on the observed actual exit.
    */
   const requestTermination = (): void => {
-    if (terminationRequested) return
+    if (terminationRequested || exited) return
     terminationRequested = true
     try {
-      void worker.terminate()
+      // A rejected termination is not proof that native teardown is underway or
+      // complete; the observed exit event still governs.
+      void Promise.resolve(worker.terminate()).catch(() => {})
     } catch {
       // The transport may already be stopping; exit observation still governs.
     }
@@ -397,7 +399,10 @@ export async function createKokoroWorkerProvider(
           const message: KokoroWorkerDisposeMessage = { kind: 'dispose' }
           worker.postMessage(message)
         } catch {
-          // The worker is already unreachable; exit observation still governs.
+          // Posting the dispose request failed. Request one native termination
+          // through the existing fault path unless an exit was already observed;
+          // close still resolves only on the actual exit event.
+          requestTermination()
         }
       }
       await exitPromise
