@@ -256,4 +256,71 @@ describe('console voice selection', () => {
     expect(selection.message).toBeNull()
     expect(selection.state.activeVoiceId).toBeNull()
   })
+
+  it('holds the adopted draft and rejects a duplicate apply while the ack is outstanding', () => {
+    const draft = withVoiceDraft(listed(), 'bm_george')
+    const requested = requestVoiceSelection(draft, identity('voice-select-held'), true)
+    if (requested.message === null) throw new Error('expected a voice.select request')
+
+    const changed = withVoiceDraft(requested.state, 'af_heart')
+    expect(changed).toBe(requested.state)
+    expect(changed.draftVoiceId).toBe('bm_george')
+    expect(changed.activeVoiceId).toBe('af_heart')
+    expect(changed.selectionOutcome).toBe('pending')
+    expect(changed.pendingSelectionMessageId).toBe('voice-select-held')
+
+    const duplicate = requestVoiceSelection(changed, identity('voice-select-duplicate'), true)
+    expect(duplicate.message).toBeNull()
+    expect(duplicate.state).toBe(changed)
+  })
+
+  it('clears a refusal on a fresh draft and preserves that draft through a list refresh', () => {
+    const requested = requestVoiceSelection(
+      withVoiceDraft(listed(), 'bm_george'),
+      identity('voice-select-refused'),
+      true,
+    )
+    if (requested.message === null) throw new Error('expected a voice.select request')
+    const refused = withVoiceError(requested.state, {
+      requestMessageId: requested.message.messageId,
+      code: 'refused',
+      message: 'voice selection was refused',
+    })
+    expect(refused.selectionOutcome).toBe('refused')
+
+    const freshDraft = withVoiceDraft(refused, 'bm_george')
+    expect(freshDraft.selectionOutcome).toBe('idle')
+    expect(freshDraft.lastError).toBeNull()
+    expect(freshDraft.draftVoiceId).toBe('bm_george')
+    expect(freshDraft.activeVoiceId).toBe('af_heart')
+
+    const reload = requestVoiceList(freshDraft, identity('voice-list-after-refusal'))
+    const reloaded = withVoiceState(reload.state, voiceState('voice-list-after-refusal', 'af_heart'))
+    expect(reloaded.draftVoiceId).toBe('bm_george')
+    expect(reloaded.activeVoiceId).toBe('af_heart')
+    expect(reloaded.selectionOutcome).toBe('idle')
+    expect(reloaded.lastError).toBeNull()
+  })
+
+  it('clears a prior confirmation on a fresh authoritative list', () => {
+    const requested = requestVoiceSelection(
+      withVoiceDraft(listed(), 'bm_george'),
+      identity('voice-select-confirmed'),
+      true,
+    )
+    if (requested.message === null) throw new Error('expected a voice.select request')
+    const confirmed = withVoiceState(
+      requested.state,
+      voiceState(requested.message.messageId, 'bm_george'),
+    )
+    expect(confirmed.selectionOutcome).toBe('confirmed')
+    expect(confirmed.activeVoiceId).toBe('bm_george')
+
+    const reload = requestVoiceList(confirmed, identity('voice-list-after-confirm'))
+    const reloaded = withVoiceState(reload.state, voiceState('voice-list-after-confirm', 'bm_george'))
+    expect(reloaded.selectionOutcome).toBe('idle')
+    expect(reloaded.activeVoiceId).toBe('bm_george')
+    expect(reloaded.draftVoiceId).toBe('bm_george')
+    expect(reloaded.lastError).toBeNull()
+  })
 })

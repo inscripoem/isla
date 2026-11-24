@@ -85,6 +85,8 @@ import './console.css'
 const HEALTH_PATH = '/health'
 const DIAGNOSTICS_PATH = '/diag'
 const PING_KIND = 'ping'
+/** Bounded wait for one correlated voice-list reply on a mixed-version runtime. */
+const VOICE_LIST_TIMEOUT_MS = 5000
 
 type StatusColor = 'app-green' | 'app-teal' | 'app-yellow' | 'app-orange' | 'app-red'
 
@@ -454,6 +456,7 @@ export function ConsoleApp({
   const [voice, setVoice] = useState<VoiceSelectionState>(createInitialVoiceSelectionState)
   const [voiceAudition, setVoiceAudition] = useState<VoiceAuditionView>(IDLE_VOICE_AUDITION)
   const [productPlaybackActive, setProductPlaybackActive] = useState(false)
+  const [voiceListUnavailable, setVoiceListUnavailable] = useState(false)
 
   const transportRef = useRef<ConsoleTransportPort | null>(null)
   const playbackRef = useRef<PlaybackBinding | null>(null)
@@ -467,6 +470,7 @@ export function ConsoleApp({
   const voiceIdentityRef = useRef<{ readonly sessionId: string; readonly epoch: number } | null>(null)
   const auditionRef = useRef<VoiceAudition | null>(null)
   const productPlaybackActiveRef = useRef(false)
+  const voiceListTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Mirror the latest view state for event handlers, which must read it outside
   // render. Writing the ref during render is not allowed.
@@ -482,6 +486,13 @@ export function ConsoleApp({
   const setProductPlayback = useCallback((active: boolean): void => {
     productPlaybackActiveRef.current = active
     setProductPlaybackActive(active)
+  }, [])
+
+  const clearVoiceListTimer = useCallback((): void => {
+    if (voiceListTimerRef.current !== null) {
+      clearTimeout(voiceListTimerRef.current)
+      voiceListTimerRef.current = null
+    }
   }, [])
 
   /**
@@ -513,6 +524,10 @@ export function ConsoleApp({
     () => () => {
       auditionRef.current?.dispose()
       auditionRef.current = null
+      if (voiceListTimerRef.current !== null) {
+        clearTimeout(voiceListTimerRef.current)
+        voiceListTimerRef.current = null
+      }
     },
     [],
   )
@@ -529,6 +544,8 @@ export function ConsoleApp({
       if (voiceListKeyRef.current === key) return
       voiceListKeyRef.current = key
       voiceIdentityRef.current = { sessionId, epoch }
+      clearVoiceListTimer()
+      setVoiceListUnavailable(false)
 
       // Keep the last server-confirmed voice and the installed list visible
       // while the refreshed list is in flight. A draft or preview is fenced,
@@ -548,7 +565,21 @@ export function ConsoleApp({
       setVoice(requested.state)
       try {
         application.sendApplication(requested.message)
+        const listMessageId = requested.message.messageId
+        if (voiceRef.current.pendingListMessageId === listMessageId) {
+          voiceListTimerRef.current = setTimeout(() => {
+            voiceListTimerRef.current = null
+            // Only the matching outstanding list request becomes unavailable. A
+            // later valid reply can still clear it, and no unrelated request error
+            // is treated as a voice failure.
+            if (voiceRef.current.pendingListMessageId === listMessageId) {
+              setVoiceListUnavailable(true)
+            }
+          }, VOICE_LIST_TIMEOUT_MS)
+        }
       } catch (error) {
+        clearVoiceListTimer()
+        setVoiceListUnavailable(false)
         const failed = withVoiceError(requested.state, {
           requestMessageId: requested.message.messageId,
           code: 'transport_error',
@@ -558,7 +589,7 @@ export function ConsoleApp({
         setVoice(failed)
       }
     },
-    [nextId, stopVoiceAudition],
+    [clearVoiceListTimer, nextId, stopVoiceAudition],
   )
 
   useEffect(() => {
@@ -573,6 +604,8 @@ export function ConsoleApp({
         // last confirmed active voice but fences every in-flight response.
         voiceListKeyRef.current = null
         voiceIdentityRef.current = null
+        clearVoiceListTimer()
+        setVoiceListUnavailable(false)
         updateVoice((current) => withVoiceDisconnected(current))
         setProductPlayback(false)
         stopVoiceAudition('Preview stopped because the transport closed.')
@@ -627,6 +660,13 @@ export function ConsoleApp({
                 const before = voiceRef.current
                 const next = updateVoice((current) => withVoiceState(current, voiceMessage))
                 if (
+                  before.pendingListMessageId !== null &&
+                  next.pendingListMessageId === null
+                ) {
+                  clearVoiceListTimer()
+                  setVoiceListUnavailable(false)
+                }
+                if (
                   next !== before &&
                   next.selectionOutcome === 'confirmed' &&
                   before.selectionOutcome !== 'confirmed'
@@ -664,6 +704,10 @@ export function ConsoleApp({
                 )
                 if (requestId === current.preview.requestMessageId) {
                   stopVoiceAudition('Preview request was refused.')
+                }
+                if (requestId === current.pendingListMessageId) {
+                  clearVoiceListTimer()
+                  setVoiceListUnavailable(false)
                 }
               }
             }
@@ -850,6 +894,7 @@ export function ConsoleApp({
       unsubscribeBase?.()
       voiceListKeyRef.current = null
       voiceIdentityRef.current = null
+      clearVoiceListTimer()
       stopVoiceAudition('Preview stopped because the console is reconnecting.')
       machineRef.current?.dispose('console unmounted')
       machineRef.current = null
@@ -868,6 +913,7 @@ export function ConsoleApp({
     ensureAudition,
     requestVoiceListForSession,
     setProductPlayback,
+    clearVoiceListTimer,
   ])
 
   const reconnect = useCallback(() => {
@@ -881,6 +927,8 @@ export function ConsoleApp({
     pendingDraftRef.current = null
     voiceListKeyRef.current = null
     voiceIdentityRef.current = null
+    clearVoiceListTimer()
+    setVoiceListUnavailable(false)
     // Keep the last confirmed voice and installed list visible while the
     // reconnect requests a fresh list. No draft becomes active by itself.
     const refreshedVoice = withVoiceDisconnected(voiceRef.current)
@@ -892,7 +940,7 @@ export function ConsoleApp({
     const nextEpoch = transportEpochRef.current + 1
     transportEpochRef.current = nextEpoch
     setTransportEpoch(nextEpoch)
-  }, [setProductPlayback, stopVoiceAudition])
+  }, [clearVoiceListTimer, setProductPlayback, stopVoiceAudition])
 
   const dispatchable = canDispatch(state)
 
@@ -1075,6 +1123,10 @@ export function ConsoleApp({
 
   const changeVoiceDraft = useCallback(
     (voiceId: string) => {
+      // The adopted choice holds the draft until its acknowledgement. Ignore a
+      // stale click before it can fence the in-flight audition.
+      const current = voiceRef.current
+      if (current.pendingSelectionMessageId !== null || current.selectionOutcome === 'pending') return
       // A dropdown change is local. It never writes to the server, and any
       // audition for the previous candidate is fenced immediately.
       updateVoice((current) => withVoiceDraft(stopVoicePreview(current), voiceId))
@@ -1098,6 +1150,15 @@ export function ConsoleApp({
       return
     }
     const auditionView = auditionRef.current?.view()
+    const sameSampleInFlight =
+      (current.preview.requestMessageId !== null &&
+        current.preview.voiceId === current.draftVoiceId) ||
+      (auditionView !== undefined &&
+        (auditionView.phase === 'preparing' || auditionView.phase === 'playing') &&
+        auditionView.voiceId === current.draftVoiceId)
+    // Rapid repeats must not spend another wire request or consume another
+    // sample for the audition that is already pending or preparing.
+    if (sameSampleInFlight) return
     // A blocked sample is already prepared. The second explicit click is the
     // user gesture the browser needs, so do not spend another server request.
     if (
@@ -1142,7 +1203,7 @@ export function ConsoleApp({
     const activeMachine = machineRef.current
     if (session === null || transport === null || !isApplicationTransport(transport)) return
     if (activeMachine === null || !canDispatch(stateRef.current) || session.retiring) return
-    if (current.selectionOutcome === 'pending') return
+    if (current.pendingSelectionMessageId !== null || current.selectionOutcome === 'pending') return
     if (current.draftVoiceId === null || current.draftVoiceId === current.activeVoiceId) return
     const requested = requestVoiceSelection(
       stopVoicePreview(current),
@@ -1299,6 +1360,7 @@ export function ConsoleApp({
           retiring={retiring}
           operator={machine?.operator === true}
           productPlaybackBusy={voicePlaybackBusy}
+          voiceListUnavailable={voiceListUnavailable}
           canEnableVoiceChanges={operatorButtonVisible && machine?.operator !== true}
           operatorRequestPending={operatorRequestPending}
           operatorRequestError={operatorRequestError}

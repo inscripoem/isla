@@ -17,6 +17,7 @@ export interface VoiceCardProps {
   readonly retiring: boolean
   readonly operator: boolean
   readonly productPlaybackBusy: boolean
+  readonly voiceListUnavailable: boolean
   readonly canEnableVoiceChanges: boolean
   readonly operatorRequestPending: boolean
   readonly operatorRequestError: string | null
@@ -46,6 +47,7 @@ function viewerStatus(props: VoiceCardProps): string {
 function statusLine(props: VoiceCardProps): string {
   const { state, audition, connected, retiring, operator, productPlaybackBusy } = props
   if (!connected) return 'Connect an application session to choose a voice.'
+  if (props.voiceListUnavailable) return 'Installed voices are unavailable on this runtime.'
   if (state.pendingListMessageId !== null) return 'Waiting for installed voices…'
   if (audition.phase === 'preparing' || state.preview.requestMessageId !== null) {
     return `Preparing preview of ${voiceName(state, state.draftVoiceId)}…`
@@ -73,13 +75,20 @@ export function VoiceCard(props: VoiceCardProps) {
   const { state, audition, connected, retiring, operator, productPlaybackBusy } = props
   const voicesAvailable = state.voices.length > 0
   const waitingForVoices = state.pendingListMessageId !== null
-  const selectable = connected && voicesAvailable && !waitingForVoices
+  const adopting =
+    state.pendingSelectionMessageId !== null || state.selectionOutcome === 'pending'
+  const selectable = connected && voicesAvailable && !waitingForVoices && !adopting
+  const sameSampleInFlight =
+    state.draftVoiceId !== null &&
+    ((state.preview.requestMessageId !== null && state.preview.voiceId === state.draftVoiceId) ||
+      ((audition.phase === 'preparing' || audition.phase === 'playing') &&
+        audition.voiceId === state.draftVoiceId))
   const previewDisabled =
     retiring ||
     productPlaybackBusy ||
     !selectable ||
     state.draftVoiceId === null ||
-    state.selectionOutcome === 'pending'
+    sameSampleInFlight
   const previewBusy =
     state.preview.requestMessageId !== null ||
     audition.phase === 'preparing' ||
@@ -92,15 +101,17 @@ export function VoiceCard(props: VoiceCardProps) {
     waitingForVoices ||
     state.draftVoiceId === null ||
     state.draftVoiceId === state.activeVoiceId ||
-    state.selectionOutcome === 'pending'
+    adopting
   const activeNeedsQualifier =
     state.activeVoiceId !== null &&
     (!connected || waitingForVoices || state.selectionOutcome === 'unknown')
-  const placeholder = waitingForVoices
-    ? 'Waiting for installed voices…'
-    : voicesAvailable
-      ? 'Choose a voice'
-      : 'No installed voices'
+  const placeholder = props.voiceListUnavailable
+    ? 'Installed voices unavailable'
+    : waitingForVoices
+      ? 'Waiting for installed voices…'
+      : voicesAvailable
+        ? 'Choose a voice'
+        : 'No installed voices'
 
   return (
     <Card>
@@ -122,6 +133,7 @@ export function VoiceCard(props: VoiceCardProps) {
           disabled={!selectable}
           aria-describedby="console-voice-status"
           onChange={(event) => {
+            if (adopting) return
             if (event.target.value.length > 0) props.onDraftChange(event.target.value)
           }}
         >

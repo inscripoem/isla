@@ -114,9 +114,18 @@ export function requestVoiceList(
 
 /**
  * Change only the draft. No request is sent and the active voice is untouched.
+ * An adoption in flight holds the draft: a later dropdown change cannot replace
+ * the choice whose acknowledgement is still outstanding.
  */
 export function withVoiceDraft(state: VoiceSelectionState, voiceId: string): VoiceSelectionState {
-  return { ...state, draftVoiceId: voiceId, lastError: null }
+  if (state.pendingSelectionMessageId !== null || state.selectionOutcome === 'pending') return state
+  return {
+    ...state,
+    draftVoiceId: voiceId,
+    // A new intent supersedes an old refusal, confirmation or uncertain result.
+    selectionOutcome: 'idle',
+    lastError: null,
+  }
 }
 
 /**
@@ -129,6 +138,11 @@ export function requestVoiceSelection(
   operator: boolean,
 ): { readonly state: VoiceSelectionState; readonly message: VoiceSelectMessage | null } {
   if (!voiceApplyAllowed(operator)) return { state, message: null }
+  // Event-time guard: a second click cannot duplicate an adoption that is
+  // already awaiting its correlated acknowledgement, even before a re-render.
+  if (state.pendingSelectionMessageId !== null || state.selectionOutcome === 'pending') {
+    return { state, message: null }
+  }
   const voiceId = state.draftVoiceId
   if (voiceId === null) return { state, message: null }
   if (!state.voices.some((voice) => voice.id === voiceId)) return { state, message: null }
@@ -246,15 +260,16 @@ export function withVoiceState(
   if (state.pendingSelectionMessageId !== null) {
     return { ...state, voices, pendingListMessageId: null }
   }
+  const draftStillInstalled =
+    state.draftVoiceId !== null && voices.some((voice) => voice.id === state.draftVoiceId)
   return {
     ...state,
     voices,
     activeVoiceId: message.payload.selectedVoiceId,
-    draftVoiceId: message.payload.selectedVoiceId,
-    selectionOutcome:
-      state.selectionOutcome === 'pending' || state.selectionOutcome === 'unknown'
-        ? 'idle'
-        : state.selectionOutcome,
+    // A fresh authoritative list clears stale outcomes, but it must not discard
+    // a genuine draft the user picked after the previous result.
+    draftVoiceId: draftStillInstalled ? state.draftVoiceId : message.payload.selectedVoiceId,
+    selectionOutcome: 'idle',
     pendingListMessageId: null,
     lastError: null,
   }
