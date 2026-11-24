@@ -61,11 +61,12 @@ dialogue, deterministic rule selection/reaction, Kokoro synthesis, the audio res
 VTS-backed renderer with the three pinned actions, operator Stop/cancellation, durable SQLite
 persistence and recovery.
 
-No new user-visible feature is planned after CP04. X01, X02 and X07 are implemented and merged
-(#159, #163, #157) but are not wired into the reference deployment, so they add no live behavior to
-the frozen scope. X03, X04, X05, X06, X08 and X09 are deferred and outside the submission scope unless
-separately approved. After this freeze, changes are limited to demonstrated defect fixes and
-evidence/documentation corrections.
+No new user-visible feature is planned after CP04. X01, X02, X06 and X07 are implemented and merged
+(#159, #163, #161, #157) but are not wired into the reference deployment, so they add no live behavior
+to the frozen scope. X06 is the default-off, opt-in offline expression policy merged as `2a3f9d3`;
+the reference deployment continues to use its existing renderer path. X03, X04, X05, X08 and X09 are
+deferred and outside the submission scope unless separately approved. After this freeze, changes are
+limited to demonstrated defect fixes and evidence/documentation corrections.
 
 ## 6. Reproduction and acceptance
 

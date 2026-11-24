@@ -22,10 +22,15 @@ The checks below apply to the live target declared in
 - **Untrusted content cannot grant control privileges or change policy** (INV-03 / NFR-05, C-07).
   The verifier is `test/conformance/runtime.conformance.ts::untrusted-control-refused`; the case is
   registered as implemented in `docs/req/trace.en.md`.
-- **Stop and local cancellation never wait for a storage write.** A failed or unavailable write
-  leaves unresolved output `unknown`; the runtime policy catalog records that Stop and local
-  cancellation proceed regardless, and no output is replayed.
-- **Recovery requires operator authority.** A restart begins stopped and restores only confirmed
+- **Stop and local cancellation never wait for a storage write.** Stop advances the epoch, revokes
+  the active turn and starts cancellation without waiting for persistence. A failed cancellation
+  commit leaves `outputConfirmation: pending` with zero deliveries
+  (`test/offline/m5-coordinator.test.ts::keeps cancellation evidence unconfirmed when the held commit fails`);
+  the runtime policy catalog records that Stop and local cancellation proceed regardless, and no
+  output is replayed.
+- **Recovery requires operator authority.** Recovery is the explicit `session.recover` action,
+  accepted only from the operator role (`src/runtime/application.ts::handleRecover` rejects a
+  non-operator with `unauthorized`). A process restart begins stopped and restores only confirmed
   history; unresolved output is not promoted or replayed (runtime policy catalog, C-32/C-33).
 
 Negative checks: untrusted control attempts are refused by the conformance verifier; Stop during
@@ -63,6 +68,7 @@ append-only evidence.
 | Consent/durable gate, unowned/refused/conflict (C-76) | `test/offline/m6-memory-store.test.ts` — insert-once binding, durable/consent refusal, owner/derived gate | passing |
 | Session-scoped state and audience conflict (C-77) | `test/offline/m6-memory-store.test.ts` — state read-back, stale-version conflict, audience immutability, state under a non-durable binding | passing; a two-session seed would add a cross-session replay case, not change the current audience-conflict verifier |
 | Audience-scoped deletion/retention leaves evidence (C-78) | `test/offline/m6-memory-store.test.ts` — cross-table delete, unchanged evidence counts, per-audience retention, audience export scope | passing |
+| Invalid output refused without delivery (#107 delivery scope) | `test/offline/m5-coordinator.test.ts::rejects a malformed segment and ends the cycle safely`; `::rejects a malformed direct execute receipt without throwing` | passing — a malformed segment emits `segment.rejected` with zero player executions and zero deliveries; a malformed direct receipt yields zero deliveries and `outputConfirmation: unknown` |
 | Operator Stop settles to idle without replay | [M1 six browser receipts](https://github.com/inscripoem/isla/issues/97#issuecomment-6918501769) and [M1 Windows live evidence](https://github.com/inscripoem/isla/issues/96#issuecomment-6920647994) | observed on the live target |
 
 Commands and results at `main` `e32bf1a6`: `pnpm test:m6` → 22 files / 343 tests passed;
