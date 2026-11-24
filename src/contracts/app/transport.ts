@@ -242,6 +242,101 @@ export const sessionRecoveryStateMessageSchema = z.strictObject({
 })
 export type SessionRecoveryStateMessage = z.infer<typeof sessionRecoveryStateMessageSchema>
 
+/**
+ * Console voice selection (TA-004).
+ *
+ * Explicit request/reply pairs only: each server reply echoes the originating
+ * request `messageId` in `payload.requestMessageId`, so there is no unsolicited
+ * voice push. Voice identifiers are bounded opaque asset ids, never free text
+ * or paths; the server owns display names and locale classification. A voice
+ * list is bounded and may be empty, and a sample is a bounded base64 WAV
+ * (at most 1.5 MiB characters). These are additive protocol-0.2 kinds: a strict
+ * decoder that predates them rejects them rather than ignoring them, so
+ * producers and consumers must be upgraded together.
+ */
+export const VOICE_ID_MAX_LENGTH = 64
+export const VOICE_NAME_MAX_LENGTH = 128
+export const VOICE_LIST_MAX_ITEMS = 64
+export const VOICE_SAMPLE_MAX_BASE64_LENGTH = 1_572_864
+
+const requestMessageIdSchema = z.string().min(1).max(256)
+
+export const voiceIdSchema = z
+  .string()
+  .min(1)
+  .max(VOICE_ID_MAX_LENGTH)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, {
+    message: 'voiceId must be an opaque voice asset id',
+  })
+
+export const voiceLocaleSchema = z.enum(['en-US', 'en-GB'])
+export type VoiceLocale = z.infer<typeof voiceLocaleSchema>
+
+/** One selectable voice as rendered by the console. */
+export const voiceOptionSchema = z.strictObject({
+  id: voiceIdSchema,
+  name: z.string().min(1).max(VOICE_NAME_MAX_LENGTH),
+  locale: voiceLocaleSchema,
+})
+export type VoiceOption = z.infer<typeof voiceOptionSchema>
+
+/** Client request payload shared by `voice.select` and `voice.preview`. */
+export const voiceIdRequestPayloadSchema = z.strictObject({ voiceId: voiceIdSchema })
+export type VoiceIdRequestPayload = z.infer<typeof voiceIdRequestPayloadSchema>
+
+export const voiceListMessageSchema = z.strictObject({
+  ...envelopeBase,
+  kind: z.literal('voice.list'),
+  payload: z.strictObject({}),
+})
+export type VoiceListMessage = z.infer<typeof voiceListMessageSchema>
+
+export const voiceSelectMessageSchema = z.strictObject({
+  ...envelopeBase,
+  kind: z.literal('voice.select'),
+  payload: voiceIdRequestPayloadSchema,
+})
+export type VoiceSelectMessage = z.infer<typeof voiceSelectMessageSchema>
+
+export const voicePreviewMessageSchema = z.strictObject({
+  ...envelopeBase,
+  kind: z.literal('voice.preview'),
+  payload: voiceIdRequestPayloadSchema,
+})
+export type VoicePreviewMessage = z.infer<typeof voicePreviewMessageSchema>
+
+export const voiceStatePayloadSchema = z.strictObject({
+  requestMessageId: requestMessageIdSchema,
+  selectedVoiceId: voiceIdSchema.nullable(),
+  voices: z.array(voiceOptionSchema).max(VOICE_LIST_MAX_ITEMS),
+})
+export type VoiceStatePayload = z.infer<typeof voiceStatePayloadSchema>
+
+export const voiceStateMessageSchema = z.strictObject({
+  ...envelopeBase,
+  kind: z.literal('voice.state'),
+  payload: voiceStatePayloadSchema,
+})
+export type VoiceStateMessage = z.infer<typeof voiceStateMessageSchema>
+
+export const voiceSamplePayloadSchema = z.strictObject({
+  requestMessageId: requestMessageIdSchema,
+  voiceId: voiceIdSchema,
+  wavBase64: z
+    .string()
+    .min(1)
+    .max(VOICE_SAMPLE_MAX_BASE64_LENGTH)
+    .regex(/^[A-Za-z0-9+/]+={0,2}$/, { message: 'wavBase64 must be standard base64' }),
+})
+export type VoiceSamplePayload = z.infer<typeof voiceSamplePayloadSchema>
+
+export const voiceSampleMessageSchema = z.strictObject({
+  ...envelopeBase,
+  kind: z.literal('voice.sample'),
+  payload: voiceSamplePayloadSchema,
+})
+export type VoiceSampleMessage = z.infer<typeof voiceSampleMessageSchema>
+
 /** Envelope for an offer; the command already carries its own identity. */
 export function performanceOffer(
   command: PerformanceCommand,
@@ -289,6 +384,9 @@ export const applicationClientMessageSchema = z.discriminatedUnion('kind', [
   sessionAttachMessageSchema,
   operatorBootstrapMessageSchema,
   sessionRecoverMessageSchema,
+  voiceListMessageSchema,
+  voiceSelectMessageSchema,
+  voicePreviewMessageSchema,
 ])
 export type ApplicationClientMessage = z.infer<typeof applicationClientMessageSchema>
 
@@ -300,6 +398,8 @@ export const applicationServerMessageSchema = z.union([
   performanceGrantMessageSchema,
   sessionRecoveryAckMessageSchema,
   sessionRecoveryStateMessageSchema,
+  voiceStateMessageSchema,
+  voiceSampleMessageSchema,
 ])
 export type ApplicationServerMessage = z.infer<typeof applicationServerMessageSchema>
 
