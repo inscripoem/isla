@@ -16,14 +16,19 @@ import {
   APPLICATION_PATH,
   OPERATOR_BOOTSTRAP_HEADER,
   OPERATOR_BOOTSTRAP_PATH,
+  VOICE_SAMPLE_MAX_BASE64_LENGTH,
   operatorAckMessageSchema,
   parseApplicationClientMessage,
   requestError,
   sessionAttachAckMessageSchema,
   sessionRecoveryAckMessageSchema,
   sessionRecoveryStateMessageSchema,
+  voiceSampleMessageSchema,
+  voiceStateMessageSchema,
+  type ErrorCode,
   type SessionRecoverMessage,
   type SessionRecoveryStateMessage,
+  type VoiceOption,
 } from '../contracts'
 import type { RuntimeComposition } from './composition'
 import { RecoveryError } from './session-recovery'
@@ -42,6 +47,20 @@ import type { AudioResourceSource } from './audio-resource-route'
  * never infers authority from a payload.
  */
 
+/**
+ * Optional local voice capability. It is deliberately request/reply only:
+ * listing and previewing are available to any attached viewer, while the
+ * caller is responsible for the operator check on selection. A deployment that
+ * does not supply it still answers `voice.list` with an empty state.
+ */
+export interface ApplicationVoiceSettings {
+  state(): { readonly selectedVoiceId: string | null; readonly voices: readonly VoiceOption[] }
+  select(
+    voiceId: string,
+  ): Promise<{ readonly selectedVoiceId: string | null; readonly voices: readonly VoiceOption[] }>
+  preview(voiceId: string): Promise<{ readonly voiceId: string; readonly wav: Uint8Array }>
+}
+
 export interface ApplicationEndpointOptions {
   composition: RuntimeComposition
   clock: ClockPort
@@ -54,6 +73,8 @@ export interface ApplicationEndpointOptions {
   maxSendBufferBytes?: number
   /** Concurrent non-control inbound messages allowed per connection. */
   maxInboundPerConnection?: number
+  /** Optional local voice list/select/preview capability. */
+  voice?: ApplicationVoiceSettings
   /**
    * Optional local sink for bounded application-internal failure records. It is
    * not a wire message and carries no error text, stack, cause, thrown-object
@@ -126,6 +147,59 @@ const DEFAULT_MAX_INBOUND_PER_CONNECTION = 8
 const MAX_OPERATOR_TOKENS = 32
 /** Upper bound on response opportunities processed before an explicit yield. */
 const TURNS_BEFORE_YIELD = 8
+
+const EMPTY_VOICE_STATE: {
+  readonly selectedVoiceId: null
+  readonly voices: readonly VoiceOption[]
+} = Object.freeze({ selectedVoiceId: null, voices: Object.freeze([]) as readonly VoiceOption[] })
+
+interface VoiceFailure {
+  readonly code: ErrorCode
+  readonly message: string
+  readonly retryable: boolean
+}
+
+/** Map typed domain refusals to the existing protocol error vocabulary. */
+function voiceFailure(error: unknown): VoiceFailure {
+  const code =
+    typeof error === 'object' && error !== null
+      ? (error as { readonly code?: unknown }).code
+      : undefined
+  switch (code) {
+    case 'unknown_voice':
+    case 'invalid_voice':
+    case 'no_selected_voice':
+      return {
+        code: 'invalid_field',
+        message: 'the requested voice is not available',
+        retryable: false,
+      }
+    case 'persistence_failed':
+      return {
+        code: 'storage_unavailable',
+        message: 'the voice preference could not be saved',
+        retryable: true,
+      }
+    case 'busy':
+      return {
+        code: 'conflict',
+        message: 'another voice preview is already running',
+        retryable: true,
+      }
+    case 'invalid_audio':
+      return {
+        code: 'dependency_failed',
+        message: 'the voice preview could not be synthesized',
+        retryable: true,
+      }
+    default:
+      return {
+        code: 'dependency_failed',
+        message: 'the voice request failed',
+        retryable: false,
+      }
+  }
+}
 
 // A bare `host` or `host:port`, optionally a bracketed IPv6 literal. Host
 // headers carrying credentials, a path, a query or a fragment are rejected
@@ -218,6 +292,7 @@ function createOperatorBootstrapStore(clock: ClockPort, ttlMs: number): Operator
 
 export function createApplicationEndpoint(options: ApplicationEndpointOptions): ApplicationEndpoint {
   const { recovery } = options
+  const voiceSettings = options.voice
   let composition = options.composition
   const allowedOrigins = new Set(
     options.allowedOrigins
@@ -371,6 +446,184 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
         retryable,
       ),
     )
+  }
+
+  /**
+   * Read the optional capability defensively. A failed state read is rendered
+   * as the same empty state an absent capability returns, never as a push or a
+   * fabricated selection.
+   */
+  const readVoiceState = (): {
+    readonly selectedVoiceId: string | null
+    readonly voices: readonly VoiceOption[]
+  } => {
+    if (voiceSettings === undefined) return EMPTY_VOICE_STATE
+    try {
+      const state = voiceSettings.state()
+      return { selectedVoiceId: state.selectedVoiceId, voices: state.voices }
+    } catch {
+      return EMPTY_VOICE_STATE
+    }
+  }
+
+  const sendVoiceState = (
+    conn: ConnectionState,
+    requestMessageId: string,
+    state: { readonly selectedVoiceId: string | null; readonly voices: readonly VoiceOption[] } = readVoiceState(),
+  ): void => {
+    safeSend(
+      conn,
+      voiceStateMessageSchema.parse({
+        protocolVersion: '0.2',
+        messageId: makeMessageId(),
+        sessionId: composition.sessionId,
+        epoch: composition.coordinator.epoch(),
+        kind: 'voice.state',
+        payload: {
+          requestMessageId,
+          selectedVoiceId: state.selectedVoiceId,
+          voices: state.voices,
+        },
+      }),
+    )
+  }
+
+  /** Session/epoch/retirement fence shared by every explicit voice request. */
+  const voiceRequestCurrent = (
+    conn: ConnectionState,
+    sessionId: string,
+    epoch: number,
+    requestMessageId: string,
+  ): boolean => {
+    if (disposed || conn.closed) return false
+    if (sessionId !== composition.sessionId) {
+      sendError(conn, 'conflict', 'voice session does not match this runtime session', requestMessageId)
+      return false
+    }
+    if (epoch !== composition.coordinator.epoch()) {
+      sendError(conn, 'stale', 'voice request epoch is not the current epoch', requestMessageId)
+      return false
+    }
+    if (retiring) {
+      sendError(conn, 'conflict', 'voice requests are disabled while the session is retiring', requestMessageId)
+      return false
+    }
+    return true
+  }
+
+  /**
+   * After an await, the request may belong to a retired composition, a stopped
+   * epoch or a closed connection. Such a reply is dropped rather than sent to
+   * the successor or a stale requester.
+   */
+  const voiceReplyCurrent = (
+    conn: ConnectionState,
+    owner: RuntimeComposition,
+    requestEpoch: number,
+  ): boolean =>
+    !disposed &&
+    !retiring &&
+    !conn.closed &&
+    composition === owner &&
+    owner.coordinator.epoch() === requestEpoch
+
+  const handleVoiceList = (
+    conn: ConnectionState,
+    messageId: string,
+    sessionId: string,
+    epoch: number,
+  ): void => {
+    if (!voiceRequestCurrent(conn, sessionId, epoch, messageId)) return
+    sendVoiceState(conn, messageId)
+  }
+
+  const handleVoiceSelect = async (
+    conn: ConnectionState,
+    messageId: string,
+    sessionId: string,
+    epoch: number,
+    voiceId: string,
+  ): Promise<void> => {
+    if (conn.role !== 'operator') {
+      sendError(conn, 'unauthorized', 'voice selection requires operator authority', messageId)
+      return
+    }
+    if (!voiceRequestCurrent(conn, sessionId, epoch, messageId)) return
+    if (voiceSettings === undefined) {
+      sendError(conn, 'conflict', 'voice settings are not available for this runtime', messageId)
+      return
+    }
+    if (!readVoiceState().voices.some((voice) => voice.id === voiceId)) {
+      sendError(conn, 'invalid_field', 'the requested voice is not installed', messageId)
+      return
+    }
+    const owner = composition
+    try {
+      const state = await voiceSettings.select(voiceId)
+      if (!voiceReplyCurrent(conn, owner, epoch)) return
+      sendVoiceState(conn, messageId, state)
+    } catch (error) {
+      if (!voiceReplyCurrent(conn, owner, epoch)) return
+      const failure = voiceFailure(error)
+      sendError(conn, failure.code, failure.message, messageId, failure.retryable)
+    }
+  }
+
+  const handleVoicePreview = async (
+    conn: ConnectionState,
+    messageId: string,
+    sessionId: string,
+    epoch: number,
+    voiceId: string,
+  ): Promise<void> => {
+    if (!voiceRequestCurrent(conn, sessionId, epoch, messageId)) return
+    if (voiceSettings === undefined) {
+      sendError(conn, 'conflict', 'voice previews are not available for this runtime', messageId)
+      return
+    }
+    if (!readVoiceState().voices.some((voice) => voice.id === voiceId)) {
+      sendError(conn, 'invalid_field', 'the requested voice is not installed', messageId)
+      return
+    }
+    const owner = composition
+    try {
+      const sample = await voiceSettings.preview(voiceId)
+      if (!voiceReplyCurrent(conn, owner, epoch)) return
+      if (
+        !(sample.wav instanceof Uint8Array) ||
+        sample.wav.byteLength === 0 ||
+        sample.voiceId !== voiceId
+      ) {
+        sendError(conn, 'dependency_failed', 'the voice preview returned invalid audio', messageId)
+        return
+      }
+      // Bound the raw payload first, so an oversized sample is never encoded or
+      // copied into a diagnostic/history path.
+      const encodedLength = Math.ceil(sample.wav.byteLength / 3) * 4
+      if (encodedLength > VOICE_SAMPLE_MAX_BASE64_LENGTH) {
+        sendError(conn, 'dependency_failed', 'the voice preview exceeds the sample payload bound', messageId)
+        return
+      }
+      safeSend(
+        conn,
+        voiceSampleMessageSchema.parse({
+          protocolVersion: '0.2',
+          messageId: makeMessageId(),
+          sessionId: composition.sessionId,
+          epoch: composition.coordinator.epoch(),
+          kind: 'voice.sample',
+          payload: {
+            requestMessageId: messageId,
+            voiceId,
+            wavBase64: Buffer.from(sample.wav).toString('base64'),
+          },
+        }),
+      )
+    } catch (error) {
+      if (!voiceReplyCurrent(conn, owner, epoch)) return
+      const failure = voiceFailure(error)
+      sendError(conn, failure.code, failure.message, messageId, failure.retryable)
+    }
   }
 
   const contextFor = (conn: ConnectionState): TrustedControlContext => ({
@@ -929,6 +1182,30 @@ export function createApplicationEndpoint(options: ApplicationEndpointOptions): 
             return
           }
           composition.bridge.handlePhysicalStatus(message)
+          return
+        }
+        case 'voice.list': {
+          handleVoiceList(conn, message.messageId, message.sessionId, message.epoch)
+          return
+        }
+        case 'voice.select': {
+          await handleVoiceSelect(
+            conn,
+            message.messageId,
+            message.sessionId,
+            message.epoch,
+            message.payload.voiceId,
+          )
+          return
+        }
+        case 'voice.preview': {
+          await handleVoicePreview(
+            conn,
+            message.messageId,
+            message.sessionId,
+            message.epoch,
+            message.payload.voiceId,
+          )
           return
         }
         case 'session.attach': {

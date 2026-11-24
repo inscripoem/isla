@@ -33,6 +33,7 @@ import type {
   RendererPort,
   SelectionPort,
   SynthesisPort,
+  VoiceOption,
 } from '../../contracts'
 import { NO_OP_ACTION } from '../../contracts'
 import { createRuleReactionPort } from '../../decision/reaction'
@@ -45,7 +46,8 @@ import type { ReceiptTools } from '../../performance/browser/types'
 import type { KokoroProviderConfig } from '../../performance/kokoro-provider'
 import { createKokoroProvider } from '../../performance/kokoro-provider'
 import { createKokoroSynthesis } from '../../performance/kokoro-synthesis'
-import type { KokoroVoiceProfile } from '../../performance/kokoro-types'
+import type { KokoroProvider, KokoroVoiceProfile } from '../../performance/kokoro-types'
+import { listInstalledKokoroVoices } from '../../performance/voice-catalog'
 import { createMappedRenderer } from '../../performance/mapped-renderer'
 import type { VtsAcquisition, VtsCredentialStore } from '../vts-acquisition'
 import {
@@ -61,7 +63,18 @@ import type {
   ProductionDeployment,
   ProductionDeploymentContext,
   ProductionPeers,
+  ProductionVoice,
 } from '../production'
+import { createVoicePreview, VoicePreviewError } from '../voice-preview'
+import {
+  VOICE_PROFILE_VERSION,
+  VoiceSettingsError,
+  createJsonFileVoiceSettingsPersistence,
+  createVoiceSettings,
+  type VoiceProfile,
+  type VoiceSettings,
+  type VoiceSettingsState,
+} from '../voice-settings'
 import type { ReferenceLiveConfig } from './reference-live-config'
 import { parseReferenceLiveConfig } from './reference-live-config'
 
@@ -84,6 +97,12 @@ const REFERENCE_VOICE_PROFILE: KokoroVoiceProfile = {
   providerVoiceId: 'af_heart',
   speed: 1,
 }
+
+/** The exact fixed sentence the console auditions at speed 1. */
+const REFERENCE_VOICE_PREVIEW_TEXT = "Hi, I'm Elleya. It's good to see you."
+
+/** Suffix of the sidecar JSON preference beside the configured database. */
+const VOICE_SETTINGS_SUFFIX = '.voices.json'
 
 const REFERENCE_KOKORO: Omit<KokoroProviderConfig, 'environment'> = {
   modelRoot: 'onnx-community/Kokoro-82M-v1.0-ONNX',
@@ -181,6 +200,113 @@ function createRebindableGate(): RebindableGate {
       target = null
     },
   }
+}
+
+/**
+ * Serialize all work over the one shared Kokoro model.
+ *
+ * Official replies retain priority: a preview started while speech is active or
+ * waiting is refused immediately as `busy`, so normal speech never queues behind
+ * a new audition. If a preview is already physically running when speech starts,
+ * official work waits for that one real generation to settle; the provider has
+ * no cancellation API, so no second call is ever started concurrently.
+ */
+interface SharedKokoroWork {
+  readonly official: KokoroProvider
+  readonly preview: KokoroProvider
+  idle(): Promise<void>
+}
+
+function createSharedKokoroWork(provider: KokoroProvider): SharedKokoroWork {
+  let tail: Promise<void> = Promise.resolve()
+  let officialWaiting = 0
+  let officialActive = 0
+  let previewActive = 0
+
+  const enqueue = <T>(run: () => Promise<T>): Promise<T> => {
+    const result = tail.then(run)
+    tail = result.then(
+      () => undefined,
+      () => undefined,
+    )
+    return result
+  }
+
+  const official: KokoroProvider = {
+    generate(input) {
+      officialWaiting += 1
+      return enqueue(async () => {
+        officialWaiting -= 1
+        officialActive += 1
+        try {
+          return await provider.generate(input)
+        } finally {
+          officialActive -= 1
+        }
+      })
+    },
+  }
+
+  const preview: KokoroProvider = {
+    generate(input) {
+      if (officialWaiting > 0 || officialActive > 0 || previewActive > 0) {
+        return Promise.reject(
+          new VoicePreviewError(
+            'busy',
+            'reference-live: a speech or preview generation is already running',
+          ),
+        )
+      }
+      previewActive += 1
+      return enqueue(async () => {
+        try {
+          return await provider.generate(input)
+        } finally {
+          previewActive -= 1
+        }
+      })
+    },
+  }
+
+  return {
+    official,
+    preview,
+    async idle() {
+      let observed = tail
+      for (;;) {
+        await observed
+        if (observed === tail) return
+        observed = tail
+      }
+    },
+  }
+}
+
+/**
+ * A readable but unavailable preference store. Listing and previewing remain
+ * possible, while an adoption attempt reports `persistence_failed` and official
+ * speech falls back to the fixed legacy profile.
+ */
+function createUnavailableVoiceSettings(
+  voices: readonly VoiceOption[],
+  cause: unknown,
+): VoiceSettings {
+  const state: VoiceSettingsState = Object.freeze({
+    selectedVoiceId: null,
+    voices: Object.freeze([...voices]),
+  })
+  const unavailable = (): never => {
+    throw new VoiceSettingsError(
+      'persistence_failed',
+      'reference-live: voice preference storage is unavailable',
+      { cause },
+    )
+  }
+  return Object.freeze({
+    state: () => state,
+    select: async () => unavailable(),
+    currentVoiceProfile: (): VoiceProfile => unavailable(),
+  })
 }
 
 /**
@@ -405,6 +531,9 @@ async function acquireReferenceVts(config: ReferenceLiveConfig): Promise<Acquire
 /**
  * Build the deployment from an already parsed configuration. The factories are
  * an explicit test seam; production calls this with `{}` and the real peers.
+ * When the real Kokoro path is used and an explicit `databasePath` is supplied,
+ * the deployment also owns voice settings (persisted in a `<databasePath>.voices.json`
+ * sidecar), the installed-voice catalog and the fixed-text preview capability.
  * A failed build releases every resource acquired up to that point before the
  * original failure is rethrown.
  */
@@ -412,6 +541,7 @@ export async function buildReferenceDeployment(
   config: ReferenceLiveConfig,
   factories: ReferenceLiveFactories,
   clock: ClockPort,
+  databasePath?: string,
 ): Promise<ProductionDeployment> {
   const mappings = toMappings(config.hotkeyMap)
   const disposers: Disposer[] = []
@@ -468,6 +598,10 @@ export async function buildReferenceDeployment(
     disposers.push(() => audioResources.dispose())
 
     let createSynthesis: (gate: RuntimeDeadlineGate) => SynthesisPort
+    // Voice selection is an optional deployment capability. It is only built
+    // for the real Kokoro path with an explicit durable preference sidecar, so
+    // older custom-synthesis factory tests remain model- and filesystem-free.
+    let voice: ProductionVoice | undefined
     if (factories.createSynthesis !== undefined) {
       const synthesisFactory = factories.createSynthesis
       createSynthesis = (gate) => {
@@ -484,10 +618,23 @@ export async function buildReferenceDeployment(
       }
     } else {
       const provider = await createKokoroProvider(kokoroProviderConfig(config))
+      const work = createSharedKokoroWork(provider)
+      const installedVoices = listInstalledKokoroVoices()
+      const profiles: readonly KokoroVoiceProfile[] = [
+        ...installedVoices.map((entry) => ({
+          voiceProfileId: entry.id,
+          voiceProfileVersion: VOICE_PROFILE_VERSION,
+          providerVoiceId: entry.id,
+          speed: 1,
+        })),
+        // Preserve the old public profile tuple for callers and profiles that
+        // predate explicit selection.
+        REFERENCE_VOICE_PROFILE,
+      ]
       const synthesisGate = createRebindableGate()
       const synthesis = createKokoroSynthesis({
-        provider,
-        profiles: [REFERENCE_VOICE_PROFILE],
+        provider: work.official,
+        profiles,
         registry: audioResources,
         clock,
         deadlineGate: synthesisGate,
@@ -496,8 +643,36 @@ export async function buildReferenceDeployment(
         synthesisGate.retarget(gate)
         return synthesis
       }
+      if (
+        databasePath !== undefined &&
+        databasePath.length > 0 &&
+        installedVoices.length > 0
+      ) {
+        let settings: VoiceSettings
+        try {
+          settings = await createVoiceSettings({
+            voices: installedVoices,
+            persistence: createJsonFileVoiceSettingsPersistence(
+              `${databasePath}${VOICE_SETTINGS_SUFFIX}`,
+            ),
+          })
+        } catch (error) {
+          // Official speech remains available; the console gets a readable
+          // storage refusal on adoption instead of a fabricated selection.
+          settings = createUnavailableVoiceSettings(installedVoices, error)
+        }
+        voice = {
+          settings,
+          preview: createVoicePreview({
+            provider: work.preview,
+            text: REFERENCE_VOICE_PREVIEW_TEXT,
+            speed: 1,
+          }),
+        }
+      }
       disposers.push(async () => {
         await synthesis.whenIdle()
+        await work.idle()
       })
     }
 
@@ -566,6 +741,7 @@ export async function buildReferenceDeployment(
       createRenderer,
       createSynthesis,
       audioResources,
+      ...(voice !== undefined ? { voice } : {}),
       profile: {
         characterProfileId: REFERENCE_CHARACTER_PROFILE.profileId,
         characterProfileVersion: REFERENCE_CHARACTER_PROFILE.profileVersion,
@@ -608,7 +784,7 @@ export async function createProductionDeployment(
   context: ProductionDeploymentContext,
 ): Promise<ProductionDeployment> {
   const config = parseReferenceLiveConfig(context.env)
-  return buildReferenceDeployment(config, {}, context.clock)
+  return buildReferenceDeployment(config, {}, context.clock, context.databasePath)
 }
 
 export default createProductionDeployment

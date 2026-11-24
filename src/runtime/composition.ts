@@ -33,6 +33,7 @@ import {
   validateArchiveSelection,
 } from './session-archives'
 import type { ArchiveSelectionConfig, ValidatedArchiveSelection } from './session-archives'
+import type { VoiceSettings } from './voice-settings'
 
 /**
  * Controlled server-side audio resource ownership used by the composition on
@@ -85,6 +86,8 @@ export interface RuntimeCompositionDeps {
   audioResources?: CompositionAudioResources
   sessionId?: string
   profile?: Partial<SessionProfileConfig>
+  /** Optional persisted voice preference snapshotted at each new turn. */
+  voice?: VoiceSettings
   timings?: Partial<CycleTimings>
   inputTtlMs?: number
   storageTtlMs?: number
@@ -301,6 +304,8 @@ export interface ReconstructedRuntimeDeps {
   onDialogueOutcome?: DialogueOutcomeObserver
   /** Any remaining session-profile fields (for example voice). Character identity is always bound to the selection. */
   profile?: Partial<SessionProfileConfig>
+  /** Optional persisted voice preference snapshotted at each new turn. */
+  voice?: VoiceSettings
   timings?: Partial<CycleTimings>
   inputTtlMs?: number
   storageTtlMs?: number
@@ -371,6 +376,7 @@ export async function createReconstructedRuntimeComposition(
       characterProfileId: selection.liveProfile.profileId,
       characterProfileVersion: selection.liveProfile.profileVersion,
     },
+    ...(deps.voice !== undefined ? { voice: deps.voice } : {}),
     ...(deps.timings !== undefined ? { timings: deps.timings } : {}),
     ...(deps.inputTtlMs !== undefined ? { inputTtlMs: deps.inputTtlMs } : {}),
     ...(deps.storageTtlMs !== undefined ? { storageTtlMs: deps.storageTtlMs } : {}),
@@ -436,6 +442,7 @@ export function createRuntimeComposition(deps: RuntimeCompositionDeps): RuntimeC
       store: deps.store,
       sessionId,
       ...(deps.profile !== undefined ? { profile: deps.profile } : {}),
+      ...(deps.voice !== undefined ? { voice: deps.voice } : {}),
       ...(deps.timings !== undefined ? { timings: deps.timings } : {}),
       ...(deps.inputTtlMs !== undefined ? { inputTtlMs: deps.inputTtlMs } : {}),
       ...(deps.storageTtlMs !== undefined ? { storageTtlMs: deps.storageTtlMs } : {}),

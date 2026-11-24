@@ -75,6 +75,7 @@ import {
   selectFallback,
 } from './policy'
 import type { ReceiptFact, ReconciliationAction } from './policy'
+import type { VoiceProfile, VoiceSettings } from './voice-settings'
 
 /**
  * Authoritative M5 coordinator for one controlled response cycle. It owns
@@ -151,6 +152,12 @@ export interface RuntimeCoordinatorDeps {
   cancelTtlMs?: number
   /** Validated session/persona/context profile. */
   profile?: Partial<SessionProfileConfig>
+  /**
+   * Optional persisted voice preference. A genuine new turn snapshots
+   * `currentVoiceProfile()` once before selection/dialogue work, so a preference
+   * confirmed mid-turn cannot change the voice of segments already in that turn.
+   */
+  voice?: VoiceSettings
   timings?: Partial<CycleTimings>
   /** Legacy alias for `timings.selectionMs`; prefer `timings`. */
   decisionDeadlineMs?: number
@@ -575,6 +582,24 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
     ...(deps.cancelTtlMs !== undefined ? { cancelTtlMs: deps.cancelTtlMs } : {}),
   })
   const profile = resolveSessionProfile(deps.profile)
+  /**
+   * Capture the start-of-turn voice once. Without the optional capability the
+   * fixed session profile is used exactly as before. A missing preference falls
+   * back to that same profile rather than making ordinary speech unavailable.
+   */
+  const resolveTurnVoice = (): VoiceProfile => {
+    if (deps.voice !== undefined) {
+      try {
+        return deps.voice.currentVoiceProfile()
+      } catch {
+        // Fall through to the fixed profile.
+      }
+    }
+    return {
+      voiceProfileId: profile.voiceProfileId,
+      voiceProfileVersion: profile.voiceProfileVersion,
+    }
+  }
   const timings = resolveCycleTimings(deps.timings, {
     ...(deps.decisionDeadlineMs !== undefined ? { decisionDeadlineMs: deps.decisionDeadlineMs } : {}),
     ...(deps.reactionDeadlineMs !== undefined ? { reactionDeadlineMs: deps.reactionDeadlineMs } : {}),
@@ -1480,6 +1505,7 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
     startedEpoch: number,
     signal: AbortSignal,
     personaIdentity: { profileId: string; profileVersion: string },
+    turnVoice: VoiceProfile,
   ): Promise<SegmentDispatchResult> {
     const synthesisDeadline = { atMs: deps.clock.nowMs() + timings.synthesisMs }
     if (!freshAt(startedEpoch, synthesisDeadline, signal)) return 'revoked'
@@ -1493,8 +1519,8 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
       turnId,
       segmentId: segment.segmentId,
       text: segment.text,
-      voiceProfileId: profile.voiceProfileId,
-      voiceProfileVersion: profile.voiceProfileVersion,
+      voiceProfileId: turnVoice.voiceProfileId,
+      voiceProfileVersion: turnVoice.voiceProfileVersion,
       deadline: synthesisDeadline,
     }
     const synthesisOutcome = await boundedCall(
@@ -1762,6 +1788,9 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
     let releaseCycle: (() => void) | null = null
     turnActive = true
     try {
+      // Snapshot once, before selection or dialogue can await: every segment of
+      // this genuine new turn uses the same adopted voice.
+      const turnVoice = resolveTurnVoice()
       const selectionDeadline = { atMs: deps.clock.nowMs() + timings.selectionMs }
       const preSelectContext = contextForTurn()
       // A cycle-scoped controller lets a dialogue timeout revoke segment work
@@ -2022,7 +2051,14 @@ export function createRuntimeCoordinator(deps: RuntimeCoordinatorDeps): RuntimeC
             segmentId: segment.segmentId,
             payload: { segment },
           })
-          const result = await dispatchSegment(segment, turnId, startedEpoch, cycleSignal, personaIdentity)
+          const result = await dispatchSegment(
+            segment,
+            turnId,
+            startedEpoch,
+            cycleSignal,
+            personaIdentity,
+            turnVoice,
+          )
           if (result === 'failed') cycleFailed = true
           turnDeliveries.push(...deliveries.slice(before))
         }
