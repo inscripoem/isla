@@ -167,6 +167,7 @@ const SAFE = new Set([
   'session.snapshot',
   'operator.ack',
   'control.ack',
+  'control.resume',
   'input.ack',
   'input.submit',
   'request.error',
@@ -306,6 +307,7 @@ async function attachAndResume(expectedVoiceId, expectedName) {
 async function runTurn(label, text) {
   const inputs = sentOf('input.submit').length
   const offersBefore = of('performance.offer').length
+  const deliveriesBefore = deliveries().length
   await page.locator('#console-text').fill(text)
   await page.getByRole('button', { name: 'Submit input', exact: true }).click()
   const submit = await waitFor(() => sentOf('input.submit').slice(inputs)[0], `${label} input`)
@@ -325,13 +327,21 @@ async function runTurn(label, text) {
       () => sentOf('performance.receipt').find((entry) => entry.payload.outputId === offer.payload.outputId && entry.payload.stage === 'completed'),
       `${label} receipt`,
     ),
-    delivery: await waitFor(
-      () => deliveries().find((entry) => entry.payload.data?.outputId === offer.payload.outputId || entry.payload.data?.segmentId === offer.payload.segmentId),
-      `${label} delivery`,
-    ),
     bytes: await waitFor(() => audio.get(offer.payload.audioRef), `${label} audio`),
   })))
-  return { evidence, first: evidence[0] }
+  const newDeliveries = await waitFor(() => {
+    const current = deliveries().slice(deliveriesBefore)
+    return current.length >= 2 ? current : null
+  }, `${label} deliveries`)
+  const fullyDelivered = newDeliveries.filter((entry) => entry.payload.data?.classification === 'fully-delivered')
+  check(`${label} committed two fully-delivered notifications`, fullyDelivered.length === 2, JSON.stringify(newDeliveries.map((entry) => entry.payload)))
+  check(`${label} delivery seqs are distinct`, fullyDelivered[0].payload.seq !== fullyDelivered[1].payload.seq)
+  return {
+    evidence,
+    first: evidence[0],
+    deliveries: fullyDelivered,
+    deliverySeqs: fullyDelivered.map((entry) => entry.payload.seq),
+  }
 }
 
 async function previewAndStop(emmaId) {
@@ -348,7 +358,16 @@ async function previewAndStop(emmaId) {
   )
   const sample = await waitFor(() => of('voice.sample').find((entry) => entry.payload.requestMessageId === preview.messageId), 'voice.sample frame')
   check('preview is an Emma WAV', sample.payload.voiceId === emmaId && sample.bytes > 0 && sample.wav)
-  await page.waitForFunction(() => window.__voiceMedia?.playing === true)
+  let retried = false
+  try {
+    await page.waitForFunction(() => window.__voiceMedia?.playing === true, undefined, { timeout: 5000 })
+  } catch {
+    // A browser autoplay refusal keeps the prepared sample; a second explicit
+    // Preview voice click is the user gesture that replays it.
+    retried = true
+    await page.getByRole('button', { name: 'Preview voice', exact: true }).click()
+    await page.waitForFunction(() => window.__voiceMedia?.playing === true)
+  }
   const stopAt = await page.evaluate(() => {
     window.__voiceMedia.stopAt = performance.now()
     return window.__voiceMedia.stopAt
@@ -363,7 +382,7 @@ async function previewAndStop(emmaId) {
     'preview did not change the official preference',
     latest('voice.state')?.payload.selectedVoiceId === activeBefore && (await currentLabel()).includes(`Current voice: ${HEART}`),
   )
-  return sample
+  return { sample, retried }
 }
 
 async function adopt(emmaId) {
@@ -419,10 +438,12 @@ async function beforeRestart() {
     `${baseline.first.bytes.sha256} | ${selected.first.bytes.sha256}`,
   )
   check(
-    'adopted turn completed both segments and committed two deliveries',
+    'adopted turn completed both segments and committed two fully-delivered notifications',
     selected.evidence.length === 2 &&
-      selected.evidence.every((entry) => entry.receipt.payload.stage === 'completed' && entry.delivery.payload.type === 'delivery.committed'),
-    JSON.stringify(selected.evidence.map((entry) => ({ outputId: entry.offer.payload.outputId, seq: entry.delivery.payload.seq }))),
+      selected.evidence.every((entry) => entry.receipt.payload.stage === 'completed') &&
+      selected.deliveries.length === 2 &&
+      selected.deliveries.every((entry) => entry.payload.data?.classification === 'fully-delivered'),
+    JSON.stringify(selected.evidence.map((entry) => ({ outputId: entry.offer.payload.outputId, stage: entry.receipt.payload.stage }))),
   )
   check('active voice remains Emma after the turn', latest('voice.state')?.payload.selectedVoiceId === emma.id)
   await writeFile(
@@ -440,9 +461,18 @@ async function beforeRestart() {
   )
   report.activeVoiceId = emma.id
   report.firstSegmentSha256 = selected.first.bytes.sha256
-  report.previewWavSha256 = preview.sha256
+  report.previewWavSha256 = preview.sample.sha256
+  report.previewRetried = preview.retried
   report.baselineFirstSegmentSha256 = baseline.first.bytes.sha256
-  report.deliverySeqs = selected.evidence.map((entry) => entry.delivery.payload.seq)
+  report.deliverySeqs = selected.deliverySeqs
+  report.correlations = selected.evidence.map((entry) => ({
+    turnId: entry.offer.payload.turnId,
+    segmentId: entry.offer.payload.segmentId,
+    outputId: entry.offer.payload.outputId,
+    audioRef: entry.offer.payload.audioRef,
+    receiptStage: entry.receipt.payload.stage,
+    audioSha256: entry.bytes.sha256,
+  }))
 }
 
 async function afterRestart() {
@@ -462,14 +492,24 @@ async function afterRestart() {
     `${state.firstSegmentSha256} | ${turn.first.bytes.sha256}`,
   )
   check(
-    'post-restart turn completed both segments and committed two deliveries',
+    'post-restart turn completed both segments and committed two fully-delivered notifications',
     turn.evidence.length === 2 &&
-      turn.evidence.every((entry) => entry.receipt.payload.stage === 'completed' && entry.delivery.payload.type === 'delivery.committed'),
+      turn.evidence.every((entry) => entry.receipt.payload.stage === 'completed') &&
+      turn.deliveries.length === 2 &&
+      turn.deliveries.every((entry) => entry.payload.data?.classification === 'fully-delivered'),
   )
   check('restarted server still selects Emma after the turn', latest('voice.state')?.payload.selectedVoiceId === state.selectedVoiceId)
   report.activeVoiceId = state.selectedVoiceId
   report.firstSegmentSha256 = turn.first.bytes.sha256
-  report.deliverySeqs = turn.evidence.map((entry) => entry.delivery.payload.seq)
+  report.deliverySeqs = turn.deliverySeqs
+  report.correlations = turn.evidence.map((entry) => ({
+    turnId: entry.offer.payload.turnId,
+    segmentId: entry.offer.payload.segmentId,
+    outputId: entry.offer.payload.outputId,
+    audioRef: entry.offer.payload.audioRef,
+    receiptStage: entry.receipt.payload.stage,
+    audioSha256: entry.bytes.sha256,
+  }))
 }
 
 try {
