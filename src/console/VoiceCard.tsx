@@ -1,4 +1,4 @@
-import { Button, Card, Tag, Title } from 'animal-island-ui'
+import { Button, Card, Title } from 'animal-island-ui'
 import type { VoiceAuditionView } from './voice-audition'
 import type { VoiceLocale, VoiceSelectionState } from './voice-selection'
 
@@ -16,14 +16,15 @@ export interface VoiceCardProps {
   readonly connected: boolean
   readonly retiring: boolean
   readonly operator: boolean
-  readonly canBootstrapOperator: boolean
+  readonly productPlaybackBusy: boolean
+  readonly canEnableVoiceChanges: boolean
   readonly operatorRequestPending: boolean
   readonly operatorRequestError: string | null
   readonly onDraftChange: (voiceId: string) => void
   readonly onPreview: () => void
   readonly onStopPreview: () => void
   readonly onApply: () => void
-  readonly onBootstrapOperator: () => void
+  readonly onEnableVoiceChanges: () => void
 }
 
 function localeLabel(locale: VoiceLocale): string {
@@ -36,42 +37,49 @@ function voiceName(state: VoiceSelectionState, voiceId: string | null): string {
   return voice === undefined ? voiceId : voice.name
 }
 
+function viewerStatus(props: VoiceCardProps): string {
+  return props.canEnableVoiceChanges
+    ? 'Preview a voice, or enable voice changes to use it for replies.'
+    : 'Preview a voice; only an operator can use it for replies.'
+}
+
 function statusLine(props: VoiceCardProps): string {
-  const { state, audition, connected, retiring, operator } = props
-  if (!connected) return 'Connect an application session to load or preview voices.'
-  if (state.pendingListMessageId !== null) return 'Loading installed voices…'
+  const { state, audition, connected, retiring, operator, productPlaybackBusy } = props
+  if (!connected) return 'Connect an application session to choose a voice.'
+  if (state.pendingListMessageId !== null) return 'Waiting for installed voices…'
   if (audition.phase === 'preparing' || state.preview.requestMessageId !== null) {
     return `Preparing preview of ${voiceName(state, state.draftVoiceId)}…`
   }
   if (audition.phase === 'playing') return `Playing preview of ${voiceName(state, audition.voiceId)}.`
-  if (audition.phase === 'blocked') {
-    return 'Sample ready. Click Preview voice again to play it.'
-  }
+  if (audition.phase === 'blocked') return 'Sample ready. Click Preview voice again to play it.'
   if (audition.phase === 'error') return audition.detail ?? 'Preview playback failed.'
   if (state.selectionOutcome === 'pending') {
-    return `Applying ${voiceName(state, state.draftVoiceId)}… waiting for the server acknowledgement.`
+    return `Applying ${voiceName(state, state.draftVoiceId)}…`
   }
   if (state.selectionOutcome === 'refused') {
     return `Voice change refused${state.lastError === null ? '.' : `: ${state.lastError.message}`}`
   }
   if (state.lastError !== null) return `Voice request failed: ${state.lastError.message}`
-  if (state.selectionOutcome === 'unknown') {
-    return 'Voice change is unconfirmed after the transport dropped. The last confirmed voice stays shown.'
-  }
-  if (retiring) return 'This session is retiring; applying a voice is disabled until a successor session.'
+  if (state.selectionOutcome === 'unknown') return 'Voice change unconfirmed. Current voice stays shown.'
+  if (state.voices.length === 0) return 'No installed voices.'
+  if (retiring) return 'Voice changes are unavailable while this session retires.'
+  if (productPlaybackBusy) return 'Preview is unavailable while product playback is active.'
   if (audition.phase === 'ended') return 'Preview ended.'
-  if (state.selectionOutcome === 'confirmed') return 'Voice change confirmed by the server.'
-  if (state.voices.length === 0) return 'This deployment has no installed voices.'
-  if (!operator) return 'Draft and preview are local. Use this voice requires operator authority.'
-  return 'Draft and preview are local. Use this voice asks the server to change the active voice.'
+  if (!operator) return viewerStatus(props)
+  return 'Changes apply to the next reply.'
 }
 
 export function VoiceCard(props: VoiceCardProps) {
-  const { state, audition, connected, retiring, operator } = props
+  const { state, audition, connected, retiring, operator, productPlaybackBusy } = props
   const voicesAvailable = state.voices.length > 0
-  const selectable = connected && voicesAvailable && state.pendingListMessageId === null
+  const waitingForVoices = state.pendingListMessageId !== null
+  const selectable = connected && voicesAvailable && !waitingForVoices
   const previewDisabled =
-    retiring || !selectable || state.draftVoiceId === null || state.selectionOutcome === 'pending'
+    retiring ||
+    productPlaybackBusy ||
+    !selectable ||
+    state.draftVoiceId === null ||
+    state.selectionOutcome === 'pending'
   const previewBusy =
     state.preview.requestMessageId !== null ||
     audition.phase === 'preparing' ||
@@ -81,22 +89,22 @@ export function VoiceCard(props: VoiceCardProps) {
     !connected ||
     retiring ||
     !operator ||
-    state.pendingListMessageId !== null ||
+    waitingForVoices ||
     state.draftVoiceId === null ||
     state.draftVoiceId === state.activeVoiceId ||
     state.selectionOutcome === 'pending'
   const activeNeedsQualifier =
     state.activeVoiceId !== null &&
-    (!connected || state.pendingListMessageId !== null || state.selectionOutcome === 'unknown')
+    (!connected || waitingForVoices || state.selectionOutcome === 'unknown')
+  const placeholder = waitingForVoices
+    ? 'Waiting for installed voices…'
+    : voicesAvailable
+      ? 'Choose a voice'
+      : 'No installed voices'
 
   return (
     <Card>
-      <div className="console__card-head">
-        <Title size="middle">Voice</Title>
-        <Tag variant="outlined" color={operator ? 'app-teal' : 'app-yellow'}>
-          {operator ? 'operator' : 'viewer'}
-        </Tag>
-      </div>
+      <Title size="middle">Voice</Title>
 
       <p className="console__voice-current" aria-live="polite">
         Current voice: <strong>{voiceName(state, state.activeVoiceId)}</strong>
@@ -118,7 +126,7 @@ export function VoiceCard(props: VoiceCardProps) {
           }}
         >
           <option value="" disabled>
-            {voicesAvailable ? 'Choose a voice' : 'No installed voices'}
+            {placeholder}
           </option>
           {state.voices.map((voice) => (
             <option key={voice.id} value={voice.id}>
@@ -138,28 +146,17 @@ export function VoiceCard(props: VoiceCardProps) {
         <Button size="small" type="primary" disabled={applyDisabled} onClick={props.onApply}>
           Use this voice
         </Button>
+        {!operator && props.canEnableVoiceChanges && (
+          <Button size="small" loading={props.operatorRequestPending} onClick={props.onEnableVoiceChanges}>
+            Enable voice changes
+          </Button>
+        )}
       </div>
 
       <p className="console__hint console__voice-status" id="console-voice-status" role="status" aria-live="polite">
         {statusLine(props)}
       </p>
 
-      {!operator && (
-        <p className="console__hint">
-          Viewer access: draft and preview are available on this local console, but only an operator can apply a
-          voice.
-          {props.canBootstrapOperator
-            ? ' Bootstrap operator to enable Use this voice.'
-            : ' Use this voice stays disabled until this connection has operator authority.'}
-        </p>
-      )}
-      {!operator && props.canBootstrapOperator && (
-        <div className="console__actions">
-          <Button size="small" loading={props.operatorRequestPending} onClick={props.onBootstrapOperator}>
-            Bootstrap operator
-          </Button>
-        </div>
-      )}
       {props.operatorRequestError !== null && <p className="console__alert">{props.operatorRequestError}</p>}
     </Card>
   )

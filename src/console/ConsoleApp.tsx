@@ -453,6 +453,7 @@ export function ConsoleApp({
   const [transportEpoch, setTransportEpoch] = useState(0)
   const [voice, setVoice] = useState<VoiceSelectionState>(createInitialVoiceSelectionState)
   const [voiceAudition, setVoiceAudition] = useState<VoiceAuditionView>(IDLE_VOICE_AUDITION)
+  const [productPlaybackActive, setProductPlaybackActive] = useState(false)
 
   const transportRef = useRef<ConsoleTransportPort | null>(null)
   const playbackRef = useRef<PlaybackBinding | null>(null)
@@ -465,6 +466,7 @@ export function ConsoleApp({
   const voiceListKeyRef = useRef<string | null>(null)
   const voiceIdentityRef = useRef<{ readonly sessionId: string; readonly epoch: number } | null>(null)
   const auditionRef = useRef<VoiceAudition | null>(null)
+  const productPlaybackActiveRef = useRef(false)
 
   // Mirror the latest view state for event handlers, which must read it outside
   // render. Writing the ref during render is not allowed.
@@ -475,6 +477,11 @@ export function ConsoleApp({
   const nextId = useCallback((prefix: string): string => {
     counterRef.current += 1
     return `${prefix}-${counterRef.current}-${Date.now().toString(36)}`
+  }, [])
+
+  const setProductPlayback = useCallback((active: boolean): void => {
+    productPlaybackActiveRef.current = active
+    setProductPlaybackActive(active)
   }, [])
 
   /**
@@ -567,6 +574,7 @@ export function ConsoleApp({
         voiceListKeyRef.current = null
         voiceIdentityRef.current = null
         updateVoice((current) => withVoiceDisconnected(current))
+        setProductPlayback(false)
         stopVoiceAudition('Preview stopped because the transport closed.')
         machineRef.current?.dispose('transport closed')
         playbackRef.current?.cancelLocal()
@@ -681,7 +689,54 @@ export function ConsoleApp({
               // identity with an older epoch's list.
               if (!staleSnapshot && !staleControlAck) {
                 requestVoiceListForSession(application, message.sessionId, message.epoch)
+                if (message.kind === 'control.ack') {
+                  if (
+                    message.payload.action === 'stop' &&
+                    message.payload.status !== 'refused'
+                  ) {
+                    setProductPlayback(false)
+                  }
+                } else {
+                  const identityChanged =
+                    currentSession === null ||
+                    currentSession.sessionId !== message.sessionId ||
+                    currentSession.epoch !== message.epoch
+                  if (message.payload.lifecycle === 'stopped') {
+                    setProductPlayback(false)
+                  } else if (message.payload.performerStatus === 'busy') {
+                    setProductPlayback(true)
+                  } else if (identityChanged) {
+                    setProductPlayback(false)
+                  }
+                }
               }
+            }
+
+            const playbackMachine = machineRef.current?.state()
+            const currentSession = stateRef.current.session
+            const voiceIdentity = voiceIdentityRef.current
+            const playbackSessionId =
+              playbackMachine?.sessionId ?? voiceIdentity?.sessionId ?? currentSession?.sessionId
+            const playbackEpoch =
+              playbackMachine?.epoch ?? voiceIdentity?.epoch ?? currentSession?.epoch
+            if (
+              (message.kind === 'performance.offer' || message.kind === 'performance.execute') &&
+              message.payload.sessionId === message.sessionId &&
+              message.payload.epoch === message.epoch &&
+              playbackSessionId !== undefined &&
+              playbackEpoch !== undefined &&
+              message.sessionId === playbackSessionId &&
+              message.epoch === playbackEpoch
+            ) {
+              setProductPlayback(true)
+            }
+            if (
+              message.kind === 'performance.cancel' &&
+              (playbackMachine === undefined ||
+                (message.sessionId === playbackMachine.sessionId &&
+                  message.payload.revokedEpoch >= playbackMachine.epoch))
+            ) {
+              setProductPlayback(false)
             }
 
             if (stopsLocalAudition(message)) {
@@ -724,6 +779,12 @@ export function ConsoleApp({
           const hooks: PerformerMachineHooks = {
             onReceipt: (receipt) => {
               if (cancelled) return
+              const machine = machineRef.current?.state()
+              setProductPlayback(
+                receipt.stage === 'accepted' ||
+                  receipt.stage === 'started' ||
+                  (machine !== undefined && machine.playerStatus.idle === false),
+              )
               setState((current) => withReceipt(current, receipt))
             },
             onStateChanged: () => {
@@ -731,6 +792,7 @@ export function ConsoleApp({
               const machine = machineRef.current
               if (machine === null) return
               const next = machine.state()
+              if (next.playerStatus.idle === false) setProductPlayback(true)
               setState((current) => {
                 const projected = withPlaybackStatus(current, next.playerStatus)
                 return next.display.subtitle === null ? projected : withSubtitle(projected, next.display.subtitle)
@@ -805,6 +867,7 @@ export function ConsoleApp({
     stopVoiceAudition,
     ensureAudition,
     requestVoiceListForSession,
+    setProductPlayback,
   ])
 
   const reconnect = useCallback(() => {
@@ -824,11 +887,12 @@ export function ConsoleApp({
     voiceRef.current = refreshedVoice
     setVoice(refreshedVoice)
     setVoiceAudition(IDLE_VOICE_AUDITION)
+    setProductPlayback(false)
     stopVoiceAudition('Preview stopped for reconnect.')
     const nextEpoch = transportEpochRef.current + 1
     transportEpochRef.current = nextEpoch
     setTransportEpoch(nextEpoch)
-  }, [stopVoiceAudition])
+  }, [setProductPlayback, stopVoiceAudition])
 
   const dispatchable = canDispatch(state)
 
@@ -915,6 +979,12 @@ export function ConsoleApp({
       const session = current.session
       const transport = transportRef.current
       if (transport === null || session === null || !canDispatch(current)) return
+      if (action === 'stop') {
+        // Explicit Stop cancels a pending or playing audition immediately; the
+        // acknowledgement later changes the epoch and refreshes the list.
+        updateVoice((voiceState) => stopVoicePreview(voiceState))
+        stopVoiceAudition('Preview stopped because the session is stopping.')
+      }
       const requestId = nextId(`control-${action}`)
       const message: ControlStopMessage | ControlResumeMessage =
         action === 'stop'
@@ -971,7 +1041,7 @@ export function ConsoleApp({
         notificationOpen({ type: 'error', message: `Control ${action} failed`, description: identify(error) })
       }
     },
-    [nextId],
+    [nextId, stopVoiceAudition, updateVoice],
   )
 
   const attachPerformer = useCallback(() => {
@@ -1020,6 +1090,13 @@ export function ConsoleApp({
     if (session === null || transport === null || !isApplicationTransport(transport)) return
     if (!canDispatch(stateRef.current) || current.draftVoiceId === null) return
     if (current.selectionOutcome === 'pending') return
+    const activeMachine = machineRef.current
+    if (
+      activeMachine !== null &&
+      (productPlaybackActiveRef.current || activeMachine.state().playerStatus.idle === false)
+    ) {
+      return
+    }
     const auditionView = auditionRef.current?.view()
     // A blocked sample is already prepared. The second explicit click is the
     // user gesture the browser needs, so do not spend another server request.
@@ -1196,6 +1273,8 @@ export function ConsoleApp({
   const retiring = session?.retiring === true
   const allowDispatch = dispatchable && (!machinePath || !retiring)
   const operatorButtonVisible = requestOperatorToken !== undefined && machinePath
+  const voicePlaybackBusy =
+    machine !== null && (productPlaybackActive || machine.playerStatus.idle === false)
   const recovery = machine?.recovery
   // Recovery does not wait for `retiring`: the runtime only retires the session
   // after the operator's first valid request. Eligibility requires the current
@@ -1212,6 +1291,25 @@ export function ConsoleApp({
 
   const sessionView = (
     <div className="console__stack">
+      {machinePath && (
+        <VoiceCard
+          state={voice}
+          audition={voiceAudition}
+          connected={state.connection === 'open' && session !== null}
+          retiring={retiring}
+          operator={machine?.operator === true}
+          productPlaybackBusy={voicePlaybackBusy}
+          canEnableVoiceChanges={operatorButtonVisible && machine?.operator !== true}
+          operatorRequestPending={operatorRequestPending}
+          operatorRequestError={operatorRequestError}
+          onDraftChange={changeVoiceDraft}
+          onPreview={previewVoice}
+          onStopPreview={stopPreview}
+          onApply={applyVoice}
+          onEnableVoiceChanges={() => void bootstrapOperator()}
+        />
+      )}
+
       <Card>
         <div className="console__card-head">
           <Title size="middle">Session</Title>
@@ -1222,24 +1320,6 @@ export function ConsoleApp({
         <Facts rows={inputRows} />
         <p className="console__hint">{dispatchSummary}</p>
       </Card>
-
-      {machinePath && (
-        <VoiceCard
-          state={voice}
-          audition={voiceAudition}
-          connected={state.connection === 'open' && session !== null}
-          retiring={retiring}
-          operator={machine?.operator === true}
-          canBootstrapOperator={operatorButtonVisible && machine?.operator !== true}
-          operatorRequestPending={operatorRequestPending}
-          operatorRequestError={operatorRequestError}
-          onDraftChange={changeVoiceDraft}
-          onPreview={previewVoice}
-          onStopPreview={stopPreview}
-          onApply={applyVoice}
-          onBootstrapOperator={() => void bootstrapOperator()}
-        />
-      )}
 
       <Card>
         <Title size="middle">Input</Title>
