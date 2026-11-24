@@ -150,7 +150,6 @@ page.on('console', (message) => {
 const sent = []
 const received = []
 const audio = new Map()
-const baseOrigin = new URL(options.url).origin
 const frameText = (frame) =>
   typeof frame.payload === 'string' ? frame.payload : frame.payload.toString('utf8')
 const SAFE = new Set([
@@ -178,21 +177,18 @@ page.on('websocket', (socket) => {
   socket.on('framesent', (frame) => observe(frameText(frame), true))
   socket.on('framereceived', (frame) => observe(frameText(frame), false))
 })
-page.on('response', (response) => {
-  if (response.request().method() !== 'POST') return
-  let url
-  try {
-    url = new URL(response.url())
-  } catch {
-    return
+await page.exposeFunction('__voiceAudioCapture', (entry) => {
+  if (
+    entry &&
+    typeof entry.ref === 'string' &&
+    Number.isInteger(entry.bytes) &&
+    entry.bytes >= 0 &&
+    typeof entry.sha256 === 'string' &&
+    entry.sha256.length === 64 &&
+    typeof entry.wav === 'boolean'
+  ) {
+    audio.set(entry.ref, entry)
   }
-  if (url.origin !== baseOrigin || url.pathname !== '/audio' || response.status() !== 200) return
-  const ref = url.searchParams.get('ref')
-  if (ref === null) return
-  response.body().then(
-    (buffer) => audio.set(ref, { ref, sha256: sha256(buffer), bytes: buffer.length }),
-    () => {},
-  )
 })
 await page.addInitScript(() => {
   window.__voiceMedia = { events: [], playing: false }
@@ -209,6 +205,63 @@ await page.addInitScript(() => {
       }
     }
     return originalPlay.apply(this, args)
+  }
+
+  const originalBlob = Response.prototype.blob
+  Response.prototype.blob = async function (...args) {
+    // Await the product's actual blob first, hand back the identical Blob, and
+    // observe that same immutable Blob independently. Never re-fetch /audio.
+    const blob = await originalBlob.apply(this, args)
+    void observeAudioBlob(this, blob).catch(() => {})
+    return blob
+  }
+
+  async function observeAudioBlob(response, blob) {
+    let url
+    try {
+      url = new URL(response.url, location.href)
+    } catch {
+      return
+    }
+    if (
+      response.status !== 200 ||
+      url.origin !== location.origin ||
+      url.pathname !== '/audio' ||
+      !url.searchParams.has('ref') ||
+      typeof window.__voiceAudioCapture !== 'function'
+    ) {
+      return
+    }
+    const buffer = await blob.arrayBuffer()
+    const bytes = new Uint8Array(buffer)
+    const tag = (offset) =>
+      String.fromCharCode(bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3])
+    let dataLengthOk = false
+    if (bytes.length > 44 && tag(0) === 'RIFF' && tag(8) === 'WAVE') {
+      const view = new DataView(buffer)
+      let offset = 12
+      while (offset + 8 <= bytes.length) {
+        const chunk = tag(offset)
+        const size = view.getUint32(offset + 4, true)
+        if (chunk === 'data') {
+          dataLengthOk = offset + 8 + size <= bytes.length
+          break
+        }
+        offset += 8 + size + (size % 2)
+      }
+    }
+    const digest = await crypto.subtle.digest('SHA-256', buffer)
+    const sha256 = Array.from(new Uint8Array(digest), (byte) =>
+      byte.toString(16).padStart(2, '0'),
+    ).join('')
+    void window
+      .__voiceAudioCapture({
+        ref: url.searchParams.get('ref'),
+        bytes: bytes.length,
+        sha256,
+        wav: dataLengthOk,
+      })
+      .catch(() => {})
   }
 })
 
@@ -319,16 +372,21 @@ async function runTurn(label, text) {
   }, `${label} offers`)
   const pair = offers.filter((offer) => offer.payload.turnId === offers[0].payload.turnId)
   check(`${label} has two segments`, pair.length === 2, `offers=${pair.length}`)
-  const evidence = await Promise.all(pair.map(async (offer) => ({
-    offer,
-    grant: await waitFor(() => of('performance.grant').find((entry) => entry.payload.outputId === offer.payload.outputId), `${label} grant`),
-    ready: await waitFor(() => sentOf('performance.ready').find((entry) => entry.payload.outputId === offer.payload.outputId), `${label} ready`),
-    receipt: await waitFor(
+  const evidence = await Promise.all(pair.map(async (offer) => {
+    const grant = await waitFor(() => of('performance.grant').find((entry) => entry.payload.outputId === offer.payload.outputId), `${label} grant`)
+    const ready = await waitFor(() => sentOf('performance.ready').find((entry) => entry.payload.outputId === offer.payload.outputId), `${label} ready`)
+    const receipt = await waitFor(
       () => sentOf('performance.receipt').find((entry) => entry.payload.outputId === offer.payload.outputId && entry.payload.stage === 'completed'),
       `${label} receipt`,
-    ),
-    bytes: await waitFor(() => audio.get(offer.payload.audioRef), `${label} audio`),
-  })))
+    )
+    const bytes = await waitFor(() => audio.get(offer.payload.audioRef), `${label} audio`)
+    check(
+      `${label} audio is a verified WAV`,
+      bytes.bytes > 0 && bytes.wav === true,
+      JSON.stringify({ ref: bytes.ref, bytes: bytes.bytes, wav: bytes.wav }),
+    )
+    return { offer, grant, ready, receipt, bytes }
+  }))
   const newDeliveries = await waitFor(() => {
     const current = deliveries().slice(deliveriesBefore)
     return current.length >= 2 ? current : null
