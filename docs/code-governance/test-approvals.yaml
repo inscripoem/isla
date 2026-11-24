@@ -43,3 +43,13 @@ approvals:
     tests:
       - test/offline/m1-performance.test.ts
       - test/offline/m1-kokoro-worker-entry.test.ts
+  - id: TA-003
+    task: "Remove the redundant VTS model query and classify NotAllowedError from media play"
+    approved_at: "2026-11-24T03:44:42+08:00"
+    approved_by: M1
+    scope:
+      - "src/performance/vts-driver.ts"
+      - "src/performance/browser/player.ts"
+      - "src/performance/README.md"
+    tests:
+      - test/offline/m1-performance.test.ts
