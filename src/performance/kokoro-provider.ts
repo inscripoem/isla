@@ -25,6 +25,7 @@ import {
   createGuardedTokenizer,
   type KokoroCallableTokenizer,
 } from './kokoro-guard'
+import { SUPPORTED_KOKORO_VOICE_IDS } from './voice-catalog'
 
 /**
  * The verified fixed-model token ceiling for the pinned 512-context Kokoro
@@ -47,42 +48,10 @@ export function isSupportedNodeVoiceId(voiceId: unknown): voiceId is string {
   return typeof voiceId === 'string' && SUPPORTED_NODE_VOICE_PATTERN.test(voiceId)
 }
 
-/**
- * The exact English voice table exposed by the pinned `kokoro-js` 1.2.1
- * `KokoroTTS.voices` map. The package also ships non-English `.bin` assets, but
- * the Node SDK does not accept those ids, so this allowlist — not the installed
- * file set — decides which bundled voices are supported.
- */
-const SUPPORTED_NODE_VOICE_IDS: ReadonlySet<string> = new Set([
-  'af_alloy',
-  'af_aoede',
-  'af_bella',
-  'af_heart',
-  'af_jessica',
-  'af_kore',
-  'af_nicole',
-  'af_nova',
-  'af_river',
-  'af_sarah',
-  'af_sky',
-  'am_adam',
-  'am_echo',
-  'am_eric',
-  'am_fenrir',
-  'am_liam',
-  'am_michael',
-  'am_onyx',
-  'am_puck',
-  'am_santa',
-  'bf_alice',
-  'bf_emma',
-  'bf_isabella',
-  'bf_lily',
-  'bm_daniel',
-  'bm_fable',
-  'bm_george',
-  'bm_lewis',
-])
+// Which bundled English voices are supported comes from the shared
+// `voice-catalog` allowlist. The package also ships non-English `.bin` assets,
+// but the Node SDK does not accept those ids, so that allowlist — not the
+// installed file set — decides which bundled voices are supported.
 
 /** Documented `RawAudio` shape returned by the real SDK `generate`. */
 export interface KokoroRawAudioLike {
@@ -203,7 +172,7 @@ export function createRealKokoroSdkLoader(): KokoroSdkLoader {
       return new kokoroTtsCtor(model, tokenizer) as unknown as KokoroTtsLike
     },
     ensureVoice(voiceId) {
-      if (!isSupportedNodeVoiceId(voiceId) || !SUPPORTED_NODE_VOICE_IDS.has(voiceId)) {
+      if (!isSupportedNodeVoiceId(voiceId) || !SUPPORTED_KOKORO_VOICE_IDS.has(voiceId)) {
         throw new Error(`m1-kokoro-provider: unsupported Node voice: ${String(voiceId)}`)
       }
       if (verifiedVoiceIds.has(voiceId)) return
