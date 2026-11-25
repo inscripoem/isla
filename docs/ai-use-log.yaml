@@ -10217,3 +10217,43 @@ entries:
       test/browser/console-wiring-acceptance.mjs, test/browser/console-wiring.tsx,
       test/browser/console-wiring.html and docs/ai-use-log.yaml. No src/,
       contract, package, lockfile or workflow change.
+  - date: "2026-11-25"
+    task: g6-log-diagnostics-followup
+    change: >-
+      Address the four non-blocking follow-ups from the approval of #191.
+      A missing or unreadable base log file now fails closed with one
+      POL-G6-03 finding naming base-log instead of ending the run with a stack
+      trace: readLogBase returns a result and runCli records it, then skips
+      identity classification while still running the shape and log-update
+      checks. The non-list message now separates a top-level list document, a
+      mapping whose entries value is not a list, and a document with no
+      top-level entries list. A cyclic head entry is reported once by the
+      reference check, and the shape check keeps only its field-presence
+      checks. The entry rule names both counts rather than claiming they are
+      equal. Delta-006 and the INV-14 verification row describe the changes.
+    requirements: []
+    invariants: [INV-14]
+    commits: ["e68d83e209d6fb9a653081ee19142bf88704bc88"]
+    agent: OpenCode V2 build
+    provider: self-api
+    model: deepseek-v4-flash
+    sessions: ["ses_deea36027ffe05391FdxH2F0Eu"]
+    supervision: >-
+      The implement session changed the gate, tests and documentation after
+      the plan and the two design answers were confirmed. The outer assistant
+      reviewed the diff, re-ran the suites and the CLI matrix and prepared
+      this entry.
+    verification:
+      base: 55e36d31534261b51baf274184a402e9945235bb
+      results: >-
+        pnpm test:gates passed 6 files / 192 tests; pnpm test:trace passed 49
+        tests; pnpm test:readiness passed 47 tests; pnpm verify passed 98
+        files / 2206 tests with a clean typecheck, lint and build; git diff
+        --check reported no whitespace errors. The CLI matrix exited 0 on a
+        valid base and exited 1 with one POL-G6-03 record for entries: {},
+        entries: 5, a cyclic base, a cyclic head and a nonexistent base path;
+        a cyclic head printed one alias diagnostic.
+      limits: >-
+        No push, pull request, merge, live provider run or Windows run. CI on
+        this head is not observed. The entry-rule message says "1 entries" for
+        a single entry; pluralisation was left as it was.
