@@ -10835,3 +10835,61 @@ entries:
       docs/architecture/permission-model.md, .opencode/permissions.jsonc,
       docs/architecture/supported-platform.md, .env.example and
       docs/ai-use-log.yaml.
+  - date: "2026-11-25"
+    task: M2-202-avatar-viewport-zorder
+    branch: m2-202-avatar-viewport
+    change: >-
+      Address the two blocking items from the M5 re-check of PR #211 at
+      33b543a. The stage box now isolates its own stacking context and the
+      transparent avatar layer sits at a negative stacking level inside it, so
+      an opaque relay frame paints above the stage background but below the
+      in-flow HUD row, visualiser, subtitle and reaction, while the laser,
+      danmaku, player and stopped overlay keep their positive levels and the
+      canvas stays transparent with pointer events disabled for the layer. A
+      node-side test parses the real console, component and layout CSS, computes
+      the per-selector stacking level and asserts the resulting paint order, so
+      removing the isolation or the negative level fails the suite. TA-014
+      records the M2 avatar task scope for future pull requests; its header
+      states that adding it after the first #211 code commit cannot satisfy G1
+      ordering retroactively and that the #211 exception remains an M6-reviewed
+      exception.
+    requirements: [FR-04, NFR-02, NFR-06]
+    invariants: []
+    commits:
+      - f6fc3bcba86fc951840fdf629f843b2e1e654adf
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    opencode_version: "1.19.4"
+    launch_flags:
+      - "--agent build --format json -m opencode-go/deepseek-v4.1-flash (z-order follow-up)"
+    sessions: [ses_ded0ffbb8ffelGXg1bzp92NeQS]
+    supervision: >-
+      The M2 member approved the two blocking follow-up items and a local-only
+      commit. This session made the CSS, test, approval and log changes and ran
+      the checks; no agent merged the pull request, enabled auto-merge or pushed
+      main.
+    human_review: >-
+      The M5 re-check of 33b543a requested the stacking fix and the task-scoped
+      approval record. The fixes are committed on the task branch for re-review;
+      the #211 G1 exception still requires M6 review.
+    transcript_record: >-
+      The OpenCode session is retained in the local OpenCode database; no
+      separate export was created in this session.
+    verification:
+      base: f6fc3bcba86fc951840fdf629f843b2e1e654adf
+      results: >-
+        pnpm test:m2 passed 175 tests in three files (console, viewport/client
+        and relay). pnpm gate:test-approval printed "G1: tests-approved
+        requirement satisfied (or not applicable)" because this local run is
+        not a pull-request event. pnpm verify exited 0 with tsc -b, oxlint, 2375
+        tests in 101 files and the Vite production build.
+      independent: >-
+        None; a single operator ran the checks. The CSS paint order is asserted
+        from the parsed files, not from a browser render, and no live VTS or NDI
+        capture was performed.
+    scope: >-
+      src/console/console.css, test/offline/m2-avatar-viewport.test.ts,
+      docs/code-governance/test-approvals.yaml and docs/ai-use-log.yaml. No
+      performance, runtime, contract, relay protocol or frozen architecture file
+      changed.
