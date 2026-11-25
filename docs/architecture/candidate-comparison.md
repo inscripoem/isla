@@ -14,9 +14,9 @@ candidate was chosen and why the others were rejected, with a pointer to the rec
 decision. It contains **no measurements, scores, latencies or pass rates**.
 
 Measured results belong in `docs/architecture/evaluation-table.md`, which G4 reserves for claims
-carrying fixed conditions and observed values. For this candidate the G4 gate was **not run**: there is
-no evaluation set and no provider access, so no measured comparison exists and none is claimed here. A
-"not run" result is not a pass.
+carrying fixed conditions and observed values. A one-attempt pilot table now exists
+(`pilot-selection-local-magpie-20261125`) and passes G4's condition scan, but it is **not** a threshold
+baseline and no semantic comparison is claimed here.
 
 The failure-response side of D2 is recorded separately in
 [`runtime-policy-catalog.md`](runtime-policy-catalog.md); this file does not duplicate those rows.
@@ -49,8 +49,8 @@ The failure-response side of D2 is recorded separately in
 
 ## 5. What this comparison does not establish
 
-- No candidate is compared by measured latency, cost, token use or quality; the G4 evaluation table does
-  not exist and the gate was not run.
+- No candidate is compared by measured latency, cost, token use or quality. The pilot table is one
+  attempt, not a comparative measurement; Tier 3 semantic evaluation is not run.
 - The ADR decisions are the records' own claims. This file does not re-adopt them, and it does not
   extend any owner's approval.
 - The permission model in [`permission-model.md`](permission-model.md) is a D2.6/D3 proposal under

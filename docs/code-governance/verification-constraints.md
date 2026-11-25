@@ -145,8 +145,8 @@ rejects a missing file or absent test string.
   blank condition, an undeclared variant, a negative/non-finite duration or usage, a failed attempt with no
   reason, and an impossible calendar date. An unobserved stage prints `—`; usage stays `unknown`; table
   cells are escaped. `writeEvaluationReport` is the only writer and validates before touching the
-  filesystem. Gate **G4** reads the generated table, and the table is **not** produced without provider
-  access.
+  filesystem. Gate **G4** reads the generated table. The current pilot table is one attempt with
+  declared conditions; it is not a p95 or threshold baseline.
 
 ## Honest limitations
 

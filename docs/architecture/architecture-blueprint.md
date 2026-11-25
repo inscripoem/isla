@@ -84,7 +84,7 @@ The driver-to-element and driver-to-test detail is in
 | **M3 — decision** | `src/decision/` | Response selection, reply intent, rule reactions, provider adapters | Rule selection/reaction merged; model quality evaluation pending |
 | **M4 — dialogue** | `src/dialogue/`, `prompts/dialogue/` | Dialogue generation, persona, context assembly, memory semantics | Context/persona/memory implemented; live provider quality pending |
 | **M5 — runtime** | `src/runtime/` | Authoritative lifecycle, scheduling, validation, cancellation, dispatch, composition | Coordinator, production composition and reference deployment implemented; live acceptance separate |
-| **M6 — evidence** | `src/storage/`, `src/evaluation/`, `.github/workflows/` | SQLite, migrations, replay, recovery, evaluation tooling, CI gates | SQLite/replay/recovery/evaluation tooling implemented; real evaluation table absent |
+| **M6 — evidence** | `src/storage/`, `src/evaluation/`, `.github/workflows/` | SQLite, migrations, replay, recovery, evaluation tooling, CI gates | SQLite/replay/recovery/evaluation tooling implemented; one pilot evaluation table present; no threshold baseline |
 
 **One element, one home.** A new element belongs to exactly one module; cross-module calls go through
 `src/contracts/app/`. Production code must not import `test/`. The structural rules are in
@@ -184,8 +184,9 @@ Verification is **three-tiered and fail-closed**.
 **Gates.** G1 test approval, G2 static analysis, G3 schema + boundaries, trace fitness, G5 regression,
 G6 AI-use log, G4 semantic evaluation, build. The active `Protect Main` ruleset requires the `verify`
 check and an approval after the latest push; re-check the ruleset before claiming enforcement. G1 has a
-PR-creation cutover and a time-boxed waiver; G4 is a condition/claim scan, **not** a semantic evaluator,
-and reports `not run` without an evaluation table. See
+PR-creation cutover and a time-boxed waiver; G4 is a condition/claim scan, **not** a semantic evaluator.
+The pilot table passes the condition check, but no semantic Tier 3 result or threshold baseline is
+claimed. See
 [`../code-governance/verification-constraints.md`](../code-governance/verification-constraints.md).
 
 **Rules.**

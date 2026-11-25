@@ -178,8 +178,8 @@ The decision was produced with the course's Attribute-Driven Design loop:
 6. **Record.** This ADR, the blueprint, the invariant register, the trace matrix, the permission model,
    the memory design and the runtime policy catalog.
 7. **Evaluate.** Qualitative candidate comparison, offline conformance/regression tests, trace and
-   readiness gates. A measured quality/latency evaluation is **not run**; G4 remains `not run` and no
-   threshold value is claimed.
+   readiness gates. A semantic quality/latency evaluation is **not run**. G4's condition scan passes
+   with the one-attempt pilot table, but no Tier 3 result and no threshold baseline are claimed.
 
 ---
 
@@ -298,8 +298,9 @@ The canonical requirement-to-component-to-test-to-monitor matrix is
    before enforcement.
 3. **Permission model adoption.** `.opencode/permissions.jsonc` is a policy source compiled per task;
    human adoption and the file-level read-inventory decision remain open.
-4. **G4 semantic evaluation.** The current G4 checks conditions/claims, not faithfulness/relevance; a
-   fixed evaluation set and thresholds are not run.
+4. **G4 semantic evaluation.** G4 checks conditions/claims, not faithfulness/relevance. The pilot
+   table exists and passes the condition scan; a fixed, labelled evaluation set and thresholds remain
+   not run.
 5. **Requirement split IDs.** `COST-01`, `SEC-01` and `GOV-01` are proposed allocations pending #25.
 6. **D5/D6.** Transcripts and the process report are submission artifacts outside this ADR.
 
