@@ -53,6 +53,8 @@ opencode.json
 # working rules/plans must never reach the checkout.
 /.token/
 /.trae/
+.zcode/
+.workbuddy/
 
 # Local evaluation scaffolding — never part of a published change.
 # A product deployment must be added deliberately, under review, and this rule
