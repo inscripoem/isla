@@ -9691,7 +9691,6 @@ entries:
         browser phases passed 31 and 16 checks. Heart and Emma speech matched
         their expected WAVs and a new runtime process retained Emma. Playback
         and SQLite were real, with controlled dialogue text and avatar peers.
-
   - date: "2026-11-25"
     task: course-governance-d2-d3-d9-candidate
     change: >-
@@ -9761,3 +9760,84 @@ entries:
       Prompt.md, README.md, docs/architecture/permission-model.md,
       docs/architecture/candidate-comparison.md, docs/code-governance/README.md,
       docs/code-governance/structural-constraints.md and this log entry.
+  - date: "2026-11-25"
+    task: g6-historical-identity
+    change: >-
+      Classify a G6 AI-use entry as historical by its content, not by its array
+      position. An entry identical to one in the base log is historical wherever
+      a merge placed it, so inserting a new entry before it no longer turns its
+      accepted citations into failures. A new entry, a repointed commit or a
+      reworded entry stays strict and must cite a string commit reachable from
+      HEAD. An unparsable base log now fails closed instead of marking every
+      entry historical. Delta-006 and the INV-14 verification row describe the
+      identity rule.
+    requirements: []
+    invariants: [INV-14]
+    commits: ["8b71e03f08ae87c66c4661c1a26a569dd9d55f1c"]
+    agent: OpenCode V2 build
+    provider: self-api
+    model: deepseek-v4-flash
+    sessions: ["ses_def219b06ffeda1ULKE5NemSIj"]
+    supervision: >-
+      The session implemented the gate, tests and documentation on branch
+      fix/g6-historical-identity-20261125 after the reported mid-insertion
+      failure. No other gate rule was changed.
+    verification:
+      base: 3bdcbff03326c56f73226a7aee0d7f63af61bcd5
+      results: >-
+        pnpm test:gates passed 6 files / 176 tests; pnpm test:trace passed 49
+        tests; pnpm typecheck and oxlint exited 0; git diff --check reported no
+        whitespace errors. The focused test builds a base log with entries A
+        and B and a head log with a new entry inserted between them; B's
+        unreachable citation is advisory, while a new or repointed entry citing
+        the same commit still fails.
+      limits: >-
+        No merge, push, live provider run or Windows run; CI on this head is not
+        observed. The gate was not exercised against the real merge that
+        motivated the fix.
+  - date: "2026-11-25"
+    task: g6-historical-identity-review-fix
+    change: >-
+      Address M6's request-changes review of the G6 identity fix. A recursive
+      YAML alias in the base or head log now fails closed instead of aborting
+      the gate: entryIdentity walks the entry graph with an ancestor set and
+      reports the alias path, the shape check names a cyclic entry as
+      unreadable, and the reference check emits POL-G6-03 with evidence
+      naming base-log or head-log; an acyclic shared anchor still compares by
+      content. One readLogEntries reader now serves shape, counting and
+      classification, and the message distinguishes invalid YAML syntax from
+      a document whose entries cannot be read as a list. runCli reads the base
+      copy once and derives the printed violations and the failure records
+      from the same dependencies, so the base-log record is actually written.
+      The POL-G6-03 row and action, the INV-14 trace and verification rows and
+      the 2026-11-25 delta note are updated to match.
+    requirements: []
+    invariants: [INV-14]
+    commits: ["a291133de5d47e95f2960ffebd05719df66a9238"]
+    agent: OpenCode V2 build
+    provider: self-api
+    model: deepseek-v4-flash
+    sessions: ["ses_deeccdecfffeIO5UnZ3Flqfzop", "ses_deec7d344ffeFC8D7xXc62FQTd"]
+    supervision: >-
+      The first session reproduced both review findings read-only and proposed
+      the fix plan; the second implemented the gate, tests and documentation
+      after the plan was approved. The outer assistant reviewed the diff, ran
+      the checks and prepared this entry.
+    verification:
+      base: 3bdcbff03326c56f73226a7aee0d7f63af61bcd5
+      results: >-
+        pnpm test:gates passed 6 files / 186 tests (the gate file alone 61);
+        pnpm test:trace passed 49 tests; pnpm test:readiness passed 47 tests;
+        pnpm verify passed 97 files / 2182 tests with a clean typecheck, lint
+        and build; git diff --check reported no whitespace errors. The CLI
+        matrix exited 0 on a valid base and exited 1 with a POL-G6-03 record
+        for an unparsable base, a non-list entries base, a cyclic base and a
+        cyclic head, with evidence naming base-log or head-log. Three
+        temporary mutations failed the suite and were reverted: positional
+        classification, no ancestor guard (RangeError) and non-list entries
+        read as empty.
+      limits: >-
+        No merge, live provider run or Windows run. CI on this head is not
+        observed. The entry rule's existing message still says "at both the
+        base and the head" when the counts differ; that wording predates this
+        change and was left alone.

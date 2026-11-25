@@ -17,12 +17,13 @@ to existing gates; no interface, contract or schema change).
   performance claims (`p95`, `p99`, `recall@`, `precision@`, `accuracy`, `tokens per`, `cost per`);
   an unqualified measured claim without an evaluation table fails. Wording such as *target*,
   *threshold*, *requirement*, *goal* marks an intention, not a claim, and passes.
-- **G6 — references must exist.** A **newly added** entry must cite commits **reachable from HEAD**;
-  historical entries are checked as advice only, because a fresh clone does not carry the orphaned
-  commits of squash-merged work. Every cited case id must exist in `docs/req/case-registry.yaml`; every
-  cited invariant must exist in `docs/architecture/invariants.md`. A register that cannot be read, or
-  an unavailable history, fails closed. `docs/code-governance/gate-baseline.yaml` holds expiry-dated
-  exemptions for the other gates.
+- **G6 — references must exist.** A **newly added or edited** entry must cite commits **reachable
+  from HEAD**; an entry present in the base log is historical and checked as advice only, wherever a
+  merge placed it, because a fresh clone does not carry the orphaned commits of squash-merged work.
+  Every cited case id must exist in `docs/req/case-registry.yaml`; every cited invariant must exist
+  in `docs/architecture/invariants.md`. A register that cannot be read, or an unavailable history,
+  fails closed. `docs/code-governance/gate-baseline.yaml` holds expiry-dated exemptions for the
+  other gates.
 - **trace — exact citations and ADR cells.** `` `test/…/x.test.ts::title` `` is checked against the
   file's actual test titles. Prose-only citations stay path-checked and are reported as
   `unverified-citation` advice, not failures. A row's ADR cell must contain `ADR-\d{3}` or start with
@@ -101,6 +102,19 @@ branch's own commit ids while the AI-use entries still cited the pre-rebase ids,
 and nowhere else. Those entries were repointed after the final rebase. The 4 genuinely missing
 historical commits remain recorded for their owners (M1/M4 entries 110, 116, 117, 118) but no longer
 need an exemption.
+
+**Corrected 2026-11-25: historical means "present in the base log", not "below an index".** The
+rule classified an entry by its array position (`index < base entry count`). When a merge inserted
+its own entries before a base entry, that entry moved past the count and its previously accepted
+citations were re-checked as new and failed. The gate now compares each head entry with the entries
+of the base log by content: an identical entry is historical wherever it sits, including after a
+mid-insertion, and each repeated occurrence consumes one base match. A new entry, or one whose fields
+changed (a repointed commit, a reworded change), is still new and must cite a string commit reachable
+from HEAD. A base log that is supplied but cannot be read as an entry list fails closed instead of
+silently making every entry historical: that covers unparsable YAML, a document whose `entries` is
+not a list, and a recursive YAML alias. The same alias in the head fails closed too, and the gate
+writes the resulting POL-G6-03 record with evidence naming `base-log` or `head-log`; the record path
+now receives the base copy instead of rebuilding its dependencies without it.
 
 ## Cutover
 
