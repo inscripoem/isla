@@ -8,6 +8,13 @@
 #
 # What the gate proves: ordering. What it does not prove: that a human read the
 # tests. That remains a review obligation (ADR-006 delta, 2026-11-13).
+#
+# Known limitation: TA-014 was added after the first code commit of PR #211, so in
+# evidence mode it cannot satisfy G1's ordering rule for that pull request
+# retroactively. It is a task-scoped record for future pull requests; the #211
+# exception stays a reviewed exception requested from M6. The gate's matching
+# semantics are unchanged (`covers()` remains file-exact or directory-prefix);
+# widening directory-prefix matching is an M6 decision, not part of this record.
 version: "1"
 approvals:
   - id: TA-001
@@ -173,3 +180,20 @@ approvals:
       - test/offline/m1-performance.test.ts
       - test/offline/m1-lipsync-envelope-playback.test.ts
       - test/offline/m1-lipsync-envelope-bridge.test.ts
+  - id: TA-014
+    task: "M2-202 avatar viewport and avatar relay (PR #211)"
+    approved_at: "2026-11-25T21:44:58+08:00"
+    approved_by: M2
+    scope:
+      - "src/App.tsx"
+      - "src/console/AvatarViewport.tsx"
+      - "src/console/ConsoleApp.tsx"
+      - "src/console/avatar-frame-client.ts"
+      - "src/console/avatar-viewport.ts"
+      - "src/console/console.css"
+      - "tools/avatar-relay/"
+      - "package.json"
+    tests:
+      - test/offline/m2-avatar-viewport.test.ts
+      - test/offline/m2-avatar-relay.test.ts
+      - test/offline/boundaries.test.ts

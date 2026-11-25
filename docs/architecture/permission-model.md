@@ -41,7 +41,7 @@ plugin state are local; they are not committed in the policy.
 | Role | Owned source | Named tests | Handoff |
 | --- | --- | --- | --- |
 | M1 | `src/performance/**` | `m1-*` tests, conformance/support kits and live Kokoro files listed in the policy | none |
-| M2 | `src/console/**` | `test/offline/m2-console.test.ts`, console conformance and browser files | none |
+| M2 | `src/console/**`, `src/App.tsx`, `tools/avatar-relay/**` | `test/offline/m2-console.test.ts`, `test/offline/m2-avatar-viewport.test.ts`, `test/offline/m2-avatar-relay.test.ts`, console conformance and browser files | none |
 | M3 | `src/decision/**` | `test/offline/m3-decision.test.ts`, decision conformance/support/fixtures | none |
 | M4 | `src/dialogue/**`, `prompts/dialogue/**` | `test/offline/m4-*.test.ts`, dialogue conformance and kit | `docs/team/HANDOFF-M4-01.en.md` |
 | M5 | `src/runtime/**` | `m5-*` tests, `production-cli.test.ts`, runtime conformance and support kits | `docs/team/HANDOFF-M5-*.md`, `docs/team/HANDOFF-I1-APPLICATION.en.md` |
@@ -49,6 +49,12 @@ plugin state are local; they are not committed in the policy.
 
 All roles may append to `docs/ai-use-log.yaml`. Append-only behaviour is a review rule, not something a
 path policy can enforce.
+
+The M2-202 avatar slice (PR #211) also touches `package.json` (the `relay:avatar` and expanded `test:m2`
+scripts) and the console composition root `src/App.tsx`. It uses the `manifests` approval for the manifest
+and records `src/App.tsx`, `tools/avatar-relay/**` and the two named avatar tests under M2 so later work
+does not need the same cross-module approval. The approval itself is recorded in the pull request and in
+`docs/ai-use-log.yaml`; this section does not treat a generated configuration as proof of it.
 
 ## 4. Read whitelist
 

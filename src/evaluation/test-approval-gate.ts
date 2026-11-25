@@ -84,9 +84,12 @@ export const G1_EVIDENCE_ACTIVATED_AT = '2026-11-16T16:01:01Z'
  * recorded exception, not evidence: the G1 step must say so in its output.
  * PR 181 (the M2 #174 P1 state-completeness fix) and PR 187 (the M2 console
  * visual rebuild) were added on 2026-11-22 at the M2 member's request, inside
- * the same window.
+ * the same window. PR 211 (the M2 #202 avatar viewport) was added on 2026-11-25
+ * at the M2 member's request: its TA-014 record was committed after the first
+ * code commit, so evidence mode cannot order it retroactively and the exception
+ * is recorded here instead of rewriting history.
  */
-export const G1_TIME_WAIVER_PRS: readonly number[] = [170, 171, 175, 181, 187]
+export const G1_TIME_WAIVER_PRS: readonly number[] = [170, 171, 175, 181, 187, 211]
 export const G1_TIME_WAIVER_UNTIL = '2026-11-28T00:00:00+08:00'
 
 export type ApprovalMode = 'advise' | 'evidence'

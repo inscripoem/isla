@@ -9263,7 +9263,7 @@ entries:
     requirements: [FR-04, FR-05]
     invariants: [INV-01]
     cases: [C-04]
-    commits: ["4a6288aa02c5ff38568f80760b203c57c152952c"]
+    commits: ["96b7f075a112969dcfa3bb008e7c3bd9bc61c569"]
     agent: OpenCode V2 build
     provider: deepseek
     model: deepseek-flash
@@ -10708,6 +10708,208 @@ entries:
         No push, pull request, merge, CI run or live product run. The mode is
         opt-in and no recorded run uses a provider-backed decision port.
   - date: "2026-11-25"
+    task: M2-202-avatar-viewport
+    branch: m2-202-avatar-viewport
+    change: >-
+      Add a transparent avatar viewport to the console and a local avatar relay
+      for issue #202. The console gains a browser-safe frame client, a pure
+      viewport reducer and an alpha canvas layer that stays unavailable when no
+      relay is configured, reports stale or error instead of a fabricated
+      avatar, and requires an explicit reconnect. The relay is a local Node
+      process that serves avatar.status text and avatar.frame binary WebP
+      messages on /avatar, reports source presence and last-frame time, and
+      never creates a frame when the source is absent. The synthetic source is
+      a fixed 96x96 transparent WebP used only for offline observation; NDI
+      capture is not implemented and is marked untested.
+    requirements: [FR-04, NFR-02, NFR-06]
+    invariants: []
+    commits:
+      - 949ad8d0561417fb96e9bcba7e866711d9f0d10e
+      - 00a73f7b3bd6a4a2a01c45019e7b72291312cb64
+    agent: opencode/build
+    provider: personal-deepseek / custom-foundry
+    model: deepseek-v4-flash / CS5351/DeepSeek-V4-Flash
+    opencode_version: "1.19.4"
+    launch_flags:
+      - "--agent build --format json -m personal-deepseek/deepseek-v4-flash --variant xhigh (viewport initial authoring)"
+      - "--agent build --format json -m custom-foundry/CS5351/DeepSeek-V4-Flash (viewport follow-up fixes and relay slice)"
+    sessions: [ses_ded957836ffeTuI4nVAcCIaExl, ses_ded8cb09fffeXFP3X0j0tXbRjy]
+    supervision: >-
+      The M2 member approved the plan and both decisions: WebP over WebSocket,
+      and a placeholder viewport labelled unavailable when no source exists.
+      The supervising agent prepared the prompts, reviewed every diff and ran
+      all checks; OpenCode sessions wrote the application code and tests and
+      were not allowed to run shell commands or git. The personal-deepseek
+      balance ran out after the initial viewport authoring, so two small
+      follow-up fixes and the entire relay slice ran on the foundry model. The
+      relay was exercised live with a Node WebSocket client and the viewport
+      was observed in local Chromium against the synthetic source.
+    human_review: >-
+      M5 reviewed head fdcf855 and requested changes on items 1-4 plus
+      should-fix 5-9. The follow-up fixes are recorded in the
+      M2-202-avatar-viewport-review-fixes entry; no agent pushed main or
+      merged the pull request.
+    transcript_record: >-
+      OpenCode sessions ses_ded957836ffeTuI4nVAcCIaExl and
+      ses_ded8cb09fffeXFP3X0j0tXbRjy are exported to
+      ~/Library/Caches/isla-opencode-exports/M2-202-avatar-viewport-20261125.json
+      and M2-202-avatar-relay-20261125.json outside the checkout.
+    verification:
+      base: dba25e030e6cc826308292a863dca96f580dca28
+      results: >-
+        pnpm verify exited 0 on the merged task branch at origin/main 5414dad: tsc -b, oxlint with 0
+        warnings and 0 errors, the full suite at 2339 tests in 101 files
+        including 119 existing console tests plus 13 new viewport tests and 8
+        new relay tests, and the Vite production build. The import-graph
+        boundary suite passed, keeping Node and ws out of the console graph and
+        the relay out of the bundle. A Node WebSocket client received one
+        status and 15 binary frames from the synthetic relay in 1.5 s, and
+        local Chromium on the fixture console page showed the badge
+        "Avatar · synthetic · 10 fps · live" with no WebSocket or decode error.
+      independent: >-
+        None; a single operator ran the checks. No live VTS, NDI, Windows or
+        remote CI check was performed. The browser observation used the
+        synthetic source, not VTube Studio, and is local evidence only.
+    scope: >-
+      src/console/avatar-viewport.ts, src/console/avatar-frame-client.ts,
+      src/console/AvatarViewport.tsx, src/console/ConsoleApp.tsx,
+      src/console/console.css, src/App.tsx, tools/avatar-relay/index.ts,
+      tools/avatar-relay/relay.ts, tools/avatar-relay/source.ts,
+      test/offline/m2-avatar-viewport.test.ts,
+      test/offline/m2-avatar-relay.test.ts, test/browser/console.tsx,
+      package.json and docs/ai-use-log.yaml. The existing tsconfig.node.json
+      already included tools. No shared contract, RendererPort, receipt,
+      storage, runtime or workflow file changed.
+  - date: "2026-11-25"
+    task: M2-202-avatar-viewport-review-fixes
+    branch: m2-202-avatar-viewport
+    change: >-
+      Address the M5 review of PR #211. The relay now binds 127.0.0.1, rejects
+      a non-local Origin and a path other than /avatar, caps clients at four,
+      drops frames when a client stops draining, ignores a source callback
+      after stop, defaults --source to none, reports the actual bound address,
+      and closes asynchronously on SIGINT/SIGTERM. The console normalizes an
+      optional relay URL (blank means unavailable, a scheme-less host gains
+      ws:// and /avatar, http(s) map to ws(s), and an invalid value becomes an
+      error badge instead of a render fault), times out a socket that never
+      opens, ignores a frame after close or with an older receive time, drops
+      a stale async decode, and rejects a WebP frame whose VP8X alpha flag is
+      explicitly clear. The badge moves to the bottom-left, the import
+      boundary blocks tools/ from the browser graph, and the permission
+      policy records the M2 relay and avatar-test paths.
+    requirements: [FR-04, NFR-02, NFR-06]
+    invariants: []
+    commits:
+      - bf243b0fd18355891a898180dbd0c4756e530cb9
+    agent: opencode/build
+    provider: custom-foundry
+    model: CS5351/DeepSeek-V4-Flash
+    opencode_version: "1.19.4"
+    launch_flags:
+      - "--agent build --format json -m custom-foundry/CS5351/DeepSeek-V4-Flash (viewport/client review fixes)"
+      - "--agent build --format json -m custom-foundry/CS5351/DeepSeek-V4-Flash (relay review fixes)"
+    sessions: [ses_ded49d0caffe4J7DdFNiLr5xye, ses_ded49d0c8ffeaYrTWnogiPgch6]
+    supervision: >-
+      The M2 member approved fixing the four blocking items and should-fix
+      items 5-9. The supervising agent wrote both prompts, reviewed every diff
+      and ran all checks; the OpenCode sessions wrote the application code and
+      tests and were not allowed to run shell commands, tests or git. The
+      supervisor returned two type errors and one SIGTERM race to the relay
+      session, which corrected them.
+    human_review: >-
+      M5 requested changes on fdcf855. The fixes are committed on the task
+      branch for re-review; no agent merged the pull request or pushed main.
+    transcript_record: >-
+      OpenCode sessions ses_ded49d0caffe4J7DdFNiLr5xye and
+      ses_ded49d0c8ffeaYrTWnogiPgch6 are exported to
+      ~/Library/Caches/isla-opencode-exports/M2-202-review-viewport-20261125.json
+      and M2-202-review-relay-20261125.json outside the checkout.
+    verification:
+      base: fdcf8551262a2ae59aa707c1e60c4bff0f0119b4
+      results: >-
+        pnpm verify exited 0 on the fix commit: tsc -b, oxlint with 0 warnings
+        and 0 errors, 2371 tests in 101 files, and the Vite production build.
+        The M2 suite passed 171 tests (119 console, 32 viewport/client and 20
+        relay). The relay suite starts a real WebSocket server on port 0,
+        asserts the 127.0.0.1 host, accepts localhost and absent Origins,
+        rejects a foreign Origin with 403 and a wrong path with 404, and checks
+        the --source ndi exit code 2 and SIGTERM exit code 0 subprocess paths.
+        The boundary suite now rejects a console import of tools/avatar-relay.
+      independent: >-
+        None; a single operator ran the checks. No live VTS or NDI capture,
+        Windows, Safari, remote CI or 1920-wide frame was verified. The
+        component effect has no DOM test because the repository test
+        environment is node-only; the reducer, frame client, real relay server
+        and earlier browser observation cover it indirectly.
+    scope: >-
+      src/App.tsx, src/console/avatar-viewport.ts,
+      src/console/avatar-frame-client.ts, src/console/AvatarViewport.tsx,
+      src/console/console.css, tools/avatar-relay/index.ts,
+      tools/avatar-relay/relay.ts, tools/avatar-relay/README.md,
+      test/offline/m2-avatar-viewport.test.ts,
+      test/offline/m2-avatar-relay.test.ts, test/offline/boundaries.test.ts,
+      docs/architecture/permission-model.md, .opencode/permissions.jsonc,
+      docs/architecture/supported-platform.md, .env.example and
+      docs/ai-use-log.yaml.
+  - date: "2026-11-25"
+    task: M2-202-avatar-viewport-zorder
+    branch: m2-202-avatar-viewport
+    change: >-
+      Address the two blocking items from the M5 re-check of PR #211 at
+      33b543a. The stage box now isolates its own stacking context and the
+      transparent avatar layer sits at a negative stacking level inside it, so
+      an opaque relay frame paints above the stage background but below the
+      in-flow HUD row, visualiser, subtitle and reaction, while the laser,
+      danmaku, player and stopped overlay keep their positive levels and the
+      canvas stays transparent with pointer events disabled for the layer. A
+      node-side test parses the real console, component and layout CSS, computes
+      the per-selector stacking level and asserts the resulting paint order, so
+      removing the isolation or the negative level fails the suite. TA-014
+      records the M2 avatar task scope for future pull requests; its header
+      states that adding it after the first #211 code commit cannot satisfy G1
+      ordering retroactively and that the #211 exception remains an M6-reviewed
+      exception.
+    requirements: [FR-04, NFR-02, NFR-06]
+    invariants: []
+    commits:
+      - f6fc3bcba86fc951840fdf629f843b2e1e654adf
+    agent: opencode/build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    opencode_version: "1.19.4"
+    launch_flags:
+      - "--agent build --format json -m opencode-go/deepseek-v4.1-flash (z-order follow-up)"
+    sessions: [ses_ded0ffbb8ffelGXg1bzp92NeQS]
+    supervision: >-
+      The M2 member approved the two blocking follow-up items and a local-only
+      commit. This session made the CSS, test, approval and log changes and ran
+      the checks; no agent merged the pull request, enabled auto-merge or pushed
+      main.
+    human_review: >-
+      The M5 re-check of 33b543a requested the stacking fix and the task-scoped
+      approval record. The fixes are committed on the task branch for re-review;
+      the #211 G1 exception still requires M6 review.
+    transcript_record: >-
+      The OpenCode session is retained in the local OpenCode database; no
+      separate export was created in this session.
+    verification:
+      base: f6fc3bcba86fc951840fdf629f843b2e1e654adf
+      results: >-
+        pnpm test:m2 passed 175 tests in three files (console, viewport/client
+        and relay). pnpm gate:test-approval printed "G1: tests-approved
+        requirement satisfied (or not applicable)" because this local run is
+        not a pull-request event. pnpm verify exited 0 with tsc -b, oxlint, 2375
+        tests in 101 files and the Vite production build.
+      independent: >-
+        None; a single operator ran the checks. The CSS paint order is asserted
+        from the parsed files, not from a browser render, and no live VTS or NDI
+        capture was performed.
+    scope: >-
+      src/console/console.css, test/offline/m2-avatar-viewport.test.ts,
+      docs/code-governance/test-approvals.yaml and docs/ai-use-log.yaml. No
+      performance, runtime, contract, relay protocol or frozen architecture file
+      changed.
+  - date: "2026-11-25"
     task: m1-windows-speaking-mouth
     change: >-
       Add a Windows speaking-mouth demo for the normal operator console.
@@ -10861,3 +11063,35 @@ entries:
         Windows measurements above predate this change. The local full
         Windows run reproduced the existing missing-base G6 CLI test failure
         when Node loaded an absolute Windows path.
+  - date: "2026-11-25"
+    task: M2-202-g1-waiver
+    branch: m2-202-avatar-viewport
+    change: >-
+      Record PR #211 in the G1 time-boxed waiver list with its reason, and add
+      tests that pin the waiver on and after its expiry. The pull request run
+      failed G1 because the TA-014 approval record was committed after the
+      first code commit; rewriting history to reorder them would fabricate the
+      approval ordering the gate exists to prove, so the exception is recorded
+      instead.
+    requirements: [NFR-02]
+    invariants: []
+    commits: []
+    agent: Trae IDE agent
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    sessions: []
+    supervision: >-
+      The M2 member selected the waiver path from the two legitimate options
+      presented after the CI failure was reproduced locally with the pull
+      request environment variables.
+    verification:
+      base: e398a0bedb4e2efb6cb4908bc824c0f7314e1615
+      results: >-
+        test/offline/test-approval-gate.test.ts passed 42 tests, including the
+        new #211 waiver and post-expiry assertions. gate:test-approval auto
+        passed under GITHUB_EVENT_NAME=pull_request, PR_NUMBER=211 and the pull
+        request changed-file list. pnpm verify exited 0.
+      limits: >-
+        The waiver is an M6-owned policy list; this change requests M6 review
+        rather than deciding the exception. The gate's matching and ordering
+        semantics are unchanged.

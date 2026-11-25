@@ -45,6 +45,7 @@ import {
 } from './voice-selection'
 import { createVoiceAudition, IDLE_VOICE_AUDITION, type VoiceAudition, type VoiceAuditionView } from './voice-audition'
 import { VoiceCard } from './VoiceCard'
+import { AvatarViewport } from './AvatarViewport'
 import {
   canDispatch,
   createInitialConsoleState,
@@ -112,6 +113,8 @@ export interface ConsoleAppProps {
    * fixture transports only; production composes the performer machine instead.
    */
   readonly playbackFactory?: PlaybackFactory
+  /** An optional local avatar relay URL; null shows the unavailable placeholder. */
+  readonly avatarRelayUrl?: string | null
 }
 
 function identify(error: unknown): string {
@@ -190,6 +193,7 @@ export function ConsoleApp({
   performerFactory,
   requestOperatorToken,
   playbackFactory,
+  avatarRelayUrl,
 }: ConsoleAppProps) {
   const [state, setState] = useState<ConsoleState>(createInitialConsoleState)
   const [source, setSource] = useState<InputSource>('local-audience')
@@ -1276,6 +1280,7 @@ export function ConsoleApp({
 
             {/* The stage box: a proper 16:9 live window. */}
             <div ref={stageRef} className="isla-stage console__stagebox isla-rise isla-rise--focus">
+              <AvatarViewport relayUrl={avatarRelayUrl ?? null} />
               <div className="isla-stage__laser" aria-hidden="true" />
               {danmakuOn && state.selection.acceptedInputs.length > 0 && (
                 <div className="isla-stage__danmaku" aria-hidden="true">
