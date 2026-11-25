@@ -18,11 +18,17 @@
  * builder's injected renderer factory is synchronous. The renderer is created
  * once, cached, and given a retargetable gate because the reference builder may
  * invoke the factory once per composition.
+ *
+ * When `ISLA_SPEAKING_MOUTH_SOURCE=envelope` and the parent supplied an IPC
+ * channel, the deployment also forwards the registry's optional numeric volume
+ * envelopes to the launcher. That observer is released before any other owned
+ * lifecycle work; no audio bytes or credentials cross the channel.
  */
 
 import { readFileSync } from 'node:fs'
 import { WebSocket } from 'ws'
 import type { ReceiptTools } from '../../src/performance/browser/types'
+import type { VolumeEnvelopeEvent } from '../../src/performance/lipsync/volume-envelope'
 import type { VtsConnectionHandle, VtsConnectionSocket } from '../../src/performance/vts-connection'
 import { createVtsConnectionHandle } from '../../src/performance/vts-connection'
 import type { VtsTransport } from '../../src/performance/vts-client'
@@ -48,6 +54,8 @@ import {
 } from '../../src/runtime/vts-acquisition'
 
 const MODEL_ID_ENV = 'ISLA_SPEAKING_MODEL_ID'
+const MOUTH_SOURCE_ENV = 'ISLA_SPEAKING_MOUTH_SOURCE'
+const MOUTH_ENVELOPE_MESSAGE = 'isla.mouth.volume-envelope'
 
 const RENDERER_ID = 'isla-reference-renderer'
 const CHARACTER_ID = 'Elleya'
@@ -252,6 +260,78 @@ interface AcquiredVts {
 }
 
 /**
+ * The production peer view intentionally exposes only the composition and
+ * serving seams. The launcher opts into the registry's optional synthesis
+ * envelope observer without widening that shared M5 type.
+ */
+interface MouthEnvelopeRegistry {
+  observeVolumeEnvelopes?: (
+    listener: (event: VolumeEnvelopeEvent) => void,
+  ) => () => void
+}
+
+/**
+ * Subscribe once to the deployment's synthesis-envelope stream when the
+ * launcher explicitly selected it and a parent IPC channel exists. Only the
+ * numeric envelope is forwarded; audio bytes and credentials never cross IPC.
+ * A closed or failing channel is ignored so normal playback continues.
+ */
+function observeMouthEnvelopes(
+  context: ProductionDeploymentContext,
+  audioResources: unknown,
+): (() => void) | null {
+  if (context.env[MOUTH_SOURCE_ENV]?.trim() !== 'envelope') return null
+  if (process.connected !== true || typeof process.send !== 'function') return null
+
+  const registry = audioResources as MouthEnvelopeRegistry | null | undefined
+  if (
+    registry === null ||
+    registry === undefined ||
+    typeof registry.observeVolumeEnvelopes !== 'function'
+  ) {
+    return null
+  }
+
+  let active = true
+  let unsubscribe: (() => void) | null = null
+  try {
+    const stop = registry.observeVolumeEnvelopes((envelope) => {
+      if (!active || process.connected !== true || typeof process.send !== 'function') {
+        return
+      }
+      try {
+        process.send(
+          { type: MOUTH_ENVELOPE_MESSAGE, envelope },
+          undefined,
+          undefined,
+          () => {},
+        )
+      } catch {
+        // A parent that stopped listening must not disturb normal playback.
+      }
+    })
+    if (typeof stop !== 'function') {
+      active = false
+      return null
+    }
+    unsubscribe = stop
+  } catch {
+    active = false
+    return null
+  }
+
+  // Unsubscription is idempotent and also invalidates the listener immediately,
+  // so a teardown race cannot forward one more event.
+  return () => {
+    if (!active) return
+    active = false
+    const stop = unsubscribe
+    unsubscribe = null
+    if (stop !== null) stop()
+  }
+}
+
+/**
  * Perform one bounded, existing-token acquisition. A failed or refused attempt
  * is fully released before the safe classification is reported. `acquire` is
  * not retried: the production CLI reports the failure and exits.
@@ -354,6 +434,7 @@ export async function createProductionDeployment(
 
   let acquisition: VtsAcquisition | null = null
   let vtsRenderer: VtsRenderer | null = null
+  let unsubscribeMouthEnvelopes: (() => void) | null = null
 
   const disposeRenderer = (): void => {
     // `VtsRenderer.dispose` is idempotent; the reference builder also registers
@@ -407,12 +488,28 @@ export async function createProductionDeployment(
       context.databasePath,
     )
 
+    unsubscribeMouthEnvelopes = observeMouthEnvelopes(
+      context,
+      deployment.peers.audioResources,
+    )
+
     const baseRelease = deployment.release
     let releaseStarted: Promise<void> | null = null
     const release = (): Promise<void> => {
       if (releaseStarted !== null) return releaseStarted
       releaseStarted = (async () => {
         const failures: unknown[] = []
+
+        // Release the optional mouth observer before any owned lifecycle work.
+        const unsubscribe = unsubscribeMouthEnvelopes
+        unsubscribeMouthEnvelopes = null
+        if (unsubscribe !== null) {
+          try {
+            unsubscribe()
+          } catch (error) {
+            failures.push(error)
+          }
+        }
 
         // Close the renderer before the reference peers so the VTS subscription
         // ends before Kokoro's idle wait. The builder's own disposer is
@@ -470,6 +567,15 @@ export async function createProductionDeployment(
       release,
     }
   } catch (error) {
+    const unsubscribe = unsubscribeMouthEnvelopes
+    unsubscribeMouthEnvelopes = null
+    if (unsubscribe !== null) {
+      try {
+        unsubscribe()
+      } catch {
+        // The setup or build failure is the reportable error.
+      }
+    }
     try {
       disposeRenderer()
     } catch {
