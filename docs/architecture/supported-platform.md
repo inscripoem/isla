@@ -36,6 +36,17 @@ Evidence: [M1 Windows live run](https://github.com/inscripoem/isla/issues/94#iss
 [M1 Windows deployment evidence](https://github.com/inscripoem/isla/issues/96#issuecomment-6920647994),
 [six browser receipts](https://github.com/inscripoem/isla/issues/97#issuecomment-6918501769).
 
+**Decision provider mode (opt-in, not observed).** The deployment reads `ISLA_DECISION_MODE`
+and keeps its deterministic rule selection and reaction ports unless the mode is `general` or
+`jev`. `general` builds the OpenAI-compatible chat adapters over the `ISLA_LIVE_DECISION_*` group;
+`jev` builds the Jev decisions adapters, which call the dedicated classifier on
+`POST /v1/decisions` (not chat completions) and read only the `ISLA_LIVE_JEV_BASE_URL`,
+`ISLA_LIVE_JEV_MODEL` and `ISLA_LIVE_JEV_API_KEY` settings. Both ports always follow the same mode,
+an injected factory keeps precedence, and a provider group is read only when its mode is selected.
+No recorded run in this section used a provider decision mode, so this record makes no model,
+latency or decision-quality claim for either group. The variables, their base-URL rule and their
+names-only startup failure are documented in the repository README.
+
 The CP04 checkpoint (#74) remains open; the dated deployment record is the `9577069` run.
 
 **Merged after CP04.** Two changes postdate the run in this section and are not part of its evidence.
@@ -52,10 +63,13 @@ Supported: the regression baseline in §1 and the live product target in §2. Si
 Kokoro voices can be listed, previewed and selected from the console; only `af_heart` was exercised in
 the recorded run, so this record makes no quality or acoustic claim for another voice.
 
+The decision provider mode is implemented but outside the recorded acceptance: `ISLA_DECISION_MODE`
+defaults to `rules`, and no live run in this record selected `general` or `jev`.
+
 Not supported or claimed by this record: macOS live VTS/Kokoro; Windows builds other than build
 26300; VTube Studio models other than `Hiyori_A`; browser output device enumeration beyond the sink used
 in the recorded run; multi-host or multi-user deployment; any provider, model, platform or voice
-without its own recorded live run.
+without its own recorded live run, including the `general` and `jev` decision provider groups.
 
 ## 4. Known limits
 

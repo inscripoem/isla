@@ -141,3 +141,13 @@ approvals:
       - "src/dialogue/dialogue-port.ts"
     tests:
       - test/offline/m4-dialogue.test.ts
+  - id: TA-013
+    task: "Add opt-in decision provider modes to the reference live deployment"
+    approved_at: "2026-11-25T18:02:00+08:00"
+    approved_by: M5
+    scope:
+      - "src/runtime/deployments/reference-live-config.ts"
+      - "src/runtime/deployments/reference-live.ts"
+    tests:
+      - test/offline/m5-reference-live-config.test.ts
+      - test/offline/m5-reference-live.test.ts

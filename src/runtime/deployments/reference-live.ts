@@ -15,6 +15,13 @@
  * OpenAI-compatible dialogue text source, a VTube Studio renderer, Kokoro
  * synthesis over the audio-resource registry, and the real registry itself.
  *
+ * Selection and reaction follow one configured decision mode: `rules` by
+ * default, the OpenAI-compatible general-model chat group, or the dedicated Jev
+ * decisions group (`POST /v1/decisions`) when `ISLA_DECISION_MODE` selects it.
+ * An injected selection/reaction factory always takes precedence over the mode.
+ * Provider ports are constructed offline; a provider call happens only when the
+ * runtime invokes one.
+ *
  * The VTube Studio path acquires one authenticated connection at deployment
  * creation and wraps its hotkey driver with `createMappedRenderer`. Every
  * advertised capability action is exactly one hotkey-map key and every binding
@@ -38,6 +45,9 @@ import type {
 import { NO_OP_ACTION } from '../../contracts'
 import { createRuleReactionPort } from '../../decision/reaction'
 import { createRuleSelectionPort } from '../../decision/selection'
+import { createOpenAiCompatibleReactionPort } from '../../decision/provider-reaction'
+import { createOpenAiCompatibleSelectionPort } from '../../decision/provider-selection'
+import { createJevReactionPort, createJevSelectionPort } from '../../decision/provider-jev'
 import type { DialogueTextSource } from '../../dialogue/dialogue-port'
 import { createOpenAiCompatibleTextSource } from '../../dialogue/provider-text-source'
 import type { AudioResourceRegistry } from '../../performance/audio-resources'
@@ -76,6 +86,7 @@ import {
   type VoiceSettingsState,
 } from '../voice-settings'
 import type { ReferenceLiveConfig } from './reference-live-config'
+import type { ReferenceDecisionConfig } from './reference-live-config'
 import { parseReferenceLiveConfig } from './reference-live-config'
 
 /**
@@ -529,6 +540,38 @@ async function acquireReferenceVts(config: ReferenceLiveConfig): Promise<Acquire
 }
 
 /**
+ * Compose the selection port for the configured decision mode. An absent
+ * `decision` means the historical rule default. Provider construction performs
+ * no provider call; the adapter contacts the endpoint only when invoked.
+ */
+function createSelectionForMode(
+  decision: ReferenceDecisionConfig | undefined,
+  clock: ClockPort,
+): SelectionPort {
+  if (decision === undefined || decision.mode === 'rules') {
+    return createRuleSelectionPort({ clock })
+  }
+  if (decision.mode === 'jev') {
+    return createJevSelectionPort({ clock, ...decision.provider })
+  }
+  return createOpenAiCompatibleSelectionPort({ clock, ...decision.provider })
+}
+
+/** Compose the reaction port from the same decision mode as selection. */
+function createReactionForMode(
+  decision: ReferenceDecisionConfig | undefined,
+  clock: ClockPort,
+): ReactionPort {
+  if (decision === undefined || decision.mode === 'rules') {
+    return createRuleReactionPort({ clock })
+  }
+  if (decision.mode === 'jev') {
+    return createJevReactionPort({ clock, ...decision.provider })
+  }
+  return createOpenAiCompatibleReactionPort({ clock, ...decision.provider })
+}
+
+/**
  * Build the deployment from an already parsed configuration. The factories are
  * an explicit test seam; production calls this with `{}` and the real peers.
  * When the real Kokoro path is used and an explicit `databasePath` is supplied,
@@ -577,11 +620,11 @@ export async function buildReferenceDeployment(
     const selection =
       factories.createSelection !== undefined
         ? factories.createSelection(clock)
-        : createRuleSelectionPort({ clock })
+        : createSelectionForMode(config.decision, clock)
     const reaction =
       factories.createReaction !== undefined
         ? factories.createReaction(clock)
-        : createRuleReactionPort({ clock })
+        : createReactionForMode(config.decision, clock)
     const textSource =
       factories.createTextSource !== undefined
         ? factories.createTextSource(config.text)

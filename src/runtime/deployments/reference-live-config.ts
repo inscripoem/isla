@@ -4,7 +4,41 @@
  * Pure function: no `process.env` reads, no defaults. Every required variable
  * must be present and non-blank after trimming, otherwise parsing fails once
  * with the full list of offending variable names (never their values).
+ *
+ * The decision mode is the one optional surface: an absent `ISLA_DECISION_MODE`
+ * keeps the historical rule ports, and the variables of a model provider group
+ * are only required when that group's mode is selected.
  */
+
+/** How the reference deployment obtains its M3 selection and reaction ports. */
+export type ReferenceDecisionMode = 'rules' | 'general' | 'jev';
+
+/** Provider settings shared by both decision model groups. */
+export interface ReferenceDecisionProviderConfig {
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+}
+
+/**
+ * The general group is an OpenAI-compatible chat provider and additionally
+ * accepts an optional completion-token limit. The Jev decisions adapter has no
+ * such setting.
+ */
+export interface ReferenceGeneralDecisionProviderConfig
+  extends ReferenceDecisionProviderConfig {
+  /** Optional positive completion-token limit; absent uses the adapter default. */
+  maxTokens?: number;
+}
+
+/** `rules` needs no provider; a model mode carries exactly one provider group. */
+export type ReferenceDecisionConfig =
+  | { readonly mode: 'rules' }
+  | {
+      readonly mode: 'general';
+      readonly provider: ReferenceGeneralDecisionProviderConfig;
+    }
+  | { readonly mode: 'jev'; readonly provider: ReferenceDecisionProviderConfig };
 
 export interface ReferenceLiveConfig {
   text: {
@@ -22,6 +56,11 @@ export interface ReferenceLiveConfig {
   kokoroModelDir: string;
   allowedOrigins: readonly string[];
   allowedHosts: readonly string[];
+  /**
+   * Decision mode and its provider settings. Absent means `rules`, the
+   * historical default, so a hand-built configuration keeps rule ports.
+   */
+  decision?: ReferenceDecisionConfig;
 }
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -29,6 +68,7 @@ type Env = Readonly<Record<string, string | undefined>>;
 const TEXT_BASE_URL = 'ISLA_LIVE_TEXT_BASE_URL';
 const TEXT_MODEL = 'ISLA_LIVE_TEXT_MODEL';
 const TEXT_API_KEY = 'ISLA_LIVE_TEXT_API_KEY';
+const DECISION_MODE = 'ISLA_DECISION_MODE';
 const VTS_WS_URL = 'ISLA_VTS_WS_URL';
 const VTS_PLUGIN_NAME = 'ISLA_VTS_PLUGIN_NAME';
 const VTS_PLUGIN_DEVELOPER = 'ISLA_VTS_PLUGIN_DEVELOPER';
@@ -95,6 +135,137 @@ function isWebSocketUrl(raw: string): boolean {
   }
 }
 
+/**
+ * The same rule the OpenAI-compatible decision adapters enforce before a call:
+ * https anywhere, plain http only on loopback, no embedded credentials and no
+ * fragment. A URL the adapter would refuse cannot pass startup.
+ */
+function isProviderBaseUrl(raw: string): boolean {
+  if (raw.includes('#')) return false;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (url.username !== '' || url.password !== '') return false;
+  if (url.hash !== '') return false;
+  if (url.protocol === 'https:') return true;
+  if (url.protocol !== 'http:') return false;
+  const hostname = url.hostname.replace(/^\[|\]$/g, '');
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+}
+
+interface DecisionProviderNames {
+  readonly baseUrl: string;
+  readonly model: string;
+  readonly apiKey: string;
+  /** Absent for a group whose adapter has no completion-token setting. */
+  readonly maxTokens?: string;
+}
+
+/** General-purpose chat group; the same names the M3 live harness reads. */
+const GENERAL_DECISION_ENV: DecisionProviderNames = {
+  baseUrl: 'ISLA_LIVE_DECISION_BASE_URL',
+  model: 'ISLA_LIVE_DECISION_MODEL',
+  apiKey: 'ISLA_LIVE_DECISION_API_KEY',
+  maxTokens: 'ISLA_LIVE_DECISION_MAX_TOKENS',
+};
+
+/**
+ * Dedicated Jev decisions group for the NFR-03 comparison. The adapter calls
+ * `POST /v1/decisions` and has no completion-token setting, so no token-limit
+ * variable is read or validated for this group.
+ */
+const JEV_DECISION_ENV: DecisionProviderNames = {
+  baseUrl: 'ISLA_LIVE_JEV_BASE_URL',
+  model: 'ISLA_LIVE_JEV_MODEL',
+  apiKey: 'ISLA_LIVE_JEV_API_KEY',
+};
+
+/** Reads an optional positive integer completion-token limit. */
+function readMaxTokens(
+  env: Env,
+  name: string,
+  invalid: Set<string>,
+): number | undefined {
+  const raw = readTrimmed(env, name);
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (!/^[1-9]\d*$/.test(raw)) {
+    invalid.add(name);
+    return undefined;
+  }
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value)) {
+    invalid.add(name);
+    return undefined;
+  }
+  return value;
+}
+
+function readDecisionProvider(
+  env: Env,
+  required: (name: string) => string,
+  invalid: Set<string>,
+  names: DecisionProviderNames,
+): ReferenceGeneralDecisionProviderConfig {
+  const baseUrl = required(names.baseUrl);
+  if (baseUrl.length > 0 && !isProviderBaseUrl(baseUrl)) {
+    invalid.add(names.baseUrl);
+  }
+  const model = required(names.model);
+  const apiKey = required(names.apiKey);
+  const maxTokensName = names.maxTokens;
+  const maxTokens =
+    maxTokensName === undefined
+      ? undefined
+      : readMaxTokens(env, maxTokensName, invalid);
+  return {
+    baseUrl,
+    model,
+    apiKey,
+    ...(maxTokens !== undefined ? { maxTokens } : {}),
+  };
+}
+
+/**
+ * Resolves the decision mode. An absent or blank mode is `rules`; the provider
+ * group for a selected model mode is then read and its missing or invalid
+ * variables join the one aggregated startup error.
+ */
+function readDecisionConfig(
+  env: Env,
+  required: (name: string) => string,
+  invalid: Set<string>,
+): ReferenceDecisionConfig {
+  const mode = readTrimmed(env, DECISION_MODE);
+  if (mode === undefined || mode === 'rules') {
+    return { mode: 'rules' };
+  }
+  if (mode === 'general') {
+    return {
+      mode,
+      provider: readDecisionProvider(
+        env,
+        required,
+        invalid,
+        GENERAL_DECISION_ENV,
+      ),
+    };
+  }
+  if (mode === 'jev') {
+    return {
+      mode,
+      provider: readDecisionProvider(env, required, invalid, JEV_DECISION_ENV),
+    };
+  }
+  // Names the variable only: the value is never reported.
+  invalid.add(DECISION_MODE);
+  return { mode: 'rules' };
+}
+
 /** Returns the canonical `scheme://host` origin, or null for anything else. */
 function canonicalOrigin(raw: string): string | null {
   let url: URL;
@@ -158,6 +329,7 @@ export function parseReferenceLiveConfig(env: Env): ReferenceLiveConfig {
   }
 
   const kokoroModelDir = required(KOKORO_MODEL_DIR);
+  const decision = readDecisionConfig(env, required, invalid);
 
   const originsRaw = readTrimmed(env, ALLOWED_ORIGINS);
   let allowedOrigins: string[] = [];
@@ -206,5 +378,6 @@ export function parseReferenceLiveConfig(env: Env): ReferenceLiveConfig {
     kokoroModelDir,
     allowedOrigins,
     allowedHosts,
+    decision,
   };
 }

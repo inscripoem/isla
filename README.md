@@ -105,6 +105,17 @@ ISLA_RUNTIME_HOST=127.0.0.1 ISLA_RUNTIME_PORT=4317 \
 pnpm runtime:production
 ```
 
+Selection and reaction are chosen by `ISLA_DECISION_MODE`. Unset or `rules` keeps the deterministic rule ports. `general` builds the M3 OpenAI-compatible chat adapters; `jev` builds the M3 Jev decisions adapters, which call the classifier on `POST /v1/decisions` rather than a chat-completions model. Both ports always follow the selected mode, and a provider group is read only when its mode is selected.
+
+| Variable | Purpose / default |
+| --- | --- |
+| `ISLA_DECISION_MODE` | `rules` (default when unset or blank), `general` or `jev`; any other value fails startup. |
+| `ISLA_LIVE_DECISION_BASE_URL`, `ISLA_LIVE_DECISION_MODEL`, `ISLA_LIVE_DECISION_API_KEY` | Required by `general`: OpenAI-compatible chat-completions base URL, model identifier and bearer credential. |
+| `ISLA_LIVE_DECISION_MAX_TOKENS` | Optional positive integer completion-token limit for `general`; absent uses the adapter default of 256. |
+| `ISLA_LIVE_JEV_BASE_URL`, `ISLA_LIVE_JEV_MODEL`, `ISLA_LIVE_JEV_API_KEY` | Required by `jev`: Jev decisions API base URL (the adapter appends `/decisions`, so either the API root `.../v1` or the full endpoint is accepted), model identifier and bearer credential. Jev has no completion-token setting. |
+
+A provider base URL must be `https`, or plain `http` on a loopback host; embedded URL credentials and fragments are refused. A missing or invalid variable fails startup with the variable names only, never their values. An injected selection or reaction factory still takes precedence over the mode.
+
 `ISLA_VTS_HOTKEY_MAP` is a JSON object; every advertised action must have exactly one binding. The reference target uses the bundled `Hiyori_A` model (`00f9750080014d43bb398cd98e4f55ad`) and these three hotkey ids:
 
 ```sh
