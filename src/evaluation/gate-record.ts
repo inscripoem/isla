@@ -99,7 +99,8 @@ export const POLICY_SPECS: Readonly<Record<string, PolicySpec>> = {
   'POL-G6-03': {
     gate: 'G6',
     decision: 'fail-closed',
-    action: 'block the merge; an unreadable register is a failure, never an empty register',
+    action:
+      'block the merge; an unreadable register or log copy is a failure, never an empty register or an unclassified entry',
     fields: ['register'],
   },
   'POL-G6-04': {
