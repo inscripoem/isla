@@ -1,6 +1,7 @@
+import { MEMORY_INSPECT_KIND } from './diagnostics'
 import { DIAGNOSTICS_PROTOCOL_VERSION } from './version'
 
-export const DIAGNOSTIC_KINDS = ['ping', 'get_health'] as const
+export const DIAGNOSTIC_KINDS = ['ping', 'get_health', MEMORY_INSPECT_KIND] as const
 
 export type DiagnosticKind = (typeof DIAGNOSTIC_KINDS)[number]
 

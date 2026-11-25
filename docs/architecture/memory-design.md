@@ -227,7 +227,7 @@ Latin word from restarting the same failed contraction search at each character;
 negation markers and ASCII/curly-apostrophe contractions retain their meanings.
 
 These are M4 module API changes, not changes to the shared C1–C7 schemas or the storage schema.
-The inspection builder is not a connected diagnostics endpoint or an M2 panel. Confirmed-history
+The inspection builder is connected to the read-only diagnostics endpoint (`get_memory_inspect`) and is not an M2 panel. Confirmed-history
 admission, outcome reporting and character charges for the optional conflict marker are retained.
 The ceilings limit scan work, not total context
 assembly, storage reads, wall-clock latency, or the rest of the dialogue pipeline. Large histories

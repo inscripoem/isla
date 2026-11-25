@@ -29,6 +29,14 @@ describe('parseDiagnosticRequest', () => {
     })
   })
 
+  it('accepts a get_memory_inspect request', () => {
+    const outcome = parseDiagnosticRequest({ v: 1, id: 'm1', kind: 'get_memory_inspect' })
+    expect(outcome).toEqual({
+      ok: true,
+      request: { v: 1, id: 'm1', kind: 'get_memory_inspect', payload: undefined },
+    })
+  })
+
   it('rejects non-object payloads', () => {
     expect(failure(parseDiagnosticRequest('ping')).code).toBe('malformed')
     expect(failure(parseDiagnosticRequest(['ping'])).code).toBe('malformed')

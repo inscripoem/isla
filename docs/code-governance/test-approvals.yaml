@@ -112,3 +112,24 @@ approvals:
     tests:
       - test/offline/m3-decision.test.ts
       - test/live/m3-jev-decisions.live.test.ts
+  - id: TA-011
+    task: "Connect the memory-inspection diagnostic end to end"
+    approved_at: "2026-11-25T18:00:00+08:00"
+    approved_by: M5
+    scope:
+      - "src/contracts/diagnostics.ts"
+      - "src/contracts/protocol.ts"
+      - "src/dialogue/dialogue-port.ts"
+      - "src/dialogue/memory-inspect.ts"
+      - "src/runtime/composition.ts"
+      - "src/runtime/diagnostics.ts"
+      - "src/runtime/evaluation-adapter.ts"
+      - "src/runtime/production.ts"
+      - "src/runtime/server.ts"
+    tests:
+      - test/offline/m4-memory-inspect.test.ts
+      - test/offline/m5-dialogue-outcome.test.ts
+      - test/offline/m5-production-application.test.ts
+      - test/offline/m5-runtime.test.ts
+      - test/offline/protocol.test.ts
+      - test/offline/server.test.ts
