@@ -99,6 +99,9 @@ cases:
       file: test/offline/regressions.test.ts
       test: "adds exactly one attempt per new eligible input and none while unchanged"
 
+  # C-16 remains pending: no quality scorer or reviewed human labels exist. The
+  # draft rubric docs/decision/m3-quality-rubric-v0.1.md is not a verifier, so no
+  # quality score or semantic acceptance is claimed here.
   - id: C-16
     status: pending
     title: Intent and late fallback semantics
@@ -449,6 +452,12 @@ cases:
       file: test/offline/m5-process-restart.test.ts
       test: "production process restart acceptance"
 
+  # Supporting (not registered) cursor tests in test/offline/m6-memory-store.test.ts:
+  # "does not lower the cursor when a same-version rebuild sees fewer events",
+  # "rebuilds rows and cursor under a new extractor version" and
+  # "refuses a rebuild whose episode carries a different extractor version".
+  # C-75 stays pending: rebuild-equality needs M4's derive rules through the
+  # composition adapter, so these tests are recorded as supporting evidence only.
   - id: C-75
     status: pending
     title: The projection cursor is monotonic within one extractor version, and derived rows and cursor share that version
