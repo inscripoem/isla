@@ -9433,3 +9433,38 @@ entries:
         browser phases passed 31 and 16 checks. Heart and Emma speech matched
         their expected WAVs and a new runtime process retained Emma. Playback
         and SQLite were real, with controlled dialogue text and avatar peers.
+  - date: "2026-11-25"
+    task: g6-historical-identity
+    change: >-
+      Classify a G6 AI-use entry as historical by its content, not by its array
+      position. An entry identical to one in the base log is historical wherever
+      a merge placed it, so inserting a new entry before it no longer turns its
+      accepted citations into failures. A new entry, a repointed commit or a
+      reworded entry stays strict and must cite a string commit reachable from
+      HEAD. An unparsable base log now fails closed instead of marking every
+      entry historical. Delta-006 and the INV-14 verification row describe the
+      identity rule.
+    requirements: []
+    invariants: [INV-14]
+    commits: ["8b71e03f08ae87c66c4661c1a26a569dd9d55f1c"]
+    agent: OpenCode V2 build
+    provider: self-api
+    model: deepseek-v4-flash
+    sessions: ["ses_def219b06ffeda1ULKE5NemSIj"]
+    supervision: >-
+      The session implemented the gate, tests and documentation on branch
+      fix/g6-historical-identity-20261125 after the reported mid-insertion
+      failure. No other gate rule was changed.
+    verification:
+      base: 3bdcbff03326c56f73226a7aee0d7f63af61bcd5
+      results: >-
+        pnpm test:gates passed 6 files / 176 tests; pnpm test:trace passed 49
+        tests; pnpm typecheck and oxlint exited 0; git diff --check reported no
+        whitespace errors. The focused test builds a base log with entries A
+        and B and a head log with a new entry inserted between them; B's
+        unreachable citation is advisory, while a new or repointed entry citing
+        the same commit still fails.
+      limits: >-
+        No merge, push, live provider run or Windows run; CI on this head is not
+        observed. The gate was not exercised against the real merge that
+        motivated the fix.
