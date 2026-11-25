@@ -10257,3 +10257,40 @@ entries:
         No push, pull request, merge, live provider run or Windows run. CI on
         this head is not observed. The entry-rule message says "1 entries" for
         a single entry; pluralisation was left as it was.
+  - date: "2026-11-25"
+    task: g6-log-diagnostics-rereview
+    change: >-
+      Address the two evidence gaps in the #196 review. Add a subprocess test
+      that runs the real gate entry with an unwritten base path and asserts
+      exit status 1, one POL-G6-03 record with trigger log-unreadable and
+      evidence naming base-log, no identity classification and no stack trace.
+      Refresh the INV-14 trace row with the missing or unreadable base case,
+      the single head-alias diagnostic and exact citations for the three new
+      tests; add the same tests to the POL-G6-03 catalog Test cell and name the
+      subprocess test in the INV-14 verification row and delta-006.
+    requirements: []
+    invariants: [INV-14]
+    commits: ["7683644b623965070e2cef6eaae7ab3085e2e240"]
+    agent: OpenCode V2 build
+    provider: self-api
+    model: deepseek-v4-flash
+    sessions: ["ses_dee64cb4affeLYa1c5ogFkvwx7"]
+    supervision: >-
+      The implement session added the subprocess test and refreshed the shared
+      rows after the review. The outer assistant reviewed the diff, re-ran the
+      suites and prepared this entry.
+    verification:
+      base: 55e36d31534261b51baf274184a402e9945235bb
+      results: >-
+        pnpm test:gates passed 6 files / 193 tests; pnpm test:trace passed 49
+        tests; pnpm test:readiness passed 47 tests; pnpm verify passed 98
+        files / 2207 tests with a clean typecheck, lint and build; git diff
+        --check reported no whitespace errors. The subprocess test runs the
+        real CLI entry in a temporary directory and asserts the single
+        POL-G6-03 base-log record, exit status 1 and the absence of a stack
+        trace or identity classification.
+      limits: >-
+        No push, pull request update, merge, live provider run or Windows run.
+        CI on this head is not observed. The branch is two commits behind main
+        and the #192 conflict on the log tail is unresolved until one of the
+        two merges.
