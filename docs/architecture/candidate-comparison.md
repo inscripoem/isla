@@ -1,7 +1,8 @@
 # Architecture candidate comparison (qualitative)
 
-Status: **proposal, under review.** Owner: M5 coordination. Revision 2026-11-25.2. Base:
-`main` `e2166cd047537042bd58a3c9999515fa9caf96e1`; also carried by the #192 candidate at `8a55f67`.
+Status: **proposal, under review.** Owner: M5 coordination. Revision 2026-11-25.3. Base:
+`main` `783215b6aa1dbbebf902d5a9467ff0ed1769974c`; also carried by the #192 candidate. The candidate
+head is the PR head.
 
 ## 1. Scope and relationship to the G4 evaluation table
 

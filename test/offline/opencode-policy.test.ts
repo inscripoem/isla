@@ -129,8 +129,8 @@ describe('policy source', () => {
   })
 
   it('rejects a policy that removes a mandatory credential pattern', () => {
-    const weakened = POLICY_TEXT.replace('      "**/*credential*",\n', '')
-    expect(() => parsePolicy(weakened)).toThrow(/must include "\*\*\/\*credential\*"/)
+    const weakened = POLICY_TEXT.replace('      "**/credentials.json",\n', '')
+    expect(() => parsePolicy(weakened)).toThrow(/must include "\*\*\/credentials\.json"/)
   })
 
   it('rejects a policy that removes the delegation denial', () => {
@@ -221,6 +221,9 @@ describe('compiled configuration', () => {
     const rules = rulesFor('M5').agents.build.permissions
     for (const allowed of [
       'src/dialogue/delivery-key.ts',
+      'src/dialogue/tokenizer.ts',
+      'src/runtime/auth.ts',
+      'src/runtime/credential-policy.ts',
       'src/runtime/control-authorizer.ts',
       'docs/team/README.md',
     ]) {
@@ -231,13 +234,23 @@ describe('compiled configuration', () => {
       '.env',
       '.env.example',
       '.env.local',
+      'credentials.json',
+      'credentials.yml',
+      'secrets.yaml',
+      'secrets.yml',
+      'secret.json',
       'id_rsa',
+      'id_ed25519',
       'server.pem',
       'client.p12',
       'private.key',
+      'server.p8',
+      'store.jks',
+      'store.pfx',
+      'store.keystore',
       '.ssh/config',
       '.aws/credentials',
-      'docs/team/example-token.txt',
+      '.gnupg/trustdb.gpg',
     ]) {
       expect(evaluateRules(rules, 'read', path(denied)), denied).toBe('deny')
     }
@@ -275,10 +288,60 @@ describe('compiled configuration', () => {
     expect(evaluateRules(rules, 'task', 'anything')).toBe('deny')
     expect(evaluateRules(rules, 'shell', 'git status --short')).toBe('allow')
     expect(evaluateRules(rules, 'shell', 'pnpm test:m5')).toBe('allow')
+    expect(evaluateRules(rules, 'shell', 'pnpm install --frozen-lockfile')).toBe('allow')
+    expect(evaluateRules(rules, 'shell', 'gh pr view 192')).toBe('allow')
+    expect(evaluateRules(rules, 'shell', 'gh pr view 192 --json title')).toBe('allow')
+    expect(evaluateRules(rules, 'shell', 'gh issue view 192')).toBe('allow')
     expect(evaluateRules(rules, 'shell', 'git commit -m x')).toBe('deny')
     expect(evaluateRules(rules, 'shell', 'git add --dry-run -- .')).toBe('deny')
     expect(evaluateRules(rules, 'shell', 'gh --version')).toBe('deny')
+    expect(evaluateRules(rules, 'shell', 'gh pr view')).toBe('deny')
+    expect(evaluateRules(rules, 'shell', 'gh issue view')).toBe('deny')
+    expect(evaluateRules(rules, 'shell', 'gh api repos/inscripoem/isla')).toBe('deny')
+    expect(evaluateRules(rules, 'shell', 'gh pr merge 192')).toBe('deny')
+    expect(evaluateRules(rules, 'shell', 'gh pr comment 192 --body x')).toBe('deny')
+    expect(evaluateRules(rules, 'shell', 'gh pr edit 192')).toBe('deny')
+    expect(evaluateRules(rules, 'shell', 'gh pr list')).toBe('deny')
+    expect(evaluateRules(rules, 'shell', 'gh issue list')).toBe('deny')
+    expect(evaluateRules(rules, 'shell', 'pnpm install')).toBe('deny')
+    expect(evaluateRules(rules, 'shell', 'pnpm install --no-frozen-lockfile')).toBe('deny')
+    expect(evaluateRules(rules, 'shell', 'pnpm install --frozen-lockfile --offline')).toBe('deny')
+    expect(evaluateRules(rules, 'shell', 'npm install lodash')).toBe('deny')
+    expect(evaluateRules(rules, 'shell', 'pnpm add lodash')).toBe('deny')
     expect(evaluateRules(rules, 'shell', 'pnpm exec vitest run')).toBe('deny')
+  })
+
+  it('allows each role its documented live, runtime and gate commands', () => {
+    const allowed: Array<[RoleId, string]> = [
+      ['M1', 'pnpm exec tsx test/live/kokoro-setup.ts'],
+      ['M1', 'pnpm exec tsx test/live/kokoro-smoke.ts'],
+      ['M1', 'pnpm exec tsx test/live/kokoro-smoke.ts --main-thread'],
+      ['M5', 'pnpm runtime:production'],
+      ['M6', 'pnpm test:trace'],
+      ['M6', 'pnpm test:gates'],
+      ['M6', 'pnpm gate:ai-use-log'],
+      ['M6', 'pnpm gate:test-approval'],
+      ['M6', 'pnpm gate:eval'],
+      ['M6', 'pnpm gate:trace'],
+      ['M6', 'pnpm gate:aggregate'],
+    ]
+    for (const [role, command] of allowed) {
+      expect(evaluateRules(rulesFor(role).agents.build.permissions, 'shell', command), `${role} ${command}`).toBe(
+        'allow',
+      )
+    }
+
+    const m5 = rulesFor('M5').agents.build.permissions
+    expect(evaluateRules(m5, 'shell', 'pnpm runtime:production --extra')).toBe('deny')
+    expect(evaluateRules(m5, 'shell', 'pnpm gate:eval')).toBe('deny')
+
+    const m6 = rulesFor('M6').agents.build.permissions
+    expect(evaluateRules(m6, 'shell', 'pnpm gate:eval --force')).toBe('deny')
+    expect(evaluateRules(m6, 'shell', 'pnpm runtime:production')).toBe('deny')
+
+    const m1 = rulesFor('M1').agents.build.permissions
+    expect(evaluateRules(m1, 'shell', 'pnpm exec tsx test/live/kokoro-smoke.ts --extra')).toBe('deny')
+    expect(evaluateRules(m1, 'shell', 'pnpm exec tsx test/live/kokoro-browser.ts')).toBe('deny')
   })
 
   it('allows only the observed RTK rewrite forms', () => {

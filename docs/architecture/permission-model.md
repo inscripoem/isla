@@ -4,8 +4,8 @@ Status: **proposal (M5), under review.** This document is not adopted by the tea
 branch protection, and not evidence that a member accepted it. No human author or human adoption is
 claimed.
 
-Revision: 2026-11-25.2. Reconciled against `main` `e2166cd047537042bd58a3c9999515fa9caf96e1`; also
-carried by the #192 candidate at `8a55f67`. The earlier candidate was prepared against `main`
+Revision: 2026-11-25.2. Reconciled against `main` `191edb5`; also carried by the #192 candidate. The
+candidate head is the PR head. The earlier candidate was prepared against `main`
 `e32bf1a6b532112ae00d9f29345668016f0f3a3a`; its version-bound observations are kept separately in §10.
 
 ## 1. Purpose and course basis
@@ -96,30 +96,55 @@ rule documents through an ordinary task grant. The derivation CLI remains the in
 
 ## 7. Credential boundary
 
-The credential denial list is intentionally broad but must not block ordinary source names. The current
-proposal denies:
+The credential denial list protects conventional secret-file names and directories without blocking
+ordinary source names. The current proposal denies:
 
 ```text
 .env  .env.*  **/.env  **/.env.*  **/*.env
-**/*secret*  **/*token*  **/*password*  **/*credential*
-**/*auth.*  **/.auth*  **/auth/**
-id_*  **/id_*  **/*.pem  **/*.p12  **/*.key
+**/credentials.json  **/credentials.yml  **/credentials.yaml
+**/secrets.json  **/secrets.yml  **/secrets.yaml
+**/secret.json  **/secret.yml  **/secret.yaml
+**/id_rsa  **/id_dsa  **/id_ecdsa  **/id_ed25519
+**/*.pem  **/*.p12  **/*.key  **/*.p8  **/*.jks  **/*.pfx  **/*.keystore
 **/.ssh/**  **/.aws/**  **/.gnupg/**
 ```
 
-It does not deny `src/dialogue/delivery-key.ts`, which is a normal source file. The earlier candidate
-denied it through `**/*key*`; that false positive is removed. `.env.example` remains denied by `.env.*`;
-it is not needed for coding tasks.
+The previous revision used substring patterns (`**/*token*`, `**/*auth.*`, `**/*credential*`) that also
+denied ordinary source files. Those patterns are replaced by the filename conventions above. Ordinary
+source names such as `src/dialogue/tokenizer.ts`, `src/runtime/auth.ts` and
+`src/runtime/credential-policy.ts` are now readable. `**/*.key` still denies conventional key files such
+as `private.key` but does not match `src/dialogue/delivery-key.ts`.
+
+The tradeoff is convention-based coverage: a secret stored under an unconventional name, or a credential
+value embedded in an ordinary source file, is not denied by path policy. The list is not a content
+classifier and not an operating-system sandbox; it cannot inspect file contents or prevent an allowed
+command from reading a secret. `.env.example` remains denied by `.env.*`; it is not needed for coding
+tasks.
 
 Tests may evaluate fake path strings against the matcher. Native canaries must never use a real
 credential-shaped file or a real secret value. A harmless synthetic path is used instead.
 
 ## 8. Shell and command boundary
 
-The shell allowlist contains exact command strings for common checks and each role's test command. It
-includes both plain and observed RTK-rewritten forms (`git status --short`, `rtk git status --short`,
-`git diff`, `rtk git diff`, `pnpm lint`, `rtk lint`). The rewrite was observed with RTK 1.1.0 in the M5
+The shell allowlist contains exact command strings for common checks and each role's commands, plus the
+narrow read-only patterns `gh pr view *` and `gh issue view *`. Common commands include
+`pnpm install --frozen-lockfile`, `git status --short`, `rtk git status --short`, `git diff`,
+`rtk git diff`, `pnpm lint` and `rtk lint`. The RTK rewrite was observed with RTK 1.1.0 in the M5
 controller on 2026-11-01; it is an environment fact, not a team-wide assumption.
+
+Role commands added in this revision:
+
+- M1: `pnpm exec tsx test/live/kokoro-setup.ts`, `pnpm exec tsx test/live/kokoro-smoke.ts`,
+  `pnpm exec tsx test/live/kokoro-smoke.ts --main-thread`.
+- M5: `pnpm runtime:production`.
+- M6: `pnpm test:trace`, `pnpm test:gates`, `pnpm gate:ai-use-log`, `pnpm gate:test-approval`,
+  `pnpm gate:eval`, `pnpm gate:trace`, `pnpm gate:aggregate`.
+
+The blanket `pnpm install*` and `gh *` denials are removed. An installation or GitHub command that is not
+one of the exact allows stays denied by the default-deny rule. The following remain human-only and
+unavailable to the agent: `gh api` unless a future change proves the specific call read-only; publishing
+(`pnpm publish`, `npm publish`); merges (`gh pr merge`, `git merge`); pull-request edits and comments;
+and credential access. There is no generic `gh *` allow.
 
 The allowlist is not containment. A permitted `pnpm test` can execute arbitrary project code, and an
 unlisted wrapper is denied only if the native matcher sees the exact command string. Native behaviour
@@ -143,9 +168,10 @@ must be observed in a disposable worktree, not inferred from the policy file.
 
 ### 9.1 Generate and check (human, before the session)
 
-The compiler is not in the policy's shell allowlist, and the policy denies `pnpm install*`, so both
-commands run in a **plain terminal before the scoped session starts**, not inside it. Run them from the
-checkout root:
+The compiler command is not in the policy's shell allowlist, so it runs in a **plain terminal before the
+scoped session starts**, not inside it. The only allowed install form is the exact
+`pnpm install --frozen-lockfile`; any other installation command remains denied by default. Run the
+commands from the checkout root:
 
 ```sh
 # The model is the member's local input; it lives in this shell only.
@@ -178,8 +204,8 @@ pnpm exec tsx tools/opencode/cli.ts \
   model and is never committed. §10 records the specific value used for the 2026-11-25 observation.
 - `--check` recompiles and fails on any drift: policy hash, config hash, role, task, grants, agent,
   model or plugin exclusions.
-- On a fresh checkout, run `pnpm install --frozen-lockfile` before either command; that install is a
-  human prerequisite, since the policy denies it during the session.
+- On a fresh checkout, run `pnpm install --frozen-lockfile` before either command. That exact command is
+  allowed inside the session; every other install form is denied.
 
 ### 9.2 Disposable-worktree load
 
@@ -208,8 +234,9 @@ They are not current-`main` evidence. The refresh removes the candidate's commit
 plugin values, so the generated configuration shape differs from the observed one until it is regenerated
 and re-observed.
 
-The 2026-11-25 refresh runs on `main` `e2166cd`. OpenCode is `v2.4.1`. In a disposable directory outside
-the checkout, the generated configuration was activated as that directory's `opencode.json`:
+The 2026-11-25 native observation used `main` `e2166cd`. OpenCode was `v2.4.1`. It has not been re-run
+on the `191edb5` base. In a disposable directory outside the checkout, the generated configuration was
+activated as that directory's `opencode.json`:
 
 - `opencode debug config` listed the generated document with 317 ordered rules, model
   `self-api/deepseek-v4-flash` and `plugins: ["-oh-my-opencode-slim"]`. The sidecar and the
@@ -226,9 +253,9 @@ These observations establish native load and deny behaviour for this candidate i
 do not establish branch protection, team adoption or any G4 result. The original session exports and
 environment details are kept in the external evidence directory, not in the checkout.
 
-The policy path audit against `e2166cd` resolves every existing path; the only unresolved entries are the
-`.opencode/**`, `.agent/**`, `.cache/opencode/**` and protected paths that this proposal introduces or
-generates.
+The earlier policy path audit against `e2166cd` resolved every then-existing path; the only unresolved
+entries are the `.opencode/**`, `.agent/**`, `.cache/opencode/**` and protected paths that this proposal
+introduces or generates.
 
 ## 11. Limits and open decisions
 

@@ -122,18 +122,26 @@ export const REQUIRED_CREDENTIAL_PATTERNS = [
   '**/.env',
   '**/.env.*',
   '**/*.env',
-  '**/*secret*',
-  '**/*token*',
-  '**/*password*',
-  '**/*credential*',
-  '**/*auth.*',
-  '**/.auth*',
-  '**/auth/**',
-  'id_*',
-  '**/id_*',
+  '**/credentials.json',
+  '**/credentials.yml',
+  '**/credentials.yaml',
+  '**/secrets.json',
+  '**/secrets.yml',
+  '**/secrets.yaml',
+  '**/secret.json',
+  '**/secret.yml',
+  '**/secret.yaml',
+  '**/id_rsa',
+  '**/id_dsa',
+  '**/id_ecdsa',
+  '**/id_ed25519',
   '**/*.pem',
   '**/*.p12',
   '**/*.key',
+  '**/*.p8',
+  '**/*.jks',
+  '**/*.pfx',
+  '**/*.keystore',
   '**/.ssh/**',
   '**/.aws/**',
   '**/.gnupg/**',
@@ -338,8 +346,9 @@ export function compileConfig(
   const ownPaths = [...rolePolicy.source, ...rolePolicy.tests, ...rolePolicy.handoffs, 'docs/ai-use-log.yaml']
   addRules(rules, ['edit', 'write'], ownPaths, root, 'allow')
 
-  // Shell commands are exact strings. This does not promise that the native
-  // matcher compares the whole command; verification is native.
+  // Shell commands are exact strings except the two narrow read-only GitHub
+  // patterns. This does not promise that the native matcher compares the whole
+  // command; verification is native.
   for (const command of [...policy.shell.common, ...rolePolicy.shell]) {
     rules.push({ action: 'shell', resource: command, effect: 'allow' })
   }
@@ -358,9 +367,9 @@ export function compileConfig(
     addRules(rules, ['edit', 'write'], policy.approvals.frozen, root, 'deny')
   }
 
-  // Hard denies come last. The credential list is narrow: it refuses actual
-  // secret files and directories but keeps ordinary source names such as
-  // src/dialogue/delivery-key.ts readable.
+  // Hard denies come last. The credential list names conventional secret files
+  // and directories instead of substrings, so ordinary source names such as
+  // src/dialogue/tokenizer.ts and src/runtime/auth.ts remain readable.
   addRules(rules, ['*'], policy.hardDeny.credentials, root, 'deny')
   addRules(rules, ['edit', 'write'], policy.protectedPaths, root, 'deny')
   for (const action of policy.hardDeny.actions) {

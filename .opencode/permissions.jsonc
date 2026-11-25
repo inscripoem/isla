@@ -58,7 +58,12 @@
         "test/browser/root-entry-audio-browser.mjs"
       ],
       "handoffs": [],
-      "shell": ["pnpm test:m1"]
+      "shell": [
+        "pnpm test:m1",
+        "pnpm exec tsx test/live/kokoro-setup.ts",
+        "pnpm exec tsx test/live/kokoro-smoke.ts",
+        "pnpm exec tsx test/live/kokoro-smoke.ts --main-thread"
+      ]
     },
     "M2": {
       "source": ["src/console/**"],
@@ -112,7 +117,7 @@
         "docs/team/HANDOFF-M5-*.md",
         "docs/team/HANDOFF-I1-APPLICATION.en.md"
       ],
-      "shell": ["pnpm test:m5", "pnpm test:composition"]
+      "shell": ["pnpm test:m5", "pnpm test:composition", "pnpm runtime:production"]
     },
     "M6": {
       "source": ["src/storage/**", "src/evaluation/**", ".github/workflows/**"],
@@ -132,7 +137,16 @@
         "test/support/gated-ports.ts"
       ],
       "handoffs": [],
-      "shell": ["pnpm test:m6"]
+      "shell": [
+        "pnpm test:m6",
+        "pnpm test:trace",
+        "pnpm test:gates",
+        "pnpm gate:ai-use-log",
+        "pnpm gate:test-approval",
+        "pnpm gate:eval",
+        "pnpm gate:trace",
+        "pnpm gate:aggregate"
+      ]
     }
   },
   "approvals": {
@@ -187,18 +201,26 @@
       "**/.env",
       "**/.env.*",
       "**/*.env",
-      "**/*secret*",
-      "**/*token*",
-      "**/*password*",
-      "**/*credential*",
-      "**/*auth.*",
-      "**/.auth*",
-      "**/auth/**",
-      "id_*",
-      "**/id_*",
+      "**/credentials.json",
+      "**/credentials.yml",
+      "**/credentials.yaml",
+      "**/secrets.json",
+      "**/secrets.yml",
+      "**/secrets.yaml",
+      "**/secret.json",
+      "**/secret.yml",
+      "**/secret.yaml",
+      "**/id_rsa",
+      "**/id_dsa",
+      "**/id_ecdsa",
+      "**/id_ed25519",
       "**/*.pem",
       "**/*.p12",
       "**/*.key",
+      "**/*.p8",
+      "**/*.jks",
+      "**/*.pfx",
+      "**/*.keystore",
       "**/.ssh/**",
       "**/.aws/**",
       "**/.gnupg/**"
@@ -217,10 +239,8 @@
       "git stash drop*",
       "git clean*",
       "git add*",
-      "gh *",
       "pnpm publish*",
       "npm publish*",
-      "pnpm install*",
       "npx *",
       "pnpm dlx *",
       "rm -rf*"
@@ -241,7 +261,10 @@
       "pnpm build",
       "pnpm verify",
       "pnpm test:readiness",
-      "pnpm test:composition"
+      "pnpm test:composition",
+      "pnpm install --frozen-lockfile",
+      "gh pr view *",
+      "gh issue view *"
     ]
   }
 }

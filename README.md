@@ -133,7 +133,7 @@ finishes in the voice it started with. The reference deployment stores the
 selection beside its SQLite database in `<database path>.voices.json` and
 loads it at startup. The initial voice is Heart.
 
-Voice preview and selection merged after CP04 as #190 (`2889136`), and the three-request VTS dispatch with the `play_not_allowed`/`play_failed` failure reasons merged as #189 (`3a54e6b`). Each carries its own scoped evidence and review on its issue/PR: neither is part of the `9577069` CP04 run. The frozen live feature set in [supported-platform](docs/architecture/supported-platform.md) §5 still dates to `9577069`; updating it for #189/#190 is a separate documentation change.
+Voice preview and selection merged after CP04 as #190 (`2889136`), and the three-request VTS dispatch with the `play_not_allowed`/`play_failed` failure reasons merged as #189 (`3a54e6b`). Each carries its own scoped evidence and review on its issue/PR: neither is part of the `9577069` CP04 run. [Supported platform](docs/architecture/supported-platform.md) §2 now records both post-CP04 changes and explicitly retains §5's CP04 freeze at `9577069`; that record does not claim live or named acceptance for either merged change.
 
 ## Check the foundation
 
