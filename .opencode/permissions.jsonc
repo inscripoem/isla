@@ -66,9 +66,11 @@
       ]
     },
     "M2": {
-      "source": ["src/console/**"],
+      "source": ["src/console/**", "src/App.tsx", "tools/avatar-relay/**"],
       "tests": [
         "test/offline/m2-console.test.ts",
+        "test/offline/m2-avatar-viewport.test.ts",
+        "test/offline/m2-avatar-relay.test.ts",
         "test/offline/console-voice-selection.test.ts",
         "test/conformance/console.conformance.ts",
         "test/browser/console.tsx",
@@ -76,7 +78,7 @@
         "test/browser/console-voice-selection.mjs"
       ],
       "handoffs": [],
-      "shell": ["pnpm test:m2"]
+      "shell": ["pnpm test:m2", "pnpm relay:avatar"]
     },
     "M3": {
       "source": ["src/decision/**"],

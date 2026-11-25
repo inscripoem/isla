@@ -50,12 +50,19 @@ async function requestOperatorToken(): Promise<string> {
   return result.token
 }
 
+// The raw env value is passed through unchanged and resolved inside the
+// viewport: a blank value is unconfigured, a scheme-less value is normalized to
+// ws://, and an invalid value is reported in the badge instead of throwing
+// during render.
+const AVATAR_RELAY_URL = import.meta.env.VITE_AVATAR_RELAY_URL ?? null
+
 function App() {
   return (
     <ConsoleApp
       transportFactory={createConsoleTransport}
       performerFactory={createConsolePerformer}
       requestOperatorToken={requestOperatorToken}
+      avatarRelayUrl={AVATAR_RELAY_URL}
     />
   )
 }

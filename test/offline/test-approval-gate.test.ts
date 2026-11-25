@@ -212,6 +212,30 @@ describe('G1 time-boxed waiver through 2026-11-27 (Tier 1, #176)', () => {
     expect(isTimeWaived({ prNumber: 181, now: beforeExpiry })).toBe(true)
   })
 
+  it('waives #211 as the M2-202 avatar viewport slice with a post-code TA-014 record', () => {
+    expect(isTimeWaived({ prNumber: 211, now: beforeExpiry })).toBe(true)
+    expect(
+      decideApprovalMode({
+        createdAt: null,
+        activatedAt: G1_EVIDENCE_ACTIVATED_AT,
+        prNumber: 211,
+        now: beforeExpiry,
+      }),
+    ).toEqual({ mode: 'advise', reason: 'waiver' })
+  })
+
+  it('returns #211 to evidence after the waiver expires', () => {
+    expect(isTimeWaived({ prNumber: 211, now: atExpiry })).toBe(false)
+    expect(
+      decideApprovalMode({
+        createdAt: '2026-11-25T14:00:00Z',
+        activatedAt: G1_EVIDENCE_ACTIVATED_AT,
+        prNumber: 211,
+        now: atExpiry,
+      }),
+    ).toEqual({ mode: 'evidence', reason: 'post-cutover' })
+  })
+
   it('accepts a Date clock', () => {
     expect(isTimeWaived({ prNumber: 170, now: new Date(beforeExpiry) })).toBe(true)
   })
