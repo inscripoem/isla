@@ -2,7 +2,9 @@
 
 Read `AGENTS.md` first. Identify the member's role, the selected task and the applicable requirements,
 invariants and architecture sections. Read the selected plan, `docs/team/INTERFACES.en.md`,
-`docs/team/REQUIREMENTS.en.md` and the relevant sections of `architecture-blueprint.md`.
+`docs/team/REQUIREMENTS.en.md` and the relevant sections of
+`docs/architecture/architecture-blueprint.md` (the root `architecture-blueprint.md` is a frozen
+historical snapshot).
 
 Before generating any code, inspect the current implementation and its callers, then present one
 execution plan containing:
