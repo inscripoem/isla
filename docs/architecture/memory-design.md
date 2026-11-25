@@ -23,7 +23,8 @@ identity key, and M6 does not store it as a key.
 The table separates what is durable today, what is only in process, and what is planned: the
 `Survives restart?` column states the position for the current code, and the Notes explain anything
 planned or deliberately absent. SQLite is implemented
-(`src/storage/sqlite/*`) and is what the production composition uses (`src/runtime/production.ts:342-343`);
+(`src/storage/sqlite/*`) and is what the production composition uses (`src/runtime/production.ts`,
+`openDatabase` / `createSqliteBackend`);
 `createEventStore` falls back to the in-memory backend only when no backend is supplied. SQLite reopen
 restores confirmed history and exposes unresolved records for recovery (M6-01); application/process
 restart acceptance remains M5's (#25).
@@ -65,7 +66,9 @@ restart acceptance remains M5's (#25).
    omits `terminalOutcome`. SQLite persists the full `StoredDelivery`, including
    `terminal_outcome`, and `src/storage/recovery-view.ts` exposes unresolved
    records; `test/offline/m6-recovery.test.ts` covers in-memory separation and
-   SQLite reopen. No projection table exists yet.
+   SQLite reopen. `projection_state` is part of schema v3
+   (`src/storage/sqlite/migrations.ts`); the `MemoryProjectionPort` itself remains
+   in-process and has no production caller.
 6. Schema versioning is separate from contract version `0.2`. Back up before migrating; reject
    unsupported schema versions; migrations are idempotent.
 7. An event **payload must be a JSON value** (INV-04): a value JSON cannot represent (undefined,
@@ -259,7 +262,7 @@ tables can be deleted by an explicit operator call. The two words must never be 
 
 ## Derived memory, audience/owner and state (memory-tables foundation)
 
-The memory-tables ADR (number pending in #25) adds six tables beyond `events`/`deliveries`:
+ADR-009 (merged in #157, `d86dbc1`) adds six tables beyond `events`/`deliveries`:
 
 | Table | Purpose | Rule |
 | --- | --- | --- |

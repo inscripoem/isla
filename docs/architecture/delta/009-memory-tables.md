@@ -1,6 +1,7 @@
 # Delta-009 — Memory-tables foundation (X02/X03/X07/X08)
 
-Change record for ADR-009 (reserved by M5 in #25 on 2026-11-14; do not merge under another number). Date: 2026-11-10. Branch `m6-memory-foundation`, draft PR only, not merged.
+Change record for ADR-009 (reserved by M5 in #25 on 2026-11-14; merged under that number). Date:
+2026-11-10. Branch `m6-memory-foundation`; merged in #157 (`d86dbc1`, 2026-11-14).
 
 ## Change (against `main` `e9e7e7b`; rebased onto `f99e2f5`)
 
@@ -43,15 +44,15 @@ calls**, replacing the earlier “not in v0.2” wording.
 
 ## Open items
 
-- **ADR-009 is reserved** (M5, #25, 2026-11-14) and the ADR and this Delta carry the number; the
-  registration lands in one commit with INV-17 and C-75…C-78.
-- The design and trace updates are local; they must merge with the ADR number.
+- **ADR-009 is reserved** (M5, #25, 2026-11-14) and merged under that number; the registration of
+  INV-17 and C-75…C-78 accompanies it in #157 (`d86dbc1`).
+- The design and trace updates merged with the ADR number in #157.
 - Operator rebuild entry and source-level cascade are recorded limits, not implemented.
 - Retention scope is **resolved** (M5, 2026-11-14): both delete paths are audience-targeted;
   `deleteOlderThan(audienceId, days, nowMs)` exists and no global by-age delete is exposed.
-- X02 integration waits on M4 `deriveEpisode`/`deriveTopics`; X07 real acceptance waits on M4’s
-  `test/fixtures/memory/` corpora. The current X07 tests are fixture-level only and claim no quality
-  result.
+- X02 integration waits on M4 `deriveEpisode`/`deriveTopics`; X07 real acceptance waits on the
+  M4-owned adapter at the composition boundary. The three corpora were published in #159 (`bb9eaa3`),
+  but the X07 tests remain fixture-level and claim no quality result.
 - **INV-17 and C-75…C-78 are allocated.** `C-76` (owner/derived writes need a durable consenting
   binding), `C-77` (state audience conflict) and `C-78` (audience deletion and retention leave events
   and deliveries untouched) are implemented. `C-75` stays pending because its rebuild-equality half
