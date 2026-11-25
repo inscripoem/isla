@@ -30,7 +30,7 @@ and the evidence tiers.
 | Tier | Applies | Command / evidence |
 | --- | --- | --- |
 | 1 — Structural | imports, module boundaries, permissions, schemas, trace/frozen fitness | `pnpm test:readiness` (`contracts`, `requirements`, `boundaries`); `pnpm test:trace`; `pnpm lint`; `pnpm typecheck` |
-| 2 — Regression | all prior offline suites, zero regressions | `pnpm test` (99 files / 2268 tests at the PR #199 review-fix head) |
+| 2 — Regression | all prior offline suites, zero regressions | `pnpm test` (99 files / 2268 tests at `2a0c009`) |
 | 3 — Behavioral | SEM1 faithfulness, SEM2 answer relevance, zero safety escapes | **pending / not run** — requires a fixed evaluation set, reviewed labels, provider access and thresholds. G4's condition scan is **not** a semantic evaluator. |
 
 **Tier 3 is not satisfied by a green G4.** G4 checks that a measured claim names its fixed conditions

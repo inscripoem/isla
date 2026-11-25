@@ -10528,3 +10528,40 @@ entries:
       limits: >-
         The pilot is one attempt, not a p95 or quality baseline. No live
         provider, acoustic output or Windows run is claimed.
+  - date: "2026-11-25"
+    task: pr199-review-fixes
+    change: >-
+      Address the PR #199 review: correct the requirement count to 32, replace
+      pre-publication hashes with resolvable commits, add canonical/column
+      fail-closed trace guards and negative tests, rename TA-007 to avoid the
+      #200 collision, record the G1 replay exception as DEBT-21, rename the
+      master ADR to ADR-010 with the #25 reservation, reconcile generatedFrom
+      and the team snapshot, cite slice commits in the AI-use entries, refresh
+      the self-review metadata, add the proposed D1 taxonomy decision record,
+      state the subtype enforcement boundary, and reconcile D2.8 with the
+      merged pilot evaluation table.
+    requirements: []
+    invariants: []
+    commits: ["2a0c009"]
+    agent: OpenCode V2 build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
+    supervision: >-
+      The member requested the review fixes and the branch rebuild. The
+      assistant applied the changes; the human review owns the remaining
+      judgment, including the G1 replay exception.
+    verification:
+      base: b2becdd
+      results: >-
+        pnpm test:trace passed 55 tests; pnpm test:readiness passed 50 tests;
+        pnpm test:gates passed 6 files / 199 tests; pnpm verify passed 99 files
+        / 2268 tests with a clean typecheck, lint and build; pnpm gate:eval
+        passed the condition scan; relative links 0 missing; git diff --check
+        clean. Mutation checks for the canonical-table and monitor-column
+        guards went red then were restored.
+      limits: >-
+        G1 ordering passes with TA-007 but is an explicit replay exception
+        (DEBT-21), not evidence of pre-implementation approval. The taxonomy
+        and ADR-010 remain proposed pending M5/registrar acceptance. No live
+        provider, acoustic output or Windows run is claimed.

@@ -36,7 +36,7 @@ without a named reviewer and the evidence they actually read.
 | PR #195 — architecture/evaluation reconciliation | merged | **none recorded here** |
 | PR #196 — G6 diagnostics | merged | **none recorded here** |
 | PR #187 — M2 console rebuild | merged | **none recorded here** |
-| PR #199 (`7112bd1`, `8a9cd13`, `50bb859`, `b50a511`, `03af868`, `b2becdd`, plus the review-fix commit) | open; review-fix commit is the current head | self-review below; human review pending |
+| PR #199 (`7112bd1`, `8a9cd13`, `50bb859`, `b50a511`, `03af868`, `b2becdd`, `2a0c009`) | open; review-fix commit `2a0c009`; log repoint is the head | self-review below; human review pending |
 
 ## PR #9 — M6-01 storage ports, backend seam and traceability artifacts
 
@@ -246,7 +246,7 @@ without a named reviewer and the evidence they actually read.
 - Review response: requirement counts corrected to 32; pre-publication hashes replaced with resolvable PR commits; the trace gate now rejects a missing canonical table, a missing Requirement column and a missing Runtime monitor column; ADR-010 and the split IDs cite the #25 reservation; `generatedFrom` and the team snapshot are reconciled; the new AI-use entries cite their commits; TA-007 replaces the #200 collision; self-review metadata is current; the taxonomy decision is recorded as proposed.
 - Architecture alignment: the blueprint/ADR keep M5 as the single live authority, M6 as the evidence owner, and the four system invariants (INV-01..03, INV-12). The master ADR is ADR-010, reserved in #25; it is explicitly proposed and not accepted.
 - Code and test quality: docs-only except the trace-fitness/registers/requirements schema changes in the first commit. The trace gate now rejects missing requirements, unreasoned monitors and non-invariant register rows; mutation checks went red for each guard. No test was weakened.
-- Operational metadata: PR #199, branch `m6-artifact-closure-20261125-r2` (rebuilt as `-r3` before force-push); commits `7112bd1`, `8a9cd13`, `50bb859`, `b50a511`, `03af868`, `b2becdd`; the review-fix commit is the current head.
+- Operational metadata: PR #199, branch `m6-artifact-closure-20261125-r2` (rebuilt as `-r3` before force-push); commits `7112bd1`, `8a9cd13`, `50bb859`, `b50a511`, `03af868`, `b2becdd`, `2a0c009`; the log repoint commit is the head.
 - Security and efficiency: no secrets, credentials or live provider calls; no runtime behavior changed. The permission model remains a local candidate and is not a blocking `verify` step.
 - G1 exception: TA-007 ordering passes on the rebuilt branch, but it is an explicit exception (DEBT-21); it is not evidence of pre-implementation approval. Human review owns the judgment.
 - Verification: `pnpm test:trace` 55, `pnpm test:readiness` 50, `pnpm test:gates` 199, `pnpm verify` 99 files / 2268 tests, `pnpm gate:ai-use-log` passed, relative-link check 0 missing, `git diff --check` clean.

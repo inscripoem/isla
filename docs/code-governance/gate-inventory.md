@@ -1,7 +1,7 @@
 # Gate inventory — CI and evidence gates
 
 Status: **under review. No gate is claimed blocking unless the active remote ruleset requires it.**
-Owner: M6. Date: 2026-11-25. Measurement base: PR #199 review-fix head (D4 slice `03af868`).
+Owner: M6. Date: 2026-11-25. Measurement base: `2a0c009` (D4 slice `03af868`).
 
 One row per gate: trigger, position, reference data, failure action, positive test and negative test.
 A gate that has never been observed rejecting has not been shown to be a gate; a gate that is advisory

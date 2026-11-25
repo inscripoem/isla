@@ -1,7 +1,7 @@
 # Isla architecture blueprint
 
 Status: **under review — D2.1 master constraint document. Not an accepted architecture baseline.**
-Owner: M5 coordination with M6. Date: 2026-11-25. Head: PR #199 review-fix head. The 32-requirement count was measured at `8a9cd13`; the 2268-test result is at the review-fix head.
+Owner: M5 coordination with M6. Date: 2026-11-25. Head: `2a0c009`. The 32-requirement count was measured at `8a9cd13`; the 2268-test result is at `2a0c009`.
 Proposed successor to the root [`architecture-blueprint.md`](../../architecture-blueprint.md), which is the
 frozen 2026-10-15 design snapshot. The root remains the operative pointer until this document is accepted;
 the docs file is the current D2.1 proposal.
@@ -179,7 +179,7 @@ Verification is **three-tiered and fail-closed**.
 | Tier | What it checks | Evidence |
 | --- | --- | --- |
 | **1 — Structural** | imports/module boundaries, permissions, schemas, trace chain, frozen paths | `pnpm test:readiness`, `pnpm test:trace`, `pnpm typecheck`, `pnpm lint` |
-| **2 — Regression** | all prior offline suites, zero regressions | `pnpm test` (currently 99 files / 2268 tests at the PR #199 review-fix head) |
+| **2 — Regression** | all prior offline suites, zero regressions | `pnpm test` (currently 99 files / 2268 tests at `2a0c009`) |
 | **3 — Behavioural** | quality thresholds, faithfulness/relevance, zero safety escapes | Evaluation protocol/rubric; **pending / not run** until a fixed set and provider evidence exist |
 
 **Gates.** G1 test approval, G2 static analysis, G3 schema + boundaries, trace fitness, G5 regression,
