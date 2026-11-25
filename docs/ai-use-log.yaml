@@ -10671,7 +10671,7 @@ entries:
       the default rule behaviour are unchanged.
     requirements: [FR-01, FR-03, NFR-03, NFR-04]
     invariants: [INV-07, INV-13, INV-14, INV-16]
-    commits: ["a41fbcdb8db938abd260e378e3ea6fac83eff650"]
+    commits: ["7331c48eae2ee659faf5e09821add824443e901c"]
     agent: OpenCode V2 build
     provider: self-api
     model: deepseek-v4-flash
@@ -10680,7 +10680,7 @@ entries:
       Implemented in the OpenCode V2 build session from the task brief; the
       change was reviewed and verified locally.
     verification:
-      base: fea3db99356f76518fbb1abe426bc90b6b0514a9
+      base: be6eb4fdb3da6f6718d9a6e549b7e1a4dd7ff6f0
       results: >-
         pnpm test:m5 passed 311 tests; pnpm test:m3 passed 130 tests;
         pnpm test:composition passed 12 tests; pnpm test:trace passed 55
