@@ -39,7 +39,7 @@ C-05/C-16 remain pending; no new global ID is allocated. M6 retains serialized `
 
 The dependent M4 proposal now bounds statement visits, text preprocessing, claims and pair
 comparisons, fixes long-word contraction matching, and reports incomplete audits through
-context and the redacted inspection builder. See [memory design](../architecture/memory-design.md#bounded-consistency-audit-proposal-2026-10-22-under-review) for ceilings and the exported API changes.
+context and the redacted inspection builder. See [memory design](../architecture/memory-design.md#bounded-consistency-audit-adopted-by-m4-2026-10-23) for ceilings and the exported API changes.
 M5 integrates the same reviewed code and tests; existing outcome/deadline handling, recovered
 session wiring and prepared evaluation inputs are retained. PR53's three documentation
 corrections are included. M4 retains ownership of the limits and API adoption; M2/M6 inspection

@@ -1,6 +1,6 @@
 # Parallel development: role kits
 
-Revision: 2026-10-15.3. Status: under review. These kits provide shared contracts, deterministic substitutes and executable examples. Main dbbbfcb includes M5 coordination, M4 dialogue/attribution, M1 fixed synthesis/rendering/browser playback and injectable synthesis/resources, and M6 memory storage. PR30 and PR31 are merged. Local I1 on this main passed 634 tests / 30 files, typecheck, lint and build; publication and consumer adoption remain pending. Product console, live provider composition, model quality and SQLite durability remain separate work. The M5-01 handoff retains historical implementation evidence.
+Revision: 2026-11-25.1. Status: under review; this is a historical preparation baseline. These kits provide shared contracts, deterministic substitutes and executable examples. Main `dbbbfcb` (2026-10-15) includes M5 coordination, M4 dialogue/attribution, M1 fixed synthesis/rendering/browser playback and injectable synthesis/resources, and M6 memory storage. PR30 and PR31 are merged; the baseline and its 634-test local I1 result are historical. The commands below remain current against remote main `55e36d3` (2026-11-25). Product console, live provider composition, model quality and SQLite durability were separate work at this baseline. The M5-01 handoff retains historical implementation evidence.
 
 ## Run the prepared version
 
@@ -19,7 +19,7 @@ pnpm test:readiness
 pnpm verify
 ```
 
-Each role command runs its real test file, including correct and deliberately faulty adapters. The composition command runs the basic offline loop; `pnpm verify` also includes the held-dependency and late-result regressions. No model credentials are needed for these checks. The standard browser page remains diagnostic-only. The separate local I1 demo runs the application transport and actual M1 player with fixed assets and explicit M3/dialogue-provider substitutes; see the [I1 handoff](HANDOFF-I1-APPLICATION.en.md). This increment is uncommitted and under review.
+Each role command runs its real test file, including correct and deliberately faulty adapters. The composition command runs the basic offline loop; `pnpm verify` also includes the held-dependency and late-result regressions. No model credentials are needed for these checks. The standard browser page remains diagnostic-only. The separate local I1 demo runs the application transport and actual M1 player with fixed assets and explicit M3/dialogue-provider substitutes; see the [I1 handoff](HANDOFF-I1-APPLICATION.en.md). The prepared increment is merged; current status is recorded in the [delivery plan](DELIVERY-PLAN.en.md#current-baseline).
 
 ## First task and replacement point
 
