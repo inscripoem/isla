@@ -431,6 +431,16 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
    * a session's first deliverable segment increments once, whatever the number
    * of retry attempts.
    */
+  /**
+   * KNOWN LIMIT (recorded, not fixed in this slice): this map is never pruned.
+   * It is in-process state, bounded by the process lifetime and by how many
+   * distinct sessions and recalled items that process sees - not persisted, not
+   * shared across ports, and released with the port. A long-lived process with
+   * many sessions therefore keeps one small entry per (session, recalled item)
+   * it ever served. A pruning rule has to preserve `usedBefore`, which is a
+   * ranking input, so it needs its own test before one is added; until then the
+   * bound is documented rather than guessed at.
+   */
   const recallUseCounts = new Map<string, Map<string, number>>()
   /** The candidate identity of one recalled entry, in the ranker's own shape. */
   const recallCandidateOf = (entry: RecalledMemoryEntry): RecallCandidate =>

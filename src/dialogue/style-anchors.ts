@@ -1,4 +1,6 @@
+import type { ReplyIntent } from '../contracts'
 import type { AssembledTurn } from './context'
+import { DEFAULT_STYLE_CONTRACT } from './style-contract'
 import type { StyleContract } from './style-contract'
 
 /**
@@ -137,6 +139,34 @@ export function anchorScore(turn: AssembledTurn, contract: StyleContract): numbe
   return score
 }
 
+/** Empty boundary fallbacks: selection never renders one. */
+const EMPTY_BOUNDARY_FALLBACKS: Readonly<Record<ReplyIntent, readonly string[]>> = {
+  support: [],
+  answer: [],
+  clarify: [],
+  acknowledge: [],
+  playful: [],
+  'check-correction': [],
+}
+
+/**
+ * Contract used when the caller does not supply one.
+ *
+ * It is `DEFAULT_STYLE_CONTRACT` (the same table `deriveStyleContract` starts
+ * from) plus the two profile fields that constant leaves out. The previous
+ * fallback was a hand-written empty contract - no tic, no address list - which
+ * silently scored two of the three preference dimensions at zero forever, so
+ * omitting the argument degraded the ordering instead of using the documented
+ * defaults. The tic and the address vocabulary now come from the shipped table,
+ * and the boundary fallbacks are empty because selection never renders one:
+ * they belong to delivery repair.
+ */
+const DEFAULT_ANCHOR_CONTRACT: StyleContract = {
+  ...DEFAULT_STYLE_CONTRACT,
+  profileId: '',
+  boundaryFallbacks: EMPTY_BOUNDARY_FALLBACKS,
+}
+
 /**
  * Choose up to `limit` style anchors from turns that are already in the prompt.
  *
@@ -150,6 +180,10 @@ export function anchorScore(turn: AssembledTurn, contract: StyleContract): numbe
  *     claim the character does not stand behind;
  *   - normalized duplicates are kept once.
  *
+ * `contract` defaults to `DEFAULT_ANCHOR_CONTRACT` (the shipped defaults), so
+ * omitting it is well defined: tics and address forms are still preferred. Pass
+ * `deriveStyleContract(profile)` to rank against a specific authored character.
+ *
  * Survivors are ordered by `anchorScore` (descending), ties keeping the input
  * order - which is the history's own order - and the first `limit` are kept. The
  * rest are reported with reason `'limit'`.
@@ -158,21 +192,9 @@ export function selectStyleAnchors(
   turns: readonly AssembledTurn[],
   profileVersion: string,
   limit: number = MAX_STYLE_ANCHORS,
-  contract?: StyleContract,
+  contract: StyleContract = DEFAULT_ANCHOR_CONTRACT,
 ): StyleAnchorSelection {
-  const style: StyleContract =
-    contract ?? {
-      profileId: '',
-      selfReferences: [],
-      audienceAddress: [],
-      selfReferenceViolations: [],
-      addressViolations: [],
-      tic: null,
-      maxSentenceChars: 0,
-      forbiddenPatterns: [],
-      boundaryPatterns: [],
-      boundaryFallbacks: {} as StyleContract['boundaryFallbacks'],
-    }
+  const style = contract
   const exclusions: StyleAnchorExclusion[] = []
   const seen = new Set<string>()
   const scored: { turn: AssembledTurn; score: number; order: number }[] = []

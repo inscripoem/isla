@@ -10,6 +10,8 @@ import {
   MIN_RECALL_SCORE,
   MIN_SIMILARITY,
   PARAPHRASE_ALIASES,
+  RECALL_INTENT_BONUS,
+  RECALL_PARAPHRASE_FLOOR,
   RECALL_RRF_K,
   RECALL_WEIGHTS,
   asRecallPort,
@@ -45,6 +47,7 @@ import type {
   RecallRequest,
   RecalledItem,
 } from '../../src/dialogue'
+import { REPLY_INTENTS } from '../../src/contracts'
 import type { DialogueRequest } from '../../src/contracts'
 
 /**
@@ -291,6 +294,59 @@ describe('M4 recall ranking v2 — paraphrase and pronoun recall', () => {
     expect(jaccard(latinTokensOf('What day were you born?'), latinTokensOf(target.text))).toBe(0)
     expect([...conceptProfileOf('What day were you born?').concepts]).toEqual([0])
     expect(results[0]?.scoreParts.similarity).toBeGreaterThanOrEqual(MIN_SIMILARITY)
+  })
+
+  it('scores the flagship paraphrase at EXACTLY the paraphrase floor: equality is admitted', () => {
+    /*
+     * The pair shares no word, so its similarity is the alias value alone:
+     * ALIAS_MATCH_WEIGHT / (1 + 1 + ALIAS_MATCH_WEIGHT) = 2 / 4 = 0.5. That is
+     * RECALL_PARAPHRASE_FLOOR, and admission is `>=`, so the pair is in with
+     * zero margin. This equality is pinned DELIBERATELY: if the weight, the
+     * formula or the comparison moves, the flagship case must fail loudly
+     * instead of drifting to "mostly works".
+     */
+    const target = characterTurn('birthday', 'My birthday is June 3rd, back in the spring.')
+    const results = recall.recall(
+      recallRequest({
+        inputText: 'What day were you born?',
+        candidates: [characterCandidate(target)],
+      }),
+    )
+    expect(RECALL_PARAPHRASE_FLOOR).toBe(0.5)
+    expect(results).toHaveLength(1)
+    expect(results[0]?.scoreParts.similarity).toBe(RECALL_PARAPHRASE_FLOOR)
+    // The pair shares no word, so the alias value is the only lexical evidence:
+    // the similarity is not the literal term.
+    expect(results[0]?.scoreParts.lexicalFused).toBeLessThan(RECALL_PARAPHRASE_FLOOR)
+  })
+
+  it('keeps every recalled score within 0 .. 1.1: the intent bonus is not normalised away', () => {
+    /*
+     * The weighted terms sum to 1 and the intent bonus (at most 0.1 today) is
+     * added on top, so `score` is documented as `0 .. 1 + max intent bonus`,
+     * currently 0..1.1. It is not clamped and not renormalised; this pins the
+     * upper edge across every intent, including deliberately strong candidates.
+     */
+    const recall = createMultiFactorRecall()
+    const upper = 1 + Math.max(...Object.values(RECALL_INTENT_BONUS))
+    expect(upper).toBeCloseTo(1.1, 10)
+    for (const replyIntent of REPLY_INTENTS) {
+      const candidate = characterTurn('birthday', 'My birthday is June 3rd, back in the spring.', {
+        salienceScore: 1,
+        salienceSignals: ['emotion-peak', 'concrete-detail', 'relationship'],
+      })
+      const results = recall.recall(
+        recallRequest({
+          inputText: 'Tell me about the birthday party',
+          replyIntent,
+          candidates: [characterCandidate(candidate)],
+        }),
+      )
+      for (const entry of results) {
+        expect(entry.score, replyIntent).toBeLessThanOrEqual(upper)
+        expect(entry.score, replyIntent).toBeGreaterThanOrEqual(0)
+      }
+    }
   })
 
   it('recalls a pronoun reference: "that plan" finds the earlier weekend plan', () => {

@@ -16,6 +16,7 @@ import type {
 } from '../../src/dialogue'
 import type { DialogueRequest } from '../../src/contracts'
 import {
+  anchorScore,
   MAX_STYLE_ANCHORS,
   normalizeAnchorText,
   renderStyleAnchorLines,
@@ -25,7 +26,7 @@ import {
   STYLE_ANCHORS_ENABLED,
   STYLE_ANCHORS_HEADER,
 } from '../../src/dialogue/style-anchors'
-import { deriveStyleContract } from '../../src/dialogue/style-contract'
+import { DEFAULT_STYLE_CONTRACT, deriveStyleContract } from '../../src/dialogue/style-contract'
 import type { StyleContract } from '../../src/dialogue/style-contract'
 import { createCallContext } from '../support/context'
 import { FIXTURE_SESSION_ID, fixtureCommitDelivery, fixtureDialogueRequest } from '../support/fixture-data'
@@ -42,6 +43,23 @@ import { FIXTURE_SESSION_ID, fixtureCommitDelivery, fixtureDialogueRequest } fro
 const PROFILE = AUTHOR_CHARACTER_PROFILE
 const CONTRACT = deriveStyleContract(PROFILE)
 const SESSION = FIXTURE_SESSION_ID
+/**
+ * `DEFAULT_STYLE_CONTRACT` with the two profile fields the selector needs.
+ * Selection never renders a boundary fallback, so they are left empty per
+ * intent - the same shape the function's own default uses.
+ */
+const DEFAULT_STYLE_CONTRACT_FOR_TEST: StyleContract = {
+  ...DEFAULT_STYLE_CONTRACT,
+  profileId: PROFILE.profileId,
+  boundaryFallbacks: {
+    support: [],
+    answer: [],
+    clarify: [],
+    acknowledge: [],
+    playful: [],
+    'check-correction': [],
+  },
+}
 const VERSION_KEY = JSON.stringify([PROFILE.profileId, PROFILE.version])
 const OTHER_VERSION_KEY = JSON.stringify([PROFILE.profileId, '0'])
 
@@ -241,6 +259,41 @@ describe('M4 style anchors — selection filters', () => {
     expect(lines).toEqual(['- Hmph, this line was broken across two lines.'])
     for (const line of lines) expect(line).not.toContain('\n')
     expect(normalizeAnchorText(' a\n\tb ')).toBe('a b')
+  })
+
+  it('omitting the contract uses the shipped defaults, so voice markers still count', () => {
+    /*
+     * The default must come from DEFAULT_STYLE_CONTRACT, not an empty stub. An
+     * empty stub left the tic and the address list empty, so the two strongest
+     * markers scored zero forever and selection silently degraded to input
+     * order. Here the marker-free ordering is the same with and without the
+     * argument, and a marker line beats a neutral one either way.
+     */
+    const neutral = turn('neutral', 'The quiet minutes of the stream went by.')
+    const address = turn('address', ADDRESS_LINE)
+    const tic = turn('tic', 'Hmph, you were up late again.')
+
+    const implicit = selectStyleAnchors([neutral, address, tic], VERSION_KEY, MAX_STYLE_ANCHORS)
+    const explicit = selectStyleAnchors(
+      [neutral, address, tic],
+      VERSION_KEY,
+      MAX_STYLE_ANCHORS,
+      DEFAULT_STYLE_CONTRACT_FOR_TEST,
+    )
+    expect(idsOf(implicit.anchors)).toEqual(idsOf(explicit.anchors))
+    // Both marker lines outrank the neutral one. The tic line also says
+    // "you", so it scores 2 against the address line's 1.
+    expect(idsOf(implicit.anchors)).toEqual(['tic', 'address', 'neutral'])
+
+    // And one marker line alone beats a neutral line when only one slot exists.
+    const oneSlot = selectStyleAnchors([neutral, tic], VERSION_KEY, 1)
+    expect(idsOf(oneSlot.anchors)).toEqual(['tic'])
+
+    // The default is not the old empty stub: its tic and address vocabulary are
+    // the shipped table's.
+    expect(anchorScore(neutral, DEFAULT_STYLE_CONTRACT_FOR_TEST)).toBe(0)
+    expect(anchorScore(address, DEFAULT_STYLE_CONTRACT_FOR_TEST)).toBe(1)
+    expect(anchorScore(tic, DEFAULT_STYLE_CONTRACT_FOR_TEST)).toBe(2)
   })
 
   it('accepts a contract with no tic and no address list without matching anything', () => {

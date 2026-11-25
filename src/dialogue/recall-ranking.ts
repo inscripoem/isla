@@ -106,18 +106,35 @@ export const RECALL_RECENCY_DAYS = 30
  * similarity value: shared concept weight over (query concepts + candidate
  * concepts + this smoothing weight).
  *
- * Literal word overlap and alias overlap are deliberately measured on the same
- * Jaccard scale, so the two can be compared and the stronger one kept:
+ * Literal word overlap and alias overlap are measured on the same Jaccard
+ * scale, and `similarity` keeps the stronger of the two. The LITERAL side is
+ * not a raw Jaccard by the time it is kept: it is the value fused by reciprocal
+ * rank fusion with the CJK view and normalised by that view's maximum,
+ * `min(1, literal * (1 + fused))`, so the boost depends on the candidate set
+ * the views actually order. The three examples below give the RAW values, and
+ * name the admitted `similarity` separately:
  *
  *   "tell me about the birthday party" / "The birthday party is on June 3rd"
- *     shares 2 of 3 Latin content words              -> 0.667 literal
+ *     shares 2 of 3 Latin content words   -> literal 0.667 (pre-fusion)
  *   "tell me about the birthday party" / "Which birthday?"
- *     shares 1 word and the birthday concept          -> 0.5 literal, 0.5 alias
+ *     shares 1 word and the birthday concept
+ *     -> literal 0.5 (pre-fusion) and alias 0.5. As the only candidate it is
+ *        the maximum of every view, so fused is 1 and the admitted
+ *        `similarity` is the fused literal, min(1, 0.5 * 2) = 1.0 (capped).
+ *        In a larger candidate set the fused term is lower, so the admitted
+ *        value is set by the fusion and not by either raw 0.5.
  *   "what day were you born" / "My birthday is June 3rd"
- *     no shared word, one shared concept              -> 0.25 alias
+ *     no shared word, one shared concept  -> alias-only 0.5, no fused literal
+ *        (the pair shares no content word, so the fusion views do not order
+ *        it and `lexicalFused` is 0)
  *
- * A paraphrase is thus worth strictly less than any real word overlap, which is
- * the order the reply path relies on (`RECALL_ASSEMBLY_MIN_SIMILARITY`).
+ * So the alias-only paraphrase is NOT strictly weaker than every literal
+ * value in raw terms - the smoothed one-concept value (1 * 2 / (1 + 1 + 2) =
+ * 0.5) equals half of the message's words - and what separates the two kinds of
+ * evidence is admission, not raw magnitude. A message that shares even one real
+ * word reaches `MIN_SIMILARITY` through the fused literal. A paraphrase that
+ * shares no word needs its own rule (`RECALL_PARAPHRASE_FLOOR`), because its
+ * similarity is the alias value alone and `MIN_SIMILARITY` is 0.3.
  */
 export const ALIAS_MATCH_WEIGHT = 2
 
@@ -129,10 +146,15 @@ export const ALIAS_MATCH_WEIGHT = 2
  *
  *   - a LITERAL match of real words. One shared word between a two-word message
  *     and a three-word turn is 0.25 and stays out; half the message's words is
- *     0.5 and comes in;
+ *     0.5 and comes in. The value admitted is the fused literal, which is at
+ *     least the raw Jaccard and grows with the fusion boost (`min(1, raw *
+ *     (1 + fused))`), so "tell me about the birthday party" against "Which
+ *     birthday?" - raw literal 0.5 and alias 0.5 - is admitted at
+ *     `similarity` 1.0 as a single candidate, not at 0.5 or 0.667;
  *   - a PARAPHRASE with topical agreement: the message names ONE concept and
- *     the candidate shares it, which is 0.5 when the words also overlap
- *     ("birthday party" / "Which birthday?") and 0.25 when they do not.
+ *     the candidate shares it. With a word shared as well this is the literal
+ *     branch above; with no word shared at all the similarity is the alias
+ *     value alone, which is exactly `RECALL_PARAPHRASE_FLOOR` below.
  *
  * The reply path uses the same floor (`RECALL_ASSEMBLY_MIN_SIMILARITY`), so the
  * flagship paraphrase "What day were you born?" against "My birthday is June
@@ -148,11 +170,14 @@ export const MIN_SIMILARITY = 0.3
  * one.
  *
  * "What day were you born" (birthday, nothing else) against "My birthday is
- * June 3rd" scores 0.25 on the alias value alone. That is deliberately a
- * weaker signal than any literal match - the curated alias pair is the only
- * evidence - so it is admitted by this rule and by nothing else. A message that
- * names several concepts ("the meeting about the novel") or a candidate that
- * merely shares a topic with no concept named by the message never reaches it.
+ * June 3rd" scores 0.5 on the alias value alone, which is exactly this floor:
+ * equality is admitted, so the pair is in. That is the only evidence the pair
+ * has - it shares no content word, so no fused literal is added - and that is
+ * what makes this rule necessary rather than a weaker version of the literal
+ * floor: a candidate that shares even one word is admitted through the fused
+ * literal instead. A message that names several concepts ("the meeting about
+ * the novel") or a candidate that merely shares a topic with no concept named by
+ * the message never reaches it.
  */
 export const RECALL_PARAPHRASE_FLOOR = ALIAS_MATCH_WEIGHT / (1 + 1 + ALIAS_MATCH_WEIGHT)
 
@@ -236,7 +261,16 @@ export interface RecallScoreParts {
   ageUnknown: boolean
 }
 
-/** One recalled candidate with the score that selected it. */
+/**
+ * One recalled candidate with the score that selected it.
+ *
+ * `score` ranges over `0 .. 1 + max intent bonus`, which is `0 .. 1.1` while
+ * the largest `RECALL_INTENT_BONUS` entry is 0.1. It is NOT normalised to 0..1:
+ * the weighted terms (`RECALL_WEIGHTS`) sum to 1 and the intent bonus is added
+ * on top for ranking only. Compare scores against each other, never against an
+ * absolute quality threshold, and read which dimensions contributed from
+ * `scoreParts` rather than from the total.
+ */
 export type RecalledItem = RecallCandidate & {
   score: number
   scoreParts: RecallScoreParts
