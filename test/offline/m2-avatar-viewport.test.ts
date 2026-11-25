@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import {
   AVATAR_CANVAS_CONTEXT_OPTIONS,
@@ -782,5 +783,141 @@ describe('avatar frame client', () => {
     first.closeEvent()
     first.errorEvent()
     expect(events).toHaveLength(before)
+  })
+})
+
+type CssDeclarations = ReadonlyMap<string, string>
+
+function parseCssDeclarations(body: string): Map<string, string> {
+  const declarations = new Map<string, string>()
+  for (const piece of body.split(';')) {
+    const colon = piece.indexOf(':')
+    if (colon < 0) continue
+    const property = piece.slice(0, colon).trim().toLowerCase()
+    const value = piece.slice(colon + 1).trim()
+    if (property.length > 0 && value.length > 0) declarations.set(property, value)
+  }
+  return declarations
+}
+
+function parseCssRules(files: readonly string[]): Map<string, Map<string, string>> {
+  const rules = new Map<string, Map<string, string>>()
+  for (const file of files) {
+    const css = readFileSync(file, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/@(?:import|charset)[^;]*;/g, '')
+    let cursor = 0
+    while (cursor < css.length) {
+      const open = css.indexOf('{', cursor)
+      if (open < 0) break
+      let depth = 1
+      let close = open + 1
+      while (close < css.length && depth > 0) {
+        if (css[close] === '{') depth += 1
+        else if (css[close] === '}') depth -= 1
+        close += 1
+      }
+      const prelude = css.slice(cursor, open).trim()
+      if (!prelude.startsWith('@')) {
+        const declarations = parseCssDeclarations(css.slice(open + 1, close - 1))
+        for (const selector of prelude.split(',')) {
+          const name = selector.trim()
+          if (name.length === 0) continue
+          const existing = rules.get(name) ?? new Map<string, string>()
+          for (const [property, value] of declarations) existing.set(property, value)
+          rules.set(name, existing)
+        }
+      }
+      cursor = close
+    }
+  }
+  return rules
+}
+
+function declarationsFor(rules: Map<string, Map<string, string>>, selector: string): CssDeclarations {
+  const declarations = rules.get(selector)
+  if (declarations === undefined) throw new Error(`missing CSS rule for ${selector}`)
+  return declarations
+}
+
+function isPositioned(declarations: CssDeclarations): boolean {
+  return (declarations.get('position') ?? 'static') !== 'static'
+}
+
+function integerDeclaration(declarations: CssDeclarations, property: string): number | null {
+  const raw = declarations.get(property)
+  if (raw === undefined) return null
+  const value = Number.parseInt(raw, 10)
+  return Number.isInteger(value) ? value : null
+}
+
+function stackingLevel(declarations: CssDeclarations): number {
+  if (!isPositioned(declarations)) return 0
+  return integerDeclaration(declarations, 'z-index') ?? 0
+}
+
+function createsStackingContext(declarations: CssDeclarations): boolean {
+  if ((declarations.get('isolation') ?? '') === 'isolate') return true
+  if (isPositioned(declarations) && integerDeclaration(declarations, 'z-index') !== null) return true
+  const opacity = declarations.get('opacity')
+  if (opacity !== undefined && Number.parseFloat(opacity) < 1) return true
+  if ((declarations.get('transform') ?? 'none') !== 'none') return true
+  if ((declarations.get('filter') ?? 'none') !== 'none') return true
+  if ((declarations.get('backdrop-filter') ?? 'none') !== 'none') return true
+  if ((declarations.get('mix-blend-mode') ?? 'normal') !== 'normal') return true
+  const fill = declarations.get('animation-fill-mode') ?? ''
+  const animation = declarations.get('animation') ?? ''
+  return (
+    fill.includes('both') ||
+    fill.includes('forwards') ||
+    fill.includes('backwards') ||
+    animation.includes('both')
+  )
+}
+
+describe('stage paint order (parsed static CSS)', () => {
+  const rules = parseCssRules([
+    'src/console/design/components.css',
+    'src/console/design/layout.css',
+    'src/console/console.css',
+  ])
+  const stage = declarationsFor(rules, '.console__stagebox')
+  const avatar = declarationsFor(rules, '.avatar-viewport')
+
+  it('keeps the stage a self-contained stacking context', () => {
+    expect(stage.get('position')).toBe('relative')
+    expect(stage.get('isolation')).toBe('isolate')
+    expect(declarationsFor(rules, '.isla-stage').get('overflow')).toBe('hidden')
+    expect(createsStackingContext(stage)).toBe(true)
+  })
+
+  it('places the transparent avatar at a negative level inside the stage', () => {
+    expect(avatar.get('position')).toBe('absolute')
+    expect(avatar.get('pointer-events')).toBe('none')
+    expect(avatar.get('background')).toBeUndefined()
+    expect(stackingLevel(avatar)).toBeLessThan(0)
+    expect(stackingLevel(avatar)).toBeLessThan(stackingLevel(stage))
+  })
+
+  it('paints every in-flow stage overlay above the avatar layer', () => {
+    for (const selector of ['.isla-stage__hud', '.isla-stage__viz', '.isla-subtitle', '.isla-reaction']) {
+      const overlay = declarationsFor(rules, selector)
+      expect(isPositioned(overlay)).toBe(false)
+      expect(stackingLevel(overlay)).toBeGreaterThan(stackingLevel(avatar))
+    }
+  })
+
+  it('keeps the laser, danmaku, player and stopped overlay above the avatar layer', () => {
+    for (const [selector, level] of [
+      ['.isla-stage__danmaku', 1],
+      ['.isla-player', 2],
+      ['.isla-stage__laser', 3],
+      ['.isla-stage__stopped', 4],
+    ] as const) {
+      const layer = declarationsFor(rules, selector)
+      expect(isPositioned(layer)).toBe(true)
+      expect(stackingLevel(layer)).toBe(level)
+      expect(stackingLevel(layer)).toBeGreaterThan(stackingLevel(avatar))
+    }
   })
 })

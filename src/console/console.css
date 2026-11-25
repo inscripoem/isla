@@ -148,8 +148,8 @@
   flex: none;
 }
 
-.console__stagebox { position: relative; }
-.avatar-viewport { position: absolute; inset: 0; z-index: 0; display: block; pointer-events: none; overflow: hidden; }
+.console__stagebox { position: relative; isolation: isolate; }
+.avatar-viewport { position: absolute; inset: 0; z-index: -1; display: block; pointer-events: none; overflow: hidden; }
 .avatar-viewport > canvas { width: 100%; height: 100%; object-fit: contain; }
 .avatar-viewport__badge { position: absolute; bottom: 8px; left: 8px; display: inline-flex; gap: 6px; align-items: center; padding: 2px 8px; border-radius: var(--isla-radius-pill); background: rgba(10, 13, 20, 0.55); color: var(--isla-fg-muted, #cfd6e4); font-family: var(--isla-font); font-size: var(--isla-fs-sm, 12px); letter-spacing: 0.02em; }
 .avatar-viewport__reconnect { position: absolute; right: 8px; bottom: 8px; pointer-events: auto; padding: 4px 10px; border-radius: var(--isla-radius-pill); border: var(--isla-border-hairline) solid rgba(255, 212, 107, 0.55); background: var(--isla-yellow-soft); color: var(--isla-yellow); font-family: var(--isla-font); font-size: var(--isla-fs-sm, 12px); font-weight: 700; }
