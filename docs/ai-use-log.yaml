@@ -9700,15 +9700,21 @@ entries:
       any behaviour module. New src/console/design (tokens, base, layout,
       components, ui, charts, format, toast), src/console/fx (depth, petals,
       cursor, typewriter) and src/console/pages (Session, Playback, Selection,
-      Diagnostics). The mascot component and its sticker decoration are
-      removed; the stage is now a HUD row (lifecycle, pipeline stage, active
-      output), a nine-bar waveform visualizer that animates only while the
-      performer speaks, and the streamed subtitle as the hero line. Paint cost
-      is reduced: the animated full-screen blur and hue-rotate background
-      layers, two extra background canvases and the per-click particle burst
-      are gone, scrolling panels no longer use backdrop-filter, and the petal
-      canvas is capped at 12 petals and DPR 1.5. Behaviour, wire messages,
-      transport, performer machine and recovery control are unchanged.
+      Diagnostics). The standalone stage mascot and its sticker decoration are
+      removed from the stage: it is now a HUD row (lifecycle, pipeline stage,
+      active output), a nine-bar waveform visualizer that animates only while
+      the performer speaks, and the streamed subtitle as the hero line. The
+      mascot artwork was not removed from the console: the header brand flip
+      board renders KanbanRow, which draws the nine-member cast from
+      src/console/assets/kanban/spritesheet.webp (the MIT-licensed
+      aemeath_withclaude sheet) on the board's kanban face. Paint cost is
+      reduced: the animated full-screen blur and hue-rotate background layers,
+      two extra background canvases and the per-click particle burst are gone,
+      scrolling panels no longer use backdrop-filter (a follow-up fix later
+      removed the remaining .isla-chat__item backdrop-filter too), and the
+      petal canvas is capped at 12 petals and DPR 1.5. Behaviour, wire
+      messages, transport, performer machine and recovery control are
+      unchanged.
     requirements: []
     invariants: []
     commits: []
@@ -9734,9 +9740,10 @@ entries:
       base: e095c67
       results: >-
         pnpm exec tsc -b passed; pnpm test:m2 passed 101 tests in 1 file; a
-        headless browser walk at 756px and 375px confirmed no mascot, the stage
-        waveform and tags, a submitted input settling in the ledger and no
-        horizontal overflow.
+        headless browser walk at 756px and 375px confirmed the HUD stage (no
+        stage mascot) with its waveform and tags, the header brand flip board
+        rendering the KanbanRow sprite cast, a submitted input settling in the
+        ledger and no horizontal overflow.
       independent: >-
         None; a single operator ran the local checks on this machine.
     scope: >-
@@ -9808,3 +9815,80 @@ entries:
         None; a single operator ran the local checks on this machine.
     scope: >-
       src/console/design/components.css and docs/ai-use-log.yaml.
+
+  - date: "2026-11-25"
+    task: M2-PR187-review-fix-and-main-integration
+    branch: local/pr187-fix-20261125
+    change: >-
+      Integrate pull request 187 with origin/main and close its review findings
+      without contract or backend changes. Merge origin/main (#181, #190 and the
+      G1 waiver reconciliation) and restore the C07/C08/C10 and recovery-ack
+      behaviour overwritten by the visual rebuild, keeping the Nightloom
+      VoiceCard in the console. Fix P1-1 by gating Speaking on the M1 `started`
+      receipt and showing Preparing while `accepted`; P1-2 by labelling local
+      receipts as browser-local evidence with a receipt timestamp, adding the
+      HUD's latest receipt/reason/fault count and the ticker's receipt-stage
+      fallback; P1-4 by disabling floating card geometry at or below 1100px and
+      wrapping the stage, selection and control surfaces at 320x800, 375x812,
+      756x900 and 1280x800; P1-5 by mixing status tones against the dark page
+      and darkening the primary/danger/stop gradients to at least 4.5:1; P2-7
+      by correcting FactChip polarity for `none`, `not reported` and a
+      synthetic plan; P2-9 by disabling Attach performer and Bootstrap operator
+      after disconnect; and the EventsSection regression by rendering the full
+      reversed event list instead of the newest seven. Add 16 server-rendered
+      unit tests to test/offline/m2-console.test.ts.
+    requirements: [FR-04, FR-05, FR-06, NFR-04]
+    invariants: []
+    commits: [441b9cc41b1975bd160c14159c94616016f33cb6, a805b07b6383ca06a012e409837745230e49f393]
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: "2.4.1"
+    launch_flags: [--agent, build, --format, json, -m, "self-api/deepseek-v4-flash#xhigh"]
+    sessions: [ses_deefdb749ffeaHiIIbNHgviIDy]
+    supervision: >-
+      The M5 member and the captain authorized and reviewed the local merge and
+      review fixes in this worktree, scoped to src/console/,
+      src/evaluation/test-approval-gate.ts, test/offline/m2-console.test.ts and
+      this log; the agent authored no contract or backend change. Round 1
+      restored behaviour lost in the visual rebuild, Round 2 addressed the P1/P2
+      review findings, and Round 3 restored full event rendering and added the
+      offline tests.
+    human_review: >-
+      The M5 member and the captain verified Round 3a locally and committed it.
+      This work was not pushed and no agent merged anything; a human team member
+      performs the final merge. M2/M1/M3/M4/M6 review of the updated candidate
+      remains open until it is pushed and confirmed.
+    transcript_record: >-
+      OpenCode session ses_deefdb749ffeaHiIIbNHgviIDy is exported to the CS5351
+      evidence directory outside the checkout.
+    verification:
+      base: e2166cd
+      results: >-
+        Against origin/main e2166cd: pnpm exec tsc -b exit 0; oxlint exit 0;
+        vite build 155 modules exit 0; the full pnpm test suite passed 2199
+        tests in 98 files with 0 failures and 0 skipped, including 118 tests in
+        test/offline/m2-console.test.ts and 11 in
+        test/offline/console-voice-selection.test.ts. A Nix Chromium
+        156.0.8078.47 run against the Vite preview and production CLI passed
+        formal-console-acceptance.mjs (12 steps, 0 page/console errors) and both
+        console-voice-selection.mjs phases (31 and 16 checks) with local Kokoro
+        CPU synthesis. Chromium checks covered the diagnostics socket reporting
+        `not started` before connect, waveform/Speaking strictly gated on
+        `started` with Preparing during `accepted`, stale rejected input keeping
+        the composer text, post-disconnect disabling of Attach performer and
+        Bootstrap operator plus the hidden operator tag and the ticker
+        receipt-stage fallback, and Reconnect restoring the open session.
+        Viewport checks at 320x800, 375x812, 756x900 and 1280x800 held
+        docScrollWidth equal to innerWidth, no Control Deck occlusion by Local
+        Receipts, and at least 5.06:1 contrast on all 17 tag/button pairs.
+      independent: >-
+        None; a single operator ran the local checks on this machine. The
+        deployment was a local controlled test deployment: no live LLM, VTS or
+        Windows check was performed.
+    scope: >-
+      src/console/ (ConsoleApp.tsx, VoiceCard.tsx, console.css, design/,
+      pages/), src/evaluation/test-approval-gate.ts (the G1_TIME_WAIVER_PRS
+      merge reconciliation `[170, 171, 175, 181, 187]`),
+      test/offline/m2-console.test.ts and docs/ai-use-log.yaml. No contract,
+      transport, machine, storage, backend or workflow file changed.
