@@ -1,6 +1,9 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   AI_USE_LOG_BASE_ENV,
@@ -230,6 +233,65 @@ describe('the base log file is read as a result, not a throw', () => {
         expect(result.error.detail).toContain(dir)
         expect(result.error.detail).toContain('could not be read')
       }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('the gate CLI fails closed on a missing base log (finding 2, subprocess)', () => {
+  const log = `version: "1"
+entries:
+  - date: 2026-11-25
+    task: probe
+    change: A real change.
+    requirements: [FR-06]
+    invariants: []
+    commits: []
+    agent: opencode/build
+`
+
+  it('names the base-log finding and skips identity classification when the base file is missing', () => {
+    // The unit tests read the base log directly; this runs the documented entry
+    // point (`tsx src/evaluation/ai-use-log-gate.ts`) so a throw in the CLI path
+    // cannot hide behind an assertion that only inspects `readLogBase`.
+    const tsxLoader = createRequire(import.meta.url).resolve('tsx')
+    const entry = resolve(fileURLToPath(new URL('../..', import.meta.url)), 'src/evaluation/ai-use-log-gate.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'g6-cli-'))
+    try {
+      mkdirSync(join(dir, 'docs'), { recursive: true })
+      writeFileSync(join(dir, 'docs', 'ai-use-log.yaml'), log)
+      writeFileSync(join(dir, 'changed.txt'), 'src/x.ts\0docs/ai-use-log.yaml\0')
+      const missing = join(dir, 'not-written.yaml')
+      const result = spawnSync(process.execPath, ['--import', tsxLoader, entry], {
+        cwd: dir,
+        env: {
+          ...process.env,
+          [CHANGED_FILES_ENV]: join(dir, 'changed.txt'),
+          [AI_USE_LOG_BASE_ENV]: missing,
+        },
+        encoding: 'utf8',
+      })
+      const output = `${result.stdout ?? ''}${result.stderr ?? ''}`
+      expect(result.status).toBe(1)
+      expect(output).toContain(AI_USE_LOG_BASE_ENV)
+      expect(output).toContain('does not exist')
+      expect(output).toContain('cannot classify entries')
+      expect(output).not.toContain('RangeError')
+      expect(output).not.toContain('Maximum call stack')
+      expect(output).not.toContain('not reachable from HEAD')
+
+      const recordDir = join(dir, '.cache', 'gate-failures')
+      const records = readdirSync(recordDir).filter((name) => name.endsWith('.json'))
+      expect(records).toHaveLength(1)
+      const record = JSON.parse(readFileSync(join(recordDir, records[0] as string), 'utf8')) as {
+        policy: string
+        trigger: string
+        evidence: unknown
+      }
+      expect(record.policy).toBe('POL-G6-03')
+      expect(record.trigger).toBe('log-unreadable')
+      expect(record.evidence).toEqual({ register: 'base-log' })
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
