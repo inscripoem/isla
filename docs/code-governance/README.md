@@ -14,6 +14,7 @@ This folder holds the rules that bound the coding agent (D3) and the way its wor
 | [`../architecture/permission-model.md`](../architecture/permission-model.md) | D2.6 / D3 | role/path read-write matrix, default-deny policy, approvals, protected paths and enforcement state | local proposal |
 | [`../architecture/candidate-comparison.md`](../architecture/candidate-comparison.md) | D2 | qualitative comparison of the alternatives already recorded in the ADRs | local proposal |
 | [`verification-constraints.md`](verification-constraints.md) | D4 | structural / regression / behavioral verification tiers and the evidence each requires | on `main` |
+| [`gate-inventory.md`](gate-inventory.md) | D4 | one row per CI/evidence gate: trigger, position, failure action, positive and negative test | local, under review |
 | [`mcp-tool-manifest.md`](mcp-tool-manifest.md) | D3 | the agent's external tool/context surface and the policy for extending it | on `main` |
 
 ## Where the always-on instruction lives

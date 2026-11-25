@@ -3,13 +3,26 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type {
+  CallContext,
   CapabilitySnapshot,
   ClockPort,
+  DecisionRequest,
   ReactionPort,
   RendererPort,
   SelectionPort,
+  SelectionRequest,
   SynthesisPort,
 } from '../../src/contracts'
+import {
+  JevReactionError,
+  JevSelectionError,
+  ProviderReactionError,
+  ProviderSelectionError,
+  isLiveJevReactionPort,
+  isLiveJevSelectionPort,
+  isLiveProviderSelectionPort,
+  isRuleSelectionPort,
+} from '../../src/decision'
 import type { DialogueTextSource } from '../../src/dialogue/dialogue-port'
 import type { AudioResourceRegistry } from '../../src/performance/audio-resources'
 import { createDeadlineGate } from '../../src/runtime/deadline'
@@ -57,6 +70,26 @@ function validEnv(): Record<string, string> {
 
 function fixedClock(value = 1_000): ClockPort {
   return { nowMs: () => value }
+}
+
+function generalEnv(): Record<string, string> {
+  return {
+    ...validEnv(),
+    ISLA_DECISION_MODE: 'general',
+    ISLA_LIVE_DECISION_BASE_URL: 'https://decision.example.test/v1',
+    ISLA_LIVE_DECISION_MODEL: 'general-model-id',
+    ISLA_LIVE_DECISION_API_KEY: 'sk-decision-example-value',
+  }
+}
+
+function jevEnv(): Record<string, string> {
+  return {
+    ...validEnv(),
+    ISLA_DECISION_MODE: 'jev',
+    ISLA_LIVE_JEV_BASE_URL: 'https://jev.example.test/v1',
+    ISLA_LIVE_JEV_MODEL: 'jev-model-id',
+    ISLA_LIVE_JEV_API_KEY: 'sk-jev-example-value',
+  }
 }
 
 const fakeSelection = {
@@ -177,6 +210,32 @@ function fakeFactories(
   }
 }
 
+/**
+ * The heavy peers only. Selection and reaction are left to the configured
+ * decision mode so the test observes which ports the deployment really builds.
+ */
+function fakePeerFactories(disposed: string[]): ReferenceLiveFactories {
+  return {
+    createTextSource: () => fakeTextSource,
+    createAudioResources: () =>
+      fakeRegistry(() => {
+        disposed.push('registry')
+      }),
+    createRenderer: (input): ReferenceRendererHandle => ({
+      renderer: fakeRenderer(input.mappings.map((mapping) => mapping.actionId)),
+      dispose: () => {
+        disposed.push('renderer')
+      },
+    }),
+    createSynthesis: (): ReferenceSynthesisHandle => ({
+      synthesis: fakeSynthesis,
+      dispose: () => {
+        disposed.push('synthesis')
+      },
+    }),
+  }
+}
+
 describe('reference live deployment', () => {
   it('builds from injected factories, passes config through and releases owned resources once', async () => {
     const config = parseReferenceLiveConfig(validEnv())
@@ -217,6 +276,91 @@ describe('reference live deployment', () => {
     expect(disposed.filter((name) => name === 'synthesis')).toHaveLength(1)
     expect(disposed.filter((name) => name === 'registry')).toHaveLength(1)
     gate.dispose()
+  })
+
+  it('uses the rule decision ports by default', async () => {
+    const config = parseReferenceLiveConfig(validEnv())
+    const deployment = await buildReferenceDeployment(
+      config,
+      fakePeerFactories([]),
+      fixedClock(),
+    )
+
+    expect(isRuleSelectionPort(deployment.peers.selection)).toBe(true)
+    expect(isLiveProviderSelectionPort(deployment.peers.selection)).toBe(false)
+
+    await deployment.release?.()
+  })
+
+  it('builds OpenAI-compatible decision ports for the general model', async () => {
+    const config = parseReferenceLiveConfig(generalEnv())
+    const deployment = await buildReferenceDeployment(
+      config,
+      fakePeerFactories([]),
+      fixedClock(),
+    )
+
+    expect(config.decision?.mode).toBe('general')
+    expect(isLiveProviderSelectionPort(deployment.peers.selection)).toBe(true)
+    expect(isLiveJevSelectionPort(deployment.peers.selection)).toBe(false)
+    expect(isRuleSelectionPort(deployment.peers.selection)).toBe(false)
+    // No signal is the first validated fault, so both calls refuse before any
+    // transport attempt; construction alone never contacts the provider.
+    await expect(
+      deployment.peers.selection.select({} as SelectionRequest, {} as CallContext),
+    ).rejects.toBeInstanceOf(ProviderSelectionError)
+    await expect(
+      deployment.peers.reaction.decide({} as DecisionRequest, {} as CallContext),
+    ).rejects.toBeInstanceOf(ProviderReactionError)
+
+    await deployment.release?.()
+  })
+
+  it('builds Jev decisions ports for the dedicated Jev configuration', async () => {
+    const config = parseReferenceLiveConfig(jevEnv())
+    const deployment = await buildReferenceDeployment(
+      config,
+      fakePeerFactories([]),
+      fixedClock(),
+    )
+
+    expect(config.decision).toEqual({
+      mode: 'jev',
+      provider: {
+        baseUrl: 'https://jev.example.test/v1',
+        model: 'jev-model-id',
+        apiKey: 'sk-jev-example-value',
+      },
+    })
+    // Jev is a classifier on POST /v1/decisions, not an OpenAI chat model.
+    expect(isLiveJevSelectionPort(deployment.peers.selection)).toBe(true)
+    expect(isLiveJevReactionPort(deployment.peers.reaction)).toBe(true)
+    expect(isLiveProviderSelectionPort(deployment.peers.selection)).toBe(false)
+    // No signal is the first validated fault, so both calls refuse before any
+    // transport attempt; construction alone never contacts the provider.
+    await expect(
+      deployment.peers.selection.select({} as SelectionRequest, {} as CallContext),
+    ).rejects.toBeInstanceOf(JevSelectionError)
+    await expect(
+      deployment.peers.reaction.decide({} as DecisionRequest, {} as CallContext),
+    ).rejects.toBeInstanceOf(JevReactionError)
+
+    await deployment.release?.()
+  })
+
+  it('keeps injected decision factories ahead of the configured mode', async () => {
+    const config = parseReferenceLiveConfig(jevEnv())
+    const deployment = await buildReferenceDeployment(
+      config,
+      fakeFactories([]),
+      fixedClock(),
+    )
+
+    expect(deployment.peers.selection).toBe(fakeSelection)
+    expect(deployment.peers.reaction).toBe(fakeReaction)
+    expect(isLiveProviderSelectionPort(deployment.peers.selection)).toBe(false)
+
+    await deployment.release?.()
   })
 
   it('keeps custom-synthesis factory builds voice-free even with a database path', async () => {

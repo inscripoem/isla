@@ -270,6 +270,32 @@ describe('dialogue outcome wiring through the composition', () => {
     ])
   })
 
+  it('retains the latest assembled context for memory.inspect', async () => {
+    const clock = createVirtualClock()
+    const composed = createDialogueComposition({
+      clock,
+      history,
+      textSource: createCatalogDialogueTextSource(['one spoken line']),
+    })
+
+    expect(composed.memoryInspect()).toBeNull()
+
+    await composed.dialogue.generate(
+      request({ sessionId: 'session-live', turnId: 'turn-1' }),
+      context(),
+      collectingSink().sink,
+    )
+    expect(composed.memoryInspect()?.sessionId).toBe('session-live')
+    expect(composed.memoryInspect()?.turnId).toBe('turn-1')
+
+    await composed.dialogue.generate(
+      request({ sessionId: 'session-live', turnId: 'turn-2' }),
+      context(),
+      collectingSink().sink,
+    )
+    expect(composed.memoryInspect()?.turnId).toBe('turn-2')
+  })
+
   it('keeps each report on its own request identity, in order', async () => {
     const clock = createVirtualClock()
     const events: DialogueOutcomeEvent[] = []

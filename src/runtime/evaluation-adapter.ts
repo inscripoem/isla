@@ -1112,6 +1112,7 @@ export function createEvaluationAdapter(options: EvaluationAdapterOptions): Eval
           selection: config.peers.selection,
           reaction: config.peers.reaction,
           dialogue: dialogue.dialogue,
+          memoryInspect: dialogue.memoryInspect,
           commit: dialogue.memory,
           store: options.store,
           renderer: config.peers.createRenderer(gate),

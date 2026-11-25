@@ -7,6 +7,7 @@ import {
 import { createCallContext } from '../support/context'
 import {
   fixtureDecisionRequest,
+  fixtureInputEvent,
   fixtureSelectionRequest,
 } from '../support/fixture-data'
 import { readLiveDecisionProviderConfig } from './live-config'
@@ -32,13 +33,19 @@ describe.skipIf(!report.available)('M3 live decision provider', () => {
   it('returns a schema-valid selection result from a real provider call', async () => {
     const config = report.config!
     const port = createOpenAiCompatibleSelectionPort({ clock, ...config })
+    /*
+     * The adapter rejects a selected candidate whose `expiresAtMs` is at or
+     * before call completion, compared against the same wall clock as the
+     * deadline. The fixture default of 60_000 is 1970 epoch time, so the
+     * candidate expiry is pinned to the deadline's wall-clock instant to keep
+     * both values in the same domain.
+     */
+    const deadlineAtMs = Date.now() + 60_000
     const request = fixtureSelectionRequest({
-      deadline: { atMs: Date.now() + 60_000 },
+      deadline: { atMs: deadlineAtMs },
+      candidates: [fixtureInputEvent({ expiresAtMs: deadlineAtMs })],
     })
-    const result = await port.select(
-      request,
-      createCallContext(Date.now() + 60_000),
-    )
+    const result = await port.select(request, createCallContext(deadlineAtMs))
 
     expect(selectionResultSchema.safeParse(result).success).toBe(true)
     expect(result.requestId).toBe(request.requestId)

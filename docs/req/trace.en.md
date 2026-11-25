@@ -2,7 +2,7 @@
 
 Date: 2026-10-15; updated 2026-11-25 (D1 trace increment: INV-17 and C-76–C-78). Status: under review. Scope: shared preparation, M5-01 and the Step A attribution/storage-test increment; not complete product acceptance or coursework D1.
 
-This record links candidate requirements to machine-checkable acceptance criteria, cases, owners and automated checks. It records the actual supervisory review decision; it does not claim individual approval by all six team members.
+This record links candidate requirements to machine-checkable acceptance criteria, cases, owners and automated checks. It records the actual supervisory review decision; it does not claim individual approval by all six team members. The canonical requirement-to-component-to-test-to-monitor matrix is [`docs/architecture/trace-matrix.md`](../architecture/trace-matrix.md); this file remains the historical case-to-test and approval record and is not a second matrix.
 
 ## Registry, schema and case-to-test map
 

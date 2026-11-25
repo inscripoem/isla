@@ -3,6 +3,7 @@ import type {
   InspectHistorySource,
   InspectRecall,
   MemoryInspectPayload,
+  MemoryInspectSource,
   RecallProvenance,
 } from '../contracts'
 import { MEMORY_INSPECT_SCHEMA_VERSION } from '../contracts'
@@ -148,5 +149,47 @@ export function buildMemoryInspect(
     consistency: toWireConsistencySummary(context.consistencyAudit),
     historySource: toWireHistorySource(context.historySource),
     warnings: [...context.warnings],
+  }
+}
+
+/**
+ * One successfully assembled turn, paired with the request identity the payload
+ * must carry.
+ *
+ * `AssembledDialogueContext` deliberately does not carry `sessionId`/`turnId`:
+ * they belong to the generating request. The port supplies both at the moment
+ * assembly succeeds, so the retained payload names the exact turn it describes.
+ */
+export interface MemoryInspectObservation {
+  readonly context: AssembledDialogueContext
+  readonly sessionId: string
+  readonly turnId: string
+}
+
+/**
+ * Read-only retention of the most recently assembled inspection payload.
+ *
+ * M4 owns construction (`buildMemoryInspect`), so the payload is built once, at
+ * the assembly point, from the context that was actually used. The runtime and
+ * the protocol-1 boundary only read it; they never rebuild it and never fill a
+ * missing observation with invented values.
+ *
+ * `observe` is called once per successful assembly and replaces the previous
+ * value. `read` returns `null` until the first observation, which is the
+ * explicit "no context has been assembled" state the runtime reports as
+ * `unavailable` rather than as a protocol error.
+ */
+export interface MemoryInspectRetention {
+  observe(observation: MemoryInspectObservation): void
+  read: MemoryInspectSource
+}
+
+export function createMemoryInspectRetention(): MemoryInspectRetention {
+  let latest: MemoryInspectPayload | null = null
+  return {
+    observe({ context, sessionId, turnId }) {
+      latest = buildMemoryInspect(context, sessionId, turnId)
+    },
+    read: () => latest,
   }
 }

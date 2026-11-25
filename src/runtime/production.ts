@@ -475,6 +475,9 @@ async function buildProductionApplication(
       ...(options.host !== undefined ? { host: options.host } : {}),
       ...(options.port !== undefined ? { port: options.port } : {}),
       ...(options.graceMs !== undefined ? { graceMs: options.graceMs } : {}),
+      // Read through the recovery controller, so a recovered session reports its
+      // own latest assembled context instead of the retired composition's.
+      memoryInspect: () => recovery.currentComposition().memoryInspect(),
       application: endpoint,
     })
 
