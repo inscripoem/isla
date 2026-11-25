@@ -1,5 +1,7 @@
 # M1 performance adapters
 
+For a Windows demo in the formal console, see [Set up the speaking Hiyori model](lipsync/windows/README.md). It follows the volume of Kokoro speech and closes the mouth at completion or Stop.
+
 This module houses the M1 speech synthesis, browser playback and avatar adapters
 for Isla. Application version 0.2. The M1 member owns this directory; the
 browser-safe public interface lives under [`browser/`](browser/) so M2 may
