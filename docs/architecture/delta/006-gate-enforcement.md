@@ -113,7 +113,9 @@ changed (a repointed commit, a reworded change), is still new and must cite a st
 from HEAD. A base log that is supplied but cannot be read as an entry list fails closed instead of
 silently making every entry historical: that covers unparsable YAML, a document whose `entries` is
 not a list, and a recursive YAML alias. A base log file that is missing or unreadable fails closed
-the same way, with a `base-log` record, instead of ending the run with a stack trace. The same alias
+the same way, with a `base-log` record, instead of ending the run with a stack trace. The CLI path is
+covered by a subprocess test that asserts the named base-log record, no identity classification and no
+stack trace. The same alias
 in the head fails closed too, and the gate writes the resulting POL-G6-03 record with evidence naming
 `base-log` or `head-log`; the record path now receives the base copy instead of rebuilding its
 dependencies without it. A cyclic head entry is reported once, by the reference check, as the named
