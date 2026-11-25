@@ -10922,3 +10922,40 @@ entries:
       limits: >-
         No live LLM judge, product run or merge. Style anchors are off by
         default and production composition does not enable them yet.
+  - date: "2026-11-25"
+    task: m4-a04-a11-pr214-review-fix
+    change: >-
+      Address the author's self-review on PR #214. Correct the paraphrase-floor
+      documentation (the alias-only flagship is 0.5, not 0.25; the overlapping
+      example states its pre-fusion literal and fused admitted value separately),
+      pin the flagship similarity to RECALL_PARAPHRASE_FLOOR, default
+      selectStyleAnchors to DEFAULT_STYLE_CONTRACT instead of an empty stub,
+      document the unpruned in-session use counter and the 0..1.1 score range,
+      and add the matching tests. Recall admission, the anchors off path and all
+      shared contracts are unchanged.
+    requirements: []
+    invariants: []
+    commits: ["501b017358bd478777a9f27e668878ca38d88932"]
+    agent: OpenCode V2 build
+    provider: deepseek
+    model: deepseek-v4-flash
+    sessions: ["ses_ded801693ffewtDrW1nbQdGBvG"]
+    supervision: >-
+      M4's self-review on PR #214 supplied two Medium and two Low findings.
+      OpenCode fixed the two Medium findings and recorded the two Low findings
+      as limits. A second comment-only pass corrected an inconsistency the first
+      pass introduced for the overlapping paraphrase example: the measured
+      admitted similarity is 1.0, not 0.667, so the comment now separates the
+      pre-fusion literal from the fused value.
+    verification:
+      base: f8e33f657fb76311eec48d2f80aef04c801ca4dd
+      results: >-
+        pnpm test:m4 passed 23 files / 536 tests; pnpm typecheck clean; oxlint
+        0 warnings / 0 errors on the five touched files. The full local pnpm
+        test still reports 11 environment failures outside M4: six trace-fitness
+        CRLF column checks, three opencode-policy symlink checks, one
+        ai-use-log CLI path check and one m6 provenance symlink check. None is in
+        an M4 file and the remote Linux CI is the authoritative run.
+      limits: >-
+        No live provider, product run or merge. The in-session use counter and
+        the non-normalised score range are documented limits, not fixed here.
