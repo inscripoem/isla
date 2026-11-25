@@ -9974,3 +9974,53 @@ entries:
         observed. The entry rule's existing message still says "at both the
         base and the head" when the counts differ; that wording predates this
         change and was left alone.
+
+  - date: "2026-11-25"
+    task: M2-PR187-hud-pipeline-label-fix
+    branch: feat/m2-console-nightloom-v2
+    change: >-
+      Answer the M1 re-review at 2ababcc: the stage HUD tag now reads
+      "Pipeline: <stage>" and pulses only while browser playback is actually
+      speaking, the connection is open and the session lifecycle is not
+      stopped, so an admitted-but-not-playing turn or a mid-play disconnect no
+      longer shows an unlabelled pulsing SPEAKING pill. The Retiring and
+      Session retiring fact rows use tone "bad" when the value is yes instead
+      of rendering a green checkmark. Runtime pipeline vocabulary and wire
+      behaviour are unchanged.
+    requirements: [FR-04, FR-05]
+    invariants: []
+    commits: [596f12de0a7716d565b9299e27872064388bb8fa]
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: "2.4.1"
+    launch_flags: [--agent, build, --format, json, -m, "self-api/deepseek-v4-flash#xhigh"]
+    sessions: [ses_dee79119dffew5AVI1HbL6s1Cq]
+    supervision: >-
+      The OpenCode session ran with a worktree-scoped opencode.json that allows
+      read and edit and denies shell, glob, grep and subagent tools. The edit
+      was limited to the two console files and the M2 offline test file.
+    human_review: >-
+      The diff was reviewed and the checks below were run before this entry
+      was recorded. This entry records local work only; the final merge is
+      performed by a human team member, and M1 re-review of the new head
+      remains open.
+    transcript_record: >-
+      OpenCode session ses_dee79119dffew5AVI1HbL6s1Cq is exported to the CS5351
+      evidence directory outside the checkout.
+    verification:
+      base: 55e36d3
+      results: >-
+        On this Linux worktree at commit 596f12d against main 55e36d3: pnpm
+        typecheck (tsc -b) exit 0; pnpm lint (oxlint) exit 0; vite build exit
+        0; the full pnpm test suite passed 2217 tests in 98 files with 0
+        failures, including 119 tests in test/offline/m2-console.test.ts and
+        the new retiring-row polarity test. No browser or live-provider run was
+        repeated for this small UI change.
+      independent: >-
+        None; a single operator ran the local checks. No live LLM, VTS, Windows
+        or remote CI check was performed before this entry was written.
+    scope: >-
+      src/console/ConsoleApp.tsx, src/console/pages/SessionPage.tsx,
+      test/offline/m2-console.test.ts and docs/ai-use-log.yaml. No contract,
+      transport, machine, storage, backend or workflow file changed.
