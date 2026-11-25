@@ -1,8 +1,8 @@
 # Isla — Team Work Plan v0.2
 
-Status: coordination draft, under review · 2026-11-12.1 · [Project overview](../../README.md)
+Status: coordination draft, under review · 2026-11-25.1 · [Project overview](../../README.md)
 
-Current scheduling and review carry-forward are recorded in the [delivery plan](DELIVERY-PLAN.en.md). CP02 is closed under its recorded single-machine inspection decision; CP03 remains open. Original target dates remain visible. Module responsibilities and product criteria below are unchanged except for the recorded CP02 inspection decision.
+Current scheduling and review carry-forward are recorded in the [delivery plan](DELIVERY-PLAN.en.md). CP02 is closed under its recorded single-machine inspection decision. CP03 closed on 2026-11-13 under the controlled offline I1 acceptance ([#73 comment 6860393261](https://github.com/inscripoem/isla/issues/73#issuecomment-6860393261)). CP04 and CP05 were accepted on 2026-11-20 for the recorded reduced deployed-product scope (with #96/#97 residual) and option A (thresholds pending). Original target dates remain visible. Module responsibilities and product criteria below are unchanged except for the recorded CP02 inspection decision.
 
 ## Requirements and course-deliverable work
 
@@ -104,7 +104,7 @@ Captain adopted the target schedule on October 29. Record delivery estimates whe
 | M5 / #6 / inscripoem | Issue69 resource assembly, combined I1 candidate | Product deployment over merged PR64 acquisition | Capture, control, composition and requirement verdicts | Plan/architecture/report consolidation and package |
 | M6 / #7 / MichaelLsh | PR70 checker and storage support | Measurement tooling in parallel | PR63/66, runner/provenance, formal results | Gates, trace/QA and independent recovery check |
 
-These cells describe responsibilities, not current completion status. PR67 and PR70 are merged; #69 is closed. [#85](https://github.com/inscripoem/isla/issues/85) is closed after M5 accepted the controlled merged-source console run; M2 has not reported a personal merged-source browser rerun. PR152 merged the checker workaround removal and [#68](https://github.com/inscripoem/isla/issues/68) is closed within that scope; the separate Windows follow-up remains open in PR135. Current delivery decisions and source-bound results are linked from the [delivery plan](DELIVERY-PLAN.en.md#schedule).
+These cells describe responsibilities, not current completion status. PR67 and PR70 are merged; #69 is closed. [#85](https://github.com/inscripoem/isla/issues/85) is closed after M5 accepted the controlled merged-source console run; M2 has not reported a personal merged-source browser rerun. PR152 merged the checker workaround removal and [#68](https://github.com/inscripoem/isla/issues/68) is closed within that scope; the separate Windows follow-up was merged in PR135 on 2026-11-12, and the console proxy follow-up was merged in PR153 on 2026-11-16. Current delivery decisions and source-bound results are linked from the [delivery plan](DELIVERY-PLAN.en.md#schedule).
 
 Every member supplies authentic process records, contribution evidence and a verified personal reflection. Review and QA roles rotate without changing module owners. The initial I1 loop does not depend on complete cross-session recovery; checkpoint 6 covers committed product recovery obligations. Existing preparation and merged implementations are reused with their actual verification scope.
 

@@ -1,6 +1,6 @@
 # Interface and handoff baseline v0.2
 
-Revision: 2026-10-20.4. Status: under review. Shared schemas, the M5 coordinator, M1 synthesis/playback and M6 SQLite/evaluation tooling exist. Application protocol 0.2 includes correlated physical status; PR36/43/50/51 are merged. PR48 cbc845c has scoped M1 approval; its local combination with main579b14b remains under review. Full product integration and live acceptance remain separate. This is an evolvable baseline coordinated by M5 with affected producers and consumers.
+Revision: 2026-11-25.1. Status: under review. Shared schemas, the M5 coordinator, M1 synthesis/playback and M6 SQLite/evaluation tooling exist. Application protocol 0.2 includes correlated physical status; PR36/43/50/51 are merged. PR48 (`cbc845c`) merged on 2026-10-20 with scoped M1 approval, and PR53 merged on 2026-10-23. The voice protocol section was added by merged PR #190 on 2026-11-25. Full product integration and live acceptance remain separate. This is an evolvable baseline coordinated by M5 with affected producers and consumers.
 
 ## Executable contract map
 

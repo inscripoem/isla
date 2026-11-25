@@ -1,6 +1,6 @@
 # Submission checkpoint plan
 
-Revision: 2026-11-12.1. Status: coordination draft, under review. Original target dates remain; individual estimates are recorded when supplied. All times are UTC+8; each target is 21:00. This revision records earlier decisions but accepts no additional checkpoint and changes no product test or module allocation.
+Revision: 2026-11-25.1. Status: coordination draft, under review. This revision records the CP03-CP05 acceptance state and the #135/#153 merges, but accepts no additional checkpoint and changes no target, acceptance scope or module allocation. Original target dates remain; individual estimates are recorded when supplied. All times are UTC+8; each target is 21:00.
 
 Scope: CS5351 submission and the agreed Isla requirements only. Preserve M1-M6 ownership, workload ratings, existing task/requirement/case IDs and genuine evidence. Checkpoint numbers are schedule positions, not new requirement/case IDs. I1-01, I2-01 and S1-01 remain the original task references. Any scope reduction needs an explicit recorded decision.
 
@@ -16,15 +16,15 @@ M5 maintains [Team progress](https://github.com/users/inscripoem/projects/4/view
 
 The original ten checkpoint issues (#71-#80) and 50 delivery issues retain their history. [#82](https://github.com/inscripoem/isla/issues/82) and [#83](https://github.com/inscripoem/isla/issues/83) were retired as not planned and their two Project cards archived on October 31. Retirement is not product progress. [#84](https://github.com/inscripoem/isla/issues/84) is accepted. M5's [checkpoint-01 decision](https://github.com/inscripoem/isla/issues/71#issuecomment-6718559141) identifies the working plan, and #71 is closed; [#81](https://github.com/inscripoem/isla/issues/81) still tracks the plan PR's integration.
 
-[Checkpoint 01](https://github.com/inscripoem/isla/issues/71) records M5's setup decision for [plan #81](https://github.com/inscripoem/isla/issues/81) and the [required-check record #84](https://github.com/inscripoem/isla/issues/84). [Checkpoint 02](https://github.com/inscripoem/isla/issues/72) is closed under its recorded controlled-inspection decision. [Checkpoint 03](https://github.com/inscripoem/isla/issues/73) remains open. Preparation follows technical dependencies, without waiting for capacity returns; current status stays on the actual PR or Project item.
+[Checkpoint 01](https://github.com/inscripoem/isla/issues/71) records M5's setup decision for [plan #81](https://github.com/inscripoem/isla/issues/81) and the [required-check record #84](https://github.com/inscripoem/isla/issues/84). [Checkpoint 02](https://github.com/inscripoem/isla/issues/72) is closed under its recorded controlled-inspection decision. [Checkpoint 03](https://github.com/inscripoem/isla/issues/73) closed on 2026-11-13 under the controlled offline I1 acceptance ([comment 6860393261](https://github.com/inscripoem/isla/issues/73#issuecomment-6860393261)); see [current status](#current-baseline). Preparation follows technical dependencies, without waiting for capacity returns; current status stays on the actual PR or Project item.
 
 ## Schedule
 
 Status checked on November 12: the November 1 joint session did not take place. The [checkpoint-02 decision](https://github.com/inscripoem/isla/issues/72#issuecomment-6719195922) accepted M5's November 8 controlled single-machine inspection in its place, with the recorded gaps; it did not claim other members attended. CP02 and its inspection record [#87](https://github.com/inscripoem/isla/issues/87) are closed within that alternative. PRs #67, #70, #130, #131, #136, #138, #141 and #152 are merged; their individual scope and evidence remain version-bound.
 
-CP03's five tracked deliveries #88–#92 are closed, while CP03 itself remains open. M1's [#86](https://github.com/inscripoem/isla/issues/86) was accepted and closed for its stated controlled playback scope. M2's [#85](https://github.com/inscripoem/isla/issues/85) was accepted and closed using M5's [controlled merged-source run](https://github.com/inscripoem/isla/issues/85#issuecomment-6801134561); M2 has not reported a personal merged-source formal browser rerun. The original CP03 and CP04 targets have passed. Subsequent targets are not automatically shifted, and member forecasts are not inferred from this status.
+CP03's five tracked deliveries #88–#92 are closed, and CP03 closed on 2026-11-13 under the controlled offline I1 acceptance ([comment 6860393261](https://github.com/inscripoem/isla/issues/73#issuecomment-6860393261)). M1's [#86](https://github.com/inscripoem/isla/issues/86) was accepted and closed for its stated controlled playback scope. M2's [#85](https://github.com/inscripoem/isla/issues/85) was accepted and closed using M5's [controlled merged-source run](https://github.com/inscripoem/isla/issues/85#issuecomment-6801134561); M2 has not reported a personal merged-source formal browser rerun. The original CP03 and CP04 targets have passed. Subsequent targets are not automatically shifted, and member forecasts are not inferred from this status.
 
-For CP04, M4 [reported](https://github.com/inscripoem/isla/issues/93#issuecomment-6776009679) five live-suite cases and six configuration tests passing on feature commit `e10cb2f`. The provider source and live tests matched then-main `e9e7e7b`, but other exercised dialogue files differed; this is not a pure-main run or #93 acceptance. M1 separately reported [CPU Kokoro inference](https://github.com/inscripoem/isla/issues/94#issuecomment-6786934194) and a [VTube Studio API probe](https://github.com/inscripoem/isla/issues/94#issuecomment-6795173375) on the target. Actual audible output and selected product-avatar integration remain open.
+For CP04, M4 [reported](https://github.com/inscripoem/isla/issues/93#issuecomment-6776009679) five live-suite cases and six configuration tests passing on feature commit `e10cb2f`. The provider source and live tests matched then-main `e9e7e7b`, but other exercised dialogue files differed; this is not a pure-main run or #93 acceptance. M1 separately reported [CPU Kokoro inference](https://github.com/inscripoem/isla/issues/94#issuecomment-6786934194) and a [VTube Studio API probe](https://github.com/inscripoem/isla/issues/94#issuecomment-6795173375) on the target. Actual audible output and selected product-avatar integration remained open at this snapshot; CP04's later reduced-scope acceptance is recorded in [current status](#current-baseline).
 
 | Order | Original task | Acceptance target (UTC+8) | Checkpoint |
 | --- | --- | --- | --- |
@@ -42,6 +42,18 @@ For CP04, M4 [reported](https://github.com/inscripoem/isla/issues/93#issuecommen
 Contingency: **November 23-25**. A complete candidate must exist on November 22; contingency is not the planned start of packaging. Aim for Captain's upload by November 25 at 18:00, ahead of the official November 25 23:59:59 deadline. Final upload remains Captain's action.
 
 The November 20 individual report and Chronicle's late-November work reduce shared capacity. Members confirm their own availability rather than inheriting a full-time assumption. The earlier November 2 quiz and November 4 Phase 2 constraints remain historical planning context.
+
+<a id="current-baseline"></a>
+
+### Current status (2026-11-25)
+
+Status against remote main `55e36d3` (2026-11-25). Original targets and the acceptance scope recorded above are unchanged.
+
+- CP03 (#73) closed on 2026-11-13 under the controlled offline I1 acceptance ([comment 6860393261](https://github.com/inscripoem/isla/issues/73#issuecomment-6860393261)); #88–#92 are closed.
+- CP04 (#74) was accepted on 2026-11-20 for the reduced deployed-product scope at `9577069` ([comment 7033211812](https://github.com/inscripoem/isla/issues/74#issuecomment-7033211812)): real text generation, Kokoro over `/audio`, console playback and VTS `Hiyori_A`. #74 itself, #96 and #97 remain open; no full-product acceptance is claimed.
+- CP05 (#75) was accepted on 2026-11-20 as option A with every threshold explicitly pending ([comment 7038421545](https://github.com/inscripoem/isla/issues/75#issuecomment-7038421545)); #75 remains open and #98 closed on 2026-11-22.
+- Windows follow-up #135 merged on 2026-11-12; console proxy follow-up #153 merged on 2026-11-16.
+- D5, D6 and the demo video have no repository artifact; see the [D1–D9 status](README.md#course-deliverables-d1-d9). PR #192 is still a draft.
 
 ## Deliveries and acceptance
 
@@ -91,12 +103,12 @@ Acceptance dependencies: preparation may start now; follow the prerequisites in 
 | M5 | Audio-deployment PR: supply the existing controlled audio resource peer and verify the same-origin resource route. | M1/M2 | Issue #69; existing ProductionAudioResources seam |
 | M2 | Complete the PR67 consumer review follow-up and run two turns, Stop/Resume, duplicate/late frames and transport-loss checks in the product console. <br> Status: PR67 is merged; #85 is closed after M5's controlled merged-source run was accepted. M2 has not reported a personal merged-source browser rerun. | M1/M5 | PR #67; Issue #37 |
 | M1 | Verify WAV mapping/duration and browser playback/receipt behaviour; link actual observations and remaining gaps. | M2/M5 | Issues #2/#69; scoped review on PR67 |
-| M6 | Complete boundary-parser repair review; M2 removes its workaround only after adoption. This was not intended to block the original joint check while the workaround worked. <br> Status: PR70 and PR152 are merged and #68 is closed; the separate Windows follow-up remains in PR135. | M2 | PR #70; Issue #68 |
+| M6 | Complete boundary-parser repair review; M2 removes its workaround only after adoption. This was not intended to block the original joint check while the workaround worked. <br> Status: PR70 and PR152 are merged and #68 is closed; the separate Windows follow-up was merged in PR135 on 2026-11-12. | M2 | PR #70; Issue #68 |
 | M5 | Run the complete I1 acceptance checklist and record pass/fail/not-run, owner and forecast for every remaining item. | M1-M6 | Existing I1 application handoff and original case IDs |
 
 Original pass condition: The first joint inspection is completed and all observed results or missing deliveries are recorded. Checkpoint 2 means the inspection happened; only checkpoint 3 can accept complete I1. Fixture decision/text peers must be identified. The recorded decision below accepted a controlled alternative to that original joint inspection.
 
-Recorded decision: the [November 8 controlled single-machine inspection](https://github.com/inscripoem/isla/issues/72#issuecomment-6719195922) was accepted in place of the original joint inspection, which did not happen. This accepts the inspection with its recorded gaps, not complete I1. PR67 and PR70 are merged; M2's workaround removal in PR152 is merged and #68 is closed. The controlled scopes of #85 and #86 are accepted and closed, and #87 records the accepted CP02 alternative. Windows follow-up PR135 and console proxy follow-up PR153 remain open.
+Recorded decision: the [November 8 controlled single-machine inspection](https://github.com/inscripoem/isla/issues/72#issuecomment-6719195922) was accepted in place of the original joint inspection, which did not happen. This accepts the inspection with its recorded gaps, not complete I1. PR67 and PR70 are merged; M2's workaround removal in PR152 is merged and #68 is closed. The controlled scopes of #85 and #86 are accepted and closed, and #87 records the accepted CP02 alternative. Windows follow-up PR135 merged on 2026-11-12 and console proxy follow-up PR153 merged on 2026-11-16.
 
 <a id="checkpoint-03"></a>
 

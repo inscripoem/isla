@@ -7,7 +7,9 @@ The original November 1 joint inspection did not occur, and no other member's
 attendance or approval is implied. The October 31 preparation and its NOT RUN
 table below describe that original joint plan, not the accepted alternative.
 Complete I1 checkpoint [#73](https://github.com/inscripoem/isla/issues/73)
-remains open.
+closed on 2026-11-13 under the controlled offline I1 acceptance
+([acceptance comment](https://github.com/inscripoem/isla/issues/73#issuecomment-6860393261));
+the original target and the NOT RUN table below remain historical.
 
 The accepted inspection used PR131 `38ccff7cb746a839706d6bf68a0374e24bf89c1e`
 with real rule selection and a reaction fixture. A later controlled I1
@@ -64,4 +66,4 @@ The joint-inspection column stays NOT RUN until the team performs it. Original c
 
 Checkpoint 02 records that the inspection occurred, including failures and missing work. A named human must accept the inspection record before closure; it does not accept complete I1. Record owner, forecast, required consumer and retest evidence for each remaining gap; do not invent missing forecasts.
 
-Complete I1 remains checkpoint [#73](https://github.com/inscripoem/isla/issues/73), target **November 5 at 21:00 UTC+8**. #88 is accepted; #89 ReactionPort, #90 full composition, #91 M4 consumption and #92 combined playback/console/recording remain open. M3's [forecast](https://github.com/inscripoem/isla/issues/82#issuecomment-6517571574) for #89 is review-ready on November 3 at 21:00.
+Complete I1 is checkpoint [#73](https://github.com/inscripoem/isla/issues/73), target **November 5 at 21:00 UTC+8**. #88 is accepted; #89 ReactionPort, #90 full composition, #91 M4 consumption and #92 combined playback/console/recording were open at this inspection. Superseding status (2026-11-25): all five deliveries #88–#92 are closed and CP03 closed on 2026-11-13. M3's [forecast](https://github.com/inscripoem/isla/issues/82#issuecomment-6517571574) for #89 is review-ready on November 3 at 21:00.
