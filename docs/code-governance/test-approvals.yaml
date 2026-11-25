@@ -133,3 +133,11 @@ approvals:
       - test/offline/m5-runtime.test.ts
       - test/offline/protocol.test.ts
       - test/offline/server.test.ts
+  - id: TA-012
+    task: "Wire the default-off style contract into dialogue generation"
+    approved_at: "2026-11-25T17:58:00+08:00"
+    approved_by: M4
+    scope:
+      - "src/dialogue/dialogue-port.ts"
+    tests:
+      - test/offline/m4-dialogue.test.ts

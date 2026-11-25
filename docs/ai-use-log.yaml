@@ -10629,3 +10629,33 @@ entries:
         No push, pull request, merge, CI run or live browser click. The
         end-to-end check uses a real SQLite store and the real runtime
         composition over /diag, not a live provider or product acceptance.
+  - date: "2026-11-25"
+    task: m4-style-contract-wiring
+    change: >-
+      Wire the existing deterministic style contract into the dialogue
+      generation path behind an opt-in DialoguePortOptions flag. When enabled,
+      the contract is derived once from the resolved profile, repaired lines
+      supply the segment text after the text source returns, and an optional
+      M4-owned onStyleReport callback exposes the redacted report. The default
+      remains off, so existing generated segments, accounting and prompts are
+      unchanged.
+    requirements: []
+    invariants: []
+    commits: ["4e229d6f346b04cf6b36a7f3501f31839b2d0656"]
+    agent: OpenCode V2 orchestrator
+    provider: self-api
+    model: deepseek-v4-flash
+    sessions: ["ses_dee015852ffe3zdtecbwYuJ9m0"]
+    supervision: >-
+      Implemented in the OpenCode V2 orchestrator session from the task brief;
+      the change was reviewed and verified locally.
+    verification:
+      base: 6e59e3f9b5681576a97bb3a419aad10e1af12805
+      results: >-
+        pnpm test:m4 passed 465 tests; pnpm test:m5 passed 296 tests;
+        pnpm test:composition passed 12 tests; pnpm test:trace passed 55
+        tests; pnpm verify passed 99 files / 2303 tests with a clean
+        typecheck, lint and build.
+      limits: >-
+        No push, pull request, merge, CI run or live provider run. Production
+        composition does not opt in, so the default product path is unchanged.
