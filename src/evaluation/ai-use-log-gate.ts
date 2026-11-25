@@ -42,21 +42,76 @@ export function collectAiUseLogViolations(changedFiles: readonly string[]): stri
   return [`a code or prompt change must also update ${AI_USE_LOG_PATH} (gate G6)`]
 }
 
+type LogReadErrorKind = 'invalid-yaml' | 'no-entry-list' | 'recursive-alias'
+
+/** Why a log text cannot be read as an entry list. */
+interface LogReadError {
+  readonly kind: LogReadErrorKind
+  readonly detail: string
+}
+
+type LogRead = { readonly entries: readonly unknown[] } | { readonly error: LogReadError }
+
 /**
- * Every entry must be well formed, not merely present. `branch` is *not* required:
- * one historical entry predates it, so requiring it would fail every run for a change
- * nobody can date accurately.
+ * Read a log text as its entry list, or say why it cannot be read. One reader for
+ * shape, counting and classification, so the three cannot drift on the empty,
+ * parse-error, missing-`entries` or non-list cases.
+ *
+ * `invalid-yaml` is a syntax error. `no-entry-list` means the YAML is valid but
+ * `entries` is not a list; `recursive-alias` is reported by the identity walker,
+ * because a cyclic entry is readable but never comparable.
  */
-export function collectAiUseLogShapeViolations(text: string): string[] {
+function readLogEntries(text: string): LogRead {
+  if (text.trim().length === 0) return { entries: [] }
   let parsed: unknown
   try {
     parsed = parseYaml(text)
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error)
-    return [`${AI_USE_LOG_PATH} is not valid YAML: ${reason}`]
+    return {
+      error: {
+        kind: 'invalid-yaml',
+        detail: error instanceof Error ? error.message : String(error),
+      },
+    }
   }
   const entries = (parsed as { entries?: unknown } | null)?.entries
-  if (!Array.isArray(entries) || entries.length === 0) {
+  if (entries === undefined || entries === null) return { entries: [] }
+  if (!Array.isArray(entries)) {
+    return {
+      error: {
+        kind: 'no-entry-list',
+        detail: Array.isArray(parsed)
+          ? 'the document is a list, not a mapping with an "entries" key'
+          : 'the document has no top-level "entries" list',
+      },
+    }
+  }
+  return { entries }
+}
+
+/** The operator-facing phrase for a log text that cannot be read. */
+function describeLogReadError(error: LogReadError): string {
+  if (error.kind === 'invalid-yaml') return `is not valid YAML: ${error.detail}`
+  if (error.kind === 'recursive-alias') {
+    return `cannot be read as an entries list: a recursive alias at ${error.detail}`
+  }
+  return `cannot be read as an entries list: ${error.detail}`
+}
+
+/**
+ * Every entry must be well formed, not merely present. `branch` is *not* required:
+ * one historical entry predates it, so requiring it would fail every run for a change
+ * nobody can date accurately.
+ *
+ * A recursive YAML alias parses into a real cycle, which is not log data: it can
+ * never be given an identity, so it is a shape violation here rather than a crash
+ * later in the reference check.
+ */
+export function collectAiUseLogShapeViolations(text: string): string[] {
+  const read = readLogEntries(text)
+  if ('error' in read) return [`${AI_USE_LOG_PATH} ${describeLogReadError(read.error)}`]
+  const entries = read.entries
+  if (entries.length === 0) {
     return [`${AI_USE_LOG_PATH} has no non-empty "entries" list`]
   }
 
@@ -68,6 +123,15 @@ export function collectAiUseLogShapeViolations(text: string): string[] {
     }
     const record = entry as Record<string, unknown>
     const label = typeof record.task === 'string' ? record.task : `entry ${index}`
+    try {
+      entryIdentity(record)
+    } catch (error) {
+      if (!(error instanceof RecursiveAliasError)) throw error
+      violations.push(
+        `${label} (entry ${index}) cannot be read as log data: a recursive alias at ${error.path}`,
+      )
+      return
+    }
     for (const field of REQUIRED_TEXT_FIELDS) {
       const value = record[field]
       if (typeof value !== 'string' || value.trim().length === 0) {
@@ -111,7 +175,9 @@ export function collectAiUseLogEntryViolations(
   if (baseText === null) return []
 
   const base = countEntries(baseText)
-  if ('error' in base) return [`${AI_USE_LOG_PATH} at the base is not valid YAML: ${base.error}`]
+  if ('error' in base) {
+    return [`${AI_USE_LOG_PATH} at the base ${describeLogReadError(base.error)}`]
+  }
   const head = countEntries(headText)
   if ('error' in head) return [] // the shape check reports the head's own problem
   if (head.count > base.count) return []
@@ -127,52 +193,76 @@ export function collectAiUseLogEntryViolations(
  * changed value (a repointed commit, a reworded change) produces a new identity
  * and stays strict. Array order is significant, as it is in the storage
  * contract.
+ *
+ * A recursive YAML alias parses into a cyclic object graph. `JSON.stringify`'s
+ * replacer cannot detect that cycle because it returns a fresh object at every
+ * level, so the walk tracks the ancestors it is inside and stops at the first
+ * repeated object. A non-cyclic shared anchor is *not* a cycle: it is expanded
+ * once per occurrence, exactly as a hand-written duplicate would be.
  */
-function entryIdentity(entry: unknown): string {
-  return JSON.stringify(entry, (_key, value) => {
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) return value
+class RecursiveAliasError extends Error {
+  readonly path: string
+
+  constructor(path: string) {
+    super(`a recursive alias at ${path}`)
+    this.path = path
+  }
+}
+
+function canonicalForIdentity(value: unknown, ancestors: Set<object>, path: string): unknown {
+  if (value === null || typeof value !== 'object') return value
+  if (ancestors.has(value)) throw new RecursiveAliasError(path)
+  ancestors.add(value)
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item, index) => canonicalForIdentity(item, ancestors, `${path}[${index}]`))
+    }
     const record = value as Record<string, unknown>
-    return Object.fromEntries(Object.keys(record).sort().map((key) => [key, record[key]]))
-  })
+    const canonical: Record<string, unknown> = {}
+    for (const key of Object.keys(record).sort()) {
+      const item = record[key]
+      // `JSON.stringify` drops an undefined member; do the same before recursing.
+      if (item === undefined) continue
+      canonical[key] = canonicalForIdentity(item, ancestors, `${path}.${key}`)
+    }
+    return canonical
+  } finally {
+    ancestors.delete(value)
+  }
+}
+
+function entryIdentity(entry: unknown): string {
+  return JSON.stringify(canonicalForIdentity(entry, new Set(), '$'))
 }
 
 /**
- * How many times each entry identity occurs in a log text, or the YAML error that
- * prevents reading it. Counts rather than a set: a head that repeats a base entry
+ * How many times each entry identity occurs in a log text, or why the text cannot
+ * be read as entries. Counts rather than a set: a head that repeats a base entry
  * twice contains one historical entry and one new one.
  */
-function countIdentities(text: string): { counts: Map<string, number> } | { error: string } {
-  if (text.trim().length === 0) return { counts: new Map() }
-  let parsed: unknown
-  try {
-    parsed = parseYaml(text)
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : String(error) }
-  }
-  const entries = (parsed as { entries?: unknown } | null)?.entries
-  if (entries === undefined || entries === null) return { counts: new Map() }
-  if (!Array.isArray(entries)) return { error: 'entries is not a list' }
+function countIdentities(
+  text: string,
+): { counts: Map<string, number> } | { error: LogReadError } {
+  const read = readLogEntries(text)
+  if ('error' in read) return { error: read.error }
   const counts = new Map<string, number>()
-  for (const entry of entries) {
-    const identity = entryIdentity(entry)
+  for (const entry of read.entries) {
+    let identity: string
+    try {
+      identity = entryIdentity(entry)
+    } catch (error) {
+      if (!(error instanceof RecursiveAliasError)) throw error
+      return { error: { kind: 'recursive-alias', detail: error.path } }
+    }
     counts.set(identity, (counts.get(identity) ?? 0) + 1)
   }
   return { counts }
 }
 
-/** The number of entries in a log text, or the YAML error that prevents counting. */
-function countEntries(text: string): { count: number } | { error: string } {
-  if (text.trim().length === 0) return { count: 0 }
-  let parsed: unknown
-  try {
-    parsed = parseYaml(text)
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : String(error) }
-  }
-  const entries = (parsed as { entries?: unknown } | null)?.entries
-  if (entries === undefined || entries === null) return { count: 0 }
-  if (!Array.isArray(entries)) return { error: 'entries is not a list' }
-  return { count: entries.length }
+/** The number of entries in a log text, or why the text cannot be read as entries. */
+function countEntries(text: string): { count: number } | { error: LogReadError } {
+  const read = readLogEntries(text)
+  return 'error' in read ? { error: read.error } : { count: read.entries.length }
 }
 
 /**
@@ -313,8 +403,8 @@ export function collectAiUseLogReferenceFindings(
       return [
         {
           policy: 'POL-G6-03',
-          trigger: 'register-unreadable',
-          message: `${AI_USE_LOG_PATH} at the base is not valid YAML, so G6 cannot classify entries: ${base.error}`,
+          trigger: 'log-unreadable',
+          message: `${AI_USE_LOG_PATH} at the base ${describeLogReadError(base.error)}, so G6 cannot classify entries`,
           evidence: { register: 'base-log' },
         },
       ]
@@ -331,7 +421,22 @@ export function collectAiUseLogReferenceFindings(
     const record = entry as Record<string, unknown>
     const label = typeof record.task === 'string' ? record.task : `entry ${index}`
 
-    const identity = entryIdentity(record)
+    let identity: string
+    try {
+      identity = entryIdentity(record)
+    } catch (error) {
+      if (!(error instanceof RecursiveAliasError)) throw error
+      // A cyclic entry cannot be compared with the base, so it can be neither
+      // historical nor new. Failing closed is the only answer that does not
+      // silently excuse its citations.
+      findings.push({
+        policy: 'POL-G6-03',
+        trigger: 'log-unreadable',
+        message: `${label} (entry ${index}) cannot be read as log data: a recursive alias at ${error.path}; G6 cannot classify it`,
+        evidence: { register: 'head-log' },
+      })
+      return
+    }
     const matches = remaining?.get(identity) ?? 0
     const historical = everyEntryHistorical || matches > 0
     if (remaining !== null && matches > 0) remaining.set(identity, matches - 1)
@@ -566,6 +671,7 @@ function buildReferenceDeps(
 
 function runCli(changedFiles: readonly string[]): number {
   const violations: string[] = []
+  const findings: GateFinding[] = []
   let headText: string | null = null
   if (!existsSync(AI_USE_LOG_PATH)) {
     violations.push(`${AI_USE_LOG_PATH} is missing (gate G6)`)
@@ -574,17 +680,25 @@ function runCli(changedFiles: readonly string[]): number {
     violations.push(...collectAiUseLogShapeViolations(headText))
   }
 
+  // Read the base once. The printed violations and the failure record must come
+  // from deps that saw it: rebuilding deps without the base dropped the
+  // POL-G6-03 `base-log` record and repeated the git lookups.
+  const baseText = readLogBase()
+
   if (headText !== null) {
     let unreachable = 0
-    const baseText = readLogBase()
-    const deps = buildReferenceDeps(
+    const referenceFindings = collectAiUseLogReferenceFindings(
       headText,
-      () => {
-        unreachable += 1
-      },
-      baseText,
+      buildReferenceDeps(
+        headText,
+        () => {
+          unreachable += 1
+        },
+        baseText,
+      ),
     )
-    violations.push(...collectAiUseLogReferenceViolations(headText, deps))
+    violations.push(...referenceFindings.map((finding) => finding.message))
+    findings.push(...referenceFindings)
     if (unreachable > 0) {
       process.stdout.write(
         `G6 advisory: ${unreachable} historical citation(s) were not verified in this clone (squash-merge history)\n`,
@@ -596,7 +710,6 @@ function runCli(changedFiles: readonly string[]): number {
     process.stderr.write('G6: no changed files provided; the log-update rule is not verified\n')
   } else {
     violations.push(...collectAiUseLogViolations(changedFiles))
-    const baseText = readLogBase()
     if (baseText === null) {
       process.stderr.write(`G6: no ${AI_USE_LOG_BASE_ENV}; the entry rule is not verified\n`)
     } else if (headText !== null) {
@@ -608,12 +721,8 @@ function runCli(changedFiles: readonly string[]): number {
     return 0
   }
   for (const violation of violations) process.stderr.write(`G6: ${violation}\n`)
-  const findings: GateFinding[] = []
   if (changedFiles.length > 0) {
     findings.push(...collectAiUseLogFindings(changedFiles))
-  }
-  if (headText !== null) {
-    findings.push(...collectAiUseLogReferenceFindings(headText, buildReferenceDeps(headText)))
   }
   try {
     for (const path of writeFindings(findings)) {
