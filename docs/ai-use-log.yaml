@@ -9384,3 +9384,52 @@ entries:
         Full verify passed with 2136 tests passing and nine skipped across
         95 files. G1 evidence and G6 passed on the committed difference
         against main.
+  - date: "2026-11-25"
+    task: console-kokoro-voice-selection
+    change: >-
+      List installed English Kokoro voices, audition a fixed phrase, and persist an
+      explicit operator selection. Capture the selected voice at the start of each
+      conversation turn. Add console, runtime and browser coverage for playback,
+      refusal, persistence, retry and stop behavior.
+    requirements: [FR-04, FR-05, NFR-05, NFR-06]
+    invariants: [INV-01, INV-03]
+    commits:
+      - "ab8f84dded49ed453ff30e7acbafcbe324b3f413"
+      - "246bf4b8ed7a9567d222e1ce41d4117361129d3c"
+      - "2408cd896d387316d922f37dfad7bee45cf196b7"
+      - "67fe018f70b6178da4f745662171db90bb57790a"
+      - "eff22ce1a0da36e5f1be1c634034089ea73a3c80"
+      - "b2fc9dcf001f4b5a4d3ee31ccf6139c8dd638561"
+      - "328c2f97e04aef16557124fae4c10a04e3aeb33c"
+      - "e859d26451867120361515b4957992b2d5d4788e"
+      - "355e477ce484e4e3b3b8ce606211b99b1e119f9b"
+      - "26bf07aeed7604c9356a5f69bb4d65b01e62ad23"
+      - "2e8d989ec47fbc8c56a2f4d5eab1bd198da40bda"
+      - "2e22bd435639f4724a9702d4eaba5536f2addb53"
+    agent: OpenCode V2 build
+    provider: deepseek
+    model: deepseek-flash
+    variant: max
+    model_cli_id: "deepseek/deepseek-flash#max"
+    sessions:
+      - "ses_df12def18ffez9ATMFPkyaD7Hv"
+      - "ses_df12c68e5ffeMRwJW18pGHlz5v"
+      - "ses_df12def2bffejYvdtF4204PN7r"
+      - "ses_df127a5b1ffeYC9B0BlMs4jwQf"
+      - "ses_df129322cffe8TbFIX8rC36ltR"
+      - "ses_df11ba5f0ffeR6QJXtTAezrJMh"
+    supervision: >-
+      M1 approved TA-004 before implementation. The supervisor observed failing
+      tests before feature implementation, checked authorization and real media,
+      and requested fixes for pending selections and duplicate preview requests.
+      The browser probe was corrected to hash the Blob supplied to the player
+      and to follow the actual offer and grant messages.
+    verification:
+      base: 3a54e6b96f580f220fdfc8559ecfe38e1ab0d917
+      source_candidate: 2e22bd435639f4724a9702d4eaba5536f2addb53
+      results: >-
+        On Windows the full check passed with 2155 tests passing and 9 skipped.
+        All 28 served audition WAVs matched independently rendered audio. The two
+        browser phases passed 31 and 16 checks. Heart and Emma speech matched
+        their expected WAVs and a new runtime process retained Emma. Playback
+        and SQLite were real, with controlled dialogue text and avatar peers.

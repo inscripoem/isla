@@ -53,3 +53,27 @@ approvals:
       - "src/performance/README.md"
     tests:
       - test/offline/m1-performance.test.ts
+  - id: TA-004
+    task: "Select, audition, and persist installed Kokoro voices from the operator console"
+    approved_at: "2026-11-25T02:28:48+08:00"
+    approved_by: M1
+    scope:
+      - "src/App.tsx"
+      - "src/console/"
+      - "src/contracts/app/transport.ts"
+      - "src/contracts/app/voice-settings.ts"
+      - "src/contracts/app/index.ts"
+      - "src/performance/kokoro-provider.ts"
+      - "src/performance/voice-catalog.ts"
+      - "src/runtime/voice-settings.ts"
+      - "src/runtime/voice-preview.ts"
+      - "src/runtime/application.ts"
+      - "src/runtime/coordinator.ts"
+      - "src/runtime/composition.ts"
+      - "src/runtime/production.ts"
+      - "src/runtime/deployments/reference-live.ts"
+    tests:
+      - test/offline/console-voice-selection.test.ts
+      - test/offline/voice-settings.test.ts
+      - test/offline/m5-reference-live.test.ts
+      - test/browser/console-voice-selection.mjs

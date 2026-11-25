@@ -17,7 +17,11 @@ import { createSqliteBackend } from '../storage/sqlite/backend'
 import { openDatabase } from '../storage/sqlite/database'
 import { migrate } from '../storage/sqlite/migrations'
 import { createApplicationEndpoint } from './application'
-import type { ApplicationDiagnostic, ApplicationEndpoint } from './application'
+import type {
+  ApplicationDiagnostic,
+  ApplicationEndpoint,
+  ApplicationVoiceSettings,
+} from './application'
 import { createMonotonicClock } from './clock'
 import type { CompositionAudioResources, RuntimeComposition } from './composition'
 import { createReconstructedRuntimeComposition } from './composition'
@@ -30,6 +34,8 @@ import { DiagnosticsServer } from './server'
 import type { ArchiveSelectionConfig } from './session-archives'
 import { createSessionRecovery } from './session-recovery'
 import type { SessionRecovery } from './session-recovery'
+import type { VoicePreview } from './voice-preview'
+import type { VoiceSettings } from './voice-settings'
 
 /**
  * M5 production composition and durable application lifecycle.
@@ -73,6 +79,17 @@ export interface ProductionAudioResources extends CompositionAudioResources {
 }
 
 /**
+ * Optional voice capability owned by one deployment. The settings object is
+ * shared by every composition so a recovery successor sees the same adopted
+ * preference; the preview service is the deployment's single physical audition
+ * path.
+ */
+export interface ProductionVoice {
+  readonly settings: VoiceSettings
+  readonly preview: VoicePreview
+}
+
+/**
  * Peer ports and per-composition factories a deployment must supply.
  *
  * The renderer and synthesis factories receive the composition's own deadline
@@ -97,6 +114,8 @@ export interface ProductionPeers {
    * on dispose, and the serving queries behind the `POST /audio` route.
    */
   readonly audioResources?: ProductionAudioResources
+  /** Optional local voice settings, preview and per-turn voice profile source. */
+  readonly voice?: ProductionVoice
   /** Non-character session profile fields (for example voice identity). */
   readonly profile?: Partial<SessionProfileConfig>
   /** Validated stage timings applied to every composition. */
@@ -260,6 +279,24 @@ export function validateProductionPeers(peers: ProductionPeers): void {
     assertPeerMethod(peers.audioResources, 'peers.audioResources', 'admission', 'M1 AudioResourceRegistry')
     assertPeerMethod(peers.audioResources, 'peers.audioResources', 'resolve', 'M1 AudioResourceRegistry')
   }
+  if (peers.voice !== undefined) {
+    if (peers.voice === null || typeof peers.voice !== 'object') {
+      throw missingPeer('peers.voice', 'ProductionVoice')
+    }
+    assertPeerMethod(peers.voice.settings, 'peers.voice.settings', 'state', 'voice settings')
+    assertPeerMethod(peers.voice.settings, 'peers.voice.settings', 'select', 'voice settings')
+    assertPeerMethod(peers.voice.settings, 'peers.voice.settings', 'currentVoiceProfile', 'voice settings')
+    assertPeerMethod(peers.voice.preview, 'peers.voice.preview', 'synthesize', 'voice preview')
+  }
+}
+
+/** Adapt one deployment-owned voice capability to the endpoint's narrow seam. */
+function applicationVoice(voice: ProductionVoice): ApplicationVoiceSettings {
+  return {
+    state: () => voice.settings.state(),
+    select: (voiceId) => voice.settings.select(voiceId),
+    preview: (voiceId) => voice.preview.synthesize(voiceId),
+  }
 }
 
 /** One-line failure text for a combined lifecycle error. */
@@ -384,6 +421,7 @@ async function buildProductionApplication(
             textSource: peers.textSource,
             ...(peers.personaRecall !== undefined ? { personaRecall: peers.personaRecall } : {}),
             ...(peers.profile !== undefined ? { profile: peers.profile } : {}),
+            ...(peers.voice !== undefined ? { voice: peers.voice.settings } : {}),
             ...(peers.timings !== undefined ? { timings: peers.timings } : {}),
             ...(peers.inputTtlMs !== undefined ? { inputTtlMs: peers.inputTtlMs } : {}),
             ...(peers.storageTtlMs !== undefined ? { storageTtlMs: peers.storageTtlMs } : {}),
@@ -430,6 +468,7 @@ async function buildProductionApplication(
       ...(options.allowedHosts !== undefined ? { allowedHosts: options.allowedHosts } : {}),
       ...(options.onDiagnostic !== undefined ? { onDiagnostic: options.onDiagnostic } : {}),
       ...(peers.audioResources !== undefined ? { audioSource: peers.audioResources } : {}),
+      ...(peers.voice !== undefined ? { voice: applicationVoice(peers.voice) } : {}),
       recovery,
     })
     const server = new DiagnosticsServer({

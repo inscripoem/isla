@@ -120,6 +120,19 @@ database and await deployment-owned release. Readiness follows signal-handler
 registration; shutdown completion requires successful release. Multiple cleanup
 failures remain visible, including on repeated stop calls.
 
+### Choose a voice
+
+Open **Session → Voice** to see the English Kokoro voices installed on this
+machine. Choose a voice and click **Preview voice** to hear the same short
+line in that voice. **Stop preview** ends the audition. The **Current voice**
+label shows which voice will be used for replies.
+
+Enable operator controls and click **Use this voice** to save your choice.
+It takes effect on the next conversation turn. A reply already in progress
+finishes in the voice it started with. The reference deployment stores the
+selection beside its SQLite database in `<database path>.voices.json` and
+loads it at startup. The initial voice is Heart.
+
 ## Check the foundation
 
 ```sh

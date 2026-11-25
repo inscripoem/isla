@@ -862,9 +862,9 @@ export function reduceServerMessage(state: ConsoleState, message: ServerMessage)
 /**
  * Apply one inbound application (protocol 0.2) message. Base messages are
  * delegated unchanged to {@link reduceServerMessage}; only the explicit
- * retirement state is handled here. Attach, operator, offer, grant and recovery
- * acknowledgement messages leave the view unchanged, and retirement is never
- * inferred from lifecycle.
+ * retirement state is handled here. Attach, operator, offer, grant, recovery and
+ * voice messages leave the view unchanged, and retirement is never inferred
+ * from lifecycle.
  */
 export function reduceApplicationMessage(
   state: ConsoleState,
@@ -884,6 +884,8 @@ export function reduceApplicationMessage(
     case 'performance.offer':
     case 'performance.grant':
     case 'session.recovery.ack':
+    case 'voice.state':
+    case 'voice.sample':
       return state
     default:
       return reduceServerMessage(state, message)
