@@ -101,6 +101,11 @@ import {
 } from '../../src/performance/audio-resources'
 import { createKokoroSynthesis } from '../../src/performance/kokoro-synthesis'
 import { encodeMonoFloat32Wav } from '../../src/performance/wav'
+import type {
+  VolumeEnvelope,
+  VolumeEnvelopeEvent,
+} from '../../src/performance/lipsync/volume-envelope'
+import { computeVolumeEnvelope } from '../../src/performance/lipsync/volume-envelope'
 import {
   createGuardedTokenizer,
   type KokoroTokenizerEncoding,
@@ -4072,6 +4077,374 @@ describe('M1-02 controlled audio-resource registry (K04)', () => {
     )
     expect(final.ok).toBe(true)
     expect(kit.registry.snapshot().usedBytes).toBe(KOKORO_WAV_BYTES)
+  })
+})
+
+describe('M1-02 synthesis RMS envelope', () => {
+  it('uses fixed 20ms windows and disburses a split sample at a nondivisible rate', () => {
+    const envelope = computeVolumeEnvelope(new Float32Array([1, 0, -1]), 75)
+    expect(envelope.stepMs).toBe(20)
+    expect(envelope.durationMs).toBeCloseTo(40, 12)
+    expect(envelope.levels).toHaveLength(2)
+    for (const level of envelope.levels) expect(level).toBeCloseTo(Math.sqrt(2 / 3), 12)
+
+    const lowRate = computeVolumeEnvelope(new Float32Array([1]), 1)
+    expect(lowRate.durationMs).toBe(1000)
+    expect(lowRate.levels).toHaveLength(50)
+    expect(lowRate.levels.every((level) => level === 1)).toBe(true)
+  })
+
+  it('retains a normalized final tail, natural silence and sign symmetry, saturating only the RMS', () => {
+    const tail = computeVolumeEnvelope(new Float32Array([0.5, 0, 0, 0, 0.5]), 100)
+    expect(tail.durationMs).toBe(50)
+    expect(tail.levels).toHaveLength(3)
+    expect(tail.levels[0]).toBeCloseTo(Math.sqrt(0.25 / 2), 12)
+    expect(tail.levels[1]).toBe(0)
+    expect(tail.levels[2]).toBe(0.5)
+
+    const symmetric = computeVolumeEnvelope(new Float32Array([0.25, -0.25, 0, 0]), 100)
+    expect(symmetric.levels).toHaveLength(2)
+    expect(symmetric.levels[0]).toBeCloseTo(0.25, 12)
+    expect(symmetric.levels[1]).toBe(0)
+
+    const hot = new Float32Array([2, -2])
+    expect(computeVolumeEnvelope(hot, 100).levels).toEqual([1])
+    expect(Array.from(hot)).toEqual([2, -2])
+  })
+
+  it('rejects invalid audio instead of returning a usable envelope', () => {
+    const invalid: Array<[Float32Array, number]> = [
+      [new Float32Array([]), 100],
+      [new Float32Array([0]), 0],
+      [new Float32Array([0]), -100],
+      [new Float32Array([0]), 100.5],
+      [new Float32Array([0]), Number.NaN],
+      [new Float32Array([0]), Number.POSITIVE_INFINITY],
+      [new Float32Array([0]), 2 ** 30],
+      [new Float32Array([0]), 2 ** 32],
+      [new Float32Array([0, Number.NaN]), 100],
+      [new Float32Array([0, Number.NEGATIVE_INFINITY]), 100],
+    ]
+    for (const [samples, sampleRate] of invalid) {
+      expect(() => computeVolumeEnvelope(samples, sampleRate)).toThrow()
+    }
+  })
+})
+
+describe('M1-02 opt-in synthesis-envelope delivery', () => {
+  const observe = (
+    registry: ReturnType<typeof createAudioResourceRegistry>,
+    listener: (event: VolumeEnvelopeEvent) => void,
+  ): (() => void) => {
+    const subscribe = registry.observeVolumeEnvelopes
+    expect(subscribe).toBeDefined()
+    if (subscribe === undefined) throw new Error('expected envelope observer support')
+    return subscribe(listener)
+  }
+
+  it('omits the curve without subscribers and attaches/freezes it on the same real registry', async () => {
+    const samples = new Float32Array([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve({ samples, sampleRate: M1_KOKORO_SAMPLE_RATE })
+    const kit = createM1KokoroSynthesisKit({ provider })
+    const registrationSpy = vi.spyOn(kit.registry, 'register')
+    const events: VolumeEnvelopeEvent[] = []
+    const durationMs = (M1_KOKORO_SAMPLE_COUNT * 1000) / M1_KOKORO_SAMPLE_RATE
+
+    expect(kit.registry.wantsVolumeEnvelope).toBe(false)
+    const unobserved = await kit.synthesis.prepare(fixturePreparePerformance(), createCallContext())
+    expect(unobserved.ok).toBe(true)
+    if (!unobserved.ok) return
+    const firstRegistration = registrationSpy.mock.calls[0]?.[0]
+    expect(firstRegistration).toBeDefined()
+    if (firstRegistration === undefined) return
+    expect(Object.hasOwn(firstRegistration, 'volumeEnvelope')).toBe(false)
+
+    const firstLease = await kit.registry.resolve(unobserved.audioRef, createCallContext().signal)
+    const firstBytes = new Uint8Array(await firstLease.blob.arrayBuffer())
+    expect(Array.from(firstBytes)).toEqual(
+      Array.from(encodeMonoFloat32Wav(samples, M1_KOKORO_SAMPLE_RATE)),
+    )
+
+    const unsubscribe = observe(kit.registry, (event) => events.push(event))
+    expect(kit.registry.wantsVolumeEnvelope).toBe(true)
+    const uncurvedLease = await kit.registry.resolve(unobserved.audioRef, createCallContext().signal)
+    expect(events).toEqual([])
+    const observed = await kit.synthesis.prepare(
+      fixturePreparePerformance({ requestId: 'prepare-req-2' }),
+      createCallContext(),
+    )
+    expect(observed.ok).toBe(true)
+    if (!observed.ok) return
+    const secondRegistration = registrationSpy.mock.calls[1]?.[0]
+    expect(secondRegistration?.volumeEnvelope).toMatchObject({ stepMs: 20, levels: [0.5] })
+    expect(secondRegistration?.volumeEnvelope?.durationMs).toBeCloseTo(durationMs, 12)
+    expect(events).toEqual([])
+
+    const secondLease = await kit.registry.resolve(observed.audioRef, createCallContext().signal)
+    expect(
+      kit.registry
+        .snapshot()
+        .resources.find((resource) => resource.audioRef === observed.audioRef)?.activeLeases,
+    ).toBe(1)
+    expect(events).toHaveLength(1)
+    const firstEvent = events[0]
+    expect(firstEvent).toBeDefined()
+    if (firstEvent === undefined) return
+    expect(firstEvent).toMatchObject({
+      audioRef: observed.audioRef,
+      sessionId: FIXTURE_SESSION_ID,
+      epoch: 1,
+      turnId: 'turn-fixture-1',
+      segmentId: 'segment-fixture-0',
+      stepMs: 20,
+      levels: [0.5],
+    })
+    expect(firstEvent.durationMs).toBeCloseTo(durationMs, 12)
+    expect(Object.isFrozen(firstEvent)).toBe(true)
+    expect(Object.isFrozen(firstEvent.levels)).toBe(true)
+    expect(() => {
+      ;(firstEvent.levels as number[])[0] = 1
+    }).toThrow(TypeError)
+    expect(firstEvent.levels[0]).toBe(0.5)
+
+    unsubscribe()
+    unsubscribe()
+    expect(kit.registry.wantsVolumeEnvelope).toBe(false)
+    const quietLease = await kit.registry.resolve(observed.audioRef, createCallContext().signal)
+    expect(events).toHaveLength(1)
+    quietLease.release()
+    secondLease.release()
+    uncurvedLease.release()
+    firstLease.release()
+  })
+
+  it('notifies only successful live resolves, isolates listener faults and clears opt-in on dispose', async () => {
+    const samples = new Float32Array([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve({ samples, sampleRate: M1_KOKORO_SAMPLE_RATE })
+    const clock = createVirtualClock(0)
+    const kit = createM1KokoroSynthesisKit({ provider, clock, retentionMs: 100 })
+    const events: VolumeEnvelopeEvent[] = []
+    const seenByMutationListener: number[] = []
+    const unsubscribeSyncFault = observe(kit.registry, () => {
+      throw new Error('sync observer fault')
+    })
+    const unsubscribeAsyncFault = observe(kit.registry, async () => {
+      throw new Error('async observer fault')
+    })
+    const unsubscribeMutation = observe(kit.registry, (event) => {
+      seenByMutationListener.push(event.levels[0] ?? -1)
+      ;(event.levels as number[])[0] = 0.99
+    })
+    const unsubscribe = observe(kit.registry, (event) => events.push(event))
+    expect(kit.registry.wantsVolumeEnvelope).toBe(true)
+
+    const prepare = async (requestId: string) => {
+      const prepared = await kit.synthesis.prepare(
+        fixturePreparePerformance({ requestId }),
+        createCallContext(),
+      )
+      expect(prepared.ok).toBe(true)
+      if (!prepared.ok) throw new Error(`expected success for ${requestId}`)
+      return prepared
+    }
+    const first = await prepare('first')
+    const retired = await prepare('retired')
+    const aborted = await prepare('aborted')
+    const expiring = await prepare('expiring')
+    expect(events).toEqual([])
+
+    const firstLease = await kit.registry.resolve(first.audioRef, createCallContext().signal)
+    expect(events).toHaveLength(1)
+    expect(kit.registry.snapshot().leasedCount).toBe(1)
+    expect(firstLease.blob.size).toBe(KOKORO_WAV_BYTES)
+    expect(seenByMutationListener).toEqual([0.5])
+    expect(events[0]?.levels[0]).toBe(0.5)
+
+    const secondLease = await kit.registry.resolve(first.audioRef, createCallContext().signal)
+    expect(events).toHaveLength(2)
+    expect(events[1]?.levels[0]).toBe(0.5)
+
+    expect(kit.registry.retire(retired.audioRef)).toBe(true)
+    await expect(kit.registry.resolve(retired.audioRef, createCallContext().signal)).rejects.toThrow()
+    const cancelled = createCallContext()
+    cancelled.abort()
+    await expect(kit.registry.resolve(aborted.audioRef, cancelled.signal)).rejects.toThrow()
+    await expect(
+      kit.registry.resolve('audio://kokoro/missing', createCallContext().signal),
+    ).rejects.toThrow()
+    expect(events).toHaveLength(2)
+
+    clock.set(100)
+    await expect(kit.registry.resolve(expiring.audioRef, createCallContext().signal)).rejects.toThrow()
+    expect(events).toHaveLength(2)
+    clock.set(0)
+    const revivedLease = await kit.registry.resolve(first.audioRef, createCallContext().signal)
+    expect(events).toHaveLength(3)
+
+    unsubscribe()
+    unsubscribe()
+    unsubscribeSyncFault()
+    unsubscribeAsyncFault()
+    unsubscribeMutation()
+    expect(kit.registry.wantsVolumeEnvelope).toBe(false)
+    const quietLease = await kit.registry.resolve(first.audioRef, createCallContext().signal)
+    expect(events).toHaveLength(3)
+
+    const disposeObserver = observe(kit.registry, (event) => events.push(event))
+    expect(kit.registry.wantsVolumeEnvelope).toBe(true)
+    kit.registry.dispose()
+    expect(kit.registry.wantsVolumeEnvelope).toBe(false)
+    disposeObserver()
+    await expect(kit.registry.resolve(first.audioRef, createCallContext().signal)).rejects.toThrow()
+    expect(events).toHaveLength(3)
+    await microtasks()
+    firstLease.release()
+    secondLease.release()
+    revivedLease.release()
+    quietLease.release()
+    expect(kit.registry.snapshot()).toMatchObject({ activeCount: 0, usedBytes: 0 })
+  })
+
+  it('publishes the same WAV when the optional wantsVolumeEnvelope getter throws', async () => {
+    const samples = new Float32Array([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
+    const provider = createFakeKokoroProvider()
+    provider.setAutoResolve({ samples, sampleRate: M1_KOKORO_SAMPLE_RATE })
+    const kit = createM1KokoroSynthesisKit({ provider })
+    const registrationSpy = vi.spyOn(kit.registry, 'register')
+    Object.defineProperty(kit.registry, 'wantsVolumeEnvelope', {
+      configurable: true,
+      get() {
+        throw new Error('optional wantsVolumeEnvelope fault')
+      },
+    })
+
+    const prepared = await kit.synthesis.prepare(fixturePreparePerformance(), createCallContext())
+    expect(prepared.ok).toBe(true)
+    if (!prepared.ok) return
+    const registration = registrationSpy.mock.calls[0]?.[0]
+    expect(registration).toBeDefined()
+    if (registration === undefined) return
+    expect(Object.hasOwn(registration, 'volumeEnvelope')).toBe(false)
+
+    const lease = await kit.registry.resolve(prepared.audioRef, createCallContext().signal)
+    const bytes = new Uint8Array(await lease.blob.arrayBuffer())
+    lease.release()
+    expect(Array.from(bytes)).toEqual(
+      Array.from(encodeMonoFloat32Wav(samples, M1_KOKORO_SAMPLE_RATE)),
+    )
+    expect(prepared.durationMs).toBeCloseTo(
+      (M1_KOKORO_SAMPLE_COUNT * 1000) / M1_KOKORO_SAMPLE_RATE,
+      12,
+    )
+  })
+
+  it('registers the same WAV bytes when the optional volumeEnvelope getter throws', async () => {
+    const registry = createAudioResourceRegistry({
+      clock: createVirtualClock(0),
+      byteBudget: 1000,
+      retentionMs: 1000,
+      newRef: createSequentialRefFactory('audio://kokoro/throwing-curve'),
+    })
+    const events: VolumeEnvelopeEvent[] = []
+    const unsubscribe = observe(registry, (event) => events.push(event))
+    const bytes = encodeMonoFloat32Wav(
+      new Float32Array([0.5, 0.5]),
+      M1_KOKORO_SAMPLE_RATE,
+    )
+    const request: AudioResourceRegistration = {
+      requestId: 'req-throwing-curve',
+      sessionId: FIXTURE_SESSION_ID,
+      epoch: 1,
+      turnId: 'turn-throwing-curve',
+      segmentId: 'seg-throwing-curve',
+      voiceProfileId: 'voice-throwing-curve',
+      voiceProfileVersion: '1',
+      format: 'audio/wav',
+      bytes,
+      get volumeEnvelope(): VolumeEnvelope {
+        throw new Error('optional volumeEnvelope fault')
+      },
+    }
+
+    const registration = registry.register(request)
+    const lease = await registry.resolve(registration.audioRef, createCallContext().signal)
+    const resolvedBytes = new Uint8Array(await lease.blob.arrayBuffer())
+    lease.release()
+    expect(Array.from(resolvedBytes)).toEqual(Array.from(bytes))
+    expect(events).toEqual([])
+    unsubscribe()
+  })
+
+  it('copies, freezes and validates optional registration curves without rejecting the audio', async () => {
+    const registry = createAudioResourceRegistry({
+      clock: createVirtualClock(0),
+      byteBudget: 1000,
+      retentionMs: 1000,
+      newRef: createSequentialRefFactory('audio://kokoro/curve'),
+    })
+    const events: VolumeEnvelopeEvent[] = []
+    observe(registry, (event) => events.push(event))
+    const registrationFor = (volumeEnvelope?: VolumeEnvelope): AudioResourceRegistration => ({
+      requestId: 'req-curve',
+      sessionId: FIXTURE_SESSION_ID,
+      epoch: 1,
+      turnId: 'turn-curve',
+      segmentId: 'seg-curve',
+      voiceProfileId: 'voice-curve',
+      voiceProfileVersion: '1',
+      format: 'audio/wav',
+      bytes: new Uint8Array([1, 2, 3, 4]),
+      ...(volumeEnvelope === undefined ? {} : { volumeEnvelope }),
+    })
+
+    const levels = [0.25, 0.75]
+    const callerEnvelope: VolumeEnvelope = { stepMs: 20, durationMs: 40, levels }
+    const registration = registry.register(registrationFor(callerEnvelope))
+    levels[0] = 1
+    ;(callerEnvelope as { durationMs: number }).durationMs = 999
+    expect(events).toEqual([])
+
+    const lease = await registry.resolve(registration.audioRef, createCallContext().signal)
+    expect(events).toEqual([
+      {
+        audioRef: registration.audioRef,
+        sessionId: FIXTURE_SESSION_ID,
+        epoch: 1,
+        turnId: 'turn-curve',
+        segmentId: 'seg-curve',
+        stepMs: 20,
+        durationMs: 40,
+        levels: [0.25, 0.75],
+      },
+    ])
+    expect(Object.isFrozen(events[0])).toBe(true)
+    expect(Object.isFrozen(events[0]?.levels)).toBe(true)
+    lease.release()
+
+    const malformed: unknown[] = [
+      { stepMs: 19, durationMs: 40, levels: [0.5, 0.5] },
+      { stepMs: 20, durationMs: Number.POSITIVE_INFINITY, levels: [0.5, 0.5] },
+      { stepMs: 20, durationMs: 40, levels: [0.5] },
+      { stepMs: 20, durationMs: 40, levels: [Number.NaN, 0.5] },
+      { stepMs: 20, durationMs: 40, levels: [-0.1, 0.5] },
+      { stepMs: 20, durationMs: 40, levels: [0.5, 1.1] },
+      { stepMs: 20, durationMs: 40, levels: 'not-levels' },
+      null,
+    ]
+    for (const volumeEnvelope of malformed) {
+      const malformedRegistration = registry.register(
+        registrationFor(volumeEnvelope as VolumeEnvelope),
+      )
+      const malformedLease = await registry.resolve(
+        malformedRegistration.audioRef,
+        createCallContext().signal,
+      )
+      expect(malformedLease.blob.size).toBe(4)
+      malformedLease.release()
+    }
+    expect(events).toHaveLength(1)
   })
 })
 

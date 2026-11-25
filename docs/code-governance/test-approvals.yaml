@@ -158,6 +158,28 @@ approvals:
     tests:
       - test/offline/m5-reference-live-config.test.ts
       - test/offline/m5-reference-live.test.ts
+  - id: TA-006
+    task: "Drive the selected speaking avatar from observed Windows playback level and close it on Stop or terminal playback"
+    approved_at: "2026-11-25T16:22:51+08:00"
+    approved_by: M1
+    scope:
+      - "src/performance/lipsync/"
+    tests:
+      - test/offline/test_m1_speaking_mouth.py
+      - test/offline/m1-speaking-release.test.ts
+  - id: TA-008
+    task: "Drive mouth opening from the synthesis-time 20 ms RMS envelope and the admitted player's media position"
+    approved_at: "2026-11-25T18:37:42+08:00"
+    approved_by: M1
+    scope:
+      - "src/performance/kokoro-synthesis.ts"
+      - "src/performance/audio-resources.ts"
+      - "src/performance/browser/"
+      - "src/performance/lipsync/"
+    tests:
+      - test/offline/m1-performance.test.ts
+      - test/offline/m1-lipsync-envelope-playback.test.ts
+      - test/offline/m1-lipsync-envelope-bridge.test.ts
   - id: TA-014
     task: "M2-202 avatar viewport and avatar relay (PR #211)"
     approved_at: "2026-11-25T21:44:58+08:00"

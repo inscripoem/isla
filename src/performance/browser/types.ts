@@ -88,8 +88,46 @@ export interface MediaHandle {
 
 /** Creates independent media handles for successive outputs. */
 export interface MediaDriver {
-  create(): MediaHandle
+  /**
+   * The optional admitted command binds any configured mouth observer to this
+   * exact output. Existing zero-argument callers remain valid.
+   */
+  create(command?: PerformanceCommand): MediaHandle
 }
+
+/**
+ * Identity of one admitted audio output. It mirrors the identity fields of
+ * {@link PerformanceCommand} and never authorizes playback by itself.
+ */
+export interface MouthPlaybackKey {
+  readonly audioRef: string
+  readonly sessionId: string
+  readonly epoch: number
+  readonly turnId: string
+  readonly segmentId: string
+  readonly outputId: string
+}
+
+export type MouthPlaybackState =
+  | 'playing'
+  | 'waiting'
+  | 'paused'
+  | 'ended'
+  | 'error'
+  | 'stopped'
+
+/**
+ * One observed media position for an explicitly bound mouth. `positionMs` is
+ * the element's actual `currentTime`; non-playing states carry no promise that
+ * a later observation will arrive.
+ */
+export interface MouthPlaybackSample {
+  readonly key: MouthPlaybackKey
+  readonly state: MouthPlaybackState
+  readonly positionMs: number
+}
+
+export type MouthPlaybackObserver = (sample: MouthPlaybackSample) => void
 
 /**
  * Local execution context for the browser player. The signal aborts on owner
