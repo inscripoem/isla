@@ -10294,3 +10294,40 @@ entries:
         CI on this head is not observed. The branch is two commits behind main
         and the #192 conflict on the log tail is unresolved until one of the
         two merges.
+  - date: "2026-11-25"
+    task: submission-materials-prompt-manifest-opencode
+    change: >-
+      Add prompts/prompt_v1.0.yaml as a manifest for the existing M3 and M4
+      prompt sources, with source paths, SHA-256 values and renderer paths;
+      no prompt text changed. Add the evaluation table generated from the
+      local Magpie group/deepseek-flash pilot, the pilot spec, and a README
+      that describes the repository without issue status. The documentation
+      was written in OpenCode session ses_dee1ab4f6ffe0bBAMLH62GtnCf; the
+      orchestrator generated the table and recorded TA-005.
+    requirements: [FR-01, FR-02]
+    invariants: [INV-14]
+    commits: ["ec3ea2914cdced3488aba4f452222229348c6fe9"]
+    agent: OpenCode V2 build
+    provider: magpie
+    model: group/deepseek-flash
+    variant: high
+    sessions: ["ses_dee1ab4f6ffe0bBAMLH62GtnCf"]
+    supervision: >-
+      The user chose option B and approved the test approval and commit
+      sequence. OpenCode wrote README.md, prompts/prompt_v1.0.yaml and the
+      pilot spec in the recorded session; the orchestrator generated the
+      evaluation table with pnpm evaluation:report and recorded TA-005. No
+      product source, prompt text, test assertion or dependency changed.
+    verification:
+      base: 2b83017736929863210498ed2383ab23e8cd186f
+      results: >-
+        pnpm gate:eval passed with the generated table; pnpm test:gates passed
+        6 files / 193 tests; pnpm test:readiness passed 47 tests; pnpm verify
+        passed 99 files / 2,259 tests with typecheck, lint and build clean;
+        git diff --check reported no whitespace errors. The pilot recorded one
+        case, one completed attempt and no not-run case.
+      limits: >-
+        No push, pull request, merge or live deployment. The pilot used the
+        local Magpie gateway with one selection case; all stage latencies are
+        unobserved and usage is unknown, so the table is not a p95 or a
+        threshold baseline. No Windows run.
