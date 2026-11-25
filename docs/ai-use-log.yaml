@@ -11047,3 +11047,35 @@ entries:
         Windows measurements above predate this change. The local full
         Windows run reproduced the existing missing-base G6 CLI test failure
         when Node loaded an absolute Windows path.
+  - date: "2026-11-25"
+    task: M2-202-g1-waiver
+    branch: m2-202-avatar-viewport
+    change: >-
+      Record PR #211 in the G1 time-boxed waiver list with its reason, and add
+      tests that pin the waiver on and after its expiry. The pull request run
+      failed G1 because the TA-014 approval record was committed after the
+      first code commit; rewriting history to reorder them would fabricate the
+      approval ordering the gate exists to prove, so the exception is recorded
+      instead.
+    requirements: [NFR-02]
+    invariants: []
+    commits: []
+    agent: Trae IDE agent
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    sessions: []
+    supervision: >-
+      The M2 member selected the waiver path from the two legitimate options
+      presented after the CI failure was reproduced locally with the pull
+      request environment variables.
+    verification:
+      base: e398a0bedb4e2efb6cb4908bc824c0f7314e1615
+      results: >-
+        test/offline/test-approval-gate.test.ts passed 42 tests, including the
+        new #211 waiver and post-expiry assertions. gate:test-approval auto
+        passed under GITHUB_EVENT_NAME=pull_request, PR_NUMBER=211 and the pull
+        request changed-file list. pnpm verify exited 0.
+      limits: >-
+        The waiver is an M6-owned policy list; this change requests M6 review
+        rather than deciding the exception. The gate's matching and ordering
+        semantics are unchanged.
