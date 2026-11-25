@@ -10422,3 +10422,38 @@ entries:
         stop are design proposals, not shipped behavior or a measured baseline.
         No live provider, G4 semantic result, acoustic output or Windows run is
         claimed.
+  - date: "2026-11-25"
+    task: d2-state-runtime-policy-closure
+    change: >-
+      Add the session/restart/version-survival matrix to the memory/state
+      design, with the version axes and the rules that keep contract, schema,
+      extractor, persona and prompt versions separate. Add the remaining
+      dialogue, synthesis, renderer, playback, provider-auth, database and
+      startup failure rows to the runtime policy catalog, plus a clearly
+      separate proposed token-overflow row. Mark the provider-auth and
+      database-corruption rows with their missing verifiers rather than
+      claiming coverage, and update the D2 artifact index.
+    requirements: [FR-06, NFR-05, SEC-01, GOV-01, INV-17]
+    invariants: [INV-12]
+    commits: []
+    agent: OpenCode V2 build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
+    supervision: >-
+      The member directed the artifact-closure branch and approved the
+      state/runtime-policy slice. The assistant wrote the documents from the
+      merged storage, context and runtime records; the member reviews the diff
+      before any commit or publication.
+    verification:
+      base: 57ef721b9c5118fcfc5f2a87e79df3a9090f8747
+      results: >-
+        pnpm test:trace passed 52 tests; pnpm test:readiness passed 50 tests;
+        pnpm test:gates passed 6 files / 196 tests; pnpm verify passed 99 files
+        / 2265 tests with a clean typecheck, lint and build; git diff --check
+        reported no whitespace errors.
+      limits: >-
+        No live provider, acoustic output, G4 semantic result or Windows run is
+        claimed. The token-overflow row is proposed, not implemented. The
+        provider-authentication and database-corruption rows name their evidence
+        gaps; they are not coverage claims.
