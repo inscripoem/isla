@@ -1,10 +1,41 @@
 # Isla
 
-Team delivery: [submission checkpoints and per-member handoffs](docs/team/DELIVERY-PLAN.en.md). The plan retains I1-01 / I2-01 and targets a complete candidate on November 22, with November 23-25 reserved for contingency. Progress board: [Isla Roadmap](https://github.com/users/inscripoem/projects/4).
+Repository: https://github.com/inscripoem/isla
 
-Isla is a planned AI VTuber framework: a configurable character runtime with replaceable decision, dialogue, speech and avatar adapters, plus a local console.
+Isla is an AI VTuber runtime: a configurable character runtime with replaceable decision, dialogue, speech and avatar adapters, a local console and a durable session store. The repository holds the runtime, its module implementations, the shared contracts between them and the offline, live and browser test suites.
 
-This checkout contains the shared application contracts, the M5 runtime coordinator, the M1 speech and browser-playback interfaces, the M2 console, M3 rule selection and reaction, M4 dialogue context and M6 SQLite storage. A controlled offline I1 deployment combines the console and these modules with fixed WAV/subtitle assets and controlled dialogue text and rendering. A coordinator-backed evaluation adapter is available for explicit peers and consumers; see the [evaluation handoff](docs/team/HANDOFF-M5-EVALUATION-ADAPTER.en.md). A complete deployment with live dialogue, speech and avatar output remains open. See the [current delivery plan](docs/team/DELIVERY-PLAN.en.md) for component and PR status.
+Delivery status, checkpoint records and per-member handoffs are kept in the [delivery plan](docs/team/DELIVERY-PLAN.en.md) and the [GitHub issue tracker](https://github.com/inscripoem/isla/issues). This README describes the repository itself and does not track individual pieces of work.
+
+## Architecture
+
+One Node.js process owns the session loop. It admits input, asks the decision module for a selection and a reply intent, asks the dialogue module for text, drives speech synthesis and playback, renders avatar actions through the performance module, and records the confirmed result through storage. Modules meet only at the ports and schemas in `src/contracts/`; each module has a production implementation and explicit test substitutes under `test/support/`. The browser console and the automated tests share the same browser-safe performer state machine.
+
+Diagnostic protocol `1` at `/diag` is separate from application protocol `0.2` at `/app`.
+
+## Project organization
+
+| Path | Contents |
+| --- | --- |
+| `src/contracts/` | Shared application schemas and ports (C1-C7); application schemas under `src/contracts/app/`. |
+| `src/runtime/` | Runtime coordinator, application transport, session reconstruction, production CLI and deployment modules. |
+| `src/performance/` | Speech synthesis, audio playback adapters, the browser player and avatar rendering; the browser entry lives in `src/performance/browser/`. |
+| `src/console/` | Browser console, application transport client and the shared performer state machine. |
+| `src/decision/` | Response-plan selection and segment-reaction decisions, with rule and OpenAI-compatible provider adapters. |
+| `src/dialogue/` | Dialogue context, persona content and memory. |
+| `src/storage/` | SQLite persistence, history views and session recovery stores. |
+| `src/evaluation/` | Evaluation adapters, run provenance capture and recording. |
+| `test/offline/` | Default suite collected by `pnpm test`; no model services required. |
+| `test/live/` | Opt-in live provider suites with a standalone Vitest configuration; not collected by `pnpm test`. |
+| `test/browser/` | Playwright browser acceptance, root-entry routing and audio fetch checks. |
+| `test/support/` | Test-only fixtures, substitute peers and the contract runner; production code must not import them. |
+| `docs/req/` | Machine-readable requirements, cases and their schema. |
+| `docs/architecture/` | Architecture blueprint, ADRs and deltas, supported platform, permission model and candidate comparison. |
+| `docs/code-governance/` | Gate tooling, test approvals, structural constraints, verification constraints and the tool manifest. |
+| `docs/team/` | Role entry points, plans, readiness kits, interfaces, requirements and handoffs. |
+| `prompts/` | Versioned prompt specifications, the character bible and the prompt version manifest. |
+| `.opencode/` | Permission policy source (`permissions.jsonc`) and the per-role compiled agent configuration. |
+| `.agent/` | Project covenant (`rules.md`). |
+| `.github/workflows/` | Continuous integration: verification, the D7 gates and the traceability check. |
 
 ## Run locally
 
@@ -23,44 +54,24 @@ pnpm dev:web
 
 Open the local URL printed by Vite (normally `http://127.0.0.1:5173`). The console displays backend health and the diagnostic socket status. Select **Ping diagnostics** to obtain a real response. Start the runtime before opening the page; reload the page to reconnect after a runtime restart. Use Ctrl-C in each terminal to stop it.
 
-The runtime listens on `127.0.0.1:4317`. Vite proxies `/health` and `/diag` (diagnostics), `/app` (application WebSocket) and `/operator` (operator bootstrap) to it, so an application runtime can share the root entry origin with the diagnostics console; the runtime's own origin/host checks still apply to the forwarded request. The root console provides diagnostic and application views; M2 owns the console UI. The optional `ISLA_RUNTIME_HOST` and `ISLA_RUNTIME_PORT` settings are validated; changing the runtime endpoint also requires updating the Vite proxy. No provider credentials or model downloads are needed.
+The runtime listens on `127.0.0.1:4317`. Vite proxies `/health` and `/diag` (diagnostics), `/app` (application WebSocket) and `/operator` (operator bootstrap) to it, so an application runtime can share the root entry origin with the diagnostics console; the runtime's own origin/host checks still apply to the forwarded request. The root console provides diagnostic and application views; the console UI is owned by the console module. The optional `ISLA_RUNTIME_HOST` and `ISLA_RUNTIME_PORT` settings are validated; changing the runtime endpoint also requires updating the Vite proxy. No provider credentials or model downloads are needed.
 
-## Run the first interactive loop (I1)
+## Run the offline interactive loop
 
-The offline product loop (input → selection/intent → dialogue → fixed
-audio/subtitle/reaction → real player receipts → history) runs against the real
-M5 runtime, M4 dialogue/context/memory, M1 playback and M6 in-memory storage.
-The loop uses the merged M3 rule SelectionPort with the runtime clock. Reaction
-and the dialogue text provider remain explicit `test/support` substitutes; the
-fixed text matches the registered WAV assets exactly. Production source imports
-no test code. This is partial I1 adoption; the formal M2 console is a separate
-consumer. Use the [first joint inspection preparation](docs/team/FIRST-I1-INSPECTION.en.md)
-to record the November 1 source, actual results and remaining owner actions.
+The offline product loop (input → selection/intent → dialogue → fixed audio/subtitle/reaction → real player receipts → history) runs against the real runtime, dialogue/context/memory, playback and in-memory storage. The loop uses the rule `SelectionPort` with the runtime clock. Reaction and the dialogue text provider are explicit `test/support` substitutes, and the fixed text matches the registered WAV assets exactly. Production source imports no test code.
 
 ```sh
 pnpm dev:loop                                        # loop runtime on 127.0.0.1:4317
 pnpm exec vite --config test/browser/vite.config.ts  # loop page on 127.0.0.1:5173
 ```
 
-Open `http://127.0.0.1:5173/loop.html` and follow the on-page steps. The
-[I1 application transport handoff](docs/team/HANDOFF-I1-APPLICATION.en.md)
-documents the protocol-0.2 wire messages, authority rules and M2 integration
-points. Diagnostic protocol `1` at `/diag` is unchanged.
+Open `http://127.0.0.1:5173/loop.html` and follow the on-page steps. The [application transport handoff](docs/team/HANDOFF-I1-APPLICATION.en.md) documents the protocol-0.2 wire messages, authority rules and console integration points. Diagnostic protocol `1` at `/diag` is unchanged.
 
-The browser demo and the automated Node performer share the browser-safe
-production state machine (`src/console/performer-machine.ts`). The
-`test/browser/performer-machine.ts` shim re-exports it for test consumers.
-Media events are API observations, not acoustic measurements.
+The browser demo and the automated Node performer share the browser-safe production state machine (`src/console/performer-machine.ts`). The `test/browser/performer-machine.ts` shim re-exports it for test consumers. Media events are API observations, not acoustic measurements.
 
 ## Dynamic audio resource route
 
-The runtime serves registered dynamic audio resources over one explicit
-same-origin route: `POST /audio?ref=<reference>` with the `x-isla-audio-fetch`
-header. The root Vite entry (`pnpm dev`) proxies `/audio` to the runtime, so a
-page served by that entry fetches resources on its own origin; the demo-local
-config above does not proxy it. Admission, lifecycle rechecks, serving slots and
-lease ownership are documented in the
-[dynamic audio handoff](docs/team/HANDOFF-M5-DYNAMIC-AUDIO.en.md).
+The runtime serves registered dynamic audio resources over one explicit same-origin route: `POST /audio?ref=<reference>` with the `x-isla-audio-fetch` header. The root Vite entry (`pnpm dev`) proxies `/audio` to the runtime, so a page served by that entry fetches resources on its own origin; the demo-local config above does not proxy it. Admission, lifecycle rechecks, serving slots and lease ownership are documented in the [dynamic audio handoff](docs/team/HANDOFF-M5-DYNAMIC-AUDIO.en.md).
 
 ```sh
 pnpm dev:loop   # loop runtime on 127.0.0.1:4317
@@ -69,20 +80,11 @@ node test/browser/root-entry-routing.mjs         # root routing and refusal chec
 node test/browser/root-entry-audio-browser.mjs   # real-browser audio fetch acceptance
 ```
 
-The browser acceptance resolves Playwright from the installed packages and lets
-Playwright pick Chromium; on a machine that keeps them outside the project, set
-`ISLA_PLAYWRIGHT_PATH` (Playwright package directory) and `ISLA_CHROMIUM_PATH`
-(Chromium executable).
+The browser acceptance resolves Playwright from the installed packages and lets Playwright pick Chromium; on a machine that keeps them outside the project, set `ISLA_PLAYWRIGHT_PATH` (Playwright package directory) and `ISLA_CHROMIUM_PATH` (Chromium executable).
 
 ## Run the production composition
 
-`pnpm runtime:production` starts the M5 production application: one real SQLite
-database, the M6 store/history view over it, operator-driven session recovery and
-the loopback HTTP/WebSocket server. The entry requires an explicit deployment
-module and never falls back to fixtures. The module exports
-`createProductionDeployment` (or a default export) returning the peer ports, the
-initial archive selection and the allowed origins; the contract is documented in
-the [M5 production composition handoff](docs/team/HANDOFF-M5-PRODUCTION.en.md).
+`pnpm runtime:production` starts the production application: one real SQLite database, the store/history view over it, operator-driven session recovery and the loopback HTTP/WebSocket server. The entry requires an explicit deployment module and never falls back to fixtures. The module exports `createProductionDeployment` (or a default export) returning the peer ports, the initial archive selection and the allowed origins; the contract is documented in the [production composition handoff](docs/team/HANDOFF-M5-PRODUCTION.en.md).
 
 ```sh
 ISLA_DEPLOYMENT_MODULE=/absolute/path/to/deployment.ts pnpm runtime:production
@@ -94,7 +96,7 @@ ISLA_DEPLOYMENT_MODULE=/absolute/path/to/deployment.ts pnpm runtime:production
 | `ISLA_STORAGE_DB_PATH` | SQLite database path; default `.cache/isla/isla.db`, kept outside OneDrive. |
 | `ISLA_RUNTIME_HOST`, `ISLA_RUNTIME_PORT` | Loopback bind address; default `127.0.0.1:4317`. |
 
-The reference live deployment is `src/runtime/deployments/reference-live.ts`. It reads its configuration from the same injected environment, fails startup when any required value is missing or invalid (naming the variables only, never their values), and wires the live text provider, Kokoro synthesis, the VTube Studio renderer and the audio registry. CP04 recorded a **reduced acceptance** of this deployed-product path at `9577069` on 2026-11-20 ([#74](https://github.com/inscripoem/isla/issues/74#issuecomment-7033211812)); issue #74 remains open, and the named acceptance for #96 (M4/M6) and #97 (live pre-playback waiting and provider-failure observations, still open) is outstanding. The module is therefore an accepted-but-scoped live path, not a fully accepted product.
+The reference live deployment is `src/runtime/deployments/reference-live.ts`. It reads its configuration from the same injected environment, fails startup when a required value is missing or invalid (naming the variables only, never their values), and wires the live text provider, Kokoro synthesis, the VTube Studio renderer and the audio registry. [Supported platform](docs/architecture/supported-platform.md) records the target machine, the observed model and voice, and the limits of that observation.
 
 ```sh
 ISLA_DEPLOYMENT_MODULE=src/runtime/deployments/reference-live.ts \
@@ -109,33 +111,19 @@ pnpm runtime:production
 ISLA_VTS_HOTKEY_MAP='{"animation-1":"b66cf516d694446b9e1aafbcf16459a9","animation-2":"c28e206b5e3c4eb5be3c1dcee11f02c0","animation-3":"ad4e0bc1a58746a58002ad180692e649"}'
 ```
 
-The `Hiyori_A` model id and the three hotkey ids are attributed to M1 observations on [issue #95](https://github.com/inscripoem/isla/issues/95); this PR did not re-measure them. `animation-1/2/3` map to `hiyori_m03/m06/m10.motion3.json`; the display names are the model's "My Animation 1/2/3". The host operator keeps the raw model, textures and motions outside the repository. The demo credits must carry Live2D's prescribed Hiyori copyright notice and use content that respects the character terms.
+The `Hiyori_A` model id and the three hotkey ids are recorded platform observations, not re-measured here. `animation-1/2/3` map to `hiyori_m03/m06/m10.motion3.json`; the display names are the model's "My Animation 1/2/3". The host operator keeps the raw model, textures and motions outside the repository. The demo credits must carry Live2D's prescribed Hiyori copyright notice and use content that respects the character terms.
 
-The retained synthesis factory uses the merged M1 PR33/34 interfaces; see the [physical synthesis handoff](docs/team/HANDOFF-M5-PHYSICAL-SYNTHESIS.en.md) for the shared adapter, originating gate and owned-release contract. The controlled deployment combines M3 rule selection and reaction with fixed WAV assets; live M4 text and selected model adapters remain owner deliverables. M5 owns dynamic audio HTTP/resource assembly and physical
-provider lifecycle; M2 is the browser consumer. The module under
-`test/support/` is test-only and is used by the automated CLI suite, not by the
-product entry. SIGINT/SIGTERM perform the controlled shutdown: stop the transport,
-drain admitted turn and receipt bookkeeping, then the queued writes, close the
-database and await deployment-owned release. Readiness follows signal-handler
-registration; shutdown completion requires successful release. Multiple cleanup
-failures remain visible, including on repeated stop calls.
+The synthesis factory uses the speech-synthesis interfaces; the [physical synthesis handoff](docs/team/HANDOFF-M5-PHYSICAL-SYNTHESIS.en.md) documents the shared adapter, originating gate and owned-release contract. A controlled deployment combines rule selection and reaction with fixed WAV assets, while the reference live deployment adds live dialogue text, Kokoro synthesis and the VTS renderer. The runtime owns dynamic audio HTTP/resource assembly and physical provider lifecycle; the console is the browser consumer. The module under `test/support/` is test-only and is used by the automated CLI suite, not by the product entry. SIGINT/SIGTERM perform the controlled shutdown: stop the transport, drain admitted turn and receipt bookkeeping, then the queued writes, close the database and await deployment-owned release. Readiness follows signal-handler registration; shutdown completion requires successful release. Multiple cleanup failures remain visible, including on repeated stop calls.
 
 ### Choose a voice
 
-Open **Session → Voice** to see the English Kokoro voices installed on this
-machine. Choose a voice and click **Preview voice** to hear the same short
-line in that voice. **Stop preview** ends the audition. The **Current voice**
-label shows which voice will be used for replies.
+Open **Session → Voice** to see the English Kokoro voices installed on this machine. Choose a voice and click **Preview voice** to hear the same short line in that voice. **Stop preview** ends the audition. The **Current voice** label shows which voice will be used for replies.
 
-Enable operator controls and click **Use this voice** to save your choice.
-It takes effect on the next conversation turn. A reply already in progress
-finishes in the voice it started with. The reference deployment stores the
-selection beside its SQLite database in `<database path>.voices.json` and
-loads it at startup. The initial voice is Heart.
+Enable operator controls and click **Use this voice** to save your choice. It takes effect on the next conversation turn. A reply already in progress finishes in the voice it started with. The reference deployment stores the selection beside its SQLite database in `<database path>.voices.json` and loads it at startup. The initial voice is Heart.
 
-Voice preview and selection merged after CP04 as #190 (`2889136`), and the three-request VTS dispatch with the `play_not_allowed`/`play_failed` failure reasons merged as #189 (`3a54e6b`). Each carries its own scoped evidence and review on its issue/PR: neither is part of the `9577069` CP04 run. [Supported platform](docs/architecture/supported-platform.md) §2 now records both post-CP04 changes and explicitly retains §5's CP04 freeze at `9577069`; that record does not claim live or named acceptance for either merged change.
+Each VTube Studio hotkey dispatch sends three requests and reports `play_not_allowed` or `play_failed` when the model refuses or fails playback.
 
-## Check the foundation
+## Check the repository
 
 ```sh
 pnpm typecheck
@@ -144,15 +132,23 @@ pnpm test
 pnpm build
 ```
 
-Tests run locally without model services and exercise HTTP/WebSocket success, rejection and lifecycle behavior. `pnpm test` collects only the offline suites in `test/offline/`; the live provider suites in `test/live/` are opt-in and outside CI, run with `pnpm exec vitest run --config test/live/vitest.config.ts`. The build produces the browser bundle; the runtime runs through `tsx`. The [initial scaffold CI passed](https://github.com/inscripoem/isla/actions/runs/37954077638) at commit c717f77. Main requires a protected, approved PR; follow maintainer confirmation and the effective branch rules before merging.
+The three check paths are:
+
+| Path | Command | Scope |
+| --- | --- | --- |
+| Offline | `pnpm test` (or `pnpm verify`) | Every suite in `test/offline/`; no model services or audio device required. |
+| Live | `pnpm exec vitest run --config test/live/vitest.config.ts` | Opt-in provider suites in `test/live/`; excluded from CI and from `pnpm test`, needing the pinned model. |
+| Full | `pnpm verify` | Typecheck, lint, every offline suite and the production build. |
+
+Tests exercise HTTP/WebSocket success, rejection and lifecycle behaviour. The build produces the browser bundle; the runtime runs through `tsx`. Main requires a protected, approved PR; follow maintainer confirmation and the effective branch rules before merging.
 
 ## Blocking gates (D7)
 
-The CI pipeline implements six gate checks plus the traceability fitness function; the design is recorded in [ADR-006](docs/architecture/adr/006-gate-tooling.md) and its [enforcement delta](docs/architecture/delta/006-gate-enforcement.md). G1 uses recorded approval evidence for pull requests created at or after the 2026-11-16T16:01:01Z cutover and keeps the label rule (advisory) for earlier ones; a time-boxed M6 waiver covers #170/#171/#175/#181 through 2026-11-27. #181 is the CP04 M2 console UI-defect slice and is G1-only. G4 reports not run when there is no evidence at all, and fails a measured claim that has no evaluation table or no fixed conditions.
+The CI pipeline implements six gate checks plus the traceability fitness function; the design is recorded in [ADR-006](docs/architecture/adr/006-gate-tooling.md) and its [enforcement delta](docs/architecture/delta/006-gate-enforcement.md). G1 uses recorded approval evidence for pull requests created at or after the 2026-11-16T16:01:01Z cutover and keeps the label rule (advisory) for earlier ones; a time-boxed M6 waiver covers the recorded exception set through 2026-11-27; see docs/code-governance/g1-test-approval-proposal.md. G4 reports not run when there is no evidence at all, and fails a measured claim that has no evaluation table or no fixed conditions.
 
 | Gate | Enforced by |
 | --- | --- |
-| G1 — tests approved before implementation | the **`verify` job**: a PR created at or after the 2026-11-16T16:01:01Z cutover needs `docs/code-governance/test-approvals.yaml` to cover every changed code path and be committed before the first code commit; a PR created before it keeps the `tests-approved` label/advise rule; the M6 time-boxed waiver covers #170/#171/#175/#181 through 2026-11-27, with #181 G1-only and not a CP04/C09 acceptance. The path check covers changed files under `src/` or `prompts/` only (`CODE_OR_PROMPT_PREFIXES`); `tools/` is outside G1 and is covered by G2 and G5 |
+| G1 — tests approved before implementation | the **`verify` job**: a PR created at or after the 2026-11-16T16:01:01Z cutover needs `docs/code-governance/test-approvals.yaml` to cover every changed code path and be committed before the first code commit; a PR created before it keeps the `tests-approved` label/advise rule; the M6 time-boxed waiver covers the recorded exception set through 2026-11-27; see docs/code-governance/g1-test-approval-proposal.md. The path check covers changed files under `src/` or `prompts/` only (`CODE_OR_PROMPT_PREFIXES`); `tools/` is outside G1 and is covered by G2 and G5 |
 | G2 — static analysis + boundary | `pnpm typecheck && pnpm lint` |
 | G3 — requirements schema | `pnpm test:readiness` (contracts, requirements registry and import boundaries); the permission-policy test runs in G5 |
 | G4 — semantic evaluation | `pnpm gate:eval` — reports **not run** only when there is neither a table nor a claim; fails a table that omits the fixed conditions NFR-01 requires, a claim row with no value or conditions, and a measured prose claim with no evaluation table; reviewed exceptions expire in `gate-baseline.yaml` |
@@ -160,25 +156,22 @@ The CI pipeline implements six gate checks plus the traceability fitness functio
 | G6 — AI-use log | `pnpm gate:ai-use-log` over the pull-request diff |
 | traceability | `pnpm test:trace` (INV-13: the chain is machine-checked; a changed frozen path passes only on a verified default-branch restoration for a feature-branch push) |
 
-The effective main rules require the GitHub Actions `verify` check, one approving review after the latest push, and linear history.
-Account-specific bypasses and the untested failed-check refusal are recorded in
-[verification constraints](docs/code-governance/verification-constraints.md). Live providers, browser
-audio and semantic quality thresholds are not proven by these checks.
+The effective main rules require the GitHub Actions `verify` check, one approving review after the latest push, and linear history. Account-specific bypasses and the untested failed-check refusal are recorded in [verification constraints](docs/code-governance/verification-constraints.md). Live providers, browser audio and semantic quality thresholds are not proven by these checks.
 
 ## Team development
 
-Start with [the team development index](docs/team/README.md). The [work plan](docs/team/PLAN.en.md) describes the confirmed allocation, directories and first parallel tasks; [interfaces](docs/team/INTERFACES.en.md) and [candidate requirements](docs/team/REQUIREMENTS.en.md) remain subject to their stated acceptance status.
+Start with [the team development index](docs/team/README.md). The [work plan](docs/team/PLAN.en.md) describes the confirmed allocation, directories and first parallel tasks; [interfaces](docs/team/INTERFACES.en.md) and [candidate requirements](docs/team/REQUIREMENTS.en.md) carry their own acceptance status.
 
-| Role | Main directory | State |
-| --- | --- | --- |
-| M1 speech/player/avatar | `src/performance/` | Synthesis, mapped rendering, browser player and guarded Kokoro worker implemented; live product acceptance pending |
-| M2 console | `src/console/` | Product application transport and browser playback are integrated; live output acceptance remains open |
-| M3 response decisions | `src/decision/` | Rule selection and reaction are integrated in the controlled I1 deployment; model adapters remain open |
-| M4 dialogue/memory | `src/dialogue/` | Dialogue and context are integrated in controlled I1; live provider verification remains open |
-| M5 runtime — CHANG Xuben | `src/runtime/` | Application transport, reconstruction and controlled I1 composition are integrated; live product assembly remains open; [reconstruction](docs/team/HANDOFF-M5-RECONSTRUCTION.en.md) and [production](docs/team/HANDOFF-M5-PRODUCTION.en.md) handoffs |
-| M6 storage/evaluation/CI | `src/storage/`, `src/evaluation/`, `.github/workflows/` | SQLite and offline recording checks are available; product recovery, run provenance and live measurements remain open |
+| Role | Main directory |
+| --- | --- |
+| M1 speech/player/avatar | `src/performance/` |
+| M2 console | `src/console/` |
+| M3 response decisions | `src/decision/` |
+| M4 dialogue/memory | `src/dialogue/` |
+| M5 runtime — CHANG Xuben | `src/runtime/` |
+| M6 storage/evaluation/CI | `src/storage/`, `src/evaluation/`, `.github/workflows/` |
 
-Shared contracts use `src/contracts/` (application schemas and ports under `src/contracts/app/`); tests use `test/offline/` by default, and the opt-in live suites live in `test/live/` (not collected by `pnpm test`). The [architecture blueprint](architecture-blueprint.md) defines editing boundaries. Planned directories are not empty substitute implementations. Each owner can begin against the shared contracts and explicit fixtures; see [readiness kits](docs/team/READINESS-KITS.en.md).
+Shared contracts use `src/contracts/` (application schemas and ports under `src/contracts/app/`); tests use `test/offline/` by default, and the opt-in live suites live in `test/live/` (not collected by `pnpm test`). The [architecture blueprint](architecture-blueprint.md) defines editing boundaries. Each directory holds its stated implementation; unfinished adapters use explicit `test/support` substitutes rather than silent stubs. See [readiness kits](docs/team/READINESS-KITS.en.md) for each owner's starting points.
 
 Each role has an independently runnable conformance command:
 
@@ -190,12 +183,18 @@ pnpm test:readiness     # contracts, requirements, import boundaries
 pnpm verify             # typecheck, lint, all tests, build
 ```
 
-M5 tests exercise the production coordinator and retain the independent fixture reference. Both implementations run the same composition and regression assertions. See the [M5-01 handoff](docs/team/HANDOFF-M5-01.en.md) for imports, configuration and I1-01 integration requests. The production application and process-restart tests additionally exercise real SQLite persistence and application transport. Controlled peer fixtures do not certify live providers or acoustic output.
+The coordinator tests exercise the production coordinator and retain the independent fixture reference. Both implementations run the same composition and regression assertions. The production application and process-restart tests additionally exercise real SQLite persistence and application transport. Controlled peer fixtures do not certify live providers or acoustic output.
 
-The proposed [coding permission model](docs/architecture/permission-model.md) compiles one task-local `build` configuration from an explicit role/path policy. The policy remains under review: it is not auto-loaded, does not activate a blocking gate, and leaves human adoption and branch protection as separate decisions. Provider, model and plugin choices are generation inputs, not committed policy values. The [qualitative architecture candidate comparison](docs/architecture/candidate-comparison.md) consolidates the alternatives already recorded in the ADRs; measured results remain reserved for the G4 evaluation table, which has not been created or run.
+The [coding permission model](docs/architecture/permission-model.md) compiles one task-local `build` configuration from an explicit role/path policy. The policy is not auto-loaded and does not activate a blocking gate; human adoption and branch protection are separate decisions. Provider, model and plugin choices are generation inputs, not committed policy values. The [qualitative architecture candidate comparison](docs/architecture/candidate-comparison.md) consolidates the alternatives recorded in the ADRs; measured results belong to the G4 evaluation table.
+
+## Diagnostics
 
 Diagnostics use version `1`: send `{"v":1,"kind":"ping"}` or `{"v":1,"kind":"get_health"}` to `/diag`. Application actions such as `input.submit` are rejected. This diagnostic protocol is separate from application protocol `0.2` at `/app`.
 
-Keep dependencies, caches and execution data outside OneDrive. Current English collaboration documents are maintained in `docs/team/`; Chinese understanding copies remain in OneDrive. Internal raw records, historical review-only drafts and sharing ZIPs remain in OneDrive or external evidence storage. Coursework submission packages use an explicit English-only whitelist and exclude Chinese copies. Genuine development records are kept in the adjacent external evidence directory.
+## Repository hygiene
+
+Keep dependencies, caches and execution data outside OneDrive. English collaboration documents are maintained in `docs/team/`; Chinese understanding copies remain in OneDrive. Internal raw records, historical review-only drafts and sharing ZIPs remain in OneDrive or external evidence storage. Coursework submission packages use an explicit English-only whitelist and exclude Chinese copies. Genuine development records are kept in the adjacent external evidence directory.
+
+## References
 
 Product references: [AIRI](https://github.com/moeru-ai/airi), [Cortico](https://github.com/Pal-AI-Lab/Cortico), [cortico-world-vtuber](https://github.com/Pal-AI-Lab/cortico-world-vtuber), and the public [Neuro SDK](https://github.com/VedalAI/neuro-sdk). These are references, not claims about Neuro-sama's private implementation.
