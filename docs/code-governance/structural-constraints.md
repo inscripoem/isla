@@ -159,7 +159,7 @@ that does not exist.
 | --- | --- | --- |
 | Module boundary: production must not import `test/`; cross-module calls go through ports (§1.4) | import-boundary tests | ✅ on `main` |
 | Registers are schema-valid; ids are unique and reference existing rows (§3) | readiness suite over `requirements.yaml` / `case-registry.yaml` | ✅ on `main` |
-| The trace chain is complete; dangling references fail (§1.3) | `src/evaluation/trace-fitness.ts` + the `trace` gate | ✅ on `main` (#158, `9492070`); a failing step makes the required `verify` check red |
+| Every cited trace link resolves; every registered requirement has a canonical row and no bare monitor cell (§1.3) | `src/evaluation/trace-fitness.ts` + the `trace` gate (`trace-requirement-missing`, `trace-monitor-missing`, `trace-monitor-unreasoned`) | ✅ on `main` (#158, `9492070`); a failing step makes the required `verify` check red |
 | Frozen paths require an ADR and human review (§7) | `docs/architecture/frozen.yaml` + the `frozen-modified` check, run against the **change set CI supplies** | ✅ on `main` (#158, `9492070`); red `verify` on a violation |
 | Every change updates the AI-use log (G6) | `ai-use-log-gate.ts` + the G6 gate | ✅ on `main` (#158, `9492070`); red `verify` on a violation |
 | One task = one commit; no agent merges; PR checklist | `.github/PULL_REQUEST_TEMPLATE.md` (+ `AGENTS.md`) | ✅ template on `main`; G1 evidence is enforced by the gate, not yet listed in the template (follow-up) |
