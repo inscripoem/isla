@@ -10565,3 +10565,36 @@ entries:
         (DEBT-21), not evidence of pre-implementation approval. The taxonomy
         and ADR-010 remain proposed pending M5/registrar acceptance. No live
         provider, acoustic output or Windows run is claimed.
+  - date: "2026-11-25"
+    task: m3-jev-decisions-adapter
+    change: >-
+      Add the Jev decisions selection and reaction adapters for M3-02. The
+      adapters call the OpenAI Decisions-compatible /v1/decisions endpoint with
+      fixed untrusted-data instructions, map candidate event ids and allowed
+      intents to choice questions, validate the returned proposal against the
+      request, and record the served model and token usage honestly. The
+      m3-jev comparison variant now uses the decisions adapters, while
+      m3-general-model keeps the OpenAI-compatible chat adapters.
+    requirements: [FR-01, FR-03, NFR-03, NFR-04]
+    invariants: [INV-07, INV-13, INV-14, INV-16]
+    cases: [C-06, C-11, C-13, C-14, C-15]
+    commits: ["c462ca0c4b6ccffc9be9e49fe22b753a21dc5867"]
+    agent: OpenCode V2 build
+    provider: self-api
+    model: deepseek-v4-flash
+    sessions: ["ses_dedf1daa3ffeQZGBZC8c6s7MNq"]
+    supervision: >-
+      Implemented in the OpenCode V2 build session from the task brief; the
+      change was reviewed and verified locally.
+    verification:
+      base: 259d075ce7a1089d3748b3612c9a23bee6d9ab88
+      results: >-
+        pnpm test:m3 passed 130 tests; pnpm test:composition passed 12 tests;
+        pnpm test:trace passed 55 tests; pnpm verify passed 99 files / 2284
+        tests with a clean typecheck, lint and build. The opt-in live Jev suite
+        passed 3/3 against the local magpie gateway with typesafe/jev-latest;
+        that live run is not part of the offline gate.
+      limits: >-
+        No push, pull request, merge, CI run or product-wiring run. The live
+        result depends on the local magpie gateway and the configured Jev
+        access and is not a remote-host claim.

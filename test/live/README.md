@@ -47,23 +47,32 @@ embedded URL credentials are rejected. `https://` is required except for loopbac
 `ISLA_LIVE_DECISION_MAX_TOKENS` is optional; when set it must be a positive
 integer, and when absent or blank the adapter default of 256 applies.
 
-### M3 Jev provider (`readLiveJevProviderConfig`)
+### M3 Jev provider (`test/live/m3-jev-decisions.live.test.ts`)
 
 | Variable | Purpose |
 | --- | --- |
-| `ISLA_LIVE_JEV_BASE_URL` | OpenAI-compatible chat-completions base URL for the dedicated Jev model |
-| `ISLA_LIVE_JEV_MODEL` | Jev model identifier |
+| `ISLA_LIVE_JEV_BASE_URL` | TypeSafe Jev decisions base URL (http/https, API root or full `/decisions` endpoint) |
+| `ISLA_LIVE_JEV_MODEL` | Jev model identifier, for example `typesafe/jev-latest` |
 | `ISLA_LIVE_JEV_API_KEY` | Bearer credential |
-| `ISLA_LIVE_JEV_MAX_TOKENS` | Optional positive integer completion-token limit (default 256) |
+| `ISLA_LIVE_JEV_MAX_TOKENS` | Not part of the verified decisions request; it is never sent and has no effect on Jev calls |
+
+Jev is a classifier/decision model, not an OpenAI chat model. This group calls
+`POST /v1/decisions` with the verified body `{ model, input, questions }`, where
+`questions` are typed `choice` questions: `selectedEventId` (offered candidate
+ids plus `defer`) and `replyIntent` (allowed intents plus `none`) for selection,
+and `actionId` (eligible action ids plus `no-op`) and `status` (`selected` or
+`abstained`) for reaction. It never calls `/v1/chat/completions`.
 
 For this group, `ISLA_LIVE_JEV_BASE_URL` accepts either the API root
-(`https://host/v1`) or the full endpoint (`https://host/v1/chat/completions`);
-query parameters on `baseUrl` (such as `?tenant=...` or `?api-version=...`) are
-preserved on the `/chat/completions` request URL, while URL `#` fragments and
-embedded URL credentials are rejected. `https://` is required except for loopback
-`http://` (`localhost`, `127.0.0.1`, `[::1]`). `ISLA_LIVE_JEV_MAX_TOKENS` is
-optional; when set it must be a positive integer, and when absent or blank the
-adapter default of 256 applies.
+(`http://127.0.0.1:3425/v1`) or the full endpoint
+(`http://127.0.0.1:3425/v1/decisions`); the adapter appends `/decisions` only
+when it is not already present. Query parameters on `baseUrl` (such as
+`?tenant=...`) are preserved on the `/decisions` request URL, while URL `#`
+fragments and embedded URL credentials are rejected. `https://` is required
+except for loopback `http://` (`localhost`, `127.0.0.1`, `[::1]`). The served
+model reported by the response (for example `jev-1.14.0`) is recorded as
+`modelVersion` and `usage.resolvedModel`; the configured `model` is recorded as
+`usage.requestedModel`.
 
 The Jev group names the NFR-03 dedicated-model configuration. It is reported
 separately so a measurement run can compare `m3-general-model` with `m3-jev`
@@ -77,9 +86,11 @@ without conflating either credential or endpoint.
   the group unavailable and names the offending variable.
 - URL `#` fragments and embedded URL credentials make an M3 group unavailable;
   query parameters on `baseUrl` (such as `?tenant=...` or `?api-version=...`) are
-  preserved on the `/chat/completions` request URL.
-- An invalid optional `maxTokens` value makes the M3 group unavailable and names
-  only the environment variable, never its value.
+  preserved on the provider request URL.
+- An invalid optional `maxTokens` value makes the corresponding M3 chat-provider
+  group unavailable and names only the environment variable, never its value.
+  The Jev group validates `ISLA_LIVE_JEV_MAX_TOKENS` the same way, but the value
+  is not part of the decisions request and is never sent.
 - An available group runs its live cases; a rejection, timeout or invalid model
   output fails the suite rather than being replaced by fixture data.
 - The offline suites never collect these files, so `pnpm test` is unaffected.
@@ -101,7 +112,8 @@ without conflating either credential or endpoint.
 | `vitest.config.ts` | Opt-in live Vitest configuration; scopes collection to this directory and is not part of the offline gate. |
 | `live-config.ts` | Reads the provider environment groups and reports availability without echoing values. |
 | `live-config.test.ts` | Offline-safe unit and no-secret-echo tests for the live configuration loaders. |
-| `m3-decision.live.test.ts` | M3 live selection and reaction acceptance; skips cleanly when unconfigured. |
+| `m3-decision.live.test.ts` | M3 live selection and reaction acceptance against an OpenAI-compatible provider; skips cleanly when unconfigured. |
+| `m3-jev-decisions.live.test.ts` | M3 live selection and reaction acceptance against TypeSafe Jev `/decisions`; skips cleanly when unconfigured. |
 | `m4-text-source.live.test.ts` | M4 live text-source acceptance; skips cleanly when unconfigured. |
 | `kokoro-*` | M1's Kokoro worker live-verification assets (`kokoro-setup.ts`, `kokoro-smoke.ts`, and the browser config/page/entry); run explicitly via `tsx`, see `src/performance/README.md`. |
 
