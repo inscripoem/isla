@@ -9819,8 +9819,9 @@ entries:
     verification:
       base: dc9cb7baeda55d77051c271c32f6985b0491b11e
       results: >-
-        Focused policy suite 35/35; pnpm typecheck exited 0; rtk proxy pnpm lint
-        exited 0; git diff --check reported no whitespace errors.
+        Focused policy suite 35/35; pnpm test:readiness 47/47; pnpm test:trace
+        49/49; pnpm verify passed 99 files / 2235 tests with typecheck, lint and
+        build; G6 and G1 passed; git diff --check reported no whitespace errors.
       limits: >-
         No native role reload, human adoption or G4 result is claimed. Remote
         CI is observed only after this entry is pushed.
