@@ -1,8 +1,10 @@
 # Isla — Candidate Requirements
 
-Revision: 2026-10-17.3 · Status: under review
+Revision: 2026-11-25.1 · Status: under review
 
 Team requirements under review; English engineering requirements may be promoted to formal D1 after acceptance. This Markdown table does not replace the required YAML/schema. These are proposed acceptance obligations, not implemented capabilities or an approved D1 registry. Stable IDs are retained from the archived candidate draft; FR-01 now explicitly includes reply intent, FR-02 includes dialogue generation, and NFR-06 covers the selected adapter boundaries.
+
+This revision adds INV-17 and records the existing MoSCoW tradeoffs explicitly. It does not change an FR/NFR statement, priority, owner or numeric target.
 
 The scoped YAML register, schemas and case-to-test references now exist in [docs/req](../req/requirements.yaml). They distinguish executable fixture criteria from pending product scenarios and measurements; they do not constitute accepted final D1.
 
@@ -58,8 +60,24 @@ Every final entry requires metric + threshold + verification. TBD means not read
 | INV-14 | A code or prompt change must update `docs/ai-use-log.yaml` (gate G6). | M6 evaluation (`ai-use-log-gate`) + CI | Case C-36; a code/prompt change without a log update fails. |
 | INV-15 | Within one (sessionId, turnId), known segmentIndex values sort ascending before unknowns; ties and unknowns retain input order, with null indices preserved and other sessions/turns excluded. FR-06; issue #25. | M5 reconstruction (`src/runtime/delivery-order.ts`) | C-47 ordering regression; preserve the input history order and never infer an unknown index. INV-08 remains the M6 history-port read order. |
 | INV-16 | Every executed attempt is accounted for, including completed, cancelled and failed attempts; missing usage remains unknown, and an empty sample has no failure-rate claim. An explicit not-run result is not an executed attempt. NFR-01, NFR-04. | M6 evaluation (`summarise`, comparison and report) | C-52/C-53/C-54/C-55/C-69/C-70/C-71; missing usage stays unknown and a not-run result is never counted as an attempt. |
+| INV-17 | The derived-memory store is version-scoped and rebuildable: under one extractor version the cursor never decreases, and derived rows and cursor share that version; owner and derived rows are written only under a durable consenting binding; a session-state write naming a different audience returns conflict; audience deletion and age-based retention are audience-scoped and remove only that audience's derived/owner/state data, never events or deliveries. FR-06, NFR-03, NFR-05. | M6 storage (`src/storage/memory-store.ts`) | C-76 (durable consenting binding), C-77 (different-audience conflict) and C-78 (deletion/retention leaves evidence) in `test/offline/m6-memory-store.test.ts`; C-75 (cursor rebuild-equality) stays pending and unclaimed. |
 
-INV-13/INV-14 and their gate tooling are adopted from merged PR27; main `05b4f13` includes PR32 governance documentation and PR42/C-51. INV-09 remains M5-owned with M6 collaboration, consistent with the YAML register; INV-15/C-47 is retained. M4 C-49/C-50 are effective through merged PR35; C-64 is registered (M4 admission half of the late-evidence boundary, coordinated with M6's storage-half C-67 in [Issue25](https://github.com/inscripoem/isla/issues/25)), and C-56–C-63 remain reservations. M6 INV-16/C-52–C-55 and C-69–C-71 are registered on main. C-73/C-74 are M5 process-lifecycle/restart cases coordinated in [Issue25](https://github.com/inscripoem/isla/issues/25#issuecomment-6313932602); the new rows and INV-12 link were accepted by [M6 review at `8c36cad`](https://github.com/inscripoem/isla/pull/53#pullrequestreview-5599418482). C-72 remains outside this change. Numeric reservations continue in Issue25; no future naming-scheme adoption or application acceptance is implied.
+INV-13/INV-14 and their gate tooling are adopted from merged PR27; main `05b4f13` includes PR32 governance documentation and PR42/C-51. INV-09 remains M5-owned with M6 collaboration, consistent with the YAML register; INV-15/C-47 is retained. M4 C-49/C-50 are effective through merged PR35; C-64 is registered (M4 admission half of the late-evidence boundary, coordinated with M6's storage-half C-67 in [Issue25](https://github.com/inscripoem/isla/issues/25)), and C-56–C-63 remain reservations. M6 INV-16/C-52–C-55 and C-69–C-71 are registered on main. INV-17 and C-76–C-78 are registered at main `d86dbc1` ([ADR-009](../architecture/adr/009-memory-tables.md)); C-75 remains pending. C-73/C-74 are M5 process-lifecycle/restart cases coordinated in [Issue25](https://github.com/inscripoem/isla/issues/25#issuecomment-6313932602); the new rows and INV-12 link were accepted by [M6 review at `8c36cad`](https://github.com/inscripoem/isla/pull/53#pullrequestreview-5599418482). C-72 remains outside this change. Numeric reservations continue in Issue25; no future naming-scheme adoption or application acceptance is implied.
+
+## Priority weighting and recorded tradeoffs
+
+Every FR and NFR row carries a MoSCoW priority in this table and in the YAML registry; `docs/req/req-schema.json` accepts `must`, `should`, `could` and `wont`. The Must set is FR-01, FR-02, FR-04, FR-05, NFR-01, NFR-02, NFR-04 and NFR-05. The Should set is FR-03, FR-06, NFR-03 and NFR-06. No requirement row is currently Could or Won't; the release-level scope decisions below name the deferred and excluded items.
+
+The tradeoff is stated, not implied: control correctness ranks above completing a turn, and integration quality ranks above adding platforms. A Must may therefore spend a turn — Stop, expiry or budget pressure wins over producing output — but may not spend an invariant. A Should item may be deferred without changing the runtime's safety claims. Numeric targets remain TBD and are not implied by a priority.
+
+| Tradeoff | Recorded decision | Evidence |
+| --- | --- | --- |
+| Completeness vs the hard context cap | A turn that cannot fit is dropped rather than letting rendered context exceed `maxCharacters`; the loss is recorded as an exclusion, and a rollup line states only the count | `src/dialogue/context.ts` (`trimToCharacterBudget`); `m4-dialogue.test.ts::honours a zero character budget instead of keeping one turn` |
+| Listener input vs confirmed reply history | Listener transcript rows yield before any confirmed character turn is trimmed | `src/dialogue/context.ts`; `m4-transcript.test.ts::yields every listener line before trimming a character turn, returning to the legacy prompt with the rollup` |
+| State vs working memory under one cap | A kept state block keeps precedence; the working-memory block is dropped whole when the two would exceed the cap | `src/dialogue/context.ts`; `m4-budget.test.ts::drops a working-memory block that fits alone but not alongside a kept state block` |
+| Delivered vs complete speech | Only speech with playback evidence enters confirmed history; incomplete speech is marked in its own section and never presented as heard in full | `src/dialogue/memory-semantics.ts`; `m4-heard-prefix.test.ts::keeps the FR-02 evidence layer unchanged` |
+
+The layer order and budget units behind these decisions are documented in [context-assembly](../architecture/context-assembly.md).
 
 ## Promotion to D1
 

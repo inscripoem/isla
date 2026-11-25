@@ -1,7 +1,8 @@
 # Runtime policy catalog
 
 Status: under review. M6 rows contributed here; other owners' rows pending. Shared document —
-M5 coordination pending. Date: 2026-10-12.
+M5 coordination pending. Date: 2026-10-12; playback and voice rows for merged #189/#190 added
+2026-11-25.
 
 What the system does when each degraded or failure path is triggered. Each failure mode has a
 defined response and operational fallback.
@@ -27,6 +28,25 @@ defined response and operational fallback.
 | Context block dropped for size or for a non-finite dimension | The rendered state or working-memory block exceeds its section cap (`state` / `workingMemory` under a plan, `maxCharacters` without one) or the state and working-memory blocks together exceed `maxCharacters`; or `renderStateBlock` returns null because a dimension is not finite | Drop the block whole (`null`) and record one budget warning naming the block; a state block with a non-finite dimension is dropped with its own distinct validation warning and is not counted as a budget drop (`used` and `dropped` stay 0) | Context assembles without that block; history and recall are unchanged for a dropped working-memory block, and the remaining budget is spent on the other sections in the persona → state → workingMemory order | M4 |
 | State-plus-plan combination (former refusal retired) | `assembleDialogueContext` receives `state` together with a `budgetPlan`; the earlier implementation threw for that combination instead of assembling it | Do not refuse: keep the block only when it fits the plan's `state` section, charge the kept block to `state.used`, and still subtract it from the shared pool so history cannot exceed `maxCharacters` | A block longer than its section cap is dropped whole with the budget warning; the state block keeps precedence and the working-memory block yields first, and the plan's history floor is unchanged | M4 |
 | Contract-violating listener-history source | A `ListenerHistoryPort` returns the selected input's own event, or returns turns out of `(receivedAtMs, eventId)` order | Filter out the selected input's event without recording an exclusion, then stably re-sort by `(receivedAtMs, eventId)` before any cap or budget decision | The assembly is identical to a conforming source with the same turns: the cap keeps and the budget drops the same rows, and the exclusion order does not change | M4 |
+| Browser audio playback failure (`play()`) | `playFailureReason` reads a readable `error.name`: `NotAllowedError` yields `play_not_allowed`; any other value, an unreadable name or message-only `NotAllowedError` text yields `play_failed` | Emit exactly one `failed` receipt with that reason, detach the handle, unsubscribe and release the lease; a prior terminal receipt (for example from Stop) is retained | The segment is not treated as delivered and the existing terminal receipt is not overwritten; a failed detach retains the lease and reports `cleanup_failed` | M1 |
+| Voice selection refused or preference save fails | `voice.select` rejects with `unknown_voice` for an id that is not installed, or `persistence_failed` when the save write throws; the console admits only an operator (`voiceApplyAllowed`) | Reject the selection and leave the active voice unchanged; confirm a new active voice only from the matching `voice.state` acknowledgement | Keep using the prior confirmed voice; a begun turn keeps its starting voice even when another is adopted mid-reply, and preview samples are fenced after Stop, disconnect or replacement | M5 / M2 |
+
+The layer order, budget units and trim rules behind the context rows are
+documented in [context-assembly](context-assembly.md). Supporting checks for the
+two rows added 2026-11-25:
+
+- the two `m1-performance.test.ts` cases that classify a named
+  `NotAllowedError` thrown or rejected by `play()` as `play_not_allowed`;
+- `m1-performance.test.ts::keeps the cancelled terminal when a pending play
+  promise later rejects with a named NotAllowedError`;
+- `voice-settings.test.ts::refuses an unknown or unavailable voice and a failed
+  save without changing the active voice`;
+- `voice-settings.test.ts::keeps both segments of a begun turn in its starting
+  voice and uses the adopted voice next turn`;
+- `console-voice-selection.test.ts::does not let a viewer apply a voice
+  selection`;
+- `console-voice-selection.test.ts::fences stale preview samples after Stop,
+  disconnect and replacement`.
 
 Decision rows are recorded above; synthesis failure and renderer disconnect remain owned by M1/M5
 and pending their entries here.
