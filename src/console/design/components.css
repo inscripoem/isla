@@ -1,0 +1,2435 @@
+/*
+ * Isla Nightloom console — component primitives.
+ *
+ * Every value comes from design/tokens.css; derived shades use color-mix and
+ * rgba on token references only. Components carry their status in text next
+ * to any colour; nothing here relies on hue alone.
+ *
+ * The voice: quiet dark panels with one luminous accent per surface. Glow is
+ * spent on live status only — idle decoration stays flat. No backdrop blur
+ * on repeating panels (it is the single most expensive paint in a scrolling
+ * column); only the fixed header keeps real glass.
+ */
+
+/* --------------------------------------------------------------- *
+ * Panel: dark translucent surface, hairline border, one tone accent
+ * carried by the --tone custom property (title icon + top hairline).
+ * --------------------------------------------------------------- */
+
+.isla-card {
+  --tone: var(--isla-sky);
+  --tone-soft: var(--isla-sky-soft);
+  position: relative;
+  background: linear-gradient(180deg, rgba(24, 29, 58, 0.72), rgba(17, 21, 44, 0.68));
+  border: var(--isla-border-hairline) solid var(--isla-line);
+  border-radius: var(--isla-radius-lg);
+  padding: var(--isla-space-lg) var(--isla-space-lg) var(--isla-space-md);
+  box-shadow: 0 18px 44px rgba(4, 6, 18, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  min-width: 0;
+  overflow: hidden;
+  transition: border-color var(--isla-dur-base) var(--isla-ease-out), transform var(--isla-dur-base) var(--isla-ease-out);
+}
+
+.isla-card--hover:hover {
+  transform: translateY(-2px);
+  border-color: var(--isla-line-bright);
+}
+
+/* Tone hairline across the top edge; brightens on hover. */
+.isla-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1.5px;
+  background: linear-gradient(90deg, transparent, var(--tone), transparent);
+  opacity: 0.4;
+  transition: opacity var(--isla-dur-slow) var(--isla-ease-out);
+  pointer-events: none;
+}
+
+.isla-card--hover:hover::before {
+  opacity: 0.95;
+}
+
+.isla-card--pink { --tone: var(--isla-pink); --tone-soft: var(--isla-pink-soft); }
+.isla-card--sky { --tone: var(--isla-sky); --tone-soft: var(--isla-sky-soft); }
+.isla-card--lime { --tone: var(--isla-yellow); --tone-soft: var(--isla-yellow-soft); }
+.isla-card--purple { --tone: var(--isla-purple); --tone-soft: var(--isla-purple-soft); }
+.isla-card--orange { --tone: var(--isla-orange); --tone-soft: var(--isla-orange-soft); }
+
+.isla-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--isla-space-xs);
+  margin-bottom: var(--isla-space-sm);
+}
+
+.isla-card__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--isla-space-xs);
+  font-size: var(--isla-fs-2xl);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--isla-ink);
+  line-height: var(--isla-lh-tight);
+}
+
+.isla-card__title-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--isla-radius-sm);
+  border: var(--isla-border-hairline) solid var(--isla-line);
+  background: var(--icon-bg, var(--tone-soft));
+  color: var(--tone);
+  font-size: 15px;
+  line-height: 1;
+  flex: none;
+}
+
+.isla-card__title--sub {
+  font-size: var(--isla-fs-md);
+  margin-top: var(--isla-space-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--isla-track-caps);
+  color: var(--isla-muted);
+  position: relative;
+  padding-bottom: 6px;
+}
+
+.isla-card__title--sub::after {
+  content: '';
+  position: absolute;
+  left: 34px;
+  bottom: 0;
+  width: 64px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--isla-marker);
+  opacity: 0.85;
+}
+
+.isla-card__caption {
+  margin: 0 0 var(--isla-space-sm);
+  font-size: var(--isla-fs-sm);
+  line-height: var(--isla-lh);
+  color: var(--isla-muted);
+}
+
+/* --------------------------------------------------------------- *
+ * Status tag: translucent tinted chip; the text always names the
+ * status. Glow is reserved for the live dot, not the whole chip.
+ * --------------------------------------------------------------- */
+
+.isla-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  border-radius: var(--isla-radius-pill);
+  border: var(--isla-border-hairline) solid var(--tag-line, var(--isla-line));
+  font-size: var(--isla-fs-xs);
+  font-weight: 800;
+  letter-spacing: var(--isla-track-caps);
+  text-transform: uppercase;
+  line-height: 1.6;
+  white-space: nowrap;
+  background: var(--tag-bg, var(--isla-purple-soft));
+  color: var(--tag-fg, var(--isla-purple));
+}
+
+.isla-tag__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.isla-tag__dot--pulse {
+  animation: isla-dot-pulse 1.8s var(--isla-ease-in-out) infinite;
+}
+
+@keyframes isla-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.isla-tag--mono {
+  font-family: var(--isla-font-mono);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* --------------------------------------------------------------- *
+ * Button: flat pill; primary carries the sky->pink gradient. The
+ * element renders only its label text: browser acceptance checks
+ * match these buttons by exact text.
+ * --------------------------------------------------------------- */
+
+.isla-btn {
+  --btn-bg: var(--isla-surface-soft);
+  --btn-fg: var(--isla-ink);
+  --btn-border: var(--isla-line);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--isla-space-xs);
+  padding: 8px 18px;
+  border-radius: var(--isla-radius-pill);
+  border: var(--isla-border-hairline) solid var(--btn-border);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font-family: var(--isla-font);
+  font-size: var(--isla-fs-md);
+  font-weight: 700;
+  line-height: 1.3;
+  transition: transform var(--isla-dur-fast) var(--isla-ease-spring), background-color var(--isla-dur-fast) var(--isla-ease-out),
+    border-color var(--isla-dur-fast) var(--isla-ease-out), filter var(--isla-dur-fast) var(--isla-ease-out);
+  user-select: none;
+}
+
+.isla-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--isla-line-bright);
+  filter: brightness(1.1);
+}
+
+.isla-btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.98);
+}
+
+.isla-btn:disabled {
+  opacity: 0.4;
+  filter: saturate(0.5);
+}
+
+.isla-btn--primary {
+  /* Darkened stops keep white text >= 4.5:1 across the whole gradient. */
+  --btn-bg: linear-gradient(
+    120deg,
+    color-mix(in srgb, var(--isla-sky) 60%, var(--isla-page-deep)),
+    color-mix(in srgb, var(--isla-pink) 60%, var(--isla-page-deep))
+  );
+  --btn-fg: #fff;
+  --btn-border: transparent;
+}
+
+.isla-btn--danger {
+  --btn-bg: linear-gradient(
+    120deg,
+    color-mix(in srgb, var(--isla-red) 58%, var(--isla-page-deep)),
+    color-mix(in srgb, var(--isla-red) 38%, var(--isla-page-deep))
+  );
+  --btn-fg: #fff;
+  --btn-border: transparent;
+}
+
+.isla-btn--lime {
+  --btn-bg: linear-gradient(120deg, var(--isla-yellow), var(--isla-orange));
+  --btn-fg: #3d2c00;
+  --btn-border: transparent;
+}
+
+.isla-btn--ghost {
+  --btn-bg: var(--isla-surface-soft);
+}
+
+.isla-btn--sm {
+  padding: 5px 13px;
+  font-size: var(--isla-fs-sm);
+}
+
+.isla-btn__spin {
+  animation: isla-spin 900ms linear infinite;
+}
+
+@keyframes isla-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* --------------------------------------------------------------- *
+ * Facts: the dl.facts grid every acceptance script reads, as quiet
+ * machine readout rows with hairline separators.
+ * --------------------------------------------------------------- */
+
+.facts {
+  display: grid;
+  grid-template-columns: minmax(96px, max-content) minmax(0, 1fr);
+  gap: 0 var(--isla-space-md);
+  margin: 0;
+  padding: 0;
+}
+
+.facts dt {
+  font-size: var(--isla-fs-xs);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: var(--isla-track-caps);
+  color: var(--isla-muted);
+  padding: 5px 0;
+  border-bottom: 1px dashed var(--isla-line-soft);
+}
+
+.facts dd {
+  margin: 0;
+  font-family: var(--isla-font-mono);
+  font-size: var(--isla-fs-sm);
+  line-height: 1.8;
+  color: var(--isla-ink-soft);
+  overflow-wrap: anywhere;
+  min-width: 0;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--isla-line-soft);
+}
+
+.facts dt:last-of-type,
+.facts dd:last-of-type {
+  border-bottom: none;
+}
+
+/* --------------------------------------------------------------- *
+ * Hint / alert / empty states
+ * --------------------------------------------------------------- */
+
+.isla-hint {
+  margin: var(--isla-space-xs) 0 0;
+  font-size: var(--isla-fs-sm);
+  line-height: var(--isla-lh);
+  color: var(--isla-muted);
+}
+
+.isla-alert {
+  margin: var(--isla-space-sm) 0 0;
+  padding: var(--isla-space-xs) var(--isla-space-sm);
+  border-radius: var(--isla-radius-sm);
+  border: var(--isla-border-hairline) solid rgba(255, 107, 129, 0.5);
+  background: var(--isla-red-soft);
+  color: var(--isla-red);
+  font-size: var(--isla-fs-sm);
+  line-height: var(--isla-lh);
+  overflow-wrap: anywhere;
+}
+
+.isla-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--isla-space-xs);
+  margin: var(--isla-space-sm) 0 0;
+  padding: var(--isla-space-sm) var(--isla-space-md);
+  border: 1px dashed var(--isla-line);
+  border-radius: var(--isla-radius-md);
+  color: var(--isla-muted);
+  font-size: var(--isla-fs-sm);
+  background: var(--isla-surface-dim);
+}
+
+.isla-empty__mark {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  transform: rotate(45deg);
+  border-radius: 2px;
+  background: var(--isla-glow-line);
+}
+
+/* Drawn line glyphs (ui.tsx Glyph). */
+.isla-glyph {
+  display: block;
+}
+
+.isla-divider {
+  border: none;
+  border-top: 1px dashed var(--isla-line);
+  margin: var(--isla-space-md) 0 var(--isla-space-sm);
+}
+
+/* --------------------------------------------------------------- *
+ * Composer: source chips + input field.
+ * --------------------------------------------------------------- */
+
+.isla-segment {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px;
+  border: var(--isla-border-hairline) solid var(--isla-line);
+  border-radius: var(--isla-radius-pill);
+  background: var(--isla-surface-dim);
+}
+
+.isla-segment__item {
+  position: relative;
+  border: var(--isla-border-hairline) solid transparent;
+  border-radius: var(--isla-radius-pill);
+  background: transparent;
+  color: var(--isla-muted);
+  font-family: var(--isla-font);
+  font-size: var(--isla-fs-sm);
+  font-weight: 700;
+  padding: 4px 13px;
+  transition: color var(--isla-dur-fast) var(--isla-ease-out), background-color var(--isla-dur-fast) var(--isla-ease-out),
+    border-color var(--isla-dur-fast) var(--isla-ease-out);
+}
+
+.isla-segment__item:hover:not(:disabled) {
+  color: var(--isla-ink);
+}
+
+.isla-segment__item:disabled {
+  opacity: 0.45;
+}
+
+.isla-segment__item[aria-pressed='true'],
+.isla-segment__item.is-active {
+  background: var(--isla-pink-soft);
+  border-color: var(--isla-pink);
+  color: var(--isla-pink);
+}
+
+.isla-input {
+  width: 100%;
+  padding: 11px 16px;
+  border: var(--isla-border-hairline) solid var(--isla-line);
+  border-radius: var(--isla-radius-md);
+  background: rgba(8, 11, 26, 0.55);
+  color: var(--isla-ink);
+  font-family: var(--isla-font);
+  font-size: var(--isla-fs-md);
+  font-weight: 500;
+  transition: box-shadow var(--isla-dur-fast) var(--isla-ease-out), border-color var(--isla-dur-fast) var(--isla-ease-out);
+}
+
+.isla-input::placeholder {
+  color: var(--isla-muted);
+  opacity: 0.8;
+}
+
+.isla-input:focus {
+  outline: none;
+  border-color: var(--isla-pink);
+  box-shadow: 0 0 0 1px var(--isla-pink);
+}
+
+.isla-input:disabled {
+  opacity: 0.5;
+}
+
+/* --------------------------------------------------------------- *
+ * Checkbox: a quiet box that lights up when checked.
+ * --------------------------------------------------------------- */
+
+.isla-check {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--isla-space-xs);
+  font-size: var(--isla-fs-sm);
+  line-height: var(--isla-lh);
+  color: var(--isla-ink-soft);
+}
+
+.isla-check input[type='checkbox'] {
+  appearance: none;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 1px 0 0;
+  border: var(--isla-border-soft) solid var(--isla-line);
+  border-radius: 7px;
+  background: var(--isla-surface-dim);
+  display: inline-grid;
+  place-items: center;
+  transition: background-color var(--isla-dur-fast) var(--isla-ease-out), transform var(--isla-dur-fast) var(--isla-ease-spring);
+}
+
+.isla-check input[type='checkbox']::after {
+  content: '✓';
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--isla-page-deep);
+  transform: scale(0);
+  transition: transform var(--isla-dur-fast) var(--isla-ease-spring);
+}
+
+.isla-check input[type='checkbox']:checked {
+  background: var(--isla-mint);
+  transform: rotate(-4deg);
+}
+
+.isla-check input[type='checkbox']:checked::after {
+  transform: scale(1);
+}
+
+.isla-check input[type='checkbox']:disabled {
+  opacity: 0.45;
+}
+
+/* --------------------------------------------------------------- *
+ * Chat feed: outcome-barred rows entering with a spring pop.
+ * --------------------------------------------------------------- */
+
+.isla-chat {
+  list-style: none;
+  margin: var(--isla-space-sm) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--isla-space-xs);
+}
+
+.isla-chat__item {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 9px 14px 9px 18px;
+  border-radius: var(--isla-radius-md);
+  border: var(--isla-border-hairline) solid var(--isla-line-soft);
+  background: var(--chat-bg, rgba(255, 255, 255, 0.07));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  overflow-wrap: anywhere;
+  min-width: 0;
+  animation: isla-chat-in var(--isla-dur-slow) var(--isla-ease-spring);
+}
+
+@keyframes isla-chat-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.isla-chat__item--pending {
+  animation: isla-chat-pending 1.6s var(--isla-ease-in-out) infinite;
+}
+
+@keyframes isla-chat-pending {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.72; }
+}
+
+.isla-chat__name {
+  font-weight: 800;
+  font-size: var(--isla-fs-sm);
+  color: var(--chat-name, var(--isla-pink));
+}
+
+.isla-chat__text {
+  flex: 1 1 200px;
+  min-width: 0;
+  font-size: var(--isla-fs-base);
+  font-weight: 500;
+  color: var(--isla-ink);
+  overflow-wrap: anywhere;
+}
+
+.isla-chat__meta {
+  font-family: var(--isla-font-mono);
+  font-size: var(--isla-fs-xs);
+  color: var(--isla-muted);
+  overflow-wrap: anywhere;
+}
+
+.isla-chat__detail {
+  flex-basis: 100%;
+  font-size: var(--isla-fs-xs);
+  color: var(--isla-muted);
+  overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------------- *
+ * Collapse (event log rows) + code.
+ * --------------------------------------------------------------- */
+
+.isla-collapse {
+  border: var(--isla-border-hairline) solid var(--isla-line-soft);
+  border-radius: var(--isla-radius-sm);
+  background: var(--isla-surface-dim);
+  overflow: hidden;
+  transition: border-color var(--isla-dur-fast) var(--isla-ease-out), background-color var(--isla-dur-fast) var(--isla-ease-out);
+}
+
+.isla-collapse + .isla-collapse {
+  margin-top: var(--isla-space-xs);
+}
+
+.isla-collapse:hover,
+.isla-collapse.is-open {
+  border-color: var(--isla-sky);
+  background: var(--isla-sky-soft);
+}
+
+.isla-collapse__head {
+  display: flex;
+  align-items: center;
+  gap: var(--isla-space-xs);
+  width: 100%;
+  padding: 9px 14px;
+  border: none;
+  background: transparent;
+  font-family: var(--isla-font-mono);
+  font-size: var(--isla-fs-sm);
+  font-weight: 600;
+  color: var(--isla-ink-soft);
+  text-align: left;
+}
+
+.isla-collapse__chevron {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--isla-sky);
+  border-bottom: 2px solid var(--isla-sky);
+  /* collapsed: points right; open: points down */
+  transform: rotate(-45deg);
+  transition: transform var(--isla-dur-base) var(--isla-ease-spring);
+}
+
+.isla-collapse.is-open .isla-collapse__chevron,
+.isla-collapse__chevron.is-open {
+  transform: rotate(45deg);
+}
+
+.isla-collapse__body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--isla-dur-slow) var(--isla-ease-out);
+}
+
+.isla-collapse.is-open .isla-collapse__body {
+  grid-template-rows: 1fr;
+}
+
+.isla-collapse__inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.isla-code {
+  margin: 0;
+  padding: var(--isla-space-sm);
+  border-top: 1px dashed var(--isla-line-soft);
+  background: rgba(8, 11, 26, 0.55);
+  color: var(--isla-ink-soft);
+  font-family: var(--isla-font-mono);
+  font-size: var(--isla-fs-xs);
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* --------------------------------------------------------------- *
+ * Stage: the performance surface. A quiet dark proscenium — HUD row
+ * on top, the waveform visualizer in the centre, the streamed
+ * subtitle as the hero line. All decoration is typographic.
+ * --------------------------------------------------------------- */
+
+.isla-stage {
+  position: relative;
+  overflow: hidden;
+  border: var(--isla-border-hairline) solid var(--isla-line);
+  border-radius: var(--isla-radius-xl);
+  background:
+    radial-gradient(640px 320px at 50% 118%, rgba(90, 168, 240, 0.13), transparent 72%),
+    radial-gradient(480px 260px at 50% -18%, rgba(255, 123, 184, 0.1), transparent 72%),
+    linear-gradient(180deg, rgba(19, 23, 48, 0.74), rgba(13, 15, 34, 0.8));
+  min-height: 240px;
+  padding: var(--isla-space-md) var(--isla-space-lg) var(--isla-space-xl);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--isla-space-lg);
+  box-shadow: 0 18px 44px rgba(4, 6, 18, 0.42), 0 0 26px rgba(255, 123, 184, 0.26),
+    inset 0 0 22px rgba(255, 123, 184, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Pink laser frame: a constant faint pink ring plus a beam that sweeps
+ * the edge forever. The layer is carved into a ring with an xor mask, so
+ * the rotating conic gradient only ever paints the 2.5px border band —
+ * the beam never crosses the stage interior. */
+.isla-stage__laser {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  pointer-events: none;
+  overflow: hidden;
+  padding: 2.5px;
+  background: rgba(255, 123, 184, 0.32);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+}
+
+.isla-stage__laser::before {
+  content: '';
+  position: absolute;
+  inset: -120%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0 66%,
+    rgba(255, 123, 184, 0.08) 74%,
+    rgba(255, 123, 184, 0.5) 86%,
+    rgba(255, 216, 236, 0.95) 92%,
+    rgba(255, 212, 107, 0.7) 94.5%,
+    transparent 96.5%
+  );
+  animation: isla-laser-orbit 7s linear infinite;
+}
+
+@keyframes isla-laser-orbit {
+  to { transform: rotate(1turn); }
+}
+
+/* HUD row: lifecycle + pipeline stage + the active output id and its
+ * newest local receipt. It wraps instead of clipping inside the stage. */
+.isla-stage__hud {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--isla-space-xs);
+  width: 100%;
+  min-width: 0;
+}
+
+.isla-stage__meta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--isla-space-xs);
+  margin-left: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.isla-stage__output {
+  font-family: var(--isla-font-mono);
+  font-size: var(--isla-fs-xs);
+  color: var(--isla-muted);
+  overflow-wrap: anywhere;
+}
+
+.isla-stage__receipt {
+  font-family: var(--isla-font-mono);
+  font-size: var(--isla-fs-xs);
+  color: var(--isla-sky);
+  overflow-wrap: anywhere;
+}
+
+.isla-stage__faults {
+  font-family: var(--isla-font-mono);
+  font-size: var(--isla-fs-xs);
+  color: var(--isla-red);
+  overflow-wrap: anywhere;
+}
+
+/* Centre visualizer with its state word. */
+.isla-stage__viz {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.isla-stage__state {
+  font-family: var(--isla-font-mono);
+  font-size: var(--isla-fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--isla-muted);
+}
+
+/* Waveform: nine bars with a frozen per-bar level; while speaking they
+ * breathe up from their level to full height at staggered phases. */
+.isla-eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 88px;
+  padding-bottom: 8px;
+  border-bottom: var(--isla-border-hairline) solid var(--isla-line-soft);
+}
+
+.isla-eq__bar {
+  --level: 0.14;
+  width: 7px;
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(180deg, var(--isla-sky), var(--isla-pink));
+  transform-origin: bottom;
+  transform: scaleY(var(--level));
+  opacity: 0.32;
+  transition: opacity var(--isla-dur-base) var(--isla-ease-out);
+}
+
+.isla-eq__bar:nth-child(1) { --level: 0.3; }
+.isla-eq__bar:nth-child(2) { --level: 0.55; }
+.isla-eq__bar:nth-child(3) { --level: 0.42; }
+.isla-eq__bar:nth-child(4) { --level: 0.78; }
+.isla-eq__bar:nth-child(5) { --level: 0.95; }
+.isla-eq__bar:nth-child(6) { --level: 0.7; }
+.isla-eq__bar:nth-child(7) { --level: 0.48; }
+.isla-eq__bar:nth-child(8) { --level: 0.62; }
+.isla-eq__bar:nth-child(9) { --level: 0.36; }
+
+.isla-eq.is-speaking .isla-eq__bar {
+  opacity: 1;
+  animation: isla-eq-bounce 1s var(--isla-ease-in-out) infinite;
+}
+
+.isla-eq__bar:nth-child(2n) { animation-duration: 0.84s; }
+.isla-eq__bar:nth-child(3n) { animation-duration: 1.12s; }
+.isla-eq__bar:nth-child(2) { animation-delay: 90ms; }
+.isla-eq__bar:nth-child(3) { animation-delay: 180ms; }
+.isla-eq__bar:nth-child(4) { animation-delay: 40ms; }
+.isla-eq__bar:nth-child(5) { animation-delay: 240ms; }
+.isla-eq__bar:nth-child(6) { animation-delay: 120ms; }
+.isla-eq__bar:nth-child(7) { animation-delay: 300ms; }
+.isla-eq__bar:nth-child(8) { animation-delay: 60ms; }
+.isla-eq__bar:nth-child(9) { animation-delay: 210ms; }
+
+@keyframes isla-eq-bounce {
+  0%, 100% { transform: scaleY(var(--level)); }
+  50% { transform: scaleY(1); }
+}
+
+/* Streamed subtitle: the hero line of the stage, plain luminous type. */
+.isla-subtitle {
+  max-width: 62ch;
+  min-height: 2.6em;
+  margin: 0;
+  font-size: var(--isla-fs-subtitle-stream);
+  font-weight: 800;
+  line-height: var(--isla-lh-tight);
+  text-align: center;
+  color: var(--isla-ink);
+  overflow-wrap: anywhere;
+}
+
+.isla-subtitle--empty {
+  color: var(--isla-muted);
+  font-weight: 600;
+}
+
+.isla-subtitle__caret {
+  display: inline-block;
+  width: 3px;
+  height: 1em;
+  margin-left: 3px;
+  vertical-align: -0.15em;
+  background: var(--isla-pink);
+  box-shadow: 0 0 8px var(--isla-pink-glow);
+  animation: isla-caret-blink 0.9s steps(2) infinite;
+}
+
+@keyframes isla-caret-blink {
+  50% { opacity: 0; }
+}
+
+.isla-reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border: var(--isla-border-hairline) solid rgba(255, 212, 107, 0.55);
+  border-radius: var(--isla-radius-pill);
+  background: var(--isla-yellow-soft);
+  color: var(--isla-yellow);
+  font-weight: 800;
+  font-size: var(--isla-fs-sm);
+  animation: isla-pop-in var(--isla-dur-slow) var(--isla-ease-spring);
+}
+
+@keyframes isla-pop-in {
+  0% { opacity: 0; transform: scale(0.7) rotate(-6deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+/* --------------------------------------------------------------- *
+ * Receipt meter: gradient columns on a quiet track.
+ * --------------------------------------------------------------- */
+
+.isla-meter {
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(6px, 1.6vw, 14px);
+  height: 120px;
+  padding: var(--isla-space-sm);
+  border: 1px dashed var(--isla-line-soft);
+  border-radius: var(--isla-radius-md);
+  background: var(--isla-surface-dim);
+}
+
+.isla-meter__col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.isla-meter__bar {
+  width: 100%;
+  max-width: 46px;
+  border-radius: 8px 8px 3px 3px;
+  background: linear-gradient(180deg, var(--bar-fill, var(--isla-purple)), transparent);
+  min-height: 5px;
+  transform-origin: bottom;
+  animation: isla-bar-grow var(--isla-dur-slow) var(--isla-ease-spring);
+}
+
+@keyframes isla-bar-grow {
+  from { transform: scaleY(0.15); }
+  to { transform: scaleY(1); }
+}
+
+.isla-meter__count {
+  font-family: var(--isla-font-mono);
+  font-size: var(--isla-fs-xs);
+  font-weight: 700;
+  color: var(--isla-ink-soft);
+}
+
+.isla-meter__label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--isla-muted);
+  white-space: nowrap;
+}
+
+.isla-meter__fill--accepted { --bar-fill: var(--isla-mint); }
+.isla-meter__fill--started { --bar-fill: var(--isla-sky); }
+.isla-meter__fill--completed { --bar-fill: var(--isla-purple); }
+.isla-meter__fill--cancelled { --bar-fill: var(--isla-yellow); }
+.isla-meter__fill--failed { --bar-fill: var(--isla-red); }
+.isla-meter__fill--unknown { --bar-fill: var(--isla-orange); }
+
+/* Timeline dots: newest receipts as a strip of beads. */
+.isla-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: var(--isla-space-sm);
+}
+
+.isla-strip__dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 5px;
+  background: var(--bar-fill, var(--isla-purple));
+  animation: isla-pop-in var(--isla-dur-base) var(--isla-ease-spring);
+}
+
+/* --------------------------------------------------------------- *
+ * Pipeline stepper: quiet nodes with a luminous conveyor.
+ * --------------------------------------------------------------- */
+
+.isla-pipeline {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  flex-wrap: wrap;
+}
+
+.isla-pipe-node {
+  flex: 1 1 0;
+  min-width: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+  padding: 0 4px;
+  text-align: center;
+}
+
+.isla-pipe-node::before {
+  content: '';
+  position: absolute;
+  top: 17px;
+  left: calc(-50% + 20px);
+  right: calc(50% + 20px);
+  height: 2px;
+  border-radius: 2px;
+  background: var(--isla-line-soft);
+}
+
+.isla-pipe-node:first-child::before {
+  display: none;
+}
+
+.isla-pipe-node.is-reached::before {
+  background: repeating-linear-gradient(90deg, var(--isla-sky) 0 8px, transparent 8px 14px);
+  background-size: 14px 2px;
+  animation: isla-conveyor 1.2s linear infinite;
+}
+
+@keyframes isla-conveyor {
+  to { background-position: 14px 0; }
+}
+
+.isla-pipe__bullet {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: var(--isla-border-hairline) solid var(--isla-line);
+  border-radius: 50%;
+  background: var(--isla-surface-dim);
+  color: var(--isla-muted);
+  font-size: 15px;
+  z-index: 1;
+  transition: background-color var(--isla-dur-base) var(--isla-ease-out), color var(--isla-dur-base) var(--isla-ease-out),
+    box-shadow var(--isla-dur-base) var(--isla-ease-out), transform var(--isla-dur-base) var(--isla-ease-spring);
+}
+
+.isla-pipe-node.is-reached .isla-pipe__bullet {
+  background: var(--isla-sky-soft);
+  color: var(--isla-sky);
+  border-color: rgba(90, 168, 240, 0.5);
+}
+
+.isla-pipe-node.is-current .isla-pipe__bullet {
+  background: var(--isla-pink);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 0 14px var(--isla-pink-glow);
+  transform: scale(1.14);
+}
+
+.isla-pipe__label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--isla-muted);
+}
+
+.isla-pipe-node.is-current .isla-pipe__label {
+  color: var(--isla-pink);
+}
+
+/* --------------------------------------------------------------- *
+ * Header seq pop + compact stat chip.
+ * --------------------------------------------------------------- */
+
+.isla-pop {
+  animation: isla-pop-num var(--isla-dur-base) var(--isla-ease-spring);
+}
+
+@keyframes isla-pop-num {
+  0% { transform: scale(1.25); background-color: var(--isla-yellow-soft); }
+  100% { transform: scale(1); background-color: transparent; }
+}
+
+.isla-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--isla-radius-pill);
+  border: var(--isla-border-hairline) solid var(--isla-line);
+  background: var(--isla-surface-dim);
+  font-family: var(--isla-font-mono);
+  font-size: var(--isla-fs-xs);
+  font-weight: 600;
+  color: var(--isla-ink-soft);
+  white-space: nowrap;
+  max-width: 44ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --------------------------------------------------------------- *
+ * Toasts: solid dark cards with a luminous edge per type. No backdrop
+ * blur — they stack over a dark sky anyway.
+ * --------------------------------------------------------------- */
+
+.isla-toasts {
+  position: fixed;
+  right: var(--isla-space-md);
+  bottom: var(--isla-space-md);
+  z-index: 9000;
+  display: flex;
+  flex-direction: column;
+  gap: var(--isla-space-xs);
+  max-width: min(360px, calc(100vw - 2 * var(--isla-space-md)));
+}
+
+.isla-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--isla-space-xs);
+  padding: 10px 14px;
+  border: var(--isla-border-hairline) solid var(--isla-line-bright);
+  border-radius: var(--isla-radius-md);
+  background: rgba(20, 25, 50, 0.96);
+  box-shadow: 0 18px 44px rgba(4, 6, 18, 0.5);
+  animation: isla-toast-in var(--isla-dur-slow) var(--isla-ease-spring);
+}
+
+.isla-toast--leaving {
+  opacity: 0;
+  transform: translateX(24px);
+  transition: opacity var(--isla-dur-exit) var(--isla-ease-in-out), transform var(--isla-dur-exit) var(--isla-ease-in-out);
+}
+
+@keyframes isla-toast-in {
+  from { opacity: 0; transform: translateX(40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.isla-toast__icon {
+  flex: none;
+  font-size: var(--isla-fs-lg);
+}
+
+.isla-toast__message {
+  margin: 0;
+  font-weight: 700;
+  font-size: var(--isla-fs-base);
+  color: var(--isla-ink);
+}
+
+.isla-toast__description {
+  margin: 2px 0 0;
+  font-size: var(--isla-fs-xs);
+  line-height: var(--isla-lh);
+  color: var(--isla-muted);
+  overflow-wrap: anywhere;
+}
+
+.isla-toast__close {
+  margin-left: auto;
+  flex: none;
+  border: none;
+  background: transparent;
+  color: var(--isla-muted);
+  font-size: var(--isla-fs-lg);
+  line-height: 1;
+}
+
+.isla-toast__close:hover {
+  color: var(--isla-pink);
+}
+
+.isla-toast--success { border-color: rgba(82, 224, 176, 0.55); }
+.isla-toast--error { border-color: rgba(255, 107, 129, 0.55); }
+.isla-toast--info { border-color: rgba(90, 168, 240, 0.55); }
+
+
+/* --------------------------------------------------------------- *
+ * Brand flip board: the handwritten ISLA draws stroke by stroke,
+ * holds, then the board flips over (rotateX) and the kanban cast
+ * walks out. STUDIO stays beside the board as kinetic gradient type.
+ * --------------------------------------------------------------- */
+
+.isla-brand__board {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--isla-space-sm);
+  min-width: 0;
+  perspective: 700px;
+}
+
+.isla-brand__flip {
+  position: relative;
+  width: clamp(132px, 15vw, 200px);
+  height: clamp(44px, 4.6vw, 58px);
+  transform-style: preserve-3d;
+  transition: transform 950ms var(--isla-ease-spring);
+}
+
+.isla-brand__flip.is-kanban {
+  transform: rotateX(-180deg);
+}
+
+.isla-brand__face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--isla-radius-md);
+  border: var(--isla-border-hairline) solid var(--isla-line);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.isla-brand__face--kanban {
+  transform: rotateX(180deg);
+  background: linear-gradient(165deg, rgba(255, 123, 184, 0.12), rgba(90, 168, 240, 0.08));
+}
+
+.isla-brand__write {
+  /* preserveAspectRatio centers the signature in the full-width board. */
+  width: 100%;
+  height: 100%;
+}
+
+.isla-write {
+  display: block;
+}
+
+.isla-write__stroke {
+  fill: none;
+  stroke: url(#isla-write-grad);
+  stroke-width: 7.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: isla-write-draw var(--dd, 600ms) var(--isla-ease-out) var(--d, 0ms) forwards;
+  filter: drop-shadow(0 0 6px rgba(255, 123, 184, 0.35));
+}
+
+@keyframes isla-write-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+/* The kanban cast. */
+.isla-kanban {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 3px;
+  flex: none;
+}
+
+.isla-kanban__member {
+  display: inline-flex;
+  animation: isla-kanban-bob 3s var(--isla-ease-in-out) infinite;
+  animation-delay: var(--bob-delay, 0ms);
+}
+
+.isla-kanban__sprite {
+  display: block;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  animation-name: isla-kanban-step;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes isla-kanban-step {
+  0%, 24.9% { background-position: 0 var(--ky); }
+  25%, 49.9% { background-position: calc(-1 * var(--cw)) var(--ky); }
+  50%, 74.9% { background-position: calc(-2 * var(--cw)) var(--ky); }
+  75%, 100% { background-position: calc(-3 * var(--cw)) var(--ky); }
+}
+
+@keyframes isla-kanban-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+/* --------------------------------------------------------------- *
+ * Particle: the circular on/off dot in front of status labels.
+ * --------------------------------------------------------------- */
+
+.isla-particle {
+  display: inline-block;
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--isla-line-bright);
+  background: transparent;
+  margin-right: 6px;
+}
+
+.isla-particle.is-on {
+  border-color: transparent;
+  background: radial-gradient(circle at 35% 35%, #ffffff, var(--isla-pink) 62%);
+  box-shadow: 0 0 8px var(--isla-pink-glow);
+}
+
+.isla-particle.is-pulse {
+  animation: isla-particle-pulse 1.8s var(--isla-ease-in-out) infinite;
+}
+
+@keyframes isla-particle-pulse {
+  0%, 100% { box-shadow: 0 0 6px var(--isla-pink-glow); }
+  50% { box-shadow: 0 0 14px var(--isla-pink-glow), 0 0 3px rgba(255, 255, 255, 0.9); }
+}
+
+/* --------------------------------------------------------------- *
+ * Player bar: the live-room control strip (danmaku / cinema /
+ * fullscreen) with its kbd shortcut hints.
+ * --------------------------------------------------------------- */
+
+.isla-player {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--isla-space-xs);
+  padding: 6px 12px;
+  border-radius: var(--isla-radius-pill);
+  border: var(--isla-border-hairline) solid var(--isla-line);
+  background: var(--isla-glass-strong);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 24px rgba(4, 6, 18, 0.4);
+}
+
+.isla-player__btn {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 30px;
+  border-radius: var(--isla-radius-sm);
+  border: var(--isla-border-hairline) solid var(--isla-line);
+  background: var(--isla-surface-dim);
+  color: var(--isla-ink-soft);
+  transition: transform var(--isla-dur-fast) var(--isla-ease-spring), color var(--isla-dur-fast) var(--isla-ease-out),
+    border-color var(--isla-dur-fast) var(--isla-ease-out), box-shadow var(--isla-dur-fast) var(--isla-ease-out);
+}
+
+.isla-player__btn:hover {
+  transform: translateY(-1px);
+  border-color: var(--isla-line-bright);
+  color: var(--isla-ink);
+}
+
+.isla-player__btn.is-on {
+  color: var(--isla-pink);
+  border-color: rgba(255, 123, 184, 0.5);
+  box-shadow: 0 0 10px var(--isla-pink-glow);
+}
+
+.isla-player__keys {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 4px;
+}
+
+.isla-player__keys kbd {
+  font-family: var(--isla-font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--isla-muted);
+  border: 1px solid var(--isla-line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 1px 6px;
+  background: var(--isla-surface-dim);
+}
+
+/* --------------------------------------------------------------- *
+ * Danmaku: accepted inputs drifting across the stage as bullet
+ * comments, like a live-room overlay. Local evidence, toggled by the
+ * player bar; never session state.
+ * --------------------------------------------------------------- */
+
+.isla-stage__danmaku {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.isla-danmaku__item {
+  position: absolute;
+  left: 100%;
+  white-space: nowrap;
+  font-size: var(--isla-fs-sm);
+  font-weight: 700;
+  color: rgba(242, 245, 255, 0.82);
+  background: rgba(10, 13, 30, 0.55);
+  border: var(--isla-border-hairline) solid var(--isla-line-soft);
+  border-radius: var(--isla-radius-pill);
+  padding: 3px 12px;
+  animation: isla-danmaku-drift var(--drift, 11s) linear 1 forwards;
+  animation-delay: var(--drift-delay, 0s);
+}
+
+.isla-danmaku__name {
+  margin-right: 6px;
+  font-weight: 800;
+  color: var(--isla-sky);
+}
+
+@keyframes isla-danmaku-drift {
+  to { transform: translateX(calc(-100vw - 100%)); }
+}
+
+/* --------------------------------------------------------------- *
+ * Visually hidden: exact protocol words kept for the conformance
+ * scripts and assistive tech, invisible on the canvas.
+ * --------------------------------------------------------------- */
+
+.isla-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --------------------------------------------------------------- *
+ * Fact chips: readout values as icon + word chips.
+ * --------------------------------------------------------------- */
+
+.fact-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.fact-ico {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+}
+
+.fact-ico .isla-glyph {
+  stroke-width: 2.2;
+}
+
+.fact-ico.is-ok {
+  color: var(--isla-mint);
+  background: var(--isla-mint-soft);
+  border-color: rgba(82, 224, 176, 0.45);
+}
+
+.fact-ico.is-bad {
+  color: var(--isla-red);
+  background: var(--isla-red-soft);
+  border-color: rgba(255, 107, 129, 0.45);
+}
+
+.fact-ico.is-plain {
+  color: var(--isla-sky);
+  background: var(--isla-sky-soft);
+  border-color: rgba(90, 168, 240, 0.4);
+}
+
+.fact-chip__text {
+  font-family: var(--isla-font-mono);
+  font-size: var(--isla-fs-sm);
+  color: var(--isla-ink-soft);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+/* --------------------------------------------------------------- *
+ * Collapsible panels.
+ * --------------------------------------------------------------- */
+
+.isla-card__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--isla-space-xs);
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.isla-card__toggle .isla-collapse__chevron {
+  margin-left: 4px;
+  width: 9px;
+  height: 9px;
+  border-color: var(--isla-muted);
+}
+
+.isla-card__toggle .isla-collapse__chevron.is-open {
+  border-color: var(--isla-pink);
+}
+
+.isla-card__toggle:hover .isla-collapse__chevron {
+  border-color: var(--isla-pink);
+}
+
+.isla-card__body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--isla-dur-slow) var(--isla-ease-out);
+}
+
+.isla-card__body.is-open {
+  grid-template-rows: 1fr;
+}
+
+.isla-card__body-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* --------------------------------------------------------------- *
+ * Control Deck sections + the player transport buttons.
+ * --------------------------------------------------------------- */
+
+.control-deck {
+  display: flex;
+  flex-direction: column;
+  gap: var(--isla-space-md);
+}
+
+.control-deck__section {
+  padding-top: var(--isla-space-sm);
+  border-top: 1px dashed var(--isla-line-soft);
+}
+
+.control-deck__section:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.control-deck__head {
+  margin: 0 0 var(--isla-space-xs);
+  font-size: var(--isla-fs-xs);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: var(--isla-track-caps);
+  color: var(--isla-muted);
+}
+
+.console__transport {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--isla-space-md);
+  min-width: 0;
+}
+
+.transport-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 86px;
+  height: 76px;
+  border-radius: var(--isla-radius-md);
+  border: var(--isla-border-hairline) solid var(--isla-line);
+  background: var(--isla-surface-dim);
+  color: var(--isla-muted);
+  font-family: var(--isla-font);
+  transition: transform var(--isla-dur-fast) var(--isla-ease-spring), box-shadow var(--isla-dur-fast) var(--isla-ease-out),
+    color var(--isla-dur-fast) var(--isla-ease-out), border-color var(--isla-dur-fast) var(--isla-ease-out),
+    background-color var(--isla-dur-fast) var(--isla-ease-out);
+}
+
+.transport-btn .isla-glyph {
+  stroke-width: 2.4;
+}
+
+.transport-btn__label {
+  font-size: var(--isla-fs-xs);
+  font-weight: 800;
+  letter-spacing: var(--isla-track-caps);
+  text-transform: uppercase;
+}
+
+.transport-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  color: var(--isla-ink);
+  border-color: var(--isla-line-bright);
+}
+
+.transport-btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.97);
+}
+
+.transport-btn:disabled {
+  opacity: 0.35;
+}
+
+.transport-btn--stop.is-hot {
+  color: #fff;
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--isla-red) 58%, var(--isla-page-deep)),
+    color-mix(in srgb, var(--isla-red) 38%, var(--isla-page-deep))
+  );
+  border-color: transparent;
+  box-shadow: 0 0 22px rgba(255, 107, 129, 0.45);
+}
+
+.transport-btn--resume.is-hot {
+  color: var(--isla-page-deep);
+  background: linear-gradient(160deg, var(--isla-yellow), var(--isla-orange));
+  border-color: transparent;
+  box-shadow: 0 0 22px var(--isla-yellow-glow);
+}
+
+/* --------------------------------------------------------------- *
+ * Audience display: the live-room screen under the stage.
+ * --------------------------------------------------------------- */
+
+.isla-display {
+  position: relative;
+  border: var(--isla-border-hairline) solid var(--isla-line);
+  border-radius: var(--isla-radius-lg);
+  background:
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0 2px, transparent 2px 5px),
+    linear-gradient(180deg, rgba(12, 15, 34, 0.8), rgba(9, 11, 26, 0.88));
+  box-shadow: var(--isla-shadow-ambient), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  padding: var(--isla-space-sm) var(--isla-space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--isla-space-sm);
+  overflow: hidden;
+}
+
+.isla-display__bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--isla-space-sm);
+  min-width: 0;
+}
+
+.isla-display__live {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+  font-size: var(--isla-fs-xs);
+  font-weight: 800;
+  letter-spacing: var(--isla-track-caps);
+  text-transform: uppercase;
+  color: var(--isla-pink);
+  text-shadow: 0 0 8px var(--isla-pink-glow);
+}
+
+.isla-display__views {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.isla-display__view {
+  border: var(--isla-border-hairline) solid var(--isla-line);
+  border-radius: var(--isla-radius-pill);
+  background: var(--isla-surface-dim);
+  color: var(--isla-muted);
+  font-size: var(--isla-fs-xs);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 11px;
+  transition: all var(--isla-dur-fast) var(--isla-ease-out);
+}
+
+.isla-display__view:hover {
+  color: var(--isla-ink);
+  transform: translateY(-1px);
+}
+
+.isla-display__view[aria-pressed='true'] {
+  color: var(--isla-sky);
+  border-color: rgba(90, 168, 240, 0.5);
+  background: var(--isla-sky-soft);
+  box-shadow: 0 0 10px var(--isla-sky-glow);
+}
+
+.isla-display__feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-height: 96px;
+}
+
+.isla-display__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: var(--isla-fs-sm);
+  color: var(--isla-ink-soft);
+  animation: isla-chat-in var(--isla-dur-slow) var(--isla-ease-spring);
+}
+
+.isla-display__row.is-empty {
+  color: var(--isla-muted);
+}
+
+.isla-display__seq {
+  flex: none;
+  font-family: var(--isla-font-mono);
+  font-size: var(--isla-fs-xs);
+  color: var(--isla-muted);
+}
+
+.isla-display__source {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  color: var(--isla-sky);
+}
+
+.isla-display__text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------------- *
+ * Live-stopped overlay: the stage announces the paused broadcast.
+ * --------------------------------------------------------------- */
+
+.isla-stage__stopped {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--isla-space-sm);
+  background: rgba(9, 11, 26, 0.72);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  font-size: var(--isla-fs-2xl);
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--isla-ink);
+  animation: isla-pop-in var(--isla-dur-slow) var(--isla-ease-spring);
+}
+
+.isla-stage__stopped-ico {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2.5px solid var(--isla-line-bright);
+  background: var(--isla-surface-soft);
+  color: var(--isla-ink);
+}
+
+/* --------------------------------------------------------------- *
+ * Tooltip bubbles for icon-only buttons (hover / focus only).
+ * --------------------------------------------------------------- */
+
+.diag-btn,
+.isla-player__btn {
+  position: relative;
+}
+
+.diag-btn[data-tip]:hover::after,
+.diag-btn[data-tip]:focus-visible::after,
+.isla-player__btn[data-tip]:hover::after,
+.isla-player__btn[data-tip]:focus-visible::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: var(--isla-fs-xs);
+  font-weight: 700;
+  color: var(--isla-ink);
+  background: var(--isla-glass-strong);
+  border: var(--isla-border-hairline) solid var(--isla-line-bright);
+  border-radius: var(--isla-radius-sm);
+  padding: 4px 10px;
+  box-shadow: var(--isla-shadow-ambient);
+  pointer-events: none;
+  z-index: 40;
+}
+
+.diag-latency {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: 4px;
+  padding: 5px 12px;
+  border-radius: var(--isla-radius-pill);
+  border: var(--isla-border-hairline) solid var(--isla-line);
+  background: var(--isla-surface-dim);
+  font-family: var(--isla-font-mono);
+  font-size: var(--isla-fs-xs);
+  color: var(--isla-ink-soft);
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------- *
+ * Charts.
+ * --------------------------------------------------------------- */
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: var(--isla-space-md);
+}
+
+.chart-cell__head {
+  margin: 0 0 var(--isla-space-xs);
+  font-size: var(--isla-fs-xs);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: var(--isla-track-caps);
+  color: var(--isla-muted);
+}
+
+.isla-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.isla-bars__row {
+  display: grid;
+  grid-template-columns: minmax(64px, max-content) 1fr 34px;
+  align-items: center;
+  gap: 8px;
+}
+
+.isla-bars__label {
+  font-size: var(--isla-fs-xs);
+  font-weight: 700;
+  color: var(--isla-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.isla-bars__track {
+  height: 12px;
+  border-radius: var(--isla-radius-pill);
+  background: var(--isla-surface-dim);
+  overflow: hidden;
+}
+
+.isla-bars__fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--isla-radius-pill);
+  animation: isla-bar-grow var(--isla-dur-slow) var(--isla-ease-spring);
+  transform-origin: left;
+}
+
+.isla-bars__count {
+  font-family: var(--isla-font-mono);
+  font-size: var(--isla-fs-xs);
+  color: var(--isla-ink-soft);
+  text-align: right;
+}
+
+.isla-ring {
+  display: flex;
+  align-items: center;
+  gap: var(--isla-space-md);
+}
+
+.isla-ring__svg {
+  width: 104px;
+  height: 104px;
+  flex: none;
+}
+
+.isla-ring__total {
+  font-family: var(--isla-font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  fill: var(--isla-ink);
+}
+
+.isla-ring__legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.isla-ring__legend-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--isla-fs-xs);
+  color: var(--isla-ink-soft);
+}
+
+.isla-ring__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+
+.isla-ring__label {
+  text-transform: capitalize;
+}
+
+.isla-ring__count {
+  margin-left: auto;
+  font-family: var(--isla-font-mono);
+}
+
+.isla-ticker {
+  position: relative;
+  height: 44px;
+  margin-top: 4px;
+}
+
+.isla-ticker__axis {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--isla-line-soft), var(--isla-sky), var(--isla-pink));
+}
+
+.isla-ticker__dot {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: var(--isla-pink);
+  box-shadow: 0 0 10px var(--isla-pink-glow);
+  animation: isla-pop-in var(--isla-dur-base) var(--isla-ease-spring);
+}
+
+.isla-ticker__tip {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--isla-muted);
+  opacity: 0;
+  transition: opacity var(--isla-dur-fast) var(--isla-ease-out);
+}
+
+.isla-ticker__dot:hover .isla-ticker__tip {
+  opacity: 1;
+}
+
+.isla-ticker__seq {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--isla-font-mono);
+  font-size: var(--isla-fs-xs);
+  color: var(--isla-muted);
+  background: var(--isla-surface-dim);
+  border: var(--isla-border-hairline) solid var(--isla-line-soft);
+  border-radius: var(--isla-radius-pill);
+  padding: 1px 8px;
+}
+
+/* --------------------------------------------------------------- *
+ * Control Deck section heads: clearly larger than field labels.
+ * --------------------------------------------------------------- */
+
+.control-deck__head {
+  font-size: var(--isla-fs-md);
+  color: var(--isla-ink);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--isla-space-xs);
+}
+
+.control-deck__head::before {
+  content: '';
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--isla-glow-line);
+}
+
+/* --------------------------------------------------------------- *
+ * Status window: four status tiles + a records expander.
+ * --------------------------------------------------------------- */
+
+.console__statuswin-roll {
+  position: relative;
+  overflow: hidden;
+}
+
+.console__statuswin-track {
+  display: flex;
+  transition: transform var(--isla-dur-slow) var(--isla-ease-out);
+}
+
+.console__statuswin-slide {
+  flex: 0 0 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--isla-space-md);
+  min-width: 0;
+  padding-right: 90px;
+}
+
+.console__statuswin-chip {
+  flex: none;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--isla-pink);
+  background: var(--isla-pink-soft);
+  border: var(--isla-border-hairline) solid rgba(255, 123, 184, 0.4);
+  border-radius: var(--isla-radius-pill);
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+.console__statuswin-big {
+  font-size: var(--isla-fs-xl);
+  font-weight: 800;
+  color: var(--isla-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console__statuswin-dots {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  gap: 6px;
+}
+
+.console__statuswin-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  background: var(--isla-line);
+  cursor: pointer;
+  transition: background-color var(--isla-dur-fast) var(--isla-ease-out), box-shadow var(--isla-dur-fast) var(--isla-ease-out);
+}
+
+.console__statuswin-dot.is-here {
+  background: var(--isla-pink);
+  box-shadow: 0 0 8px var(--isla-pink-glow);
+}
+
+.console__statuswin-expand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--isla-space-xs);
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  padding: 4px 2px;
+  font-family: var(--isla-font);
+  font-size: var(--isla-fs-xs);
+  font-weight: 800;
+  letter-spacing: var(--isla-track-caps);
+  text-transform: uppercase;
+  color: var(--isla-muted);
+  cursor: pointer;
+}
+
+.console__statuswin-expand:hover {
+  color: var(--isla-pink);
+}
+
+.console__statuswin-expand .isla-collapse__chevron {
+  margin-left: 0;
+}
+
+.console__statuswin-expand.is-open .isla-collapse__chevron {
+  transform: rotate(45deg);
+  border-color: var(--isla-pink);
+}
+
+/* View-all trigger under capped ledgers. */
+.isla-viewall {
+  margin-top: var(--isla-space-xs);
+  border: none;
+  background: transparent;
+  padding: 2px 0;
+  font-family: var(--isla-font);
+  font-size: var(--isla-fs-xs);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--isla-sky);
+  cursor: pointer;
+  text-align: left;
+}
+
+.isla-viewall:hover {
+  color: var(--isla-pink);
+  text-decoration: underline;
+}
+
+/* --------------------------------------------------------------- *
+ * Modal chrome (records + welcome tour).
+ * --------------------------------------------------------------- */
+
+.isla-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: grid;
+  place-items: center;
+  background: rgba(6, 8, 20, 0.72);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  animation: isla-fade-in var(--isla-dur-base) var(--isla-ease-out);
+}
+
+@keyframes isla-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.isla-modal {
+  width: min(640px, calc(100vw - 2 * var(--isla-space-lg)));
+  max-height: min(78vh, 720px);
+  display: flex;
+  flex-direction: column;
+  border: var(--isla-border-hairline) solid var(--isla-line-bright);
+  border-radius: var(--isla-radius-xl);
+  background: var(--isla-glass-strong);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(160%);
+  box-shadow: var(--isla-shadow-lift), 0 0 40px rgba(255, 123, 184, 0.12);
+  padding: var(--isla-space-lg);
+  animation: isla-modal-in var(--isla-dur-slow) var(--isla-ease-spring);
+  overflow: hidden;
+}
+
+@keyframes isla-modal-in {
+  from { opacity: 0; transform: translateY(26px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.isla-modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--isla-space-sm);
+}
+
+.isla-modal__title {
+  font-size: var(--isla-fs-xl);
+  font-weight: 900;
+  color: var(--isla-ink);
+}
+
+.isla-modal__close {
+  border: none;
+  background: transparent;
+  color: var(--isla-muted);
+  font-size: var(--isla-fs-2xl);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.isla-modal__close:hover {
+  color: var(--isla-pink);
+}
+
+.isla-modal__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--isla-space-xs);
+}
+
+.isla-modal__row-title {
+  font-weight: 800;
+  font-size: var(--isla-fs-sm);
+  color: var(--isla-ink);
+  overflow-wrap: anywhere;
+}
+
+/* Welcome tour voice. */
+.isla-tour {
+  width: min(760px, calc(100vw - 2 * var(--isla-space-lg)));
+  align-items: center;
+  text-align: center;
+}
+
+.isla-tour__halo {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  color: var(--isla-yellow);
+  background: var(--isla-yellow-soft);
+  border: var(--isla-border-hairline) solid rgba(255, 212, 107, 0.5);
+  box-shadow: 0 0 18px var(--isla-yellow-glow);
+  margin-bottom: var(--isla-space-xs);
+}
+
+.isla-tour__kicker {
+  margin: 0;
+  font-size: var(--isla-fs-xs);
+  font-weight: 800;
+  letter-spacing: var(--isla-track-caps);
+  text-transform: uppercase;
+  color: var(--isla-muted);
+}
+
+.isla-tour__title {
+  margin: 4px 0 0;
+  font-size: clamp(24px, 3.4vw, 36px);
+  font-weight: 900;
+  background: linear-gradient(100deg, var(--isla-sky), var(--isla-pink), var(--isla-yellow));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  line-height: 1.1;
+}
+
+.isla-tour__sub {
+  margin: var(--isla-space-xs) 0 0;
+  font-size: var(--isla-fs-sm);
+  color: var(--isla-muted);
+}
+
+.isla-tour__grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: var(--isla-space-sm);
+  margin-top: var(--isla-space-md);
+}
+
+.isla-tour__card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  text-align: left;
+  padding: var(--isla-space-sm) var(--isla-space-md);
+  border-radius: var(--isla-radius-md);
+  border: var(--isla-border-hairline) solid var(--isla-line-soft);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.isla-tour__glyph {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--isla-radius-sm);
+  background: var(--isla-pink-soft);
+  color: var(--isla-pink);
+  margin-bottom: 2px;
+}
+
+.isla-tour__card-title {
+  font-weight: 800;
+  font-size: var(--isla-fs-sm);
+  color: var(--isla-ink);
+}
+
+.isla-tour__card-text {
+  font-size: var(--isla-fs-xs);
+  line-height: var(--isla-lh);
+  color: var(--isla-muted);
+}
+
+.isla-tour__enter {
+  margin-top: var(--isla-space-md);
+}
+
+/* Records modal filters. */
+.isla-modal__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--isla-space-sm);
+  margin-bottom: var(--isla-space-sm);
+}
+
+.isla-modal__search {
+  flex: 1 1 200px;
+  padding: 8px 14px;
+  border: var(--isla-border-hairline) solid var(--isla-line);
+  border-radius: var(--isla-radius-pill);
+  background: rgba(8, 11, 26, 0.55);
+  color: var(--isla-ink);
+  font-family: var(--isla-font);
+  font-size: var(--isla-fs-sm);
+}
+
+.isla-modal__search:focus {
+  outline: none;
+  border-color: var(--isla-sky);
+  box-shadow: 0 0 0 1px var(--isla-sky);
+}
+
+.isla-modal__types {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.isla-modal__type {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: var(--isla-border-hairline) solid var(--isla-line);
+  border-radius: var(--isla-radius-pill);
+  background: var(--isla-surface-dim);
+  color: var(--isla-muted);
+  font-size: var(--isla-fs-xs);
+  font-weight: 700;
+  padding: 3px 11px;
+  cursor: pointer;
+  transition: all var(--isla-dur-fast) var(--isla-ease-out);
+}
+
+.isla-modal__type .fact-ico {
+  width: 14px;
+  height: 14px;
+}
+
+.isla-modal__type .fact-ico .isla-glyph {
+  display: none;
+}
+
+.isla-modal__type.is-on {
+  color: var(--isla-sky);
+  border-color: rgba(90, 168, 240, 0.5);
+  background: var(--isla-sky-soft);
+  box-shadow: 0 0 8px var(--isla-sky-glow);
+}
+
+.isla-modal__count {
+  margin: var(--isla-space-sm) 0 0;
+  font-size: var(--isla-fs-xs);
+  color: var(--isla-muted);
+  text-align: right;
+}
+
+/* --------------------------------------------------------------- *
+ * Recovery trace: hidden until a recovery is attempted; rows appear
+ * one by one, closing with a success or failure banner.
+ * --------------------------------------------------------------- */
+
+.recovery-trace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--isla-space-xs);
+  margin-top: var(--isla-space-sm);
+}
+
+.recovery-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--isla-space-xs);
+  min-width: 0;
+  animation: isla-rise-in var(--isla-dur-slow) var(--isla-ease-out) both;
+  animation-delay: calc(var(--i, 0) * 180ms);
+}
+
+.recovery-line__label {
+  font-size: var(--isla-fs-xs);
+  font-weight: 800;
+  letter-spacing: var(--isla-track-caps);
+  text-transform: uppercase;
+  color: var(--isla-muted);
+  flex: none;
+}
+
+.recovery-line__value {
+  font-family: var(--isla-font-mono);
+  font-size: var(--isla-fs-xs);
+  color: var(--isla-ink-soft);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.recovery-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--isla-space-sm);
+  padding: var(--isla-space-sm) var(--isla-space-md);
+  border-radius: var(--isla-radius-md);
+  font-size: var(--isla-fs-xl);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  animation: isla-pop-in var(--isla-dur-slow) var(--isla-ease-spring);
+}
+
+.recovery-banner__ico {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.recovery-banner.is-ok {
+  color: var(--isla-mint);
+  background: var(--isla-mint-soft);
+  border: var(--isla-border-hairline) solid rgba(82, 224, 176, 0.5);
+  box-shadow: 0 0 18px rgba(82, 224, 176, 0.25);
+}
+
+.recovery-banner.is-ok .recovery-banner__ico {
+  background: rgba(82, 224, 176, 0.2);
+}
+
+.recovery-banner.is-bad {
+  color: var(--isla-red);
+  background: var(--isla-red-soft);
+  border: var(--isla-border-hairline) solid rgba(255, 107, 129, 0.5);
+  box-shadow: 0 0 18px rgba(255, 107, 129, 0.25);
+}
+
+.recovery-banner.is-bad .recovery-banner__ico {
+  background: rgba(255, 107, 129, 0.2);
+}
+
+/* The hidden attribute wins over the component display values. */
+.facts[hidden],
+.recovery-trace[hidden] {
+  display: none;
+}

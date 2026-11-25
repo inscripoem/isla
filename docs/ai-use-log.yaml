@@ -9691,6 +9691,208 @@ entries:
         browser phases passed 31 and 16 checks. Heart and Emma speech matched
         their expected WAVs and a new runtime process retained Emma. Playback
         and SQLite were real, with controlled dialogue text and avatar peers.
+
+  - date: "2026-11-22"
+    task: M2-console-nightloom-v2-visual-rebuild
+    branch: feat/m2-console-nightloom-v2
+    change: >-
+      Rebuild the M2 console frontend as "Isla Nightloom" v2 without touching
+      any behaviour module. New src/console/design (tokens, base, layout,
+      components, ui, charts, format, toast), src/console/fx (depth, petals,
+      cursor, typewriter) and src/console/pages (Session, Playback, Selection,
+      Diagnostics). The standalone stage mascot and its sticker decoration are
+      removed from the stage: it is now a HUD row (lifecycle, pipeline stage,
+      active output), a nine-bar waveform visualizer that animates only while
+      the performer speaks, and the streamed subtitle as the hero line. The
+      mascot artwork was not removed from the console: the header brand flip
+      board renders KanbanRow, which draws the nine-member cast from
+      src/console/assets/kanban/spritesheet.webp (the MIT-licensed
+      aemeath_withclaude sheet) on the board's kanban face. Paint cost is
+      reduced: the animated full-screen blur and hue-rotate background layers,
+      two extra background canvases and the per-click particle burst are gone,
+      scrolling panels no longer use backdrop-filter (a follow-up fix later
+      removed the remaining .isla-chat__item backdrop-filter too), and the
+      petal canvas is capped at 12 petals and DPR 1.5. Behaviour, wire
+      messages, transport, performer machine and recovery control are
+      unchanged.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    opencode_version: "1.19.4"
+    launch_flags: [--agent, build, --format, json, --variant, xhigh]
+    sessions: [ses_e010e789affeNUAkBFW70sYaxs]
+    supervision: >-
+      The M2 member set the slice: scope limited to src/console/, the mascot
+      removed, the existing design primitives reused, and the load-time and
+      over-design problems fixed. OpenCode authored the design, fx and pages
+      modules, the ConsoleApp layout rewrite and this entry.
+    human_review: >-
+      The M2 member reviewed the result. Visual sign-off for the #174 rows is
+      requested in #182; a human team member performs the final merge and no
+      agent merged anything.
+    transcript_record: >-
+      OpenCode session ses_e010e789affeNUAkBFW70sYaxs is exported to
+      ~/Library/Caches/isla-opencode-exports/ outside the checkout.
+    verification:
+      base: e095c67
+      results: >-
+        pnpm exec tsc -b passed; pnpm test:m2 passed 101 tests in 1 file; a
+        headless browser walk at 756px and 375px confirmed the HUD stage (no
+        stage mascot) with its waveform and tags, the header brand flip board
+        rendering the KanbanRow sprite cast, a submitted input settling in the
+        ledger and no horizontal overflow.
+      independent: >-
+        None; a single operator ran the local checks on this machine.
+    scope: >-
+      src/console/ (ConsoleApp.tsx, console.css, design/, fx/, pages/),
+      src/index.css root token references,
+      docs/team/CONSOLE-FRONTEND-SPEC-M2.en.md and docs/ai-use-log.yaml. No
+      contract, transport, machine, storage or workflow file changed.
+
+  - date: "2026-11-22"
+    task: M2-console-nightloom-v2-g1-waiver
+    branch: feat/m2-console-nightloom-v2
+    change: >-
+      Extend the time-boxed G1 waiver to pull request 187, the M2 console
+      visual rebuild, so its pull-request event uses the label/advise rule
+      through the existing 2026-11-27 window. A waiver is a recorded
+      exception, not evidence; the G1 step still prints which rule it used.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    supervision: >-
+      The M2 member chose this route after the G1 scope-miss was reported.
+      OpenCode made the edit and wrote this entry.
+    human_review: >-
+      The M2 member approved adding 187 to the waiver list. A human team
+      member performs the final merge and no agent merged anything.
+    transcript_record: >-
+      OpenCode session recorded locally; the branch commits carry the change.
+    verification:
+      base: e32bf1a
+      results: >-
+        pnpm gate:test-approval auto with GITHUB_EVENT_NAME=pull_request and
+        PR_NUMBER=187 prints the waiver rule and exits 0; pnpm test:m2 and
+        pnpm gate:ai-use-log pass.
+      independent: >-
+        None; a single operator ran the local checks on this machine.
+    scope: >-
+      src/evaluation/test-approval-gate.ts and docs/ai-use-log.yaml. No
+      console source changed.
+
+  - date: "2026-11-22"
+    task: M2-VIS-V2-DANMAKU
+    branch: feat/m2-console-nightloom-v2
+    change: >-
+      Each stage danmaku comment now drifts across the stage once instead of
+      looping. A one-line CSS change: the drift animation runs a single
+      iteration and keeps its end position.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    supervision: >-
+      The M2 member reported that the local-audience danmaku repeats and asked
+      for a single pass. OpenCode made the edit and wrote this entry.
+    human_review: >-
+      The M2 member asked for this change. A human team member performs the
+      final merge and no agent merged anything.
+    transcript_record: >-
+      OpenCode session recorded locally; the branch commits carry the change.
+    verification:
+      base: e32bf1a
+      results: >-
+        pnpm test:m2 passed; the change is CSS-only and no TypeScript changed.
+      independent: >-
+        None; a single operator ran the local checks on this machine.
+    scope: >-
+      src/console/design/components.css and docs/ai-use-log.yaml.
+
+  - date: "2026-11-25"
+    task: M2-PR187-review-fix-and-main-integration
+    branch: local/pr187-fix-20261125
+    change: >-
+      Integrate pull request 187 with origin/main and close its review findings
+      without contract or backend changes. Merge origin/main (#181, #190 and the
+      G1 waiver reconciliation) and restore the C07/C08/C10 and recovery-ack
+      behaviour overwritten by the visual rebuild, keeping the Nightloom
+      VoiceCard in the console. Fix P1-1 by gating Speaking on the M1 `started`
+      receipt and showing Preparing while `accepted`; P1-2 by labelling local
+      receipts as browser-local evidence with a receipt timestamp, adding the
+      HUD's latest receipt/reason/fault count and the ticker's receipt-stage
+      fallback; P1-4 by disabling floating card geometry at or below 1100px and
+      wrapping the stage, selection and control surfaces at 320x800, 375x812,
+      756x900 and 1280x800; P1-5 by mixing status tones against the dark page
+      and darkening the primary/danger/stop gradients to at least 4.5:1; P2-7
+      by correcting FactChip polarity for `none`, `not reported` and a
+      synthetic plan; P2-9 by disabling Attach performer and Bootstrap operator
+      after disconnect; and the EventsSection regression by rendering the full
+      reversed event list instead of the newest seven. Add 16 server-rendered
+      unit tests to test/offline/m2-console.test.ts.
+    requirements: [FR-04, FR-05, FR-06, NFR-04]
+    invariants: []
+    commits: [441b9cc41b1975bd160c14159c94616016f33cb6, a805b07b6383ca06a012e409837745230e49f393]
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: "2.4.1"
+    launch_flags: [--agent, build, --format, json, -m, "self-api/deepseek-v4-flash#xhigh"]
+    sessions: [ses_deefdb749ffeaHiIIbNHgviIDy]
+    supervision: >-
+      The M5 member and the captain authorized and reviewed the local merge and
+      review fixes in this worktree, scoped to src/console/,
+      src/evaluation/test-approval-gate.ts, test/offline/m2-console.test.ts and
+      this log; the agent authored no contract or backend change. Round 1
+      restored behaviour lost in the visual rebuild, Round 2 addressed the P1/P2
+      review findings, and Round 3 restored full event rendering and added the
+      offline tests.
+    human_review: >-
+      The M5 member and the captain verified Round 3a locally and committed it.
+      This work was not pushed and no agent merged anything; a human team member
+      performs the final merge. M2/M1/M3/M4/M6 review of the updated candidate
+      remains open until it is pushed and confirmed.
+    transcript_record: >-
+      OpenCode session ses_deefdb749ffeaHiIIbNHgviIDy is exported to the CS5351
+      evidence directory outside the checkout.
+    verification:
+      base: e2166cd
+      results: >-
+        Against origin/main e2166cd: pnpm exec tsc -b exit 0; oxlint exit 0;
+        vite build 155 modules exit 0; the full pnpm test suite passed 2199
+        tests in 98 files with 0 failures and 0 skipped, including 118 tests in
+        test/offline/m2-console.test.ts and 11 in
+        test/offline/console-voice-selection.test.ts. A Nix Chromium
+        156.0.8078.47 run against the Vite preview and production CLI passed
+        formal-console-acceptance.mjs (12 steps, 0 page/console errors) and both
+        console-voice-selection.mjs phases (31 and 16 checks) with local Kokoro
+        CPU synthesis. Chromium checks covered the diagnostics socket reporting
+        `not started` before connect, waveform/Speaking strictly gated on
+        `started` with Preparing during `accepted`, stale rejected input keeping
+        the composer text, post-disconnect disabling of Attach performer and
+        Bootstrap operator plus the hidden operator tag and the ticker
+        receipt-stage fallback, and Reconnect restoring the open session.
+        Viewport checks at 320x800, 375x812, 756x900 and 1280x800 held
+        docScrollWidth equal to innerWidth, no Control Deck occlusion by Local
+        Receipts, and at least 5.06:1 contrast on all 17 tag/button pairs.
+      independent: >-
+        None; a single operator ran the local checks on this machine. The
+        deployment was a local controlled test deployment: no live LLM, VTS or
+        Windows check was performed.
+    scope: >-
+      src/console/ (ConsoleApp.tsx, VoiceCard.tsx, console.css, design/,
+      pages/), src/evaluation/test-approval-gate.ts (the G1_TIME_WAIVER_PRS
+      merge reconciliation `[170, 171, 175, 181, 187]`),
+      test/offline/m2-console.test.ts and docs/ai-use-log.yaml. No contract,
+      transport, machine, storage, backend or workflow file changed.
+
   - date: "2026-11-25"
     task: g6-historical-identity
     change: >-
@@ -9772,3 +9974,107 @@ entries:
         observed. The entry rule's existing message still says "at both the
         base and the head" when the counts differ; that wording predates this
         change and was left alone.
+
+  - date: "2026-11-25"
+    task: M2-PR187-hud-pipeline-label-fix
+    branch: feat/m2-console-nightloom-v2
+    change: >-
+      Answer the M1 re-review at 2ababcc: the stage HUD tag now reads
+      "Pipeline: <stage>" and pulses only while browser playback is actually
+      speaking, the connection is open and the session lifecycle is not
+      stopped, so an admitted-but-not-playing turn or a mid-play disconnect no
+      longer shows an unlabelled pulsing SPEAKING pill. The Retiring and
+      Session retiring fact rows use tone "bad" when the value is yes instead
+      of rendering a green checkmark. Runtime pipeline vocabulary and wire
+      behaviour are unchanged.
+    requirements: [FR-04, FR-05]
+    invariants: []
+    commits: [596f12de0a7716d565b9299e27872064388bb8fa]
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: "2.4.1"
+    launch_flags: [--agent, build, --format, json, -m, "self-api/deepseek-v4-flash#xhigh"]
+    sessions: [ses_dee79119dffew5AVI1HbL6s1Cq]
+    supervision: >-
+      The OpenCode session ran with a worktree-scoped opencode.json that allows
+      read and edit and denies shell, glob, grep and subagent tools. The edit
+      was limited to the two console files and the M2 offline test file.
+    human_review: >-
+      The diff was reviewed and the checks below were run before this entry
+      was recorded. This entry records local work only; the final merge is
+      performed by a human team member, and M1 re-review of the new head
+      remains open.
+    transcript_record: >-
+      OpenCode session ses_dee79119dffew5AVI1HbL6s1Cq is exported to the CS5351
+      evidence directory outside the checkout.
+    verification:
+      base: 55e36d3
+      results: >-
+        On this Linux worktree at commit 596f12d against main 55e36d3: pnpm
+        typecheck (tsc -b) exit 0; pnpm lint (oxlint) exit 0; vite build exit
+        0; the full pnpm test suite passed 2217 tests in 98 files with 0
+        failures, including 119 tests in test/offline/m2-console.test.ts and
+        the new retiring-row polarity test. No browser or live-provider run was
+        repeated for this small UI change.
+      independent: >-
+        None; a single operator ran the local checks. No live LLM, VTS, Windows
+        or remote CI check was performed before this entry was written.
+    scope: >-
+      src/console/ConsoleApp.tsx, src/console/pages/SessionPage.tsx,
+      test/offline/m2-console.test.ts and docs/ai-use-log.yaml. No contract,
+      transport, machine, storage, backend or workflow file changed.
+  - date: "2026-11-25"
+    task: M2-PR187-wiring-harness
+    branch: m2-wiring-harness
+    change: >-
+      Add a reproducible browser acceptance harness for console wiring that was
+      previously verified only once by hand. test/browser/console-wiring-acceptance.mjs
+      mounts the real ConsoleApp through a test-only entry page and a local
+      application WebSocket, then checks six behaviours: a rejected input
+      acknowledgement restores the composer without clobbering text typed after
+      submission; a duplicate acknowledgement does not clear the draft a second
+      time; Reconnect after a socket close bootstraps exactly once without
+      replay; performer disposal disables the performer actions; the diagnostics
+      socket renders not-started, open and closed; and a viewport below 1100px
+      does not float Local Receipts or occlude the Control Deck. No production
+      file changed: the pipeline HUD label and retiring-row tone were fixed
+      separately in commit 596f12d by the M5 member, and this harness verifies
+      that head instead of duplicating the fix.
+    requirements: [FR-04, FR-05, FR-06, NFR-04]
+    invariants: []
+    commits: [6a9e252a82f2febcdc38044fa3f90c6cb3e8f216]
+    agent: opencode/build
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    opencode_version: "1.19.4"
+    launch_flags: [--agent, build, --format, json, -m, "personal-deepseek/deepseek-v4-flash", --variant, xhigh]
+    sessions: [ses_dee7397b0ffeYhypVR88s31g0r]
+    supervision: >-
+      The M2 member asked for the six wiring checks after the captain declined a
+      separate test document. The OpenCode session wrote the harness and the
+      test-only entry page; the supervising agent reviewed the diff, ran the
+      script and the unit and type checks, and committed. A duplicate HUD fix
+      produced in the same session was discarded when the M5 member's identical
+      fix landed on the branch first.
+    human_review: >-
+      Not yet reviewed. Re-review by M1 and the merging human remain pending;
+      no agent merged anything.
+    transcript_record: >-
+      OpenCode session ses_dee7397b0ffeYhypVR88s31g0r is exported to
+      ~/Library/Caches/isla-opencode-exports/M2-PR187-pipeline-hud-20261125.json
+      outside the checkout.
+    verification:
+      base: 66b0621794b0c1b7dc0f27e93f0e9ba4c62b5f5f
+      results: >-
+        All six harness checks passed against the real console in local
+        Chromium. pnpm test:m2 exited 0, oxlint reported 0 warnings and 0 errors
+        over test/browser, and tsc -b exited 0.
+      independent: >-
+        None; one operator ran the checks on this machine. No live provider,
+        VTS or Windows observation was made, and the harness needs an external
+        Playwright module and Chromium path, so it is not part of pnpm test.
+    scope: >-
+      test/browser/console-wiring-acceptance.mjs, test/browser/console-wiring.tsx,
+      test/browser/console-wiring.html and docs/ai-use-log.yaml. No src/,
+      contract, package, lockfile or workflow change.

@@ -1,9 +1,9 @@
 :root {
-  font-family: var(--animal-font-family);
-  line-height: var(--animal-line-height-base);
+  font-family: var(--isla-font, 'Nunito', 'Noto Sans SC', sans-serif);
+  line-height: var(--isla-lh, 1.55);
   color-scheme: light;
-  color: var(--animal-text-color);
-  background: var(--animal-bg-color);
+  color: var(--isla-ink, #2e3a54);
+  background: var(--isla-page, #eaf3fc);
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -16,6 +16,7 @@
 body {
   margin: 0;
   min-height: 100svh;
-  background: var(--animal-bg-color);
-  color: var(--animal-text-color);
+  background: var(--isla-page, #eaf3fc);
+  color: var(--isla-ink, #2e3a54);
+  overflow-x: hidden;
 }

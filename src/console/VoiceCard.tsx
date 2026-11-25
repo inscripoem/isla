@@ -1,4 +1,4 @@
-import { Button, Card, Title } from 'animal-island-ui'
+import { Alert, Card, ChunkButton } from './design/ui'
 import type { VoiceAuditionView } from './voice-audition'
 import type { VoiceLocale, VoiceSelectionState } from './voice-selection'
 
@@ -114,9 +114,7 @@ export function VoiceCard(props: VoiceCardProps) {
         : 'No installed voices'
 
   return (
-    <Card>
-      <Title size="middle">Voice</Title>
-
+    <Card title="Voice" icon="voice" tone="purple" className="console__voice-card">
       <p className="console__voice-current" aria-live="polite">
         Current voice: <strong>{voiceName(state, state.activeVoiceId)}</strong>
         {activeNeedsQualifier ? ' (last confirmed)' : ''}
@@ -149,19 +147,24 @@ export function VoiceCard(props: VoiceCardProps) {
       </div>
 
       <div className="console__actions console__voice-actions">
-        <Button size="small" disabled={previewDisabled} onClick={props.onPreview}>
+        <ChunkButton size="sm" disabled={previewDisabled} onClick={props.onPreview}>
           Preview voice
-        </Button>
-        <Button size="small" disabled={!previewBusy} onClick={props.onStopPreview}>
+        </ChunkButton>
+        <ChunkButton size="sm" disabled={!previewBusy} onClick={props.onStopPreview}>
           Stop preview
-        </Button>
-        <Button size="small" type="primary" disabled={applyDisabled} onClick={props.onApply}>
+        </ChunkButton>
+        <ChunkButton size="sm" variant="primary" disabled={applyDisabled} onClick={props.onApply}>
           Use this voice
-        </Button>
+        </ChunkButton>
         {!operator && props.canEnableVoiceChanges && (
-          <Button size="small" loading={props.operatorRequestPending} onClick={props.onEnableVoiceChanges}>
+          <ChunkButton
+            size="sm"
+            variant="lime"
+            busy={props.operatorRequestPending}
+            onClick={props.onEnableVoiceChanges}
+          >
             Enable voice changes
-          </Button>
+          </ChunkButton>
         )}
       </div>
 
@@ -169,7 +172,7 @@ export function VoiceCard(props: VoiceCardProps) {
         {statusLine(props)}
       </p>
 
-      {props.operatorRequestError !== null && <p className="console__alert">{props.operatorRequestError}</p>}
+      {props.operatorRequestError !== null && <Alert>{props.operatorRequestError}</Alert>}
     </Card>
   )
 }
