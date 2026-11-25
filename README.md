@@ -120,6 +120,19 @@ database and await deployment-owned release. Readiness follows signal-handler
 registration; shutdown completion requires successful release. Multiple cleanup
 failures remain visible, including on repeated stop calls.
 
+### Choose a voice
+
+Open **Session → Voice** to see the English Kokoro voices installed on this
+machine. Choose a voice and click **Preview voice** to hear the same short
+line in that voice. **Stop preview** ends the audition. The **Current voice**
+label shows which voice will be used for replies.
+
+Enable operator controls and click **Use this voice** to save your choice.
+It takes effect on the next conversation turn. A reply already in progress
+finishes in the voice it started with. The reference deployment stores the
+selection beside its SQLite database in `<database path>.voices.json` and
+loads it at startup. The initial voice is Heart.
+
 ## Check the foundation
 
 ```sh
@@ -133,11 +146,11 @@ Tests run locally without model services and exercise HTTP/WebSocket success, re
 
 ## Blocking gates (D7)
 
-The CI pipeline implements six gate checks plus the traceability fitness function; the design is recorded in [ADR-006](docs/architecture/adr/006-gate-tooling.md) and its [enforcement delta](docs/architecture/delta/006-gate-enforcement.md). G1 uses recorded approval evidence for pull requests created at or after the 2026-11-16T16:01:01Z cutover and keeps the label rule (advisory) for earlier ones; a time-boxed M6 waiver covers #170/#171/#175 through 2026-11-27. G4 reports not run when there is no evidence at all, and fails a measured claim that has no evaluation table or no fixed conditions.
+The CI pipeline implements six gate checks plus the traceability fitness function; the design is recorded in [ADR-006](docs/architecture/adr/006-gate-tooling.md) and its [enforcement delta](docs/architecture/delta/006-gate-enforcement.md). G1 uses recorded approval evidence for pull requests created at or after the 2026-11-16T16:01:01Z cutover and keeps the label rule (advisory) for earlier ones; a time-boxed M6 waiver covers #170/#171/#175/#181 through 2026-11-27. #181 is the CP04 M2 console UI-defect slice and is G1-only. G4 reports not run when there is no evidence at all, and fails a measured claim that has no evaluation table or no fixed conditions.
 
 | Gate | Enforced by |
 | --- | --- |
-| G1 — tests approved before implementation | the **`verify` job**: a PR created at or after the 2026-11-16T16:01:01Z cutover needs `docs/code-governance/test-approvals.yaml` to cover every changed code path and be committed before the first code commit; a PR created before it keeps the `tests-approved` label/advise rule; the M6 time-boxed waiver covers #170/#171/#175 through 2026-11-27 |
+| G1 — tests approved before implementation | the **`verify` job**: a PR created at or after the 2026-11-16T16:01:01Z cutover needs `docs/code-governance/test-approvals.yaml` to cover every changed code path and be committed before the first code commit; a PR created before it keeps the `tests-approved` label/advise rule; the M6 time-boxed waiver covers #170/#171/#175/#181 through 2026-11-27, with #181 G1-only and not a CP04/C09 acceptance |
 | G2 — static analysis + boundary | `pnpm typecheck && pnpm lint`; `pnpm test:readiness` (import/permission boundaries) |
 | G3 — requirements schema | `pnpm test:readiness` (registry validation) |
 | G4 — semantic evaluation | `pnpm gate:eval` — reports **not run** only when there is neither a table nor a claim; fails a table that omits the fixed conditions NFR-01 requires, a claim row with no value or conditions, and a measured prose claim with no evaluation table; reviewed exceptions expire in `gate-baseline.yaml` |

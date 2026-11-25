@@ -32,6 +32,14 @@ M5 owns lifecycle, epoch, active turn, output registration, deadlines and sequen
 
 Check correlation, session, captured epoch, applicable turn/segment/revisions and expiry after asynchronous work and before dispatch. Old results stay stale even if a later Resume makes the session running again.
 
+The local console can request `voice.list` to get the available catalog IDs,
+display names, locales and active ID in `voice.state`. A viewer can audition
+a catalog ID with `voice.preview`. Only the requesting connection receives
+the fixed phrase as a WAV in `voice.sample`. An operator uses `voice.select`
+to save a preference. Both reply types identify the request by
+`payload.requestMessageId`. Each official turn captures the saved voice once
+for all its segments. Auditions produce no conversation delivery.
+
 ## C1–C3: selection and dialogue
 
 C1 offers at most five eligible inputs and selects exactly one or defers. Intents are answer, clarify, acknowledge, support, playful and check-correction. Selection and intent share one provider attempt per opportunity. Unchanged deferred input causes no polling. M5 validates the oldest-eligible/answer fallback after failure; Stop, expiry or stale state cannot be bypassed. Interrupted inputs are not automatically marked answered or retried.
