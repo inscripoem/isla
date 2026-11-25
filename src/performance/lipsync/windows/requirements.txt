@@ -1,0 +1,5 @@
+# Windows render-session meter and loopback VTube Studio client
+pycaw==20260927
+psutil==7.2.2
+websocket-client==1.9.2
+comtypes==1.5.0

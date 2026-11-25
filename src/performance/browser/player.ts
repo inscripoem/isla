@@ -405,7 +405,7 @@ export function createPlaybackController(deps: PlaybackDeps): PlaybackController
 
     let handle: MediaHandle
     try {
-      handle = withinSyncBoundary(() => deps.media.create())
+      handle = withinSyncBoundary(() => deps.media.create(operation.command))
     } catch {
       commitPendingTerminal(operation)
       if (!operation.terminalChosen) settleTerminal(operation, 'failed', 'media_create_failed')

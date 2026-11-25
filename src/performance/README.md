@@ -1,5 +1,7 @@
 # M1 performance adapters
 
+For the formal console demo, see [Set up the speaking Hiyori model](lipsync/windows/README.md). Its default mouth driver follows Kokoro's synthesis-time RMS curve using the browser's media clock.
+
 This module houses the M1 speech synthesis, browser playback and avatar adapters
 for Isla. Application version 0.2. The M1 member owns this directory; the
 browser-safe public interface lives under [`browser/`](browser/) so M2 may
