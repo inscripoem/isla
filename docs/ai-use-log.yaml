@@ -10294,3 +10294,54 @@ entries:
         CI on this head is not observed. The branch is two commits behind main
         and the #192 conflict on the log tail is unresolved until one of the
         two merges.
+  - date: "2026-11-25"
+    task: m1-windows-speaking-mouth
+    change: >-
+      Add a Windows speaking-mouth demo for the normal operator console.
+      The companion combines accepted playback state with the render-session
+      level of the dedicated browser. The model preparer gives the local
+      Hiyori copy independent mouth inputs and removes competing mouth curves
+      from its animations while preserving their body movement. The launcher
+      starts the reference peers with a real renderer pinned to that copy.
+    requirements: [FR-03, FR-04, FR-05]
+    invariants: [INV-01, INV-02]
+    commits: ["6e6b4c29499db9e1a20db29bf56ef8037cc65d78", "0008f3f37e2c94f20631d908ea6f8c73632a8dc7"]
+    agent: OpenCode V2 build
+    provider: mistral
+    model: deepseek-v4-1-flash-1017
+    variant: max
+    sessions:
+      - "ses_dee2e6543ffeh2Qf9oAH36NPYA"
+      - "ses_dee285653ffe7RykEOZ1jBaksa"
+      - "ses_dee23c3d9ffe6bxk0ER9Hvwyym"
+      - "ses_dee1b51dfffeZ6fy1HbG82zP3M"
+      - "ses_dee1af33fffe9kVOKLTIKj6xsM"
+      - "ses_dee14e823ffeHyxEWsA9oubAJ7"
+      - "ses_dee19a8a4ffeNDB0ZlOgSnmhk5"
+    supervision: >-
+      The member selected the speaking-level scope, with natural completion
+      and mid-speech Stop as acceptance cases. The supervising assistant
+      coordinated the implementation, stock-model preparation, first pairing,
+      launcher and tests. Independent review compared captured VTS frames
+      with the audio and SQLite receipts and identified a stale-epoch case.
+      The implementation was revised after a Windows import failure, an
+      original animation that held the mouth closed, and a transient model
+      switch in which the API acknowledgement preceded the visible load.
+    verification:
+      base: 2b83017736929863210498ed2383ab23e8cd186f
+      results: >-
+        The M1 role suite passed 353 tests, the focused release suite passed
+        four and the Python state suite passed 26. On Windows, the formal
+        console played actual Kokoro speech through its dedicated Chromium
+        process. The first segment completed and the second was cancelled.
+        All six browser receipts matched SQLite. On the release baseline,
+        the mouth was visibly open in 92 of 98 and 110 of 116 frames sampled
+        during audible speech. It was stably closed from about 84 ms after
+        Stop in that run. The stock model's 19 source files were unchanged.
+      limits: >-
+        The recorded inputs used the local text echo. The physical run used
+        one Windows machine and its default audio endpoint. The full Windows
+        verify run passed 2253 tests, skipped nine, and reproduced the
+        pre-existing missing-base G6 CLI test failure when Node loaded an
+        absolute Windows path. The base run failed the same test. The
+        Windows build and the feature-specific checks passed.
