@@ -362,13 +362,13 @@ export function SessionFacts({ state, machine }: { readonly state: ConsoleState;
     ['Output confirmation', <FactChip key="oc" value={session === null ? 'unknown' : session.outputConfirmation} />],
     ['Renderer capability revision', <FactChip key="cr" value={session === null ? 'unknown' : String(session.capabilityRevision)} />],
     ['Accepted sequence', <FactChip key="sq" value={session === null ? 'unknown' : String(session.lastSeq)} />],
-    ['Retiring', <FactChip key="rt" value={session === null ? 'unknown' : session.retiring ? 'yes' : 'no'} tone={session === null || session.retiring ? undefined : 'plain'} />],
+    ['Retiring', <FactChip key="rt" value={session === null ? 'unknown' : session.retiring ? 'yes' : 'no'} tone={session === null ? undefined : session.retiring ? 'bad' : 'plain'} />],
   ]
 
   const authorityRows: readonly (readonly [string, ReactNode])[] = [
     ['Performer attached', <FactChip key="pa" value={machine === null ? 'unknown' : machine.performer ? 'yes' : 'no'} />],
     ['Operator authority', <FactChip key="oa" value={machine === null ? 'unknown' : machine.operator ? 'yes' : 'no'} />],
-    ['Session retiring', <FactChip key="sr" value={session === null ? 'unknown' : session.retiring ? 'yes' : 'no'} tone={session === null || session.retiring ? undefined : 'plain'} />],
+    ['Session retiring', <FactChip key="sr" value={session === null ? 'unknown' : session.retiring ? 'yes' : 'no'} tone={session === null ? undefined : session.retiring ? 'bad' : 'plain'} />],
   ]
 
   return (

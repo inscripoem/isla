@@ -3582,6 +3582,18 @@ describe('PR #187 review fixes: session and selection fact polarity', () => {
     expect(factRow(html, 'Active turn')).not.toContain('isla-visually-hidden')
   })
 
+  it('flags a retiring session instead of rendering its yes value as success', () => {
+    const retiring = reduceApplicationMessage(openedWithLastSeq(4), recoveryState(PIPELINE_EPOCH, true))
+    const html = renderToStaticMarkup(createElement(SessionFacts, { state: retiring, machine: null }))
+
+    for (const label of ['Retiring', 'Session retiring']) {
+      const row = factRow(html, label)
+      expect(row).toContain('is-bad')
+      expect(row).not.toContain('is-ok')
+      expect(row).not.toContain('is-plain')
+    }
+  })
+
   it('flags a synthetic plan and keeps an ordinary plan neutral', () => {
     const plan = {
       seq: 6,

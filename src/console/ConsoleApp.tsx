@@ -1301,8 +1301,12 @@ export function ConsoleApp({
                 <Tag tone={state.connection === 'open' ? 'accepted' : state.connection === 'error' ? 'error' : 'pending'} dot pulse={state.connection === 'open'}>
                   {session === null ? 'No session' : session.lifecycle}
                 </Tag>
-                <Tag tone="neutral" dot pulse={state.selection.stage === 'speaking'}>
-                  {state.selection.stage}
+                <Tag
+                  tone="neutral"
+                  dot
+                  pulse={speaking && state.connection === 'open' && session?.lifecycle !== 'stopped'}
+                >
+                  Pipeline: {state.selection.stage}
                 </Tag>
                 <span className="isla-stage__meta">
                   <span className="isla-stage__output">
