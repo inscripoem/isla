@@ -99,3 +99,16 @@ approvals:
       - test/offline/requirements.test.ts
       - test/offline/trace-fitness.test.ts
       - test/offline/ai-use-log-gate.test.ts
+  - id: TA-010
+    task: "Add Jev decisions selection/reaction adapters and the m3-jev comparison path"
+    approved_at: "2026-11-25T17:55:00+08:00"
+    approved_by: M3
+    scope:
+      - "src/decision/jev-decisions-core.ts"
+      - "src/decision/provider-jev.ts"
+      - "src/decision/index.ts"
+      - "src/decision/variants.ts"
+      - "test/support/decision-runner.ts"
+    tests:
+      - test/offline/m3-decision.test.ts
+      - test/live/m3-jev-decisions.live.test.ts

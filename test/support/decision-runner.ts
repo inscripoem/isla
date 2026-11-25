@@ -10,6 +10,7 @@ import {
   ProviderSelectionError,
   SelectionCallError,
   createRuleSelectionPort,
+  isLiveJevSelectionPort,
   isLiveProviderSelectionPort,
   isRuleSelectionPort,
 } from '../../src/decision'
@@ -41,6 +42,15 @@ import { createVirtualClock } from './virtual-clock'
  * reviews as corpus data, but the port receives only the request; labels are
  * used for scoring only after the result returns.
  */
+
+/**
+ * True when a port is backed by a real provider transport (OpenAI-compatible
+ * chat or TypeSafe Jev decisions) rather than an injected test fetch. Only these
+ * ports may certify corpus evidence; injected-fetch ports stay synthetic.
+ */
+function isLiveModelSelectionPort(port: SelectionPort): boolean {
+  return isLiveProviderSelectionPort(port) || isLiveJevSelectionPort(port)
+}
 
 export type SelectionInvalidReason =
   | 'schema-invalid'
@@ -361,7 +371,7 @@ export async function runSelectionVariantsOnCorpus(
     ): SelectionPort => {
       const port = factory(clock, context)
       if (tracksLiveness) {
-        syntheticPort = !isLiveProviderSelectionPort(port)
+        syntheticPort = !isLiveModelSelectionPort(port)
       }
       return port
     }
@@ -723,7 +733,7 @@ export async function runSelectionCase(
   }
 
   const authentic =
-    isLiveProviderSelectionPort(selection) || isRuleSelectionPort(selection)
+    isLiveModelSelectionPort(selection) || isRuleSelectionPort(selection)
   const syntheticPort = options.syntheticPort === true || !authentic
   return observe(entry, validation.result, { syntheticPort })
 }
