@@ -32,7 +32,7 @@ entries:
       on PR #65. The member directed the work and reviewed the diff before
       push.
     human_review: >-
-      Captain (M4) requested the repair after the M5 review and approved the
+      M4 requested the repair after the M5 review and approved the
       pushed revision 4273673. M5 re-review remains pending on PR #65.
     transcript_record: >-
       The conversation is retained in the opencode session; no separate export
@@ -85,7 +85,7 @@ entries:
       package manifest and the case registry were declared out of scope and
       untouched.
     human_review: >-
-      Captain (M4) approved the plan in session and requested the work.
+      M4 approved the plan in session and requested the work.
       Results remain under review until the member confirms. No git operation
       of any kind was performed.
     transcript_record: >-
@@ -130,7 +130,7 @@ entries:
       temporary defect reintroduction for the first three regression proofs;
       the page-reload defect was independently observed before its repair.
     human_review: >-
-      Captain approved local repair and verification. The repair remains
+      M5 approved local repair and verification. The repair remains
       unpublished and under review; PR36 at 08ff362 has changes requested.
       No commit, push, GitHub message/review or merge was performed.
     transcript_record: >-
@@ -174,7 +174,7 @@ entries:
       repair was needed or made. We independently ran verification and browser
       observations, then updated documentation and factual metadata.
     human_review: >-
-      Captain approved the local main-based rebuild and verification plan.
+      M5 approved the local main-based rebuild and verification plan.
       Publication and consumer acceptance remain pending. No agent merge.
     transcript_record: >-
       Complete OpenCode loopback session and message API response bodies are
@@ -224,7 +224,7 @@ entries:
       publication metadata. The refresh retained 33 source/test files byte for
       byte; its only new code-related edit restored the dev:loop package script.
     human_review: >-
-      Captain approved the local implementation and subsequent continuation.
+      M5 approved the local implementation and subsequent continuation.
       Publication and owner acceptance remain pending when this entry is prepared.
     transcript_record: >-
       Genuine records are retained privately in i1-integration-20261015,
@@ -271,7 +271,7 @@ entries:
       filter executes six capture tests and one ordering test. Vitest filters are
       regular expressions; literal parentheses in the full verifier must be escaped.
     human_review: >-
-      Captain explicitly approved the local implementation plan. Results remain
+      M5 explicitly approved the local implementation plan. Results remain
       under review; no commit, push, GitHub reply or review was authorized here.
     transcript_record: >-
       Genuine OpenCode CLI export and SHA-256 manifest are retained in private
@@ -811,7 +811,7 @@ entries:
     cases: [C-47, C-49]
     commits: []
     agent: opencode/deepseek-v4-flash
-    human_review: "Captain-authorized integration; OpenCode resolved six doc conflicts. Independent pnpm verify passed 695 tests / 37 files, typecheck, lint and build; muted fixed-WAV browser two-turn, Stop/Resume, reload and disconnect checks passed. Coordinator corrected current-state/allocation wording after review; publication and consumer acceptance remain pending."
+    human_review: "M5-authorized integration; OpenCode resolved six doc conflicts. Independent pnpm verify passed 695 tests / 37 files, typecheck, lint and build; muted fixed-WAV browser two-turn, Stop/Resume, reload and disconnect checks passed. Coordinator corrected current-state/allocation wording after review; publication and consumer acceptance remain pending."
 
   - date: 2026-10-16
     task: M6-01
@@ -844,7 +844,7 @@ entries:
     cases: [C-47, C-51]
     commits: []
     agent: opencode/deepseek-v4-flash
-    human_review: "Captain explicitly authorized local fetch, merge, full-file staging and signed commit. This entry records direct documentation/integration work, not a new OpenCode development session. Combined verification is recorded in the delivery plan; prior browser evidence remains bound to 4c42126. Publication and consumer review are separate."
+    human_review: "M5 explicitly authorized local fetch, merge, full-file staging and signed commit. This entry records direct documentation/integration work, not a new OpenCode development session. Combined verification is recorded in the delivery plan; prior browser evidence remains bound to 4c42126. Publication and consumer review are separate."
 
   - date: 2026-10-14
     task: R3
@@ -1020,7 +1020,7 @@ entries:
     cases: [C-34, C-35, C-36, C-37, C-47, C-51]
     commits: []
     agent: opencode/deepseek-v4-flash
-    human_review: "Captain explicitly authorized local fetch, merge, full-file staging and a signed integration commit. This records direct documentation and integration work, not a new OpenCode implementation session. Preservation and final verification are recorded in the delivery plan and external evidence; original browser observations remain tied to 4c42126. Publication requires separate approval."
+    human_review: "M5 explicitly authorized local fetch, merge, full-file staging and a signed integration commit. This records direct documentation and integration work, not a new OpenCode implementation session. Preservation and final verification are recorded in the delivery plan and external evidence; original browser observations remain tied to 4c42126. Publication requires separate approval."
 
   - date: 2026-10-17
     task: M6-01-PR36-frozen-restoration
@@ -1041,7 +1041,7 @@ entries:
     provider: self-api
     model: deepseek-v4-flash
     human_review: >-
-      Captain approved the local coordinator-proposed repair for M6 review. OpenCode v2.0.32
+      M5 approved the local coordinator-proposed repair for M6 review. OpenCode v2.0.32
       session ses_eb6090f71ffentiYa7qBgQaODr used native build and xhigh. Coordinator probes
       found and corrected dirty-file and symbolic-baseline acceptance, then required strict
       decoding. Mixed standalone/background continuation caused overlapping execution and a
@@ -1117,15 +1117,15 @@ entries:
     model: deepseek-v4-flash
     sessions: [ses_eb2014c63ffePhR2Ga1C7G7sxo, ses_eb180c970ffeoD5t6ywKvYKwFS]
     human_review: >-
-      Captain approved the recovery slice and its plan. Initial implementation was
-      authored on the former I1 working copy; Captain then approved migration to
+      M5 approved the recovery slice and its plan. Initial implementation was
+      authored on the former I1 working copy; M5 then approved migration to
       feat/i1-session-recovery, based on main 2d0459fd (the
       squashed merge of PR36, whose old head 979f88d had the same tree). PR36 is
       merged; this branch is a separate follow-up and is not covered by the
       baseline M1 approval
       (https://github.com/inscripoem/isla/pull/36#pullrequestreview-5561759957).
       At completion of local verification, the result was unpublished and under
-      review. Captain subsequently authorized committing and pushing this task
+      review. M5 subsequently authorized committing and pushing this task
       branch and creating a new PR. Implementation approval does not replace
       consumer review or human merge approval; no global configuration was changed.
     transcript_record: >-
@@ -1693,9 +1693,9 @@ entries:
     provider: deepseek
     model: DeepSeek V4.1 Flash
     supervision: >-
-      This M2-01 change was authored through OpenCode under a Captain-approved
+      This M2-01 change was authored through OpenCode under an M2-approved
       plan. The agent field names the authoring agent; no ses_ identifier is
-      asserted for this historical entry. The Captain approved the scope, the
+      asserted for this historical entry. M2 approved the scope, the
       animal-island-ui dependency and this publication.
     verification:
       role: "pnpm test:m2: 20 passed (the 16 first-slice cases plus 4 review regressions)."
@@ -1711,7 +1711,7 @@ entries:
       config has no application-protocol proxy. Application protocol 0.2 and
       diagnostic protocol 1 are unchanged.
     human_review: >-
-      The Captain approved the scope, the dependency and this publication, and
+      M2 approved the scope, the dependency and this publication, and
       directed that the provenance deviation be recorded truthfully. Consumer
       review by M5 (shared transport port, player-to-runtime channel) and by M1
       (the browser mount boundary) is requested and remains pending; publication is
@@ -1740,7 +1740,7 @@ entries:
     model: DeepSeek V4.1 Flash
     supervision: >-
       This review-fix increment was authored through OpenCode under the
-      Captain-approved plan; no ses_ identifier is asserted for this historical
+      M2-approved plan; no ses_ identifier is asserted for this historical
       entry.
     verification:
       role: "pnpm test:m2: 20 passed."
@@ -1779,7 +1779,7 @@ entries:
     model: DeepSeek V4.1 Flash
     supervision: >-
       This review-fix increment was authored through OpenCode under the
-      Captain-approved plan; no ses_ identifier is asserted for this historical
+      M2-approved plan; no ses_ identifier is asserted for this historical
       entry.
     verification:
       role: "pnpm test:m2: 24 passed (the 20 previous cases plus 4 new regressions)."
@@ -1822,7 +1822,7 @@ entries:
     model: DeepSeek V4.1 Flash
     supervision: >-
       This review-fix increment was authored through OpenCode under the
-      Captain-approved plan; no ses_ identifier is asserted for this historical
+      M2-approved plan; no ses_ identifier is asserted for this historical
       entry.
     verification:
       role: "pnpm test:m2: 27 passed (the 24 previous cases plus 3 new regressions)."
@@ -2006,7 +2006,7 @@ entries:
     model: DeepSeek V4.1 Flash
     supervision: >-
       This review-fix increment was authored through OpenCode under the
-      Captain-approved plan; no ses_ identifier is asserted for this historical
+      M2-approved plan; no ses_ identifier is asserted for this historical
       entry.
     verification:
       role: "pnpm test:m2: 31 passed (the 27 previous cases plus 4 new regressions)."
@@ -2171,7 +2171,7 @@ entries:
     launch_flags: [run, -m, self-api/deepseek-v4-flash#xhigh, --agent, build, --format, json]
     sessions: [ses_eb01582deffe1lXlytG5wjv8Gm]
     supervision: >-
-      Captain approved the implementation plan and this task worktree. The
+      M5 approved the implementation plan and this task worktree. The
       session was launched non-interactively with the observed flags above; the
       configured DeepSeek-V4-Flash provider and xhigh variant were used and no
       `--pure` flag was present. M1/M2/M3/M4/M6 ownership was preserved: no peer
@@ -2180,7 +2180,7 @@ entries:
       session storage; no transcript is copied into the checkout and none is
       fabricated.
     human_review: >-
-      Captain approved the plan before implementation; the result remains under
+      M5 approved the plan before implementation; the result remains under
       review. All changes are uncommitted and unpublished; no commit, push,
       review, merge or GitHub write was performed.
     verification:
@@ -2391,7 +2391,7 @@ entries:
     human_review: >-
       Supervised interruption, reproduction and correction recorded. All changes
       remain uncommitted and unpublished; status remains under review until the
-      Captain confirms.
+      M5 confirms.
     verification:
       m5: "pnpm test:m5: 123 tests / 6 files passed (the new route suite adds 10: lifecycle refusal and same-epoch recheck, early-disconnect release, lease and slot held until finish with a paused 16 MiB client and 429 capacity, disposal of a still-open response with late settlement release, production refusals 405/403/400/404/409, session/epoch scope, Stop and retired-epoch refusal after Resume, Stop during acquisition with a held real lease, and the assembled turn)."
       acceptance: "The unchanged probe `.cache/audio-late-lease-review-probe.ts` (node --import tsx) reported releaseCount 1 of 1 with pendingCount 0. Real processes: `pnpm dev:loop` and `pnpm dev`, then `node test/browser/root-entry-routing.mjs` passed 11/11 (including header 403, GET 405 and disallowed-origin 403 for /audio through the root proxy) and `node test/browser/root-entry-audio-browser.mjs` passed 8/8 in headless Chromium: the demo page's real operator bootstrap and Resume, a browser same-origin POST that the runtime admitted with its own Origin header and that returned the registered 103420-byte WAV (equal to the prepared asset), the stopped-session 409, the missing-header 403, the GET 405 and the unknown-reference 404. The assembled-turn check uses the real M1 Kokoro synthesis adapter, the real M1 registry and a clearly controlled raw-audio provider (no live provider, download or inference) and compares the bytes acquired over the HTTP route with the encoder output of the provider samples."
@@ -2466,7 +2466,7 @@ entries:
     human_review: >-
       Supervised coverage round and server-ownership correction recorded. All
       changes remain uncommitted and unpublished; status remains under review
-      until the Captain confirms.
+      until M5 confirms.
     verification:
       m5: "pnpm test:m5: 127 tests / 6 files passed; test/offline/m5-audio-resource-route.test.ts now has 14 tests, including the four new boundaries (degraded without an epoch change under a held acquisition, operator recovery under a held acquisition with the stopped successor refusing until resumed, invalidation while Blob.arrayBuffer() is pending, and the early-disconnected non-cooperating resolver holding its slot until settlement)."
       acceptance: "The unchanged probe `.cache/audio-late-lease-review-probe.ts` (node --import tsx) still reported releaseCount 1 of 1 with pendingCount 0 (not modified). The tracked browser checks ran against fresh direct Node children: `node test/browser/root-entry-routing.mjs` passed 11/11 and the Chromium acceptance passed 8/8 with the prepared toolchain supplied through ISLA_PLAYWRIGHT_PATH and ISLA_CHROMIUM_PATH; the run log is .cache/m5-audio-fresh-browser.log and the cleanup record .cache/m5-audio-fresh-browser.json (owned PIDs 307531/307532 exited after SIGTERM without force; ports 4317/5173/5174 empty)."
@@ -2513,7 +2513,7 @@ entries:
       log documentation. An unnecessary local-agent metadata lookup during log
       preparation was interrupted; verified session facts were supplied directly.
     human_review: >-
-      The implementation follows the Captain-approved M5 plan. The increment is
+      The implementation follows the plan approved by M5. The increment is
       under review, uncommitted and unpublished. No merge or external message
       is implied by local verification.
     transcript_record: >-
@@ -2680,7 +2680,7 @@ entries:
       full: "1013 tests / 58 files; typecheck, lint and build passed."
       focused: "M5 168 / 8. The initial newline-delimited file list did not validate the actual change range; G6 and trace were rerun with all 39 paths NUL-delimited. Preserve the initial logs as superseded validation evidence."
       browser: "11 root-routing and 8 Chromium audio-route checks passed; server exits observed."
-    human_review: "Captain approved local alignment and verification. Commit, push and PR publication still require exact-content confirmation. G4 remains not run; no live provider or acoustic claim."
+    human_review: "M5 approved local alignment and verification. Commit, push and PR publication still require exact-content confirmation. G4 remains not run; no live provider or acoustic claim."
   - date: "2026-10-19"
     task: M5-i1-recovery-cancellation-attribution
     branch: feat/m5-production-main
@@ -2704,7 +2704,7 @@ entries:
     opencode_version: 2.0.32
     sessions: [ses_eabd30267ffeAKNx0oVteNu9Id]
     supervision: >-
-      Captain approved this local follow-up to PR48 at 17ab933. The
+      M5 approved this local follow-up to PR48 at 17ab933. The
       misattribution discrimination was demonstrated with a temporary
       counterfactual: the old "any previously known turn" predicate accepted
       the confirmed turn's id for appended bookkeeping (probe assertion
@@ -2714,7 +2714,7 @@ entries:
       edit or production change was made; the separately handled review
       documentation was left untouched.
     human_review: >-
-      Captain approved the local follow-up and requested the focused test
+      M5 approved the local follow-up and requested the focused test
       change, the focused suite, full verification and this log entry.
       Results remain under review and unpublished; no commit, push, review
       or merge was performed.
@@ -2746,7 +2746,7 @@ entries:
     commits: []
     agent: opencode/deepseek-v4-flash
     human_review: >-
-      Captain explicitly approved the complete local implementation plan.
+      M5 explicitly approved the complete local implementation plan.
       Publication, PR-body edits and responses still require approval of
       exact content. This entry does not assert new remote publication.
     verification: >-
@@ -2785,7 +2785,7 @@ entries:
     invariants: [INV-01, INV-09, INV-12, INV-16]
     commits: []
     human_review: >-
-      Captain approved local repair and verification. The complete native
+      M5 approved local repair and verification. The complete native
       session and independent logs are preserved outside the repository.
       This candidate remains under review; publication needs exact approval.
     verification:
@@ -2820,7 +2820,7 @@ entries:
     invariants: [INV-01, INV-09, INV-12, INV-16]
     commits: []
     human_review: >-
-      Captain approved local integration, repair and verification. The
+      M5 approved local integration, repair and verification. The
       We required an additional first-completion regression because
       the initial case covered an already-confirmed output only. No new
       commit, push or external reply is authorized by this entry.
@@ -2916,7 +2916,7 @@ entries:
     opencode_version: 2.0.32
     session: ses_ea759d8c4ffe6uU47g0fS7mg6B
     supervision: >-
-      Captain approved local integration. OpenCode edited only the three
+      M5 approved local integration. OpenCode edited only the three
       conflicted files and did not stage, commit, push or publish. The
       We separately refreshed paired handoffs, installed dependencies,
       marked conflict resolution and verified the combination. No subagent
@@ -2994,7 +2994,7 @@ entries:
     opencode_version: 2.1.0
     session: ses_ea64bf454ffeCizP5ooUs5nqzM
     supervision: >-
-      Captain approved local repair and verification. OpenCode authored test
+      M5 approved local repair and verification. OpenCode authored test
       changes; we independently investigated, reviewed, tested and
       maintained paired handoffs. The same session received follow-up review
       for timeout-safe cleanup and a cancellation-evidence negative control.
@@ -3057,7 +3057,7 @@ entries:
     opencode_version: 2.1.0
     session: ses_ea305b8c0ffeckeiKtsr3ipgCT
     supervision: >-
-      Captain approved the local plan and directed the integration, gap inspection
+      M5 approved the local plan and directed the integration, gap inspection
       and implementation order; our review required the bounded follow-up
       (output drain, IPC-path coverage, trigger-vs-signal records, IPC restart), which
       OpenCode implemented. OpenCode authored the changes; we maintain
@@ -3158,7 +3158,7 @@ entries:
         this change does not touch; CI ran the same tree and passed G2, G3, trace
         and G5, so those failures are local-only.
     human_review: >-
-      Captain owns M4 and set the three-item scope, including the explicit
+      M4 set the three-item scope, including the explicit
       exclusions (no owner/audience field, no cross-session automatic recall, no
       persisted MemoryKind/expiration/consent, no topicHints/memoryQuery, no
       seventh intent, no intent-gated admission, PERSONA_RECALL_POLICY still
@@ -3187,7 +3187,7 @@ entries:
     opencode_version: 2.1.0
     session: ses_e9d97e993ffeKyWFpkz35i9lYU
     supervision: >-
-      Captain approved local follow-up on the GitHub mentions. OpenCode authored
+      M5 approved local follow-up on the GitHub mentions. OpenCode authored
       code and tests in one build/xhigh session; we reviewed
       the changes, reproduced failures on the exact upstream source and prepared
       this isolated proposal plus documentation. No delegated agents.
@@ -3197,7 +3197,7 @@ entries:
       unchanged revision. Proposed overflow and sink-uncertain reason semantics
       require M4 review. Generated counts and fulfilled sink writes do not establish
       playback or spoken-history admission. No new case ID is allocated.
-      Captain approved publication after reviewing the complete proposal. The
+      M5 approved publication after reviewing the complete proposal. The
       commit pointer identifies the implementation; M4 semantic review is pending.
     verification:
       focused: "OpenCode: boundary13/13 and M4 role189/9 passed on the combined local tree."
@@ -3225,7 +3225,7 @@ entries:
     opencode_version: 2.1.0
     session: ses_e9d97e993ffeKyWFpkz35i9lYU
     supervision: >-
-      Captain approved local GitHub-mention follow-up and reserved publication
+      M5 approved local GitHub-mention follow-up and reserved publication
       approval. OpenCode authored implementation and tests in the genuine build
       session with xhigh. We reviewed diffs, requested
       corrections, performed independent verification and maintained documents.
@@ -3235,7 +3235,7 @@ entries:
       M3 owns actual corpus and reviewed labels; M6 owns corpus/report binding
       and serialized memory.inspect review. M5 owns runtime persistence and
       delivery decisions; generation diagnostics do not prove playback.
-      Captain approved publication after reviewing the complete implementation
+      M5 approved publication after reviewing the complete implementation
       and reply bodies. The commit pointer identifies the implementation;
       owner review and final human merge remain separate.
     verification:
@@ -3270,7 +3270,7 @@ entries:
       checks and read-only input investigation. We review
       actual diffs and results and maintains the handoff; no delegated agents.
     human_review: >-
-      Under owner review; Captain approved publication and the commit pointer
+      Under owner review; M5 approved publication and the commit pointer
       identifies the implementation. Runtime-generated identities, times, persona and history
       mean this is not full SelectionRequest/corpus replay. M3 retains actual
       corpus, labels and semantic rubric; M6 retains report binding. C-05/C-16 stay
@@ -3301,11 +3301,11 @@ entries:
     opencode_version: 2.1.0
     session: ses_e9cd43cbbffeVlkBaFW3Iajwjp
     supervision: >-
-      Captain authorized local implementation. OpenCode authors application code
+      M5 authorized local implementation. OpenCode authors application code
       and tests using build/xhigh; we review, independently
       verifies and maintains ordinary documentation. No delegated agents.
     human_review: >-
-      Captain approved publication after reviewing the complete change and reply
+      M5 approved publication after reviewing the complete change and reply
       texts. The commit pointer identifies the implementation. M4 retains
       producer and audit-policy ownership; adoption remains under review.
       M1 approval of published PR54 at 4bc4c18 does not cover this new revision.
@@ -3337,9 +3337,9 @@ entries:
     opencode_version: 2.1.0
     session: ses_e99674d80ffeVxQB2bVG12Yx4Z
     supervision: >-
-      Captain authorized adoption at owner request. OpenCode authored the
+      M4 authorized adoption at owner request. OpenCode authored the
       adoption notes, verified the combined tree and recorded the commit
-      pointers; the Captain authorized publication.
+      pointers; M4 authorized publication.
     human_review: >-
       M4 owner acceptance of the PR54 producer/audit scope. M1 approvals of
       4bc4c18 and 39e5fca remain version-bound and are not replaced or extended
@@ -3464,7 +3464,7 @@ entries:
     opencode_version: 2.1.2
     session: ses_e93d60c5fffeh3Wdrwp9hdjZ5E
     supervision: >-
-      Captain approved narrowing the local work to M5 and separately publishing
+      M5 approved narrowing the local work to M5 and separately publishing
       the scoped PR56 review; other owners' work is deferred. The source and
       tests were authored by the recorded OpenCode session and are copied
       byte-for-byte from that candidate. We perform this mechanical
@@ -3472,7 +3472,7 @@ entries:
       authoring session, code change or original-owner evidence rewrite is
       claimed for the extraction.
     human_review: >-
-      Captain approved publication of this four-file candidate and opening PR55
+      M5 approved publication of this four-file candidate and opening PR55
       for scoped review after remote CI passes. The PR base and other owner
       branches remain unchanged. Prior M1 approval remains tied to b4be30e;
       this follow-up remains subject to review. Final merge remains human-owned.
@@ -3607,12 +3607,12 @@ entries:
     provider: self-api
     model: deepseek-v4-flash
     supervision: >-
-      Captain approved the narrow deployment-factory-only scope, the new test
+      M5 approved the narrow deployment-factory-only scope, the new test
       file and local verification in this session. One registry is created per
       deployment; no production protocol, API, dependency or lockfile changed.
       No subagent, Git mutation or remote action was used.
     human_review: >-
-      Captain approved this work and subsequently approved continued implementation
+      M5 approved this work and subsequently approved continued implementation
       and publication. Implementation commit 087c99cdf9e44400403a2c15556092835f618936
       was created by us after independent verification. Consumer and course
       acceptance remain pending; no merge is claimed.
@@ -3669,7 +3669,7 @@ entries:
       proofs before fixes. We maintain status/review documents, this factual
       log entry and independent verification. No delegated agents were used.
     human_review: >-
-      Captain approved first-stage local development by asking to proceed after
+      M5 approved first-stage local development by asking to proceed after
       reviewing the M5 plan. The candidate remains uncommitted, unpublished and
       under review. This is not implementation approval by M1, a live acceptance
       result or authorization for an agent to merge.
@@ -3721,7 +3721,7 @@ entries:
       the new entry's branch and launch flags from the actual CLI invocation
       before publication; the native session and prior log entries are unchanged.
     human_review: >-
-      Captain approved local completion of the two nonblocking M1 review
+      M5 approved local completion of the two nonblocking M1 review
       follow-ups on PR64 at base 1812948 and instructed implementation,
       verification and an honest development entry. M1's approval of the earlier
       candidate does not extend to this follow-up candidate. The work remains
@@ -3811,7 +3811,7 @@ entries:
       targeted boundary test, seven mutation checks and the full verify
       comparison. No subagent or application-provider call was used.
     human_review: >-
-      The Captain approved the plan before implementation. On 2026-10-23,
+      M3 approved the plan before implementation. On 2026-10-23,
       reviewer shallight reviewed selection-001's complete request and labels
       and approved message-001 = 2, message-002 = 1, defer = 0, answer for
       message-001 and acknowledge for message-002. Intent coverage stays
@@ -4006,7 +4006,7 @@ entries:
       withdrawal, so the defects in the withdrawn checker version are on record
       rather than silently reverted.
     human_review: >-
-      Captain (M4) authorised the split in session on 2026-10-30 after reading
+      M4 authorised the split in session on 2026-10-30 after reading
       the conflict report (ownership, shared contract, manifest). No reviewer
       approval, merge or case closure is claimed by this entry.
     transcript_record: >-
@@ -4041,7 +4041,7 @@ entries:
     agent: opencode/deepseek-v4.1-flash
     model: deepseek-v4.1-flash
     supervision: >-
-      Read-only failure investigation, then an approved HOW slice. The Captain approved the
+      Read-only failure investigation, then an approved HOW slice. M6 approved the
       classification, the branch and the artifact set; no production path was edited.
     human_review: >-
       Approved in-session. Published from m6-issue-68-boundary-parser as a PR for review; no
@@ -4098,7 +4098,7 @@ entries:
       usageStatus uses the usage-record vocabulary ('ok'), not the
       end-status one ('completed').
     human_review: >-
-      Captain (M4) authorised the fix in session on 2026-10-31 after reading the
+      M4 authorised the fix in session on 2026-10-31 after reading the
       two reproduced defects and the proposed file scope. No reviewer approval,
       no merge and no case closure is claimed by this entry; PR #134 remains
       CHANGES_REQUESTED until M5 re-reviews.
@@ -4163,7 +4163,7 @@ entries:
       files was touched. This entry is recorded after the fact, alongside PR
       #137.
     human_review: >-
-      Captain (M4) confirmed the OpenCode authorship and directed this entry on
+      M4 confirmed the OpenCode authorship and directed this entry on
       2026-11-01. The re-offer implements M5's plan-A selection on issue #44 and
       awaits M2's serialized-shape review and M5's caller trace on PR #137; no
       reviewer approval, merge or case closure is claimed by this entry.
@@ -4224,7 +4224,7 @@ entries:
       closing line, and the historical table is byte-identical) rather than
       accepting the session's own claim.
     human_review: >-
-      Captain (M4) authorised the branch, the commit and the issue #116 work in
+      M4 authorised the branch, the commit and the issue #116 work in
       session on 2026-10-31. No reviewer approval, merge or case closure is
       claimed; the accepter named by #116 is M2 and has not seen this yet.
     transcript_record: >-
@@ -4340,7 +4340,7 @@ entries:
       bin/pnpm.mjs. The earlier Node-24 attribution was therefore rejected on
       evidence, not adjusted to match the PR description.
     human_review: >-
-      Captain (M4) authorised fixing PR #136 in session on 2026-11-06, after a
+      M4 authorised fixing PR #136 in session on 2026-11-06, after a
       review of the open threads. No reviewer approval, merge or case closure is
       claimed here; M5's scoped approval covered 17f42d8 and this commit
       supersedes that head, so M5 and M6 must decide whether to re-approve.
@@ -4394,7 +4394,7 @@ entries:
       event-shape repair after a real browser smoke exposed the mismatch. The
       member ran every verification command and the browser startup check.
     human_review: >-
-      Captain approved the M2-01 slice and all follow-up repairs in session,
+      M2 approved the M2-01 slice and all follow-up repairs in session,
       then authorized the commit and push to the task branch. Work remains under
       review; no pull request or merge was performed.
     transcript_record: >-
@@ -4458,7 +4458,7 @@ entries:
       expiry observation changed. The wire shape, shared contracts and other
       module code were not altered.
     human_review: >-
-      The Captain directed completion of the remaining M2 work, which included
+      M2 directed completion of the remaining M2 work, which included
       resolving the outstanding PR #67 review findings and replying to them.
       Work remains under review; no merge, approval of another role's pull
       request or self-approval is claimed.
@@ -4520,7 +4520,7 @@ entries:
       audio composition from PR #130 and restored those temporary files
       afterwards; the checkout no longer contains them.
     human_review: >-
-      The Captain directed completion of the remaining M2 work and a commit per
+      M2 directed completion of the remaining M2 work and a commit per
       completed slice. Work remains under review; no self-approval, merge or
       reviewer acceptance is claimed.
     transcript_record: >-
@@ -4588,14 +4588,14 @@ entries:
     launch_flags: [--pure, --agent, build, --variant, xhigh]
     sessions: [ses_e57fb418dffegAQv7BTzclPKpi]
     supervision: >-
-      Captain (M3) directed the Issue #89 slice and required the deterministic
+      M3 directed the Issue #89 slice and required the deterministic
       rule port to mirror the established rule SelectionPort style without
       changing the frozen C3 contracts. The OpenCode build agent authored the
       production module, tests and trace/policy updates in the recorded session
       under --pure --agent build --variant xhigh; no subagent was used and no
       application provider call was made.
     human_review: >-
-      Captain (M3) requested this entry after reviewing the rule port and the
+      M3 requested this entry after reviewing the rule port and the
       adapted contract scope. No reviewer approval, merge or case closure is
       claimed by this entry.
     transcript_record: >-
@@ -4648,7 +4648,7 @@ entries:
     launch_flags: [--pure, --agent, build, --variant, xhigh]
     sessions: [ses_e57fb418dffegAQv7BTzclPKpi]
     supervision: >-
-      Captain (M3) directed the Issue #89 slice and its review-driven fixes: the
+      M3 directed the Issue #89 slice and its review-driven fixes: the
       rule port mirrors the established rule SelectionPort error and validation
       style without changing the frozen C3 contracts, never freezes caller
       input, matches positive cues on segmentText only, and is exercised through
@@ -4657,7 +4657,7 @@ entries:
       recorded session under --pure --agent build --variant xhigh; no subagent
       was used and no application provider call was made.
     human_review: >-
-      Captain (M3) requested this entry after reviewing the rule port, the
+      M3 requested this entry after reviewing the rule port, the
       review findings and the adapted contract scope. No reviewer approval,
       merge or case closure is claimed by this entry.
     transcript_record: >-
@@ -4775,7 +4775,7 @@ entries:
       exact strings, and ran the gates; every changed line was authored by the
       OpenCode session and we performed git operations only.
     human_review: >-
-      Captain (M4) directed the change in session on 2026-11-06 under the plan
+      M4 directed the change in session on 2026-11-06 under the plan
       recorded on issue #44 (M3 semantics confirmation 2026-11-04; M5 endorsement
       2026-11-01). No reviewer approval, merge or case registration is claimed by
       this entry; the pull request awaits consumer review.
@@ -4885,9 +4885,9 @@ entries:
       OpenCode authored the test-only adoption helper, the checks, the harness
       synthesis seam, the coordinator terminal-status correction, the
       evaluation-adapter classification change, the role-script update and the
-      English handoff, trace and README edits. Captain approved the local M5 I1
+      English handoff, trace and README edits. M5 approved the local M5 I1
       adoption scope; the implementation kept red-before-fix evidence and
-      inspected every `turn.ended` consumer. The reviewer, not Captain
+      inspected every `turn.ended` consumer. The reviewer, not M5
       personally, requested this session's detailed failure semantics, the
       bounded follow-up checks and the provenance correction. We
       added the owner-replacement table to the handoff and independently ran
@@ -4895,7 +4895,7 @@ entries:
       plus five consecutive repetitions of the seven adoption checks. No subagent,
       live provider, Git mutation or remote write was used.
     human_review: >-
-      Captain authorized the local M5 I1 adoption scope only; Captain did not
+      M5 authorized the local M5 I1 adoption scope only; M5 did not
       personally authorize the detailed failure semantics or code acceptance.
       Those requests came from the reviewer. Candidate human review
       remains pending and the changes remain uncommitted.
@@ -4936,7 +4936,7 @@ entries:
     agent: opencode/deepseek-v4-flash
     sessions: [ses_e813b6114ffedTdxhlGftM8AF3]
     supervision: >-
-      Captain approved continued local implementation, publication and existing
+      M5 approved continued local implementation, publication and existing
       task follow-up. We extracted already-authored code, coordinated the
       package test command and documentation, and ran independent verification.
       No new OpenCode code-authoring session or teammate implementation is claimed.
@@ -4973,14 +4973,14 @@ entries:
     launch_flags: [--agent, build, --format, json]
     sessions: [ses_e740bebbeffeMIymYrx6cKvG6o]
     supervision: >-
-      Captain approved the local implementation and requires separate approval
+      M5 approved the local implementation and requires separate approval
       before publication. OpenCode authored code and tests in two supervised
       rounds. We traced consumers, requested the competing-input and settled
       cancellation assertions, maintained paired documentation and independently
       verified the final candidate. No other module was repaired on its owner's
       behalf; no subagent was used.
     human_review: >-
-      Under review. Captain authorized local implementation; code publication,
+      Under review. M5 authorized local implementation; code publication,
       review submission and progress-board updates require separate confirmation.
       Final merge and full product acceptance remain human-owned.
     transcript_record: >-
@@ -5028,7 +5028,7 @@ entries:
     model_id: self-api/deepseek-v4-flash#xhigh
     sessions: [ses_e7232e5e5ffe8bQ7llyVawnK2M]
     supervision: >-
-      Captain approved this local M5 work. We scoped the
+      M5 approved this local M5 work. We scoped the
       increment: a separate deployment entry, no edit to production-kit.ts or
       production-deployment.ts, reaction kept substituted, and no claim beyond
       the checks actually run. OpenCode authored the entry, the tests, the
@@ -5044,7 +5044,7 @@ entries:
     human_review: >-
       M4 approved PR131 head 9a675873 for its dialogue-side scope and identified
       this non-blocking coverage gap; the follow-up assertion remains under
-      Captain review. Publication, review submission and merging stay separate
+      M5 review. Publication, review submission and merging stay separate
       human decisions. No product, formal-console or full-I1 acceptance is
       claimed.
     verification:
@@ -5096,7 +5096,7 @@ entries:
     model_id: self-api/deepseek-v4-flash#xhigh
     sessions: [ses_e459ac963ffegh0FnSyHxha27F]
     supervision: >-
-      Captain approved the local plan before implementation. We reviewed
+      M5 approved the local plan before implementation. We reviewed
       OpenCode's work, interrupted two prolonged reading and review rounds, continued
       the same session with the existing authorization, and independently ran
       and reported the tests. OpenCode authored the test and composition code;
@@ -5141,14 +5141,14 @@ entries:
     model: deepseek-v4.1-flash
     supervision: >-
       Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
-      the Captain approved the local slice on 2026-11-06. The shape reading
+      M6 approved the local slice on 2026-11-06. The shape reading
       (root binding plus an `attempts` array) is stated in the module header
       because the merged proposal lists the per-attempt fields flat while also
       requiring one object per run; that reading is still unconfirmed, and the
       report integration is deliberately excluded so a wrong reading cannot
       reach a published table.
     human_review: >-
-      Captain (M6) approved the local implementation slice; no independent
+      M6 approved the local implementation slice; no independent
       reviewer has read the parser and no merge is claimed.
     transcript_record: >-
       The OpenCode session record is retained locally; no export was produced.
@@ -5190,7 +5190,7 @@ entries:
       contract, dependency, manifest or deployment change was made; the local
       `package.json` edit remains uncommitted.
     human_review: >-
-      The Captain directed continuation of the remaining M2 work with a commit
+      M2 directed continuation of the remaining M2 work with a commit
       per completed slice. The change remains under review; no self-approval,
       merge or reviewer acceptance is claimed.
     transcript_record: >-
@@ -5230,7 +5230,7 @@ entries:
     model_id: self-api/deepseek-v4-flash#xhigh
     sessions: [ses_e7055c128ffegY9rapRNSosxO6]
     supervision: >-
-      Captain authorised local work. We scoped Issue 133,
+      M5 authorised local work. We scoped Issue 133,
       inspected the affected entry and callers, and ran the checks. OpenCode
       authored the source change, the tests and their helper. An initial test
       used the tsx launcher and passed on the unfixed code, so it was replaced
@@ -5264,7 +5264,7 @@ entries:
     commits: [cd0fee7999804cd52fde0881b910561ae9c82b99]
     agent: opencode/deepseek-v4-flash
     supervision: >-
-      Captain approved publication of the previously verified implementation.
+      M5 approved publication of the previously verified implementation.
       OpenCode authored the original code and tests in the session already
       recorded in the preceding implementation entry; this entry records the
       published commit only and does not claim a new implementation session.
@@ -5310,7 +5310,7 @@ entries:
     launch_flags: ["-m", "self-api/deepseek-v4-flash#xhigh", "--agent", "build", "--format", "json"]
     sessions: [ses_e398f7510ffeDasJmKzoNfvFOQ]
     supervision: >-
-      Captain approved local implementation of the test changes; this record was
+      M5 approved local implementation of the test changes; this record was
       appended in the same session. The model id, provider ID and variant above
       are observed from native session message metadata; the upstream service
       behind self-api is not inferred. No subagent was used, and no
@@ -5383,7 +5383,7 @@ entries:
     sessions:
       - ses_e2e484c8fffe29HihO5CMbzUmc
     supervision: >-
-      Captain authorized OpenCode build execution and review updates for Issue
+      M3 authorized OpenCode build execution and review updates for Issue
       #104 using transient in-memory environment authentication without
       modifying global OpenCode configuration or writing credentials to disk.
       The provider resolved deepseek-v4-flash to server model id deepseek-flash
@@ -5434,12 +5434,12 @@ entries:
     model: deepseek-v4.1-flash
     supervision: >-
       Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
-      the Captain approved continuing the local #100 slice. The companion shape
+      M6 approved continuing the local #100 slice. The companion shape
       (root binding plus `attempts`) remains unconfirmed, so the renderer repeats
       the parser's reading and the command refuses rather than guessing; a shape
       change touches the parser and this section, not the record schema.
     human_review: >-
-      Captain (M6) approved the local implementation slice; no independent
+      M6 approved the local implementation slice; no independent
       reviewer has read the command or the section and no merge is claimed.
     transcript_record: >-
       The OpenCode session record is retained locally; no export was produced.
@@ -5478,7 +5478,7 @@ entries:
     model: deepseek-v4.1-flash
     supervision: >-
       Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
-      the Captain approved the review fixes. The companion shape (root binding
+      M6 approved the review fixes. The companion shape (root binding
       plus `attempts`) remains unconfirmed and is recorded as such in the trace
       row.
     human_review: >-
@@ -5519,7 +5519,7 @@ entries:
     model: deepseek-v4.1-flash
     supervision: >-
       Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
-      the Captain approved the refit plan. The companion shape remains
+      M6 approved the refit plan. The companion shape remains
       unconfirmed; the header now says so without claiming the command is
       inactive.
     human_review: >-
@@ -5561,10 +5561,10 @@ entries:
     model: deepseek-v4.1-flash
     supervision: >-
       Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
-      the Captain approved F1+F2 with the recommended exact-acknowledgement,
+      M6 approved F1+F2 with the recommended exact-acknowledgement,
       notRun[] and JSON-tuple options. M5's review is the specification.
     human_review: >-
-      Captain (M6) approved the fix plan; M5/M4 re-review requested. No merge or
+      M6 approved the fix plan; M5/M4 re-review requested. No merge or
       checkpoint acceptance is claimed.
     transcript_record: >-
       The OpenCode session record is retained locally; no export was produced.
@@ -5598,10 +5598,10 @@ entries:
     model: deepseek-v4.1-flash
     supervision: >-
       Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
-      the Captain approved the A1 shape (run reason + occurrence). M5's review is
+      M6 approved the A1 shape (run reason + occurrence). M5's review is
       the specification.
     human_review: >-
-      Captain (M6) approved the plan; M5/M4 review pending. No merge or
+      M6 approved the plan; M5/M4 review pending. No merge or
       checkpoint acceptance is claimed.
     transcript_record: >-
       The OpenCode session record is retained locally; no export was produced.
@@ -5632,7 +5632,7 @@ entries:
     supervision: >-
       Authored through OpenCode under M6 supervision after the local self-review.
     human_review: >-
-      Captain (M6) approved the fix; review pending. No merge claimed.
+      M6 approved the fix; review pending. No merge claimed.
     transcript_record: >-
       The OpenCode session record is retained locally; no export.
     verification:
@@ -5664,7 +5664,7 @@ entries:
     supervision: >-
       Authored through OpenCode under M6 supervision after the advisory review memo.
     human_review: >-
-      The Captain approved the defect list; M5/M4 review and merge remain human actions.
+      M6 approved the defect list; M5/M4 review and merge remain human actions.
     transcript_record: >-
       The OpenCode session record is retained locally; no export.
     verification:
@@ -5703,7 +5703,7 @@ entries:
       Authored through OpenCode under M6 supervision after M5's changes-requested
       review at ff676ba; the fix follows M5's reproducer.
     human_review: >-
-      The Captain approved the #140 fix plan; M5/M4 re-review and merge remain human actions.
+      M6 approved the #140 fix plan; M5/M4 re-review and merge remain human actions.
     transcript_record: >-
       The OpenCode session record is retained locally; no export.
     verification:
@@ -5739,7 +5739,7 @@ entries:
       Authored through OpenCode under M6 supervision after M5's changes-requested
       review at 0b891d8; the fix follows M5's reproducer.
     human_review: >-
-      The Captain approved the plan; M5 re-review and merge remain human actions.
+      M6 approved the plan; M5 re-review and merge remain human actions.
     transcript_record: >-
       The OpenCode session record is retained locally; no export.
     verification:
@@ -6252,8 +6252,8 @@ entries:
     task: "M6 memory AI-use wording correction"
     branch: m6-memory-foundation
     change: >-
-      Replace "Captain" with "M6" in the ten places the memory-foundation entries
-      used it, so the supervising human is named consistently with the owner. Only
+      Use the M6 role label for the supervising member in ten references
+      across the memory-foundation entries. Only
       the eight memory-branch entries changed; other owners' historical entries and
       the team documents keep their wording. No code, test, requirements or
       behaviour change.
@@ -6425,10 +6425,10 @@ entries:
     model: deepseek-v4.1-flash
     supervision: >-
       Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
-      the Captain approved the Wave 1 slice. The companion shape remains
+      M6 approved the Wave 1 slice. The companion shape remains
       unconfirmed; eligibility consumes the same reading as the parser.
     human_review: >-
-      Captain (M6) approved the local slice; no independent reviewer has read it
+      M6 approved the local slice; no independent reviewer has read it
       and no merge is claimed.
     transcript_record: >-
       The OpenCode session record is retained locally; no export was produced.
@@ -6467,11 +6467,11 @@ entries:
     model: deepseek-v4.1-flash
     supervision: >-
       Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
-      the Captain approved the review-fix slice (D1=A, D2, D3, D4). M4's review is
+      M6 approved the review-fix slice (D1=A, D2, D3, D4). M4's review is
       the specification; no approval is claimed and the label gate remains with
       #145.
     human_review: >-
-      Captain (M6) approved the fix plan; M4 re-review requested at `5e5a8b1`.
+      M6 approved the fix plan; M4 re-review requested at `5e5a8b1`.
       No merge, scoring or checkpoint acceptance is claimed.
     transcript_record: >-
       The OpenCode session record is retained locally; no export was produced.
@@ -6505,9 +6505,9 @@ entries:
     model: deepseek-v4.1-flash
     supervision: >-
       Authored through OpenCode (deepseek-v4.1-flash) under M6 supervision after
-      the Captain approved E (JSON-key adoption). M4's review is the motivation.
+      M6 approved E (JSON-key adoption). M4's review is the motivation.
     human_review: >-
-      Captain (M6) approved; final review after retarget. No merge or acceptance
+      M6 approved; final review after retarget. No merge or acceptance
       is claimed.
     transcript_record: >-
       The OpenCode session record is retained locally; no export was produced.
@@ -7188,15 +7188,12 @@ entries:
       commits, code first and then this log, with no squash and no amend, so
       commits can cite the real code SHA.
     transcript_record: >-
-      The three sessions retain their conversations in the local OpenCode
-      session store. Their per-session records (title, session id, role) are
-      kept outside the repository at
-      D:/isla-m4-05/m4-impl/X01-port-v2/opencode-sessions.md; the raw JSONL
-      streams are D:/isla-m4-05/m4-impl/X01-port-v2/impl-session-raw.json
-      (735,178 bytes, empty stderr) and
-      D:/isla-m4-05/m4-impl/X01-port-v2/ridealong-session-raw.json
-      (230,449 bytes, empty stderr). No export is stored in the repository
-      and no credential appears in repository files.
+      PR #163 documents the three OpenCode sessions and the X01 verification.
+      See https://github.com/inscripoem/isla/pull/163
+      In CS5351 Project Files / 04_D5_Raw_Exports / M4 / M4session.zip,
+      files 115, 116 and 120 match the session IDs above. M4 retains the
+      per-session records and the original implementation (735,178 bytes)
+      and ride-along (230,449 bytes) JSONL streams, both with empty stderr.
     verification:
       base: b863fa9
       reproduction: >-
@@ -7324,13 +7321,12 @@ entries:
       pre-rebase commits (c17d53d, 7138772) with the replayed pair
       (418bcad, log commit).
     transcript_record: >-
-      The sessions listed in sessions retain their conversations in the
-      local OpenCode session store; their per-session record (session
-      title, task book, session id, created time and role) is written
-      outside the repository: the four original-round sessions at
-      D:/isla-m4-05/m4-impl/X02X07/opencode-sessions.md and the rebase-round
-      sessions at D:/isla-m4-05/m4-impl/X02X07-rebase/opencode-sessions.md.
-      No export is stored in the repository.
+      PR #159 documents the X02 and X07 implementation and verification.
+      See https://github.com/inscripoem/isla/pull/159
+      In CS5351 Project Files / 04_D5_Raw_Exports / M4 / M4session.zip,
+      files 111 through 114 and 123 through 124 match the original and rebase
+      session IDs above. M4 retains the per-session titles, task books,
+      timestamps and roles with the original records.
     verification:
       base: 205424f
       typecheck: 0
@@ -7392,7 +7388,7 @@ entries:
       - ses_e2e55eb68ffeEyosSWikkc2hKq
       - ses_e2e533dcbffe065K3LK5AeRnpq
     supervision: >-
-      Captain authorized OpenCode build execution for Issue #98 using transient
+      M3 authorized OpenCode build execution for Issue #98 using transient
       in-memory environment authentication without modifying global OpenCode
       configuration or writing credentials to disk. The provider resolved
       deepseek-v4-flash to server model id deepseek-flash (DeepSeek-V4.1-Flash).
@@ -7454,7 +7450,7 @@ entries:
     sessions:
       - ses_e2cbec712ffeV2duIpJ5sHMMKT
     supervision: >-
-      Captain (shallight) personally reviewed the translated and original
+      M3 personally reviewed the translated and original
       scenarios, candidates, scores, and intents for selection-002..selection-012
       and explicitly authorized human sign-off and promotion of PR #155 from
       Draft to Ready for Review. Commit SHA updated from pre-rebase
@@ -7516,7 +7512,7 @@ entries:
     sessions:
       - ses_e2961c091ffeD2MEtaLtxav74N
     supervision: >-
-      Captain reviewed and approved the point-by-point remediation plan before
+      M3 reviewed and approved the point-by-point remediation plan before
       execution. All 9 touched files were inspected line-by-line by the
       us prior to commit; all 12 corpus request, label, review, and
       manifest JSON files remained byte-identical to cb156c4. Commit SHA updated
@@ -7590,7 +7586,7 @@ entries:
     sessions:
       - ses_e235a4408ffekUKnA35M9DDJM4
     supervision: >-
-      Captain reviewed and approved the Stage 3 rebase and remediation plan
+      M3 reviewed and approved the Stage 3 rebase and remediation plan
       (including keeping M3-02 adapters under Role Issue #4 and Issue #98). All
       10 modified files in commit 6eec8df were inspected 100% line-by-line by
       us before commit, catching and correcting a fractional-clock
@@ -7651,7 +7647,7 @@ entries:
     sessions:
       - ses_e1e5d345effe6WMK9D47zj19bk
     supervision: >-
-      Captain reviewed and approved the fail-closed certification plan (adopting
+      M3 reviewed and approved the fail-closed certification plan (adopting
       M6's WeakSet marker plus model-variant live-port preservation and 12/12
       observed inline-stub assertions while keeping splitScore semantics intact).
       All 4 touched files in commit e82a400 were inspected line-by-line by the
@@ -7713,7 +7709,7 @@ entries:
       hotkeys on #95, we pinned the verified Hiyori_A model id and the three
       action-to-hotkey bindings in the reference deployment and its README.
     human_review: >-
-      Local only. Push and pull-request creation await Captain approval; no
+      Local only. Push and pull-request creation await M5 approval; no
       agent merges and no product acceptance is claimed.
     transcript_record: >-
       Both sessions remain in the local OpenCode store; raw exports have not
@@ -7766,8 +7762,8 @@ entries:
       locally. The review findings were supplied as constraints rather than
       line-by-line implementation.
     human_review: >-
-      Captain requested the CP04 review fixes and authorized local work. The
-      change is local only; push and re-review requests await Captain approval.
+      M5 requested the CP04 review fixes and authorized local work. The
+      change is local only; push and re-review requests await M5 approval.
       No agent merges and no CP04 acceptance is claimed.
     transcript_record: >-
       The genuine OpenCode session ses_e1d82bd58ffedigb6HDcG4vtR3 remains in
@@ -7811,13 +7807,13 @@ entries:
     opencode_version: 2.2.6
     sessions: [ses_e3c429349ffebBz9NcI4oREI7o]
     supervision: >-
-      Captain requested the repair in a separate worktree. We drove the initial
+      M5 requested the repair in a separate worktree. We drove the initial
       OpenCode work and reviewed the scope, required CPU
       browser flags and a bounded source comment, and continued the same
       OpenCode session to correct the test harness and its TypeScript typing.
       The initial interrupted work and failed checks are retained in evidence.
     human_review: >-
-      Captain authorized the local work. The candidate remains uncommitted and
+      M5 authorized the local work. The candidate remains uncommitted and
       has not received a new review from the console owner; publication and
       merge decisions remain separate.
     transcript_record: >-
@@ -8128,9 +8124,9 @@ entries:
       session retried after provider ECONNRESET errors; the successful edits and
       local test results are retained.
     human_review: >-
-      Captain requested the #158 conflict resolution. M6 owns the PR and the
+      M5 requested the #158 conflict resolution. M6 owns the PR and the
       gate; this change is limited to the historical-entry rule and its tests.
-      Push and merge decisions remain with the Captain; no agent merge is
+      Push and merge decisions remain with M5; no agent merge is
       claimed.
     transcript_record: >-
       The genuine OpenCode session ses_e1aee1906ffeWv5gXw52VHBEQN remains in
@@ -8170,7 +8166,7 @@ entries:
       code, gate rule, baseline or workflow change remains; the gate and tests
       were reverted to the main versions before this entry was added.
     human_review: >-
-      Captain directed use of the existing pull request #169 for this
+      M5 directed use of the existing pull request #169 for this
       correction. The change is documentation only; merge remains subject to
       the repository rules.
     transcript_record: >-
@@ -8366,8 +8362,8 @@ entries:
       #165 squash merge left the four branch commits unreachable from main. No
       application code, gate rule or workflow change is included.
     human_review: >-
-      Captain asked to check the #165 rebase and GitHub state; this correction
-      follows that check. Push and pull-request creation await Captain approval.
+      M5 asked to check the #165 rebase and GitHub state; this correction
+      follows that check. Push and pull-request creation await M5 approval.
     transcript_record: >-
       This correction was made by us; no OpenCode
       session transcript of its own. The #165 OpenCode sessions remain in the
@@ -8411,9 +8407,9 @@ entries:
       The session had no general shell tool, so we ran every test
       command outside it.
     human_review: >-
-      Captain approved the policy change: keep squash merges, enforce ancestry
+      M5 approved the policy change: keep squash merges, enforce ancestry
       at the pull request, and treat a main push as an integration event. The
-      change is local only; push, pull-request creation and merge await Captain
+      change is local only; push, pull-request creation and merge await M5
       approval.
     transcript_record: >-
       The genuine OpenCode session ses_e1873844bffeGrUfMYTxF2JKKV remains in
@@ -8594,13 +8590,12 @@ entries:
       follow-up docs change, the same convention PR #169 recorded for the
       #158 entries.
     transcript_record: >-
-      The implementation session retains its conversation in the local
-      OpenCode session store. Its record (title, session id, role) and raw
-      JSONL stream (741,117 bytes, empty stderr) are kept outside the
-      repository at D:/isla-m4-05/m4-impl/A03/opencode-sessions.md and
-      D:/isla-m4-05/m4-impl/A03/impl-session-raw.json. The session writing
-      this entry also retains its conversation there. No export is stored
-      in the repository and no credential appears in repository files.
+      PR #170 documents the A03 implementation session and verification.
+      See https://github.com/inscripoem/isla/pull/170
+      In CS5351 Project Files / 04_D5_Raw_Exports / M4 / M4session.zip,
+      file 121 matches the implementation session ID above. M4 retains the
+      per-session record, the original JSONL stream (741,117 bytes with empty
+      stderr), and the separate session that wrote this log entry.
     verification:
       base: b58a5ad
       reproduction: >-
@@ -8707,14 +8702,12 @@ entries:
       squash and no amend are used, and the branch is pushed with a normal
       push on top of the reviewer-reviewed head.
     transcript_record: >-
-      The fix-round implementation session retains its conversation in the
-      local OpenCode session store. Its record (title, session id, role) and
-      raw JSONL stream are kept outside the repository at
-      D:/isla-m4-05/m4-impl/A03/opencode-sessions.md and
-      D:/isla-m4-05/m4-impl/A03/fixround-session-raw.json (empty stderr).
-      The session writing this entry also retains its conversation there. No
-      export is stored in the repository and no credential appears in
-      repository files.
+      PR #170 records the A03 review and fixes.
+      See https://github.com/inscripoem/isla/pull/170
+      In CS5351 Project Files / 04_D5_Raw_Exports / M4 / M4session.zip,
+      file 135 matches the fix-round session ID above. M4 retains the
+      per-session record, the original JSONL stream with empty stderr,
+      and the separate session that wrote this log entry.
     verification:
       base: 4160570
       reproduction: >-
@@ -8772,7 +8765,7 @@ entries:
       agent. The session had no shell tool, so we ran every test command
       outside the session and the results below are measured locally.
     human_review: >-
-      The change is local only; push and pull-request creation await Captain
+      The change is local only; push and pull-request creation await M5
       approval. No agent merges.
     transcript_record: >-
       The genuine OpenCode session ses_e2a38207affeQcB6p3jfyqLn3t remains in
@@ -8828,8 +8821,8 @@ entries:
       shell tool, so we ran every test command outside the
       session and the results below are measured locally.
     human_review: >-
-      Captain requested the review fixes and authorized local work. The change
-      is local only; push, PR body update and re-review requests await Captain
+      M5 requested the review fixes and authorized local work. The change
+      is local only; push, PR body update and re-review requests await M5
       approval. No agent merges.
     transcript_record: >-
       The genuine OpenCode session ses_e1f744d59ffeVohxjXwKLapXp9 remains in
@@ -8889,9 +8882,9 @@ entries:
       ran every test command outside it and the results below are
       measured locally.
     human_review: >-
-      Captain requested all local preparation and item-by-item review. M3's
+      M5 requested all local preparation and item-by-item review. M3's
       review at 1887d8b requested changes; this fix is local only. Push, PR body
-      update and re-review requests await Captain approval. No agent merges.
+      update and re-review requests await M5 approval. No agent merges.
     transcript_record: >-
       The genuine OpenCode session ses_e15d0b969ffemGwBE9exO0nDdD remains in
       the local OpenCode store; the export is saved in
@@ -9487,8 +9480,8 @@ entries:
       at implementation time. The implementation session
       ses_e262f0a3effeFpyJop8WexJbRu wrote the two new files and the
       manifest line on 2026-11-14 at the 205424f base; src/dialogue/index.ts
-      was deliberately not touched per the task book's stop rule. The
-      We independently re-ran the gates and reviewed the diff.
+      was deliberately not touched per the task book's stop rule. The M4
+      supervisor independently re-ran the gates and reviewed the diff.
       Before the commit round the branch (which had no commits) was migrated
       by stash and fast-forward rebase onto merged main a093f50; the
       package.json manifest line conflicted with the growth PR #159 had
@@ -9507,15 +9500,19 @@ entries:
       kept after disclosure (it can be normalized in the follow-up wiring
       session). This AI-use entry is written by a separate genuine OpenCode
       session per the 2026-11-15 tightened rule that repository code and all
-      ai-use-log content are session-written; that session's id and raw
-      stream are recorded outside the repository in
-      m4-impl/A06/opencode-sessions.md. The PR round makes two consecutive
-      JSONL stream (393,065 bytes, empty stderr) are kept outside the
-      repository at D:/isla-m4-05/m4-impl/A06/opencode-sessions.md and
-      D:/isla-m4-05/m4-impl/A06/impl-session-raw.json. The session writing
-      this entry also retains its conversation there. No export is stored in
-      the repository and no credential appears in repository files.
-        (feat/m4-a06-style-contract on b58a5ad). pnpm typecheck -> exit 0;
+      ai-use-log content are session-written. PR #171 identifies the code
+      and log commits for this round.
+    transcript_record: >-
+      PR #171 documents the implementation session, the separate log-writing
+      session and their verification. See https://github.com/inscripoem/isla/pull/171
+      In CS5351 Project Files / 04_D5_Raw_Exports / M4 / M4session.zip,
+      file 122 matches the implementation session ID above. M4 retains that
+      original JSONL stream (393,065 bytes with empty stderr) and the
+      separate log-writing session.
+    verification:
+      base: b58a5ad
+      results: >-
+        On feat/m4-a06-style-contract, pnpm typecheck exited 0.
         pnpm lint -> 0 warnings and 0 errors on 323 files; pnpm test:m4 ->
         430 passed in 19 files (clean b58a5ad baseline 419 in 18 files, +11
         style cases); pnpm test -> 2039 passed, 9 skipped and 1 failed in
@@ -9524,7 +9521,8 @@ entries:
         (reproduced on clean main in earlier rounds and untouched by this
         branch); pnpm build -> exit 0; the pnpm verify composite cannot run
         its nested pnpm invocation on this host, so its four components were
-        verified individually and the remote verify run is the final
+        verified individually. PR #171 links the remote checks.
+    scope: >-
       The standalone style-contract pure module, its deterministic
       validation and repair, the new style test file, the one-line manifest
       growth, and this AI-use entry. No wiring in DialoguePort.generate
@@ -9865,7 +9863,7 @@ entries:
     launch_flags: [--agent, build, --format, json, -m, "self-api/deepseek-v4-flash#xhigh"]
     sessions: [ses_deefdb749ffeaHiIIbNHgviIDy]
     supervision: >-
-      The M5 member and the captain authorized and reviewed the local merge and
+      M5 and M2 authorized and reviewed the local merge and
       review fixes in this worktree, scoped to src/console/,
       src/evaluation/test-approval-gate.ts, test/offline/m2-console.test.ts and
       this log; the agent authored no contract or backend change. Round 1
@@ -9873,7 +9871,7 @@ entries:
       review findings, and Round 3 restored full event rendering and added the
       offline tests.
     human_review: >-
-      The M5 member and the captain verified Round 3a locally and committed it.
+      M5 and M2 verified Round 3a locally and committed it.
       This work was not pushed and no agent merged anything; a human team member
       performs the final merge. M2/M1/M3/M4/M6 review of the updated candidate
       remains open until it is pushed and confirmed.
@@ -9944,7 +9942,7 @@ entries:
       focused test, typecheck, lint, full verification and the two bounded
       native preflight sessions outside the build session.
     human_review: >-
-      Captain authorized local preparation only. No push, pull request,
+      M5 authorized local preparation only. No push, pull request,
       comment, review, merge or upload was performed. The policy, rule files
       and covenant remain proposals; no human adoption is claimed. G1 does not
       apply to this change because it touches no src/ or prompts/ file; the
@@ -10208,8 +10206,8 @@ entries:
     launch_flags: [--agent, build, --format, json, -m, "personal-deepseek/deepseek-v4-flash", --variant, xhigh]
     sessions: [ses_dee7397b0ffeYhypVR88s31g0r]
     supervision: >-
-      The M2 member asked for the six wiring checks after the captain declined a
-      separate test document. The OpenCode session wrote the harness and the
+      M2 requested the six wiring checks. The approved scope kept them in the
+      harness. The OpenCode session wrote the harness and the
       test-only entry page; we reviewed the diff, ran the
       script and the unit and type checks, and committed. A duplicate HUD fix
       produced in the same session was discarded when the M5 member's identical
