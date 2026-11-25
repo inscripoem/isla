@@ -33,7 +33,11 @@ bug: **symptom, reproduction, classification, root cause, fix, and the invariant
 ## BUG-005 — WAL backup could be incomplete
 - Symptom: copying `isla.db` alone could miss committed data still in the `-wal` file.
 - Classification: durability / recovery.
-- Fix: `PRAGMA wal_checkpoint(TRUNCATE)` before the copy (`9a54663`). Invariant: INV-10.
+- Historic handling: the pre-migration backup copied the file after a best-effort
+  `PRAGMA wal_checkpoint(TRUNCATE)` whose result row was discarded.
+- Current fix: `VACUUM INTO` writes a consistent, self-contained snapshot and fails closed rather than
+  copying a file that may be missing committed data (`7aa0303`, 2026-10-15;
+  `src/storage/sqlite/migrations.ts` records why not checkpoint-then-copy). Invariant: INV-10.
 
 ## BUG-006 — Migrations were not atomic as a unit
 - Symptom: a failing migration could leave partial schema (each migration had its own transaction).

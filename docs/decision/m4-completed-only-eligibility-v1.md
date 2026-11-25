@@ -2,7 +2,7 @@
 
 - Owner: M4 (@L01nki1). Implemented by: M6 (@MichaelLsh) in `src/evaluation/`.
 - Tracks [#99](https://github.com/inscripoem/isla/issues/99) (checkpoint [#75](https://github.com/inscripoem/isla/issues/75), M6-02 / delivery 2D / S1-01 R6).
-- Status: **recorded (v1)**. This document records a decision M4 owns. It does not implement it: the named reason and its code live in `src/evaluation/`, which is M6's directory, and this record adds nothing there.
+- Status: **recorded (v1)**. This document records a decision M4 owns. It does not implement it: the named reason and its code live in `src/evaluation/`, which is M6's directory, and this record adds nothing there. #99 was closed on 2026-11-20; as of 2026-11-25 the named reason is still absent from `UNSCORED_REASONS` (`src/evaluation/eligibility.ts`), so implementation remains pending.
 
 ## 1. The decision
 
@@ -48,4 +48,4 @@ Completed-only eligibility and condition eligibility are separate conditions. Re
 
 - It creates no code change, introduces no mock or stand-in, and modifies no scoring rule.
 - It claims no CP04 or CP05 acceptance and no measured quality, latency or cost result.
-- #99 remains **open**; its acceptance terms are unchanged and closure is not implied by this record.
+- #99 was **closed on 2026-11-20**; this record neither records nor implies the reviewers' acceptance, and its implementation status above is dated 2026-11-25.

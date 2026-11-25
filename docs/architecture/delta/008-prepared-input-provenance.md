@@ -57,7 +57,7 @@ by content (`runDigest`) and a positional occurrence key, keeps unobserved value
   any CP05 scoring that joins an attempt to dialogue-side records (ADR-008 open decision 3).
 - **Case ids.** The provenance row carries ids pending; no case id is claimed or invented.
 - **Companion shape.** The root binding plus `attempts[]` reading still needs M5's explicit confirmation
-  (DEBT-09).
+  (DEBT-16).
 - **`exact` scope across a partial batch (M5, 2026-11-11).** A synthetic `accepted → no-acknowledgement →
   not-submitted` batch can currently be recorded as `correlation: exact`. Whether `exact` describes the
   admitted link or the complete batch is an open M5/M4 coordination question; this change does not decide

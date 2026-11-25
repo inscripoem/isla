@@ -1,14 +1,18 @@
 # ADR-007 — Shared comparison and measurement bench (M6-02)
 
-Status: proposed (PR #40 under review). Date: 2026-10-16. Owner: M6 (evaluation tooling lane).
-Related: ADR-006 (gate tooling — lands with **PR #27**) · `docs/code-governance/structural-constraints.md` §4 (lands with **PR #32**).
+Status: proposed; implementation merged in #40 (`d1b040b`, 2026-10-19), decision acceptance under
+review. Date: 2026-10-16. Owner: M6 (evaluation tooling lane). Related: ADR-006 (gate tooling — merged
+in #27, `457adb8`) · `docs/code-governance/structural-constraints.md` §4 (merged in #32, `c2f9b38`).
 
 ## Problem
 
-`PLAN:53` asks for a **shared comparison runner and total latency/cost**; `PLAN:90` says *M3/M4 supply
-semantic cases* while *M1/M2/M5 supply their observations*; `PLAN:116` names the timing sources per role.
-`REQUIREMENTS:34–37` (NFR-01/03/04) requires p95 latency, a versioned evaluation set compared under
-**fixed conditions**, and that **missing usage stays unknown**.
+`PLAN.en.md` §"Responsibilities and deliverables" (M6-02 row) asks for a **shared comparison runner and
+total latency/cost**; §"3. Integrate one offline loop, then connect real services" says *M3/M4 supply
+semantic cases* while *M1/M2/M5 supply their observations*; §"Performance: measure before changing the
+stack" names the timing sources per role.
+`docs/team/REQUIREMENTS.en.md` §"Non-functional requirements" (NFR-01/NFR-03/NFR-04 rows) requires
+p95 latency, a versioned evaluation set compared under **fixed conditions**, and that **missing usage
+stays unknown**.
 
 Today there is no bench. Measurements would be gathered ad hoc, per role, in different shapes — and the
 temptation is to claim a "pass" from fixtures alone. This ADR fixes the shape of a measurement before any
@@ -139,7 +143,9 @@ invented semantic rule. This is a recorded deferral, not an omission: `labels` h
 
 ## References
 
-- `PLAN.en.md:53, 90, 116`; `REQUIREMENTS.en.md:34` (NFR-01), `:36` (NFR-03), `:37` (NFR-04).
-- `docs/code-governance/structural-constraints.md` §4 — rules and their enforcement (lands with **PR #32**).
-- Gate **G4** (`src/evaluation/eval-gate.ts`, ADR-006 — lands with **PR #27**) reads the evaluation table this bench generates.
+- `PLAN.en.md` §"Responsibilities and deliverables" (M6-02 row), §"3. Integrate one offline loop, then
+  connect real services" and §"Performance: measure before changing the stack";
+  `docs/team/REQUIREMENTS.en.md` §"Non-functional requirements" (NFR-01/NFR-03/NFR-04 rows).
+- `docs/code-governance/structural-constraints.md` §4 — rules and their enforcement (merged in #32, `c2f9b38`).
+- Gate **G4** (`src/evaluation/eval-gate.ts`, ADR-006 — merged in #27, `457adb8`) reads the evaluation table this bench generates.
 - Delta-007.

@@ -1,15 +1,16 @@
 # Control permissions and privacy policy verification
 
 Status: **verification record for [#107](https://github.com/inscripoem/isla/issues/107)** (checkpoint
-[#76](https://github.com/inscripoem/isla/issues/76)). Owner: M5. Reviewers/accepters: M1/M4/M6. This
-record states what was checked and what remains; it does not close #107 without the named
-confirmations.
+[#76](https://github.com/inscripoem/isla/issues/76)). Owner: M5. Reviewers/accepters: M1/M4/M6. #107
+was closed as completed on 2026-11-24; this record contains no evidence of the named confirmations,
+so it neither supplies nor claims them.
 
 ## 1. Configuration in scope
 
 The checks below apply to the live target declared in
 [`supported-platform.md`](supported-platform.md) and the recorded run at
-[`9577069`](https://github.com/inscripoem/isla/commit/95770691cc927bb82d747024b6be193420648b21).
+[`9577069`](https://github.com/inscripoem/isla/commit/95770691cc927bb82d747024b6be193420648b21). The
+post-CP04 changes recorded there (#189, #190) are not covered by these checks.
 
 ## 2. Control permissions
 
@@ -39,9 +40,10 @@ spoken history.
 
 ## 3. Privacy policy
 
-- **What is stored.** Events and deliveries, persona attribution and segment index, and the
-  memory tables described by ADR-009. Raw audio is not stored in event payloads; credentials and
-  tokens never enter events or JSONL exports.
+- **What is stored.** Events and deliveries, persona attribution and segment index, the memory tables
+  described by ADR-009, and since #190 the console voice preference in `<databasePath>.voices.json`
+  (selected voice id and settings version; no audio). Raw audio is not stored in event payloads;
+  credentials and tokens never enter events or JSONL exports.
 - **Consent and durability.** Owner and derived memory writes require a binding that is both
   `durable` and consenting; a non-durable or non-consenting binding is refused, anonymous or
   non-consenting listeners stay session-scoped, and a different audience is a conflict
@@ -85,9 +87,11 @@ Commands and results at `main` `e32bf1a6`: `pnpm test:m6` → 22 files / 343 tes
   implemented.
 - The live control observation is one controlled run on the declared target; it does not establish
   another device, platform or adversarial deployment.
-- Named reviewer confirmations (M1/M4/M6) are still required to close #107.
+- Named reviewer confirmations (M1/M4/M6) are not recorded here. The issue was closed on 2026-11-24,
+  but this record supplies no evidence of those confirmations.
 
 ## 6. Acceptance statement
 
-This record provides the verification evidence and the limits. It does not tick the named-reviewer
-acceptance box, does not close #107, and does not claim CP06 acceptance.
+This record provides the verification evidence and the limits. It does not claim the named-reviewer
+acceptance or CP06 acceptance, and its silence on the 2026-11-24 issue closure is deliberate: closure
+is an external event, not verification evidence held in this file.
