@@ -1,5 +1,6 @@
 import type { ClockPort } from '../contracts/app'
 import type { AudioLease, AudioResolver } from './browser/types'
+import type { VolumeEnvelope, VolumeEnvelopeEvent } from './lipsync/volume-envelope'
 
 /**
  * A real, controlled server-side registry of generated audio resources.
@@ -50,6 +51,8 @@ export interface AudioResourceRegistration {
   readonly voiceProfileVersion: string
   readonly format: string
   readonly bytes: Uint8Array
+  /** Optional precomputed display curve; malformed values are ignored. */
+  readonly volumeEnvelope?: VolumeEnvelope
 }
 
 /** Facts about a successfully registered resource. */
@@ -90,6 +93,16 @@ export interface AudioResourceSnapshot {
 }
 
 export interface AudioResourceRegistry extends AudioResolver {
+  /**
+   * Optional capability probe. A registry without this surface is a valid
+   * resolver and simply receives no curve from synthesis.
+   */
+  readonly wantsVolumeEnvelope?: boolean
+  /**
+   * Optional subscription to curves delivered with successful resolves. The
+   * returned unsubscribe function is idempotent.
+   */
+  observeVolumeEnvelopes?(listener: (event: VolumeEnvelopeEvent) => void): () => void
   register(request: AudioResourceRegistration): RegisteredAudioResource
   /** Retire a resource; a held lease survives, a new acquisition cannot start. */
   retire(audioRef: string): boolean
@@ -137,6 +150,7 @@ interface Entry {
   format: string
   byteLength: number
   blob: Blob
+  volumeEnvelope: Readonly<VolumeEnvelope> | null
   registeredAtMs: number
   expiresAtMs: number
   retired: boolean
@@ -155,6 +169,39 @@ function isNonEmpty(value: unknown): value is string {
 
 function isEpoch(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0
+}
+
+/**
+ * Copy a caller-owned curve into a frozen registry value. The curve is optional
+ * display metadata: any malformed shape is ignored without rejecting the media.
+ */
+function snapshotVolumeEnvelope(value: unknown): Readonly<VolumeEnvelope> | null {
+  try {
+    if (value === null || typeof value !== 'object') return null
+    const stepMs = (value as { stepMs?: unknown }).stepMs
+    const durationMs = (value as { durationMs?: unknown }).durationMs
+    const levels = (value as { levels?: unknown }).levels
+    if (stepMs !== 20) return null
+    if (typeof durationMs !== 'number' || !Number.isFinite(durationMs) || durationMs <= 0) {
+      return null
+    }
+    if (!Array.isArray(levels) || levels.length === 0) return null
+    if (levels.length !== Math.ceil(durationMs / 20)) return null
+    const copiedLevels: number[] = []
+    for (const level of levels) {
+      if (typeof level !== 'number' || !Number.isFinite(level) || level < 0 || level > 1) {
+        return null
+      }
+      copiedLevels.push(level)
+    }
+    return Object.freeze({
+      stepMs: 20 as const,
+      durationMs,
+      levels: Object.freeze(copiedLevels),
+    })
+  } catch {
+    return null
+  }
 }
 
 let defaultRefCounter = 0
@@ -198,6 +245,11 @@ export function createAudioResourceRegistry(
   const usedRefs = new Set<string>()
   // Monotonic per-session retirement lower bounds; INFINITY retires the session.
   const retiredSessions = new Map<string, number>()
+  // Each subscription is its own object so subscribing the same function twice
+  // counts twice and each returned unsubscribe removes only its own subscription.
+  const volumeObservers = new Set<{
+    readonly listener: (event: VolumeEnvelopeEvent) => void
+  }>()
   let usedBytes = 0
   let disposed = false
 
@@ -214,6 +266,41 @@ export function createAudioResourceRegistry(
     entry.retired = true
     usedRefs.add(entry.audioRef)
     if (entry.activeLeases === 0) reclaim(entry.audioRef)
+  }
+
+  /**
+   * Deliver one immutable event while the successful lease is already held. A
+   * subscriber fault, including a rejected promise, is isolated so acquisition
+   * and other subscribers are unaffected.
+   */
+  const notifyVolumeEnvelope = (entry: Entry): void => {
+    const envelope = entry.volumeEnvelope
+    if (envelope === null || volumeObservers.size === 0) return
+    const event: VolumeEnvelopeEvent = Object.freeze({
+      audioRef: entry.audioRef,
+      sessionId: entry.sessionId,
+      epoch: entry.epoch,
+      turnId: entry.turnId,
+      segmentId: entry.segmentId,
+      stepMs: envelope.stepMs,
+      durationMs: envelope.durationMs,
+      levels: envelope.levels,
+    })
+    for (const observer of [...volumeObservers]) {
+      if (!volumeObservers.has(observer)) continue
+      try {
+        const outcome = (observer.listener as (event: VolumeEnvelopeEvent) => unknown)(event)
+        if (
+          outcome !== null &&
+          typeof outcome === 'object' &&
+          typeof (outcome as PromiseLike<unknown>).then === 'function'
+        ) {
+          void Promise.resolve(outcome).catch(() => {})
+        }
+      } catch {
+        // A presentation subscriber cannot disrupt acquisition or its peers.
+      }
+    }
   }
 
   const assertDisposed = (): void => {
@@ -248,6 +335,7 @@ export function createAudioResourceRegistry(
     format: string
     bytes: Uint8Array<ArrayBuffer>
     byteLength: number
+    volumeEnvelope: Readonly<VolumeEnvelope> | null
   }
 
   // Validate and copy every caller-owned scalar and byte before any injected
@@ -276,6 +364,14 @@ export function createAudioResourceRegistry(
     }
     const bytes = new Uint8Array(sourceBytes.byteLength)
     bytes.set(sourceBytes)
+    // Optional display metadata cannot reject otherwise valid media, including
+    // when a caller-supplied accessor throws on read.
+    let volumeEnvelope: Readonly<VolumeEnvelope> | null = null
+    try {
+      volumeEnvelope = snapshotVolumeEnvelope(request.volumeEnvelope)
+    } catch {
+      volumeEnvelope = null
+    }
     return {
       requestId,
       sessionId,
@@ -287,6 +383,7 @@ export function createAudioResourceRegistry(
       format,
       bytes,
       byteLength: bytes.byteLength,
+      volumeEnvelope,
     }
   }
 
@@ -308,6 +405,20 @@ export function createAudioResourceRegistry(
   })
 
   return {
+    get wantsVolumeEnvelope() {
+      return !disposed && volumeObservers.size > 0
+    },
+
+    observeVolumeEnvelopes(listener) {
+      if (disposed) return () => {}
+      if (typeof listener !== 'function') throw new AudioResourceError('invalid_input')
+      const subscription = { listener }
+      volumeObservers.add(subscription)
+      return () => {
+        volumeObservers.delete(subscription)
+      }
+    },
+
     register(request) {
       assertDisposed()
       const snapshot = snapshotRegistration(request)
@@ -355,6 +466,7 @@ export function createAudioResourceRegistry(
         format: snapshot.format,
         byteLength: snapshot.byteLength,
         blob,
+        volumeEnvelope: snapshot.volumeEnvelope,
         registeredAtMs,
         expiresAtMs: registeredAtMs + retentionMs,
         retired: false,
@@ -414,6 +526,9 @@ export function createAudioResourceRegistry(
             }
           },
         }
+        // The lease above is the only acquisition accounting. Observers see a
+        // frozen event and cannot mutate the stored curve for later resolves.
+        notifyVolumeEnvelope(entry)
         return Promise.resolve(lease)
       } catch (error) {
         return Promise.reject(error)
@@ -461,6 +576,7 @@ export function createAudioResourceRegistry(
 
     dispose() {
       disposed = true
+      volumeObservers.clear()
       for (const entry of [...active.values()]) {
         entry.retired = true
         usedRefs.add(entry.audioRef)
