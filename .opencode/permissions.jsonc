@@ -54,7 +54,8 @@
         "test/live/kokoro-browser.ts",
         "test/live/kokoro-browser.html",
         "test/live/kokoro-browser.config.ts",
-        "test/live/kokoro-browser-README.md"
+        "test/live/kokoro-browser-README.md",
+        "test/browser/root-entry-audio-browser.mjs"
       ],
       "handoffs": [],
       "shell": ["pnpm test:m1"]
@@ -63,9 +64,11 @@
       "source": ["src/console/**"],
       "tests": [
         "test/offline/m2-console.test.ts",
+        "test/offline/console-voice-selection.test.ts",
         "test/conformance/console.conformance.ts",
         "test/browser/console.tsx",
-        "test/browser/console.html"
+        "test/browser/console.html",
+        "test/browser/console-voice-selection.mjs"
       ],
       "handoffs": [],
       "shell": ["pnpm test:m2"]
@@ -97,6 +100,7 @@
       "source": ["src/runtime/**"],
       "tests": [
         "test/offline/m5-*.test.ts",
+        "test/offline/voice-settings.test.ts",
         "test/offline/production-cli.test.ts",
         "test/conformance/runtime.conformance.ts",
         "test/support/coordinator-runner.ts",

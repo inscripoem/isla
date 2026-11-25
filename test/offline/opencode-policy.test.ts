@@ -327,6 +327,23 @@ describe('compiled configuration', () => {
     )
   })
 
+  it('assigns the merged voice tests to their owning roles', () => {
+    const owned: Record<string, string[]> = {
+      M1: ['test/browser/root-entry-audio-browser.mjs'],
+      M2: ['test/offline/console-voice-selection.test.ts', 'test/browser/console-voice-selection.mjs'],
+      M5: ['test/offline/voice-settings.test.ts'],
+    }
+    for (const [role, files] of Object.entries(owned)) {
+      const own = rulesFor(role as RoleId).agents.build.permissions
+      const other = rulesFor('M6').agents.build.permissions
+      for (const file of files) {
+        expect(evaluateRules(own, 'edit', path(file)), `${role} ${file}`).toBe('allow')
+        expect(evaluateRules(own, 'write', path(file)), `${role} ${file}`).toBe('allow')
+        expect(evaluateRules(other, 'edit', path(file)), `${role} ${file}`).toBe('deny')
+      }
+    }
+  })
+
   it('serializes deterministically', () => {
     const first = serializeConfig(rulesFor('M5'))
     const second = serializeConfig(rulesFor('M5'))
