@@ -146,8 +146,20 @@ describe('traceability fitness functions reject defects (C-35)', () => {
   it('flags an invariant that is not registered', () => {
     const base = nodeTraceFs(ROOT)
     const path = 'docs/architecture/invariants.md'
-    const mutated = base.read(path).replace(/^\| INV-11 \|.*$/m, '')
+    const mutated = base.read(path).replace(/^\| INV-12 \|.*$/m, '')
     expect(codes(base, { [path]: mutated })).toContain('invariant-unregistered')
+  })
+
+  it('flags a non-invariant requirement registered in the invariant register', () => {
+    const base = nodeTraceFs(ROOT)
+    const path = 'docs/architecture/invariants.md'
+    const mutated = base
+      .read(path)
+      .replace(
+        /^\| INV-12 \|.*$/m,
+        '| INV-04 | synthetic | FR-06 | `src/storage/event-store.ts` | C-18 | keep | M6 |',
+      )
+    expect(codes(base, { [path]: mutated })).toContain('invariant-row-not-invariant')
   })
 
   it('flags an invariant table without an Owner column', () => {
@@ -162,6 +174,23 @@ describe('traceability fitness functions reject defects (C-35)', () => {
     const path = 'docs/architecture/trace-matrix.md'
     const mutated = base.read(path).replace(/\|\s*M6\s*\|\s*$/m, '|  |')
     expect(codes(base, { [path]: mutated })).toContain('trace-no-owner')
+  })
+
+  it('flags a requirement with no canonical trace row', () => {
+    const base = nodeTraceFs(ROOT)
+    const path = 'docs/architecture/trace-matrix.md'
+    const mutated = base.read(path).replace(/^\| INV-14 \|.*$/m, '')
+    expect(codes(base, { [path]: mutated })).toContain('trace-requirement-missing')
+  })
+
+  it('flags a runtime-monitor cell with no reason', () => {
+    const base = nodeTraceFs(ROOT)
+    const path = 'docs/architecture/trace-matrix.md'
+    const mutated = base.read(path).replace(
+      '| `shutdown_started`, `shutdown_complete`, `shutdown_failed` |',
+      '| — |',
+    )
+    expect(codes(base, { [path]: mutated })).toContain('trace-monitor-unreasoned')
   })
 
   it('flags a modified frozen path', () => {

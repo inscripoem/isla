@@ -4,7 +4,7 @@
   "properties": {
     "version": {
       "type": "string",
-      "const": "0.2"
+      "const": "0.3"
     },
     "generatedFrom": {
       "type": "string",
@@ -28,8 +28,34 @@
             "type": "string",
             "enum": [
               "functional",
-              "non-functional",
-              "invariant"
+              "invariant",
+              "security",
+              "governance",
+              "performance",
+              "cost",
+              "quality"
+            ]
+          },
+          "subtype": {
+            "type": "string",
+            "enum": [
+              "authority",
+              "safety",
+              "data-integrity",
+              "audit-integrity",
+              "reliability",
+              "correctness",
+              "privacy",
+              "access-control",
+              "retention",
+              "traceability",
+              "audit",
+              "evaluation",
+              "latency",
+              "efficiency",
+              "token-cost",
+              "response-quality",
+              "modifiability"
             ]
           },
           "priority": {

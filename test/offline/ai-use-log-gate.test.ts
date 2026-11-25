@@ -761,8 +761,10 @@ describe('register loaders agree with the committed registers (T0)', () => {
   it('sees the committed invariant ids', () => {
     const ids = invariantIdsFromRegister(readFileSync('docs/architecture/invariants.md', 'utf8'))
     expect(ids).not.toBeNull()
+    expect(ids?.has('INV-12')).toBe(true)
+    expect(ids?.has('INV-03')).toBe(true)
+    // A reclassified id remains resolvable for historical log entries.
     expect(ids?.has('INV-14')).toBe(true)
-    expect(ids?.has('INV-13')).toBe(true)
   })
 
   it('returns null rather than an empty set for an unparsable register', () => {

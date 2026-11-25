@@ -10,10 +10,41 @@ const acceptanceSchema = z.strictObject({
   cases: z.array(nonEmptyString),
 })
 
+export const requirementCategorySchema = z.enum([
+  'functional',
+  'invariant',
+  'security',
+  'governance',
+  'performance',
+  'cost',
+  'quality',
+])
+
+export const requirementSubtypeSchema = z.enum([
+  'authority',
+  'safety',
+  'data-integrity',
+  'audit-integrity',
+  'reliability',
+  'correctness',
+  'privacy',
+  'access-control',
+  'retention',
+  'traceability',
+  'audit',
+  'evaluation',
+  'latency',
+  'efficiency',
+  'token-cost',
+  'response-quality',
+  'modifiability',
+])
+
 export const requirementSchema = z.strictObject({
   id: nonEmptyString,
   title: nonEmptyString,
-  category: z.enum(['functional', 'non-functional', 'invariant']),
+  category: requirementCategorySchema,
+  subtype: requirementSubtypeSchema.optional(),
   priority: z.enum(['must', 'should', 'could', 'wont']),
   owner: roleSchema,
   collaborators: z.array(roleSchema),
@@ -25,7 +56,7 @@ export type Requirement = z.infer<typeof requirementSchema>
 
 export const requirementsRegistrySchema = z
   .strictObject({
-    version: z.literal('0.2'),
+    version: z.literal('0.3'),
     generatedFrom: nonEmptyString,
     requirements: z.array(requirementSchema).min(1),
   })

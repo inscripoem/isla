@@ -6,6 +6,13 @@ Team requirements under review; English engineering requirements may be promoted
 
 This revision adds INV-17 and records the existing MoSCoW tradeoffs explicitly. It does not change an FR/NFR statement, priority, owner or numeric target.
 
+**Taxonomy correction (2026-11-25).** The authoritative categories and subtypes are in
+`docs/req/requirements.yaml` v0.3. Only `INV-01..03` and `INV-12` are system invariants. The other
+former `INV-` rows below are retained as quality, governance or security NFR controls under their
+stable legacy IDs; the ID prefix records the original allocation, not the current type. The pre-split
+NFR-04, NFR-05 and INV-17 rows below are historical; the split entries are `COST-01` (token/cost),
+`SEC-01` (consent-bound audience memory) and `GOV-01` (audience-scoped retention/deletion).
+
 The scoped YAML register, schemas and case-to-test references now exist in [docs/req](../req/requirements.yaml). They distinguish executable fixture criteria from pending product scenarios and measurements; they do not constitute accepted final D1.
 
 ## Scope and counting
@@ -40,7 +47,7 @@ Every final entry requires metric + threshold + verification. TBD means not read
 | NFR-05 | Privacy and control security / Must | Zero unauthorized privileged transitions in the reviewed adversarial suite; retention/deletion period and completion limit TBD. | Exercise untrusted inputs, control authorization, stored data and deletion. A finite suite is not a universal security proof. | M5 / M4, M6 |
 | NFR-06 | Adapter replaceability / Should | Proposed zero changes to dialogue/scheduling business logic for provider substitution; every implemented substitute passes the shared contract suite. | Substitute decision, TTS and avatar implementations through adapters/composition/configuration; inspect changed files and affected contracts. Fixtures prove boundaries, not live-provider compatibility. | M1, M3 / M4–M6 |
 
-## Deterministic invariants
+## Deterministic controls (invariants and reclassified NFR controls)
 
 | ID | Rule / related requirements | Enforcer | Verification and operational fallback |
 | --- | --- | --- | --- |

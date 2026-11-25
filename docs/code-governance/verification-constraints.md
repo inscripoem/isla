@@ -44,6 +44,10 @@ session.
 
 ## M6 coverage map (requirement/invariant → case → test)
 
+Taxonomy note (2026-11-25): only `INV-01..03` and `INV-12` are system invariants. Rows below that use
+`INV-04..17` are retained as quality, governance or security NFR controls under their stable legacy IDs;
+their verification evidence is unchanged.
+
 | Invariant / requirement | Case | Test that would fail if violated |
 | --- | --- | --- |
 | INV-04 (session-scoped identity/sequence uniqueness) | C-18, C-23, C-39, C-40, C-41, C-43, C-44, C-51 | `m6-storage.test.ts`; conformance `append-duplicate`, `append-changed-content`, `append-seq-unique`, `append-session-scoped-identity`; conflicting commit reports `conflict` on both sides; canonical content equality (key order irrelevant, array order significant); a non-JSON payload is rejected with `unsupported_payload` (incl. sparse arrays) |

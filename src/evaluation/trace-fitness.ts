@@ -201,6 +201,9 @@ export function collectTraceViolations(fs: TraceFs, options: TraceOptions = {}):
   if (invariantsText !== null) {
     const table = parseTables(invariantsText).find((candidate) => columnIndex(candidate.header, 'ID') >= 0)
     const byId = new Map((table?.rows ?? []).map((row) => [(row[0] ?? '').trim(), row]))
+    const requirementById = new Map(
+      requirements.registry.requirements.map((requirement) => [requirement.id, requirement]),
+    )
     const verifyColumn = table ? columnIndex(table.header, 'Verification') : -1
     const ownerColumn = table ? columnIndex(table.header, 'Owner') : -1
     if (table !== undefined && ownerColumn < 0) {
@@ -231,13 +234,29 @@ export function collectTraceViolations(fs: TraceFs, options: TraceOptions = {}):
         }
       }
     }
+    for (const [id] of byId) {
+      const requirement = requirementById.get(id)
+      if (requirement === undefined) {
+        add('invariant-row-unknown', `invariants.md registers ${id}, which is not a requirement`)
+      } else if (requirement.category !== 'invariant') {
+        add(
+          'invariant-row-not-invariant',
+          `invariants.md registers ${id}, but its category is ${requirement.category}`,
+        )
+      }
+    }
   }
 
   // 3. Trace-matrix rows reference existing components and cases, and carry an
   //    explicit owner so shared rows stay classifiable.
   const traceText = readOr(`${ARCH}/trace-matrix.md`)
   if (traceText !== null) {
-    for (const table of parseTables(traceText)) {
+    const tables = parseTables(traceText)
+    const canonical = tables.find((table) =>
+      table.heading.startsWith('Canonical requirement matrix'),
+    )
+    const coveredRequirements = new Set<string>()
+    for (const table of tables) {
       const componentColumn = columnIndex(table.header, 'Enforcing component')
       if (componentColumn < 0) continue
       const caseColumn = columnIndex(table.header, 'Case')
@@ -249,9 +268,35 @@ export function collectTraceViolations(fs: TraceFs, options: TraceOptions = {}):
       const interfaceColumn = columnIndex(table.header, 'Interface')
       const testColumn = columnIndex(table.header, 'Test / evidence')
       const adrColumn = columnIndex(table.header, 'ADR')
+      const monitorColumn = columnIndex(table.header, 'Runtime monitor')
       for (const row of table.rows) {
         if (ownerColumn >= 0 && (row[ownerColumn] ?? '').trim().length === 0) {
           add('trace-no-owner', 'a trace-matrix row has no owner')
+        }
+        if (table === canonical && requirementColumn >= 0) {
+          for (const match of (row[requirementColumn] ?? '').matchAll(
+            /\b(?:FR|NFR|INV|SEC|GOV|COST|PERF|QUAL)-\d+\b/g,
+          )) {
+            coveredRequirements.add(match[0])
+          }
+          if (monitorColumn >= 0) {
+            const monitor = (row[monitorColumn] ?? '').trim()
+            if (monitor.length === 0) {
+              add(
+                'trace-monitor-missing',
+                `trace row for ${(row[requirementColumn] ?? '').trim()} has no runtime monitor cell`,
+              )
+            } else if (
+              /^(?:—|-|none|n\/a)$/i.test(monitor) ||
+              (monitor.startsWith('—') && !monitor.includes('(') && !monitor.includes(':')) ||
+              (/^none\b/i.test(monitor) && !monitor.includes('—') && !monitor.includes('(') && !monitor.includes(':'))
+            ) {
+              add(
+                'trace-monitor-unreasoned',
+                `trace row for ${(row[requirementColumn] ?? '').trim()} records a monitor with no reason`,
+              )
+            }
+          }
         }
         for (const match of (row[componentColumn] ?? '').matchAll(SRC_PATH)) {
           const path = match[1] ?? ''
@@ -335,6 +380,17 @@ export function collectTraceViolations(fs: TraceFs, options: TraceOptions = {}):
               )
             }
           }
+        }
+      }
+    }
+
+    if (canonical !== undefined) {
+      for (const requirement of requirements.registry.requirements) {
+        if (!coveredRequirements.has(requirement.id)) {
+          add(
+            'trace-requirement-missing',
+            `${requirement.id} has no row in the canonical requirement matrix`,
+          )
         }
       }
     }

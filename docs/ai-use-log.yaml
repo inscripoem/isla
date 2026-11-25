@@ -10334,3 +10334,52 @@ entries:
         local Magpie gateway with one selection case; all stage latencies are
         unobserved and usage is unknown, so the table is not a p95 or a
         threshold baseline. No Windows run.
+  - date: "2026-11-25"
+    task: m6-artifact-closure-trace-coverage
+    change: >-
+      Make the canonical trace matrix cover all 29 registered requirements,
+      move the previously orphaned table rows into the canonical table, replace
+      every bare runtime-monitor cell with a recorded reason, and teach the
+      trace fitness function to reject a missing requirement, an empty monitor
+      cell or a bare em dash. Add negative tests for the new checks and update
+      the structural-constraints enforcement row and the historical trace
+      record note. Also correct the requirement taxonomy: add course categories
+      and NFR subtypes, reclassify the former storage/evaluation invariants as
+      quality, governance or security NFRs under their stable IDs, reduce the
+      invariant register to the four true system invariants (INV-01..03 and
+      INV-12), and add a guard that rejects a non-invariant row in that register.
+      The requirements registry version is bumped to 0.3 because the category
+      enum change is a breaking schema change. Split the three mixed rows:
+      NFR-04 is now performance/efficiency, with new COST-01 for token and cost;
+      NFR-05 is now security/access-control, with new SEC-01 for consent-bound
+      audience memory; INV-17 is now quality/data-integrity, with new GOV-01 for
+      audience-scoped retention and deletion. The new IDs are type-prefixed
+      entries; #25 confirmation is pending.
+    requirements: [NFR-04, COST-01, NFR-05, SEC-01, GOV-01, INV-17]
+    invariants: []
+    commits: []
+    agent: OpenCode V2 build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
+    supervision: >-
+      The member directed the artifact-closure branch and the first trace
+      slice. The assistant edited the matrix, gate and tests; the member
+      reviews the diff before any commit or publication.
+    verification:
+      base: 2b83017736929863210498ed2383ab23e8cd186f
+      results: >-
+        pnpm test:trace passed 52 tests; pnpm test:readiness passed 50 tests;
+        pnpm test:gates passed 6 files / 196 tests; pnpm test:m6 passed 23
+        files / 347 tests; pnpm verify passed 99 files / 2265 tests with a clean
+        typecheck, lint and build. Mutation checks: changing the
+        requirement-coverage code made the missing-row test red; changing the
+        monitor-coverage code made the bare-monitor test red; changing the
+        invariant-register guard made the non-invariant-row test red; removing
+        an NFR subtype made the subtype test red. All restored.
+      limits: >-
+        No commit, push, pull request, merge, live provider or Windows run.
+        The trace matrix owner review for M1/M2/M3/M4/M5 rows is pending. The
+        new IDs COST-01, SEC-01 and GOV-01 are proposed allocations; #25
+        confirmation is pending before they are treated as effective globally.
+        INV-17 now carries only the pending C-75 rebuild-equality evidence.

@@ -1,4 +1,6 @@
-version: "0.2"
+# Category is the course requirement type. Subtype is the NFR sub-type.
+# INV-xx IDs are legacy stable identifiers; only category: invariant rows are system invariants.
+version: "0.3"
 generatedFrom: docs/team/REQUIREMENTS.en.md
 requirements:
   - id: FR-01
@@ -108,7 +110,8 @@ requirements:
 
   - id: NFR-01
     title: Responsiveness and synchronization
-    category: non-functional
+    category: performance
+    subtype: latency
     priority: must
     owner: M5
     collaborators: [M1, M2, M3, M4, M6]
@@ -124,7 +127,8 @@ requirements:
 
   - id: NFR-02
     title: Failure recovery
-    category: non-functional
+    category: quality
+    subtype: reliability
     priority: must
     owner: M5
     collaborators: [M1, M2, M3, M4, M6]
@@ -140,7 +144,8 @@ requirements:
 
   - id: NFR-03
     title: Response quality
-    category: non-functional
+    category: quality
+    subtype: response-quality
     priority: should
     owner: M3
     collaborators: [M4, M6]
@@ -152,17 +157,29 @@ requirements:
         cases: [C-16]
 
   - id: NFR-04
-    title: Bounded resource use
-    category: non-functional
+    title: Single-attempt decision efficiency
+    category: performance
+    subtype: efficiency
     priority: must
     owner: M3
-    collaborators: [M4, M5, M6]
+    collaborators: [M5]
     source: docs/team/REQUIREMENTS.en.md
     status: under-review
     acceptance:
       - kind: deterministic
         description: At most one response-provider attempt per decision opportunity; unchanged input causes no polling.
         cases: [C-15]
+
+  - id: COST-01
+    title: Bounded token and cost use
+    category: cost
+    subtype: token-cost
+    priority: must
+    owner: M3
+    collaborators: [M4, M5, M6]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
       - kind: deterministic
         description: Failed and cancelled attempts remain in the aggregate, and incomplete usage remains unknown rather than becoming a partial total.
         cases: [C-52, C-53, C-69]
@@ -171,8 +188,9 @@ requirements:
         cases: []
 
   - id: NFR-05
-    title: Privacy and control security
-    category: non-functional
+    title: Untrusted control security
+    category: security
+    subtype: access-control
     priority: must
     owner: M5
     collaborators: [M4, M6]
@@ -182,13 +200,42 @@ requirements:
       - kind: deterministic
         description: Untrusted content cannot grant control privileges or change control policy.
         cases: [C-07]
+
+  - id: SEC-01
+    title: Consent-bound audience memory
+    category: security
+    subtype: privacy
+    priority: must
+    owner: M6
+    collaborators: [M4, M5]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Owner and derived rows are written only under a durable consenting audience binding; a missing or non-durable binding refuses the write, and a session-state write for a different audience returns conflict.
+        cases: [C-76, C-77]
+
+  - id: GOV-01
+    title: Audience-scoped retention and deletion
+    category: governance
+    subtype: retention
+    priority: must
+    owner: M6
+    collaborators: [M4, M5]
+    source: docs/team/REQUIREMENTS.en.md
+    status: under-review
+    acceptance:
+      - kind: deterministic
+        description: Audience deletion and age-based retention are audience-scoped and leave events and deliveries untouched.
+        cases: [C-78]
       - kind: pending-metric
         description: Retention and deletion periods require a reviewed policy, not an asserted threshold.
         cases: []
 
   - id: NFR-06
     title: Adapter replaceability
-    category: non-functional
+    category: quality
+    subtype: modifiability
     priority: should
     owner: M1
     collaborators: [M3, M4, M5, M6]
@@ -202,6 +249,7 @@ requirements:
   - id: INV-01
     title: No pending or late output restarts playback while stopped
     category: invariant
+    subtype: authority
     priority: must
     owner: M5
     collaborators: [M1]
@@ -215,6 +263,7 @@ requirements:
   - id: INV-02
     title: Only current validated avatar commands may be dispatched
     category: invariant
+    subtype: authority
     priority: must
     owner: M5
     collaborators: [M1]
@@ -228,6 +277,7 @@ requirements:
   - id: INV-03
     title: Audience content and model output cannot grant control privileges
     category: invariant
+    subtype: authority
     priority: must
     owner: M5
     collaborators: [M4, M6]
@@ -240,7 +290,8 @@ requirements:
 
   - id: INV-04
     title: Event identity within a session and session sequence numbers are unique
-    category: invariant
+    category: quality
+    subtype: data-integrity
     priority: must
     owner: M6
     collaborators: [M5]
@@ -265,7 +316,8 @@ requirements:
 
   - id: INV-05
     title: A delivery and its supporting event commit atomically
-    category: invariant
+    category: quality
+    subtype: data-integrity
     priority: must
     owner: M6
     collaborators: [M5, M4]
@@ -281,7 +333,8 @@ requirements:
 
   - id: INV-06
     title: A memory projection never advances across a gap, is idempotent, and keeps its bookmark session-scoped
-    category: invariant
+    category: quality
+    subtype: data-integrity
     priority: must
     owner: M6
     collaborators: [M4]
@@ -294,7 +347,8 @@ requirements:
 
   - id: INV-07
     title: Committed records are isolated from caller mutation
-    category: invariant
+    category: quality
+    subtype: data-integrity
     priority: must
     owner: M6
     collaborators: [M4, M5]
@@ -307,7 +361,8 @@ requirements:
 
   - id: INV-08
     title: Confirmed history is ordered by the supporting event sequence
-    category: invariant
+    category: quality
+    subtype: data-integrity
     priority: must
     owner: M6
     collaborators: [M4, M5]
@@ -320,7 +375,8 @@ requirements:
 
   - id: INV-09
     title: Original delivery attribution is preserved
-    category: invariant
+    category: governance
+    subtype: audit-integrity
     priority: must
     owner: M5
     collaborators: [M4, M6]
@@ -333,7 +389,8 @@ requirements:
 
   - id: INV-10
     title: Storage configuration and schema version are validated before use
-    category: invariant
+    category: quality
+    subtype: reliability
     priority: must
     owner: M6
     collaborators: [M5]
@@ -346,7 +403,8 @@ requirements:
 
   - id: INV-11
     title: A schema migration is recoverable and refuses contradictory legacy rows
-    category: invariant
+    category: quality
+    subtype: reliability
     priority: must
     owner: M6
     collaborators: [M5]
@@ -363,6 +421,7 @@ requirements:
   - id: INV-12
     title: Restart restores only confirmed history and never replays unresolved output
     category: invariant
+    subtype: safety
     priority: must
     owner: M6
     collaborators: [M5, M4]
@@ -375,7 +434,8 @@ requirements:
 
   - id: INV-13
     title: The traceability chain is machine-checked
-    category: invariant
+    category: governance
+    subtype: traceability
     priority: must
     owner: M6
     collaborators: [M5]
@@ -388,7 +448,8 @@ requirements:
 
   - id: INV-14
     title: A code or prompt change updates the AI-use log
-    category: invariant
+    category: governance
+    subtype: audit
     priority: must
     owner: M6
     collaborators: [M5]
@@ -401,7 +462,8 @@ requirements:
 
   - id: INV-15
     title: Within-turn reconstruction preserves explicit segment order and unknowns
-    category: invariant
+    category: quality
+    subtype: correctness
     priority: must
     owner: M5
     collaborators: [M4, M6]
@@ -414,7 +476,8 @@ requirements:
 
   - id: INV-16
     title: Every executed attempt is accounted for, including completed, cancelled and failed attempts; missing usage remains unknown, and an empty sample has no failure-rate claim. An explicit not-run result is not an executed attempt
-    category: invariant
+    category: governance
+    subtype: evaluation
     priority: must
     owner: M6
     collaborators: [M3, M4, M5]
@@ -425,17 +488,15 @@ requirements:
         description: Completed, cancelled and failed attempts are counted with a reason; missing usage remains unknown; an empty sample has no failure-rate claim; an explicit not-run result is not an executed attempt (NFR-01/NFR-04; C-52–C-55, C-69–C-71).
         cases: [C-52, C-53, C-54, C-55, C-69, C-70, C-71]
   - id: INV-17
-    title: The derived-memory store is version-scoped and rebuildable; owner and derived rows are written only under a durable consenting binding; a session-state write for a different audience is a conflict; audience deletion and age-based retention never touch events or deliveries
-    category: invariant
+    title: Derived-memory store is version-scoped and rebuildable
+    category: quality
+    subtype: data-integrity
     priority: must
     owner: M6
     collaborators: [M4, M5]
     source: docs/team/REQUIREMENTS.en.md
     status: under-review
     acceptance:
-      - kind: deterministic
-        description: Owner and derived writes require a durable consenting binding; a session-state write for a different audience returns conflict; audience deletion and age-based retention leave events and deliveries untouched (FR-06, NFR-03, NFR-05; C-76, C-77, C-78).
-        cases: [C-76, C-77, C-78]
       - kind: pending-metric
-        description: Cursor rebuild-equality (C-75) needs M4's derive rules through the composition adapter. The case is registered pending rather than claimed.
+        description: Cursor rebuild-equality (C-75) needs M4's derive rules through the composition adapter; the version-scoped cursor tests exist but the case remains pending.
         cases: [C-75]
