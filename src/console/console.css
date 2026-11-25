@@ -148,6 +148,10 @@
   flex: none;
 }
 
+/* The stage box owns the stacking context so the transparent avatar layer
+ * (z-index: -1) paints behind every in-flow overlay — HUD, visualiser,
+ * subtitle, reaction — while the laser (z-index: 3), danmaku, stopped overlay
+ * and player keep painting above it. */
 .console__stagebox { position: relative; isolation: isolate; }
 .avatar-viewport { position: absolute; inset: 0; z-index: -1; display: block; pointer-events: none; overflow: hidden; }
 .avatar-viewport > canvas { width: 100%; height: 100%; object-fit: contain; }
