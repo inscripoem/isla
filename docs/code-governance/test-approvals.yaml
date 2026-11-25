@@ -87,3 +87,15 @@ approvals:
       - test/offline/m3-decision.test.ts
       - test/offline/m4-persona-recall.test.ts
       - test/offline/m4-style.test.ts
+  - id: TA-007
+    task: "Artifact-closure traceability: requirement taxonomy, canonical trace coverage and register loader (G1 ordering record; see DEBT-21 for the replay exception)"
+    approved_at: "2026-11-25T10:00:55Z"
+    approved_by: M6
+    scope:
+      - "src/contracts/requirements.ts"
+      - "src/evaluation/"
+      - "test/offline/"
+    tests:
+      - test/offline/requirements.test.ts
+      - test/offline/trace-fitness.test.ts
+      - test/offline/ai-use-log-gate.test.ts

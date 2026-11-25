@@ -10334,3 +10334,234 @@ entries:
         local Magpie gateway with one selection case; all stage latencies are
         unobserved and usage is unknown, so the table is not a p95 or a
         threshold baseline. No Windows run.
+  - date: "2026-11-25"
+    task: m6-artifact-closure-trace-coverage
+    change: >-
+      Make the canonical trace matrix cover all 32 registered requirements,
+      move the previously orphaned table rows into the canonical table, replace
+      every bare runtime-monitor cell with a recorded reason, and teach the
+      trace fitness function to reject a missing requirement, an empty monitor
+      cell or a bare em dash. Add negative tests for the new checks and update
+      the structural-constraints enforcement row and the historical trace
+      record note. Also correct the requirement taxonomy: add course categories
+      and NFR subtypes, reclassify the former storage/evaluation invariants as
+      quality, governance or security NFRs under their stable IDs, reduce the
+      invariant register to the four true system invariants (INV-01..03 and
+      INV-12), and add a guard that rejects a non-invariant row in that register.
+      The requirements registry version is bumped to 0.3 because the category
+      enum change is a breaking schema change. Split the three mixed rows:
+      NFR-04 is now performance/efficiency, with new COST-01 for token and cost;
+      NFR-05 is now security/access-control, with new SEC-01 for consent-bound
+      audience memory; INV-17 is now quality/data-integrity, with new GOV-01 for
+      audience-scoped retention and deletion. The new IDs are type-prefixed
+      entries reserved in #25 (comment 7159011745); the reservation does not
+      approve the taxonomy.
+    requirements: [NFR-04, COST-01, NFR-05, SEC-01, GOV-01, INV-17]
+    invariants: []
+    commits: ["8a9cd13"]
+    agent: OpenCode V2 build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
+    supervision: >-
+      The member directed the artifact-closure branch and the first trace
+      slice. The assistant edited the matrix, gate and tests; the member
+      reviews the diff before any commit or publication.
+    verification:
+      base: dba25e0
+      results: >-
+        pnpm test:trace passed 52 tests; pnpm test:readiness passed 50 tests;
+        pnpm test:gates passed 6 files / 196 tests; pnpm test:m6 passed 23
+        files / 347 tests; pnpm verify passed 99 files / 2265 tests with a clean
+        typecheck, lint and build. Mutation checks: changing the
+        requirement-coverage code made the missing-row test red; changing the
+        monitor-coverage code made the bare-monitor test red; changing the
+        invariant-register guard made the non-invariant-row test red; removing
+        an NFR subtype made the subtype test red. All restored.
+      limits: >-
+        No commit, push, pull request, merge, live provider or Windows run.
+        The trace matrix owner review for M1/M2/M3/M4/M5 rows is pending. The
+        new IDs COST-01, SEC-01 and GOV-01 are reserved in #25
+        (comment 7159011745); the reservation does not approve the taxonomy.
+        INV-17 now carries only the pending C-75 rebuild-equality evidence.
+  - date: "2026-11-25"
+    task: d2-architecture-baseline
+    change: >-
+      Add the current D2.1 architecture blueprint, the proposed D2.2 system-level
+      ADR with its ADD process and layered AI context design, and the D2 artifact
+      index. The ADR records the chosen local-first modular runtime, the rejected
+      system-level alternatives, the implemented context layers and assembly,
+      a proposed token cap/compaction threshold/reinjection policy that is not
+      shipped, and the reopen conditions. Extend the qualitative candidate
+      comparison with system-level and AI-context candidates; add the
+      corresponding rejected options to the option ledger; point AGENTS.md and
+      Prompt.md at the current docs blueprint while keeping the root blueprint
+      as the frozen historical snapshot.
+    requirements: []
+    invariants: []
+    commits: ["50bb859"]
+    agent: OpenCode V2 build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
+    supervision: >-
+      The member directed the artifact-closure branch and approved the
+      architecture-baseline slice. The assistant wrote the documents from the
+      merged requirements, context, permission, memory and trace records; the
+      member reviews the diff before any commit or publication.
+    verification:
+      base: 8a9cd13
+      results: >-
+        pnpm test:trace passed 52 tests; pnpm test:readiness passed 50 tests;
+        pnpm test:gates passed 6 files / 196 tests; pnpm verify passed 99 files
+        / 2265 tests with a clean typecheck, lint and build; git diff --check
+        reported no whitespace errors; a local relative-link check over the new
+        and changed documents found no missing targets.
+      limits: >-
+        The master ADR is ADR-010, reserved in #25 (comment 7159011745);
+        it is proposed and no human has accepted it. The 4,096-token cap, 70% compaction trigger and 90% hard
+        stop are design proposals, not shipped behavior or a measured baseline.
+        No live provider, G4 semantic result, acoustic output or Windows run is
+        claimed. The branch is PR #199; the review-fix commit is the current head.
+  - date: "2026-11-25"
+    task: d2-state-runtime-policy-closure
+    change: >-
+      Add the session/restart/version-survival matrix to the memory/state
+      design, with the version axes and the rules that keep contract, schema,
+      extractor, persona and prompt versions separate. Add the remaining
+      dialogue, synthesis, renderer, playback, provider-auth, database and
+      startup failure rows to the runtime policy catalog, plus a clearly
+      separate proposed token-overflow row. Mark the provider-auth and
+      database-corruption rows with their missing verifiers rather than
+      claiming coverage, and update the D2 artifact index.
+    requirements: [FR-06, NFR-05, SEC-01, GOV-01, INV-17]
+    invariants: [INV-12]
+    commits: ["b50a511"]
+    agent: OpenCode V2 build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
+    supervision: >-
+      The member directed the artifact-closure branch and approved the
+      state/runtime-policy slice. The assistant wrote the documents from the
+      merged storage, context and runtime records; the member reviews the diff
+      before any commit or publication.
+    verification:
+      base: 50bb859
+      results: >-
+        pnpm test:trace passed 52 tests; pnpm test:readiness passed 50 tests;
+        pnpm test:gates passed 6 files / 196 tests; pnpm verify passed 99 files
+        / 2265 tests with a clean typecheck, lint and build; git diff --check
+        reported no whitespace errors.
+      limits: >-
+        No live provider, acoustic output, G4 semantic result or Windows run is
+        claimed. The branch is PR #199; the review-fix commit is the current head. The token-overflow row is proposed, not implemented. The
+        provider-authentication and database-corruption rows name their evidence
+        gaps; they are not coverage claims.
+  - date: "2026-11-25"
+    task: d4-verification-governance-and-qa
+    change: >-
+      Tighten the verification rules: distinguish deterministic fit criteria
+      from pending metrics, add the mutation-check and gate-negative-test
+      rules, add the canonical coverage/mutation section, state that Tier 3 is
+      not run and that G4 is not a semantic evaluator, and mark the 2026-10-29
+      enforcement measurement as historical. Add the per-gate inventory with
+      positive/negative tests and recorded limits. Add the review-memo
+      template, verdict vocabulary, review-coverage table and an advisory
+      self-review of the artifact-closure branch. Expand the debt register to
+      all eight AI-era categories with a coverage table and DEBT-17..20. Fill
+      the missing reproduction/root-cause/invariant-gap fields in the bug
+      diary, including BUG-004..007.
+    requirements: []
+    invariants: []
+    commits: ["03af868"]
+    agent: OpenCode V2 build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
+    supervision: >-
+      The member directed the artifact-closure branch and approved the D4
+      governance slice. The assistant wrote the records from the merged
+      verification, review, debt and bug history; the member reviews the diff
+      before any commit or publication.
+    verification:
+      base: b50a511
+      results: >-
+        pnpm test:trace passed 52 tests; pnpm test:readiness passed 50 tests;
+        pnpm test:gates passed 6 files / 196 tests; pnpm verify passed 99 files
+        / 2265 tests with a clean typecheck, lint and build; git diff --check
+        reported no whitespace errors; a local relative-link check over the
+        changed documents found no missing targets; the bug-diary field check
+        found all six fields in all 18 entries.
+      limits: >-
+        No live provider, G4 semantic result, acoustic output or Windows run is
+        claimed. The branch is PR #199; the review-fix commit is the current head. The review memo records missing entries for the merged
+        #192-#196 batch rather than backfilling them. The self-review is
+        advisory and not a human approval.
+  - date: "2026-11-25"
+    task: d2-evaluation-table-reconciliation
+    change: >-
+      Reconcile the D2 artifact index, blueprint, candidate comparison, gate
+      inventory and verification constraints with the pilot evaluation table
+      that landed on main. The table records one attempt with declared
+      conditions; it passes G4's condition scan but is not a semantic or
+      threshold baseline.
+    requirements: []
+    invariants: []
+    commits: ["b2becdd"]
+    agent: OpenCode V2 build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
+    supervision: >-
+      The member directed the artifact-closure branch and the review fixes. The
+      assistant reconciled the D2 text with the merged evaluation table; the
+      member reviews the diff before merge.
+    verification:
+      base: 03af868
+      results: >-
+        pnpm gate:eval passed with the pilot table; pnpm test:trace passed 52
+        tests; pnpm test:readiness passed 50 tests; pnpm test:gates passed 6
+        files / 196 tests; pnpm verify passed 99 files / 2265 tests with a clean
+        typecheck, lint and build; git diff --check reported no whitespace
+        errors.
+      limits: >-
+        The pilot is one attempt, not a p95 or quality baseline. No live
+        provider, acoustic output or Windows run is claimed.
+  - date: "2026-11-25"
+    task: pr199-review-fixes
+    change: >-
+      Address the PR #199 review: correct the requirement count to 32, replace
+      pre-publication hashes with resolvable commits, add canonical/column
+      fail-closed trace guards and negative tests, rename TA-007 to avoid the
+      #200 collision, record the G1 replay exception as DEBT-21, rename the
+      master ADR to ADR-010 with the #25 reservation, reconcile generatedFrom
+      and the team snapshot, cite slice commits in the AI-use entries, refresh
+      the self-review metadata, add the proposed D1 taxonomy decision record,
+      state the subtype enforcement boundary, and reconcile D2.8 with the
+      merged pilot evaluation table.
+    requirements: []
+    invariants: []
+    commits: ["2a0c009"]
+    agent: OpenCode V2 build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
+    supervision: >-
+      The member requested the review fixes and the branch rebuild. The
+      assistant applied the changes; the human review owns the remaining
+      judgment, including the G1 replay exception.
+    verification:
+      base: b2becdd
+      results: >-
+        pnpm test:trace passed 55 tests; pnpm test:readiness passed 50 tests;
+        pnpm test:gates passed 6 files / 199 tests; pnpm verify passed 99 files
+        / 2268 tests with a clean typecheck, lint and build; pnpm gate:eval
+        passed the condition scan; relative links 0 missing; git diff --check
+        clean. Mutation checks for the canonical-table and monitor-column
+        guards went red then were restored.
+      limits: >-
+        G1 ordering passes with TA-007 but is an explicit replay exception
+        (DEBT-21), not evidence of pre-implementation approval. The taxonomy
+        and ADR-010 remain proposed pending M5/registrar acceptance. No live
+        provider, acoustic output or Windows run is claimed.

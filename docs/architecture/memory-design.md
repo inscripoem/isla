@@ -2,8 +2,14 @@
 
 Status: under review. M6 contributes the persistence portion; memory semantics are owned by M4 and
 live authority by M5. Step A record-shape coordination is under review. D2.5 clarifies persistence,
-retention and the M6/M4 visibility boundary. Updated: 2026-11-10.
-Anchors: FR-06 (persist and replay); NFR-05 (privacy, owner M5; M4/M6 collaborate).
+retention and the M6/M4 visibility boundary. Updated: 2026-11-25.
+Anchors: FR-06 (persist and replay); NFR-05 and SEC-01 (privacy/consent); GOV-01 (retention);
+INV-12 (restart truth); INV-17 (quality data-integrity).
+
+**Taxonomy note.** `INV-xx` is a stable legacy ID. Only `category: invariant` requirements are system
+invariants (INV-01, INV-02, INV-03, INV-12). The storage controls INV-04…INV-11 and INV-17 are quality
+NFRs; their stable IDs and evidence are retained. The authoritative types/subtypes are in
+[`../req/requirements.yaml`](../req/requirements.yaml) v0.3.
 
 ## Scope and ownership
 
@@ -39,6 +45,67 @@ restart acceptance remains M5's (#25).
 | Active turn / pending outputs | No (by design) | — | Restart begins stopped; unresolved outputs stay `unknown` |
 | Raw audio | Separate local files | DB reference only | Never inside event payloads |
 | Credentials / tokens | Never persisted | — | Excluded from events and JSONL |
+
+## State across sessions, interruptions and versions
+
+This matrix answers the three survival questions separately. “Session” means a new live identity in
+the same process; “restart” means a process interruption and reopen; “version” means a contract,
+schema, extractor, persona or prompt version change. A state that is absent is stated as absent, not
+as zero.
+
+| State | Survives a new session? | Survives restart? | Survives a version change? | Owner | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| Committed events (`RuntimeEvent`) | Yes, by explicit session id | Yes — SQLite rows | Schema migration only; unsupported version refused | M6 | `m6-storage`, `m6-sqlite`, `m6-durability` |
+| Delivery outcomes (`StoredDelivery`) | Yes, by explicit session id | Yes — SQLite rows | Schema migration only; legacy NULL preserved | M6 | `m6-sqlite-backend`, `m6-recovery` |
+| Confirmed spoken history | Yes, by explicit session id | Yes — only `fully-delivered` rows | Schema migration only | M6 | `m6-recovery`, `m6-i1-storage-recovery` |
+| Projection cursor | Yes, per session in `projection_state` | Yes for store callers; the port's in-process bookmark does not | Extractor-version scoped; a different version resets/rebuilds, never silently continues | M6 | `m6-memory-store` (C-75 pending for rebuild equality) |
+| Derived episodes/topics | Yes, by audience/session scope | Yes — derived tables | Rebuilt under the extractor version; rows and cursor move together | M4/M6 | `m6-memory-store`, `m6-memory-bench` |
+| Session audience / delivery owner | Yes, by explicit session id | Yes — `session_audience` / `delivery_owner` | Insert-once; a different binding conflicts rather than overwrites | M6 | `m6-memory-store` (C-76) |
+| Character state (`session_state`) | Yes, session-scoped | Yes — `session_state` | Per-session optimistic version; stale write conflicts | M6 | `m6-memory-store` (C-77) |
+| Working memory | No — one store per session | No — in-process | No schema; a new process starts empty | M4 | `m4-working-memory` |
+| Active turn / pending output | No by design | No — restart begins stopped | No | M5 | `m5-process-restart` |
+| Persona attribution / segment index | Yes, on the delivery | Yes — SQLite columns | Persona profile version is preserved; legacy unknown stays `null` | M4/M6 | `m5-attribution`, `m6-sqlite-backend` |
+| Raw audio | Separate local file, by reference | Yes if the file survives | Not versioned by the database; the reference is opaque | M1/M5 | `m1-performance`, audio route tests |
+| Credentials / tokens | Never | Never | Never | All | policy + code review |
+
+### Version axes
+
+| Axis | Current value | Governs | Rule |
+| --- | --- | --- | --- |
+| Application contract | `0.2` | C1–C7 payloads and ports | Separate from the database schema and diagnostic protocol |
+| Diagnostic protocol | `1` | `/diag` | Not an application contract |
+| Requirements registry | `0.3` | Requirement categories/subtypes | Schema change is versioned; `req-schema.json` is generated |
+| SQLite schema | single-row `schema_version` | tables/migrations | Unsupported version is refused; backup before migration; transactional rollback |
+| Recorded evaluation run | `RecordedRunV1`, `schemaVersion: 1` | recorded run/report | Frozen; a change needs a new version and owner review |
+| Memory extractor | implementation-defined `extractor_version` | derived rows + cursor | Cursor and rows share the version; a different version rebuilds |
+| Persona profile | profile id + version | memory attribution/trimming | A changed version is a different character; do not substitute silently |
+| Prompt / provider version | decision prompt `m3-decision-prompt-v1`; dialogue provider model version `openai-compatible-v1` | provider requests/provenance | Record the version with the call; do not infer it from behavior |
+
+### Version rules
+
+1. **No silent upgrade.** A newer schema version is refused; a migration is backed up and transactional.
+2. **Contract version is not schema version.** `0.2` payloads can outlive a schema migration and vice
+   versa; neither implies the other.
+3. **Derived memory is rebuildable, not authoritative.** The evidence tables are the source; derived
+   episodes/topics and their cursor are scoped to one extractor version.
+4. **Persona version is identity.** A changed profile version does not rewrite old delivery attribution;
+   old speech stays attributable to the old version.
+5. **Recorded evidence is not re-interpreted.** A schema/version mismatch is a refusal or an explicit
+   unscored/unknown state, never a best-effort parse.
+
+### What does not survive
+
+- Working memory, the in-process projection bookmark, active turns and pending output.
+- A provider session, an unconsumed stream and a model's private state.
+- Any claim that a restart “resumes” a spoken segment; it begins stopped and restores only confirmed
+  history.
+
+### Cross-session and retention boundary
+
+Automatic recall stays gated by `SEC-01`: an audience/owner binding must be durable and consenting.
+Deletion and age-based retention are `GOV-01`: audience-scoped, explicit operator calls, and they never
+remove `events` or `deliveries`. “Confirmed by M6” is not the same as “admitted by M4”; see the
+retention section below.
 
 ## Write policy
 

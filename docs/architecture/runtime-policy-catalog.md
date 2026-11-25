@@ -1,11 +1,12 @@
 # Runtime policy catalog
 
 Status: under review. M6 rows contributed here; other owners' rows pending. Shared document —
-M5 coordination pending. Date: 2026-10-12; playback and voice rows for merged #189/#190 added
-2026-11-25.
+M5 coordination pending. Date: 2026-10-12; playback/voice rows for merged #189/#190 and the
+dialogue/synthesis/renderer/startup rows added 2026-11-25.
 
 What the system does when each degraded or failure path is triggered. Each failure mode has a
-defined response and operational fallback.
+defined response and operational fallback. Rows in the main table are implemented unless their
+detection cell names an evidence gap; the separate “Proposed rows” subsection is design only.
 
 | Failure mode | Detection | Response | Fallback (concrete) | Owner |
 | --- | --- | --- | --- | --- |
@@ -30,6 +31,23 @@ defined response and operational fallback.
 | Contract-violating listener-history source | A `ListenerHistoryPort` returns the selected input's own event, or returns turns out of `(receivedAtMs, eventId)` order | Filter out the selected input's event without recording an exclusion, then stably re-sort by `(receivedAtMs, eventId)` before any cap or budget decision | The assembly is identical to a conforming source with the same turns: the cap keeps and the budget drops the same rows, and the exclusion order does not change | M4 |
 | Browser audio playback failure (`play()`) | `playFailureReason` reads a readable `error.name`: `NotAllowedError` yields `play_not_allowed`; any other value, an unreadable name or message-only `NotAllowedError` text yields `play_failed` | Emit exactly one `failed` receipt with that reason, detach the handle, unsubscribe and release the lease; a prior terminal receipt (for example from Stop) is retained | The segment is not treated as delivered and the existing terminal receipt is not overwritten; a failed detach retains the lease and reports `cleanup_failed` | M1 |
 | Voice selection refused or preference save fails | `voice.select` rejects with `unknown_voice` for an id that is not installed, or `persistence_failed` when the save write throws; the console admits only an operator (`voiceApplyAllowed`) | Reject the selection and leave the active voice unchanged; confirm a new active voice only from the matching `voice.state` acknowledgement | Keep using the prior confirmed voice; a begun turn keeps its starting voice even when another is adopted mid-reply, and preview samples are fenced after Stop, disconnect or replacement | M5 / M2 |
+| Dialogue provider timeout, rejection, malformed end or segment-count mismatch | M5 observes a non-resolved dialogue call, a schema-invalid/mis-correlated end, or a `segmentCount` disagreement | Record `dependency.failed` stage `dialogue`; do not dispatch a fabricated completion; a completed end that disagrees is a failed cycle | Deliver only segments already accepted before the fault; no later segment; a new turn is required | M4 / M5 |
+| Synthesis failure, timeout, refusal or malformed `PreparedAudio` | `boundedCall` returns timeout/rejected, `preparedAudioSchema` fails, or `prepared.ok` is false | Persist `dependency.failed` stage `synthesis`; do not play the segment; no retry in the same turn | Speech does not continue for that segment; the turn is not reported completed; the operator may start a new turn | M1 / M5 |
+| Renderer failure, disconnect, timeout or stale capability | Renderer call rejects or never settles, or the capability revision is stale; a no-op action makes no call | Bound the call; record the outcome; do not cancel otherwise valid speech | The segment continues without the avatar action (no-op); a later fresh capability is needed for the next action | M1 / M5 |
+| Playback timeout or unknown terminal outcome | Player `execute` never settles or returns malformed/uncorrelated evidence | Record the unknown outcome; block further segments until the outcome is confirmed | Keep the delivery unconfirmed; never replay or quote the segment as spoken; Stop remains responsive | M1 / M5 / M6 |
+| Provider authentication or configuration failure (no offline verifier; live config path only) | Provider call rejects with an auth/config failure; startup validation rejects a missing or invalid deployment value | Record the failure; produce no output; no retry in the same turn | Operator fixes credentials/configuration; a new turn is required; never fall back to an unconfigured provider | M3 / M4 / M5 |
+| Database file unreadable or corrupt (no dedicated corruption verifier; schema-version refusal is tested) | `openDatabase`/`migrate` throws, the file is not a database, or a schema version is unsupported | Refuse to start; do not serve or write | Restore the pre-migration backup or a known-good copy; start stopped; no replay | M6 |
+| Startup or listen failure | Deployment module missing/invalid, seeded live id, port bind error or listener error | Report the failure; release owned resources once; exit explicitly | Start stopped with corrected configuration; no fake ready state | M5 |
+| Character budget exhausted | Rendered history/recall exceeds `maxCharacters` after the section plan | Drop in trim order, add a rollup when it fits, record exclusions/warnings | Answer with reduced context; never exceed the cap; the dropped content remains stored | M4 |
+
+### Proposed rows (not implemented)
+
+These rows record a design decision, not runtime behaviour. The 4,096-token cap and 70%/90% thresholds
+are proposed in the system ADR and require M4 review and a real tokenizer before implementation.
+
+| Failure mode | Detection | Response | Fallback | Owner |
+| --- | --- | --- | --- | --- |
+| Prompt exceeds the proposed token cap after compaction | Proposed tokenizer preflight at 70% (compact) and 90% (hard stop) of a 4,096-token prompt cap | Compact history/recall; if still over 90%, return `context_overflow` and make no provider call | Operator starts a new session or reduces context; never send a prompt missing identity, standing constraints or the current task | M4 / M5 |
 
 The layer order, budget units and trim rules behind the context rows are
 documented in [context-assembly](context-assembly.md). Supporting checks for the
@@ -48,8 +66,9 @@ two rows added 2026-11-25:
 - `console-voice-selection.test.ts::fences stale preview samples after Stop,
   disconnect and replacement`.
 
-Decision rows are recorded above; synthesis failure and renderer disconnect remain owned by M1/M5
-and pending their entries here.
+Dialogue, synthesis, renderer, playback, startup and character-budget rows were added 2026-11-25;
+the provider-authentication and database-corruption rows name their missing verifiers rather than
+claiming coverage. The token-overflow row is a proposed design, not shipped behaviour.
 
 ## Pipeline gates (M6)
 
