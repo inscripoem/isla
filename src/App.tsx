@@ -50,12 +50,15 @@ async function requestOperatorToken(): Promise<string> {
   return result.token
 }
 
+const AVATAR_RELAY_URL = import.meta.env.VITE_AVATAR_RELAY_URL ?? null
+
 function App() {
   return (
     <ConsoleApp
       transportFactory={createConsoleTransport}
       performerFactory={createConsolePerformer}
       requestOperatorToken={requestOperatorToken}
+      avatarRelayUrl={AVATAR_RELAY_URL}
     />
   )
 }

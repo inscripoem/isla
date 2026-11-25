@@ -447,9 +447,15 @@ const batchHelper = (
   </div>
 )
 
+const avatarRelayUrl = new URLSearchParams(window.location.search).get('avatarRelay')
+
 createRoot(root).render(
   <StrictMode>
     {batchHelper}
-    <ConsoleApp transportFactory={createFixtureTransport} playbackFactory={createConsolePlayback} />
+    <ConsoleApp
+      transportFactory={createFixtureTransport}
+      playbackFactory={createConsolePlayback}
+      avatarRelayUrl={avatarRelayUrl}
+    />
   </StrictMode>,
 )
