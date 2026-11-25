@@ -3,13 +3,16 @@
  *
  * This is the simple open/close mouth mode, not the advanced phoneme feature.
  * The launcher composes the existing runtime production entry with the
- * existing-only M1 speaking deployment, a loopback Vite front end, a dedicated
- * Chrome/Edge app window, and the existing Python mouth companion. It owns every
- * process and local service it starts and never starts VTube Studio itself.
+ * existing-only M1 speaking deployment, a loopback Vite front end and a
+ * dedicated Chrome/Edge app window. Mouth opening comes from the local
+ * synthesis-time volume envelope by default; `--mouth-source windows` keeps the
+ * existing Python Windows audio companion. It owns every process and local
+ * service it starts and never starts VTube Studio itself.
  *
  * It deliberately depends only on Node's standard library plus the project's
  * existing `ws`, `vite` and `tsx` packages. Vite and `ws` are imported only after
- * help and configuration validation, so `--help` works without installed
+ * help and configuration validation, and the TypeScript envelope bridge is
+ * loaded through tsx only in envelope mode, so `--help` works without installed
  * project packages and without a Windows platform check.
  *
  * The token value is read into memory only. The browser never receives it, no
@@ -43,6 +46,7 @@ const PLUGIN_DEVELOPER = 'CS5351 Isla'
 
 const VTS_API_NAME = 'VTubeStudioPublicAPI'
 const VTS_API_VERSION = '1.0'
+const MODEL_LOADED_EVENT = 'ModelLoadedEvent'
 const DEFAULT_VTS_URL = 'ws://127.0.0.1:8001'
 
 const MOUTH_FORM_INPUT = 'IslaMouthForm'
@@ -54,6 +58,11 @@ const DEFAULT_WEB_PORT = 14773
 const DEFAULT_RUNTIME_PORT = 14774
 const DEFAULT_CACHE_DIR = join(REPO_ROOT, '.cache', 'models', 'kokoro-cache')
 const DEFAULT_PYTHON = join(REPO_ROOT, '.cache', 'm1-speaking-windows', 'Scripts', 'python.exe')
+
+const MOUTH_SOURCE_ENVELOPE = 'envelope'
+const MOUTH_SOURCE_WINDOWS = 'windows'
+const DEFAULT_MOUTH_SOURCE = MOUTH_SOURCE_ENVELOPE
+const MOUTH_ENVELOPE_MESSAGE = 'isla.mouth.volume-envelope'
 
 const LOCAL_TEXT_MODEL = 'local-speaking-echo'
 const LOCAL_TEXT_API_KEY = 'local-speaking-demo'
@@ -73,6 +82,7 @@ const RUNTIME_HEALTH_TIMEOUT_MS = 120_000
 const RUNTIME_STOP_TIMEOUT_MS = 10_000
 const COMPANION_READY_TIMEOUT_MS = 45_000
 const COMPANION_STOP_TIMEOUT_MS = 6_000
+const MOUTH_BRIDGE_STOP_TIMEOUT_MS = 5_000
 const BROWSER_STOP_TIMEOUT_MS = 3_000
 const VITE_STOP_TIMEOUT_MS = 4_000
 const SPAWN_TIMEOUT_MS = 10_000
@@ -94,8 +104,18 @@ Isla speaking-mouth demo (Windows, basic open/close mode)
 Usage:
   node src/performance/lipsync/windows/start-speaking-demo.mjs [options]
 
-Example:
-  node src/performance/lipsync/windows/start-speaking-demo.mjs --model-manifest ./isla-speaking-model.json --token-file C:/path/to/isla-runtime-cs5351.token --python ./.cache/m1-speaking-windows/Scripts/python.exe
+Examples:
+  node src/performance/lipsync/windows/start-speaking-demo.mjs --model-manifest ./isla-speaking-model.json --token-file C:/path/to/isla-runtime-cs5351.token
+  node src/performance/lipsync/windows/start-speaking-demo.mjs --mouth-source windows --python ./.cache/m1-speaking-windows/Scripts/python.exe
+
+Mouth source:
+  envelope (default) drives the selected mouth input from the synthesis-time
+  volume envelope reported by the local runtime through the launcher's existing
+  authenticated VTube Studio session. It needs no Python companion and reads no
+  Windows audio endpoint or browser process-id clock.
+  windows keeps the previous Python mouth companion, which reads the demo
+  browser's Windows render-session peak. That mode needs Python 3 with
+  websocket-client, pycaw, comtypes and psutil.
 
 Prerequisites:
   * Windows 10/11, Node 22 or newer, and project dependencies installed
@@ -105,9 +125,9 @@ Prerequisites:
     VTube Studio and never requests a new token.
   * The configured model is installed in VTube Studio. Its model id and its
     three advertised hotkey ids must match the manifest.
-  * Python 3 with websocket-client, pycaw, comtypes and psutil (the speaking
-    companion's documented Windows audio dependencies).
   * Google Chrome or Microsoft Edge, or an explicit --browser path.
+  * Only for --mouth-source windows: Python 3 with websocket-client, pycaw,
+    comtypes and psutil (the companion's documented Windows audio dependencies).
 
 Model manifest:
   A JSON object with this shape (replace every placeholder):
@@ -131,14 +151,14 @@ Text mode:
   ISLA_LIVE_TEXT_API_KEY values. Missing variable names are reported, never values.
 
 Shutdown:
-  Close the demo browser window or press Ctrl+C here. The launcher signals the
-  mouth companion to neutralize, neutralizes on the correct model if needed,
-  restores the VTube Studio model it changed, requests cooperative runtime
-  shutdown, closes its local services, stops only the browser process tree it
-  started, and removes its own temporary directory after a clean shutdown. On a
-  failure it keeps that directory as diagnostic output and reports the path.
-  Keep VTube Studio running until shutdown finishes so the previous model can be
-  restored.
+  Close the demo browser window or press Ctrl+C here. The launcher stops mouth
+  input, neutralizes the mouth on the correct model, restores the VTube Studio
+  model it changed, requests cooperative runtime shutdown, closes its local
+  services, stops only the browser process tree it started, and removes its own
+  temporary directory after a clean shutdown. In --mouth-source windows it also
+  signals the Python companion before neutralization. On a failure it keeps that
+  directory as diagnostic output and reports the path. Keep VTube Studio running
+  until shutdown finishes so the previous model can be restored.
 
 Options:
   -h, --help                 Show this help and exit.
@@ -148,9 +168,11 @@ Options:
   --token-file <path>        Existing VTS token (env ISLA_VTS_TOKEN_PATH;
                              default %LOCALAPPDATA%\\isla-vts\\isla-runtime-cs5351.token
                              when that file exists).
-  --python <path>            Python executable (env ISLA_SPEAKING_PYTHON;
-                             default ./.cache/m1-speaking-windows/Scripts/python.exe
-                             or python on PATH).
+  --mouth-source <mode>      Mouth input source: envelope (default) or windows.
+  --python <path>            Python executable for --mouth-source windows
+                             (env ISLA_SPEAKING_PYTHON; default
+                             ./.cache/m1-speaking-windows/Scripts/python.exe or
+                             python on PATH).
   --browser <path>           Chrome/Edge executable (env ISLA_SPEAKING_BROWSER;
                              default standard Chrome then Edge install paths).
   --cache <dir>              Kokoro model cache (env ISLA_KOKORO_MODEL_DIR;
@@ -315,11 +337,25 @@ function standardBrowserCandidates() {
   return [...new Set(candidates)]
 }
 
+function parseMouthSource(value) {
+  const normalized = String(value).trim().toLowerCase()
+  if (
+    normalized === MOUTH_SOURCE_ENVELOPE ||
+    normalized === MOUTH_SOURCE_WINDOWS
+  ) {
+    return normalized
+  }
+  throw usageError(
+    `--mouth-source must be "${MOUTH_SOURCE_ENVELOPE}" (default) or "${MOUTH_SOURCE_WINDOWS}".`,
+  )
+}
+
 function parseArgs(argv) {
-  const options = { liveText: false }
+  const options = { liveText: false, mouthSource: DEFAULT_MOUTH_SOURCE }
   const valueOptions = new Map([
     ['--model-manifest', 'modelManifest'],
     ['--token-file', 'tokenFile'],
+    ['--mouth-source', 'mouthSource'],
     ['--python', 'python'],
     ['--browser', 'browser'],
     ['--cache', 'cache'],
@@ -563,11 +599,14 @@ function readLiveTextConfig() {
 
 function resolveConfig(argv) {
   const options = parseArgs(argv)
+  const mouthSource = parseMouthSource(options.mouthSource)
   const repoFiles = {
     productionCli: requireRepoFile('src/runtime/production-cli.ts'),
     deployment: requireRepoFile('test/live/m1-speaking-deployment.ts'),
-    companion: requireRepoFile('src/performance/lipsync/speaking_mouth.py'),
     viteConfig: requireRepoFile('vite.config.ts'),
+    ...(mouthSource === MOUTH_SOURCE_WINDOWS
+      ? { companion: requireRepoFile('src/performance/lipsync/speaking_mouth.py') }
+      : { envelopeBridge: requireRepoFile('src/performance/lipsync/envelope-bridge.ts') }),
   }
 
   const manifestPath = resolveUserPath(
@@ -598,13 +637,16 @@ function resolveConfig(argv) {
   }
   const token = readToken(tokenPath)
 
-  const pythonPath = resolveExecutable(
-    options.python ?? envValue('ISLA_SPEAKING_PYTHON'),
-    [DEFAULT_PYTHON],
-    ['python.exe', 'python3.exe'],
-    'Python',
-    'Pass --python <python.exe> or set ISLA_SPEAKING_PYTHON. Install the companion dependencies in that environment.',
-  )
+  let pythonPath = null
+  if (mouthSource === MOUTH_SOURCE_WINDOWS) {
+    pythonPath = resolveExecutable(
+      options.python ?? envValue('ISLA_SPEAKING_PYTHON'),
+      [DEFAULT_PYTHON],
+      ['python.exe', 'python3.exe'],
+      'Python',
+      'Pass --python <python.exe> or set ISLA_SPEAKING_PYTHON. Install the companion dependencies in that environment.',
+    )
+  }
 
   const browserPath = resolveExecutable(
     options.browser ?? envValue('ISLA_SPEAKING_BROWSER'),
@@ -639,6 +681,7 @@ function resolveConfig(argv) {
 
   return {
     repoFiles,
+    mouthSource,
     manifest,
     manifestPath,
     token,
@@ -980,13 +1023,59 @@ function mouthLineHandler(line) {
   if (text.length > 0) warn(`mouth: ${text.slice(0, 500)}`)
 }
 
-class VtsSession {
+export class VtsSession {
   constructor(socket) {
     this.socket = socket
     this.pending = new Map()
     this.nextRequestId = 0
     this.opened = false
     this.closed = false
+    this.modelListener = null
+  }
+
+  setModelEventListener(listener) {
+    const installed = typeof listener === 'function' ? listener : null
+    this.modelListener = installed
+    return () => {
+      if (this.modelListener === installed) this.modelListener = null
+    }
+  }
+
+  notifyModelListener(event) {
+    const listener = this.modelListener
+    if (listener === null) return
+    try {
+      listener(event)
+    } catch {
+      // A model observer cannot break the request channel.
+    }
+  }
+
+  handleModelLoadedEvent(envelope) {
+    if (this.closed) return
+    if (
+      envelope.apiName !== VTS_API_NAME ||
+      envelope.apiVersion !== VTS_API_VERSION
+    ) {
+      this.notifyModelListener({ kind: 'invalid' })
+      return
+    }
+    const data = envelope.data
+    if (
+      !isRecord(data) ||
+      typeof data.modelLoaded !== 'boolean' ||
+      typeof data.modelName !== 'string' ||
+      typeof data.modelID !== 'string' ||
+      (data.modelLoaded && data.modelID.length === 0)
+    ) {
+      this.notifyModelListener({ kind: 'invalid' })
+      return
+    }
+    this.notifyModelListener({
+      kind: 'model',
+      loaded: data.modelLoaded,
+      modelID: data.modelLoaded ? data.modelID : '',
+    })
   }
 
   static open(url, WebSocketCtor, signal) {
@@ -1089,6 +1178,7 @@ class VtsSession {
 
   failAll(message) {
     this.closed = true
+    this.notifyModelListener({ kind: 'closed' })
     for (const [requestId, pending] of this.pending) {
       clearTimeout(pending.timer)
       this.pending.delete(requestId)
@@ -1118,6 +1208,12 @@ class VtsSession {
       return
     }
     if (!isRecord(envelope)) return
+    // Events may reuse the subscription request id, so they must be handled
+    // before pending correlation can reject an in-flight response.
+    if (envelope.messageType === MODEL_LOADED_EVENT) {
+      this.handleModelLoadedEvent(envelope)
+      return
+    }
     if (envelope.apiName !== VTS_API_NAME || envelope.apiVersion !== VTS_API_VERSION) {
       return
     }
@@ -1327,17 +1423,22 @@ class VtsSession {
     }
   }
 
+  async setOpening(openingInput, opening) {
+    await this.injectParameters([{ id: openingInput, value: opening }])
+  }
+
   async injectNeutral(openingInput) {
+    await this.injectParameters([
+      { id: openingInput, value: 0 },
+      { id: MOUTH_FORM_INPUT, value: 0 },
+      { id: MOUTH_X_INPUT, value: 0 },
+    ])
+  }
+
+  async injectParameters(parameterValues) {
     const data = await this.request(
       'InjectParameterDataRequest',
-      {
-        mode: 'set',
-        parameterValues: [
-          { id: openingInput, value: 0 },
-          { id: MOUTH_FORM_INPUT, value: 0 },
-          { id: MOUTH_X_INPUT, value: 0 },
-        ],
-      },
+      { mode: 'set', parameterValues },
       'InjectParameterDataResponse',
       VTS_REQUEST_TIMEOUT_MS,
     )
@@ -1391,6 +1492,229 @@ class VtsSession {
     // An empty request is the official unload operation. Some VTS builds echo
     // the model that was just unloaded, so the authoritative no-model check is
     // a CurrentModelRequest made by the caller after this response.
+  }
+}
+
+function isConfirmedModelSubscription(data) {
+  return (
+    isRecord(data) &&
+    typeof data.subscribedEventCount === 'number' &&
+    Number.isInteger(data.subscribedEventCount) &&
+    data.subscribedEventCount >= 1 &&
+    Array.isArray(data.subscribedEvents) &&
+    data.subscribedEvents.includes(MODEL_LOADED_EVENT)
+  )
+}
+
+/**
+ * Owns one launcher connection's model gate. A confirmed ModelLoadedEvent
+ * subscription lets each write use the event-derived model state, so a normal
+ * sample adds no model query. Unsupported subscriptions fall back to one
+ * checked query per update. A wrong, unloaded, invalid or closed state never
+ * receives an injection.
+ */
+export class MouthModelWriter {
+  constructor(session, targetModelId, openingInput) {
+    this.session = session
+    this.targetModelId = targetModelId
+    this.openingInput = openingInput
+    this.mode = 'starting'
+    this.snapshotQueries = 0
+    this.state = null
+    this.stateSeq = 0
+    this.started = false
+    this.closed = false
+    this.warned = false
+    this.detach = null
+  }
+
+  async start() {
+    if (this.closed) return this.mode
+    if (this.started) return this.mode
+    this.started = true
+
+    if (typeof this.session.setModelEventListener !== 'function') {
+      this.mode = 'fallback'
+      return this.mode
+    }
+    try {
+      const detach = this.session.setModelEventListener((event) => this.observe(event))
+      if (typeof detach === 'function') this.detach = detach
+    } catch {
+      this.mode = 'fallback'
+      return this.mode
+    }
+
+    let response
+    try {
+      response = await this.session.request(
+        'EventSubscriptionRequest',
+        { eventName: MODEL_LOADED_EVENT, subscribe: true, config: {} },
+        'EventSubscriptionResponse',
+        VTS_REQUEST_TIMEOUT_MS,
+      )
+    } catch {
+      if (this.closed) return this.mode
+      this.mode =
+        this.mode === 'fatal' || this.session.closed === true ? 'fatal' : 'fallback'
+      this.detachListener()
+      return this.mode
+    }
+
+    if (this.closed) return this.mode
+    if (this.mode === 'fatal' || this.session.closed === true) {
+      this.mode = 'fatal'
+      this.detachListener()
+      return this.mode
+    }
+    if (!isConfirmedModelSubscription(response)) {
+      this.mode = 'fallback'
+      this.detachListener()
+      return this.mode
+    }
+
+    this.mode = 'watched'
+    const seq = this.stateSeq
+    let baseline = null
+    try {
+      this.snapshotQueries += 1
+      baseline = await this.session.currentModel()
+    } catch (error) {
+      if (!this.closed) this.reportFailure(error)
+    }
+
+    if (this.closed) return this.mode
+    if (this.mode === 'fatal' || this.session.closed === true) {
+      this.mode = 'fatal'
+      this.state = null
+      this.detachListener()
+      return this.mode
+    }
+    if (this.stateSeq === seq && baseline !== null) {
+      this.state = baseline
+    }
+    return this.mode
+  }
+
+  observe(event) {
+    if (this.closed) return
+    this.stateSeq += 1
+    if (
+      isRecord(event) &&
+      event.kind === 'model' &&
+      typeof event.loaded === 'boolean' &&
+      typeof event.modelID === 'string'
+    ) {
+      if (event.loaded && event.modelID.length === 0) {
+        this.state = null
+        return
+      }
+      this.state = {
+        loaded: event.loaded,
+        modelID: event.loaded ? event.modelID : '',
+      }
+      return
+    }
+
+    this.state = null
+    if (isRecord(event) && event.kind === 'closed') {
+      this.mode = 'fatal'
+      this.detachListener()
+    }
+  }
+
+  async write(opening, signal) {
+    if (this.closed || this.mode === 'fatal') return
+    if (this.mode === 'fallback') {
+      await this.checkedWrite(opening, signal)
+      return
+    }
+    if (this.mode !== 'watched') return
+
+    if (this.state === null) {
+      if (!(await this.readState(signal))) return
+    }
+    if (signal.aborted) return
+    const state = this.state
+    if (state === null || !state.loaded || state.modelID !== this.targetModelId) {
+      return
+    }
+    if (signal.aborted) return
+    await this.send(opening)
+  }
+
+  async checkedWrite(opening, signal) {
+    if (signal.aborted || this.closed) return
+    this.snapshotQueries += 1
+    let current
+    try {
+      current = await this.session.currentModel()
+    } catch (error) {
+      this.reportFailure(error)
+      return
+    }
+    if (signal.aborted || this.closed) return
+    if (!current.loaded || current.modelID !== this.targetModelId) return
+    if (signal.aborted) return
+    await this.send(opening)
+  }
+
+  async readState(signal) {
+    if (signal.aborted || this.closed) return false
+    const seq = this.stateSeq
+    this.snapshotQueries += 1
+    let current
+    try {
+      current = await this.session.currentModel()
+    } catch (error) {
+      this.reportFailure(error)
+      return false
+    }
+    if (signal.aborted || this.closed) return false
+    if (this.stateSeq === seq) this.state = current
+    return true
+  }
+
+  async send(opening) {
+    const numeric = Number(opening)
+    if (!Number.isFinite(numeric)) return
+    const value = Math.min(1, Math.max(0, numeric))
+    try {
+      await this.session.setOpening(this.openingInput, value)
+    } catch (error) {
+      this.reportFailure(error)
+    }
+  }
+
+  reportFailure(error) {
+    if (this.closed) return
+    if (this.session.closed === true) {
+      this.mode = 'fatal'
+      this.state = null
+      this.detachListener()
+    }
+    if (this.warned) return
+    this.warned = true
+    warn(`Mouth update failed; audio playback continues: ${safeError(error)}`)
+  }
+
+  detachListener() {
+    const detach = this.detach
+    this.detach = null
+    if (detach === null) return
+    try {
+      detach()
+    } catch {
+      // The connection may already be gone.
+    }
+  }
+
+  close() {
+    if (this.closed) return
+    this.closed = true
+    this.mode = 'closed'
+    this.state = null
+    this.detachListener()
   }
 }
 
@@ -1660,6 +1984,7 @@ function buildRuntimeEnv(config, paths) {
   const env = sanitizedEnvironment()
   Object.assign(env, {
     ISLA_DEPLOYMENT_MODULE: 'test/live/m1-speaking-deployment.ts',
+    ISLA_SPEAKING_MOUTH_SOURCE: config.mouthSource,
     ISLA_SPEAKING_MODEL_ID: config.manifest.modelId,
     ISLA_KOKORO_MODEL_DIR: config.cacheDir,
     ISLA_RUNTIME_HOST: '127.0.0.1',
@@ -1696,6 +2021,27 @@ function startRuntime(context) {
   })
   resources.runtime = child
   guardChildErrors(child, 'The local runtime', shutdown)
+
+  if (resources.mouth !== null) {
+    const bridge = resources.mouth
+    const onMessage = (message) => {
+      if (!isRecord(message) || message.type !== MOUTH_ENVELOPE_MESSAGE) return
+      if (!isRecord(message.envelope)) return
+      try {
+        bridge.supply(message.envelope)
+      } catch {
+        // Optional mouth output must never disturb normal playback.
+      }
+    }
+    child.on('message', onMessage)
+    resources.runtimeEnvelopeListener = () => {
+      try {
+        child.off('message', onMessage)
+      } catch {
+        // The runtime may already be gone.
+      }
+    }
+  }
 
   const output = attachChildOutput(child, {
     logPath: paths.runtimeLog,
@@ -1765,6 +2111,24 @@ async function waitForHealth(context) {
   )
 }
 
+/**
+ * Vite's file-config merge ignores inline `null` overrides, so `server.watch`
+ * must be reapplied after the repository config is merged. This hook is scoped
+ * to the launcher's programmatic demo server; the developer `vite` command is
+ * untouched.
+ */
+export function createSpeakingStaticFilesPlugin() {
+  return {
+    name: 'isla-speaking-static-files',
+    enforce: 'post',
+    apply: 'serve',
+    config(config) {
+      config.server ??= {}
+      config.server.watch = null
+    },
+  }
+}
+
 async function startVite(context, createViteServer) {
   const { config, paths, resources, shutdown } = context
   let vite
@@ -1775,6 +2139,7 @@ async function startVite(context, createViteServer) {
       cacheDir: paths.viteCache,
       clearScreen: false,
       logLevel: 'warn',
+      plugins: [createSpeakingStaticFilesPlugin()],
       server: {
         host: '127.0.0.1',
         port: config.webPort,
@@ -1835,9 +2200,15 @@ function sanitizedEnvironment() {
 
 async function startBrowser(context) {
   const { config, paths, resources, shutdown, recordFailure } = context
+  // The capability fragment belongs only in this dedicated app URL; it is
+  // never written to output, logs, the runtime environment or a normal URL.
+  const appUrl =
+    resources.mouth === null
+      ? webOrigin(config.webPort)
+      : `${webOrigin(config.webPort)}${resources.mouth.fragment}`
   const args = [
     `--user-data-dir=${paths.profileDir}`,
-    `--app=${webOrigin(config.webPort)}`,
+    `--app=${appUrl}`,
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-background-mode',
@@ -2239,6 +2610,12 @@ async function settleAcceptedTransition(context) {
   }
 }
 
+function writeMouthOpening(context, opening, signal) {
+  const writer = context.resources.mouthModelWriter
+  if (writer === null) return
+  return writer.write(opening, signal)
+}
+
 async function neutralizeVts(context) {
   const { config, resources } = context
   const state = resources.vts
@@ -2479,7 +2856,10 @@ async function cleanup(context) {
   info('Stopping the speaking demo...')
 
   const steps = [
+    () => detachRuntimeEnvelopes(context),
     () => stopCompanion(context),
+    () => closeMouthBridge(context),
+    () => closeMouthModelWriter(context),
     () => settleAcceptedTransition(context),
     () => neutralizeVts(context),
     () => stopRuntime(context),
@@ -2542,6 +2922,9 @@ async function runDemo(config) {
     runtime: null,
     runtimeOutput: null,
     runtimeReady: false,
+    runtimeEnvelopeListener: null,
+    mouth: null,
+    mouthModelWriter: null,
     companion: null,
     companionOutput: null,
     companionReady: false,
@@ -2648,6 +3031,22 @@ async function runDemo(config) {
     await prepareVts(config, WebSocketCtor, resources.vts, shutdown.signal)
     throwIfStopped(shutdown.signal)
 
+    if (config.mouthSource === MOUTH_SOURCE_WINDOWS) {
+      info('Mouth source: the Windows Python audio companion.')
+    } else {
+      resources.mouthModelWriter = new MouthModelWriter(
+        resources.vts.session,
+        config.manifest.modelId,
+        config.manifest.input,
+      )
+      await resources.mouthModelWriter.start()
+      resources.mouth = await createMouthBridge(context)
+      info(
+        'Mouth source: the synthesis volume envelope; no Python companion or Windows audio meter is used.',
+      )
+    }
+    throwIfStopped(shutdown.signal)
+
     startRuntime(context)
     await awaitSpawn(resources.runtime, 'The local runtime', shutdown.signal)
     await waitForHealth(context)
@@ -2657,11 +3056,16 @@ async function runDemo(config) {
     await startVite(context, createViteServer)
     throwIfStopped(shutdown.signal)
 
+    attachMouthBridge(context)
+    throwIfStopped(shutdown.signal)
+
     const browser = await startBrowser(context)
     throwIfStopped(shutdown.signal)
 
-    await startCompanion(context, browser.pid)
-    throwIfStopped(shutdown.signal)
+    if (config.mouthSource === MOUTH_SOURCE_WINDOWS) {
+      await startCompanion(context, browser.pid)
+      throwIfStopped(shutdown.signal)
+    }
 
     printInstructions(config)
     await shutdown.wait()
@@ -2724,6 +3128,108 @@ async function loadVite() {
   return module.createServer
 }
 
+/** Load the TypeScript bridge through the installed tsx loader only in envelope mode. */
+async function loadEnvelopeBridgeFactory() {
+  let tsx
+  try {
+    tsx = await import('tsx/esm/api')
+  } catch {
+    throw usageError(
+      'The installed tsx loader could not be loaded; run pnpm install in the checkout and retry.',
+    )
+  }
+
+  let module
+  try {
+    module = await tsx.tsImport('../envelope-bridge.ts', import.meta.url)
+  } catch {
+    throw runtimeError(
+      'The local mouth bridge module could not be loaded; run the demo from a complete Isla checkout with dependencies installed.',
+    )
+  }
+  const factory = module?.createEnvelopeBridge ?? module?.default
+  if (typeof factory !== 'function') {
+    throw runtimeError('The local mouth bridge module did not expose createEnvelopeBridge.')
+  }
+  return factory
+}
+
+async function createMouthBridge(context) {
+  const factory = await loadEnvelopeBridgeFactory()
+  const bridge = factory({
+    origin: webOrigin(context.config.webPort),
+    write: (opening, signal) => writeMouthOpening(context, opening, signal),
+  })
+  if (
+    !isRecord(bridge) ||
+    typeof bridge.fragment !== 'string' ||
+    !bridge.fragment.startsWith('#isla-mouth=') ||
+    typeof bridge.supply !== 'function' ||
+    typeof bridge.attach !== 'function' ||
+    typeof bridge.close !== 'function'
+  ) {
+    if (isRecord(bridge) && typeof bridge.close === 'function') {
+      try {
+        await bridge.close()
+      } catch {
+        // The interface failure is the reportable error.
+      }
+    }
+    throw runtimeError('The local mouth bridge did not expose the expected interface.')
+  }
+  return bridge
+}
+
+function attachMouthBridge(context) {
+  const bridge = context.resources.mouth
+  if (bridge === null) return
+  const server = context.resources.vite?.httpServer
+  if (server === null || server === undefined) {
+    throw runtimeError(
+      'The local web server did not expose an HTTP server for the mouth bridge.',
+    )
+  }
+  bridge.attach(server)
+}
+
+function detachRuntimeEnvelopes(context) {
+  const detach = context.resources.runtimeEnvelopeListener
+  if (detach === null) return
+  context.resources.runtimeEnvelopeListener = null
+  try {
+    detach()
+  } catch {
+    // The runtime may already be gone.
+  }
+}
+
+async function closeMouthBridge(context) {
+  const bridge = context.resources.mouth
+  if (bridge === null) return
+  context.resources.mouth = null
+  try {
+    await withTimeout(
+      Promise.resolve().then(() => bridge.close()),
+      MOUTH_BRIDGE_STOP_TIMEOUT_MS,
+      'The local mouth bridge did not close in time.',
+    )
+  } catch (error) {
+    context.resources.cleanupProblems.push('could not close the mouth bridge')
+    warn(`Could not close the mouth bridge: ${safeError(error)}`)
+  }
+}
+
+function closeMouthModelWriter(context) {
+  const writer = context.resources.mouthModelWriter
+  if (writer === null) return
+  context.resources.mouthModelWriter = null
+  try {
+    writer.close()
+  } catch {
+    // The writer owns no process or socket; teardown is best effort.
+  }
+}
+
 async function main() {
   const argv = process.argv.slice(2)
   if (argv.includes('-h') || argv.includes('--help')) {
@@ -2758,12 +3264,18 @@ async function main() {
   }
 }
 
-try {
-  const exitCode = await main()
-  process.exitCode = exitCode
-  setTimeout(() => process.exit(exitCode), 300)
-} catch (error) {
-  warn(`Unexpected failure: ${safeError(error)}`)
-  process.exitCode = 1
-  setTimeout(() => process.exit(1), 300)
+const entryPath = process.argv[1]
+if (
+  entryPath !== undefined &&
+  fileURLToPath(import.meta.url) === resolve(entryPath)
+) {
+  try {
+    const exitCode = await main()
+    process.exitCode = exitCode
+    setTimeout(() => process.exit(exitCode), 300)
+  } catch (error) {
+    warn(`Unexpected failure: ${safeError(error)}`)
+    process.exitCode = 1
+    setTimeout(() => process.exit(1), 300)
+  }
 }
