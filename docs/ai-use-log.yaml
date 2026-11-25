@@ -9252,7 +9252,7 @@ entries:
     requirements: [FR-04, FR-05]
     invariants: [INV-01]
     cases: [C-04]
-    commits: ["4a6288aa02c5ff38568f80760b203c57c152952c"]
+    commits: ["96b7f075a112969dcfa3bb008e7c3bd9bc61c569"]
     agent: OpenCode V2 build
     provider: deepseek
     model: deepseek-flash
