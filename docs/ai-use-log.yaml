@@ -10578,7 +10578,7 @@ entries:
     requirements: [FR-01, FR-03, NFR-03, NFR-04]
     invariants: [INV-07, INV-13, INV-14, INV-16]
     cases: [C-06, C-11, C-13, C-14, C-15]
-    commits: ["04356b2a22f4ba7a62e9ea73606d9e6570773a10"]
+    commits: ["c462ca0c4b6ccffc9be9e49fe22b753a21dc5867"]
     agent: OpenCode V2 build
     provider: self-api
     model: deepseek-v4-flash
@@ -10587,7 +10587,7 @@ entries:
       Implemented in the OpenCode V2 build session from the task brief; the
       change was reviewed and verified locally.
     verification:
-      base: d01940533567156f4926f4e12dc56cc40683fac4
+      base: 259d075ce7a1089d3748b3612c9a23bee6d9ab88
       results: >-
         pnpm test:m3 passed 130 tests; pnpm test:composition passed 12 tests;
         pnpm test:trace passed 55 tests; pnpm verify passed 99 files / 2284
