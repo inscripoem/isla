@@ -27,12 +27,14 @@ persistent projection cursor (X02), audience-bound owner attribution (X03), char
 privacy/deletion/retention (X08) and a memory evaluation harness (X07). The accepted design currently
 says the projection cursor is in-process, automatic cross-session memory is out of v0.2, and v0.2
 deletes no evidence. The implementation in `src/storage/memory-store.ts` and
-`src/evaluation/memory-bench.ts` is tested and carried on a draft PR (not merged); this ADR records the decision it
-implements and the policy change it requires.
+`src/evaluation/memory-bench.ts` is tested and merged in #157 (`d86dbc1`, 2026-11-14); this ADR
+records the decision it implements and the policy change it requires, with decision acceptance still
+under review.
 
 X04's `session_state` storage ships here (D1, D4). X04's **audience-level latest-state seed** is out of
-scope: it has no decision, no API and no test in this change, and waits on #151 and M4's
-`CharacterState` mapping. It is therefore absent from the title and from the trace rows' claims.
+scope: it has no decision, no API and no test in this change, and waits on M4's `CharacterState`
+mapping; #151 merged (`11763df`) but did not supply that seed. It is therefore absent from the title
+and from the trace rows' claims.
 
 ## Decision
 
@@ -124,7 +126,9 @@ distinct; no zero substitution.
   storage boundary independently refuses a non-durable or non-consenting owner/derived write, so M5’s
   runtime gate and the store agree rather than one relying on the other.
 - M4 must supply `deriveEpisodes`/`deriveTopics`, the state projection and the **real memory corpora**.
-  Until those corpora exist, X07 is fixture-only and must not be reported as a quality result.
+  The three corpora were published in #159 (`bb9eaa3`) but are not directly pluggable into
+  `rebuildDerived`; until the M4-owned adapter exists, X07 remains fixture-level and must not be
+  reported as a quality result.
 - The evidence tables remain append-only; a source-level cascade is **deferred** until the NFR-05
   deletion policy exists.
 - `C-75` remains **pending** because its rebuild-equality half needs M4's derive rules through the
