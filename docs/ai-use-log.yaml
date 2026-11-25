@@ -10302,11 +10302,14 @@ entries:
       no prompt text changed. Add the evaluation table generated from the
       local Magpie group/deepseek-flash pilot, the pilot spec, and a README
       that describes the repository without issue status. The documentation
-      was written in OpenCode session ses_dee1ab4f6ffe0bBAMLH62GtnCf; the
+      was written in OpenCode session ses_dee1ab4f6ffe0bBAMLH62GtnCf; two
+      directory descriptions were corrected in the same session. The
       orchestrator generated the table and recorded TA-005.
     requirements: [FR-01, FR-02]
     invariants: [INV-14]
-    commits: ["ec3ea2914cdced3488aba4f452222229348c6fe9"]
+    commits:
+      - "7e433763c33b7a2457f6e60e39687b89b3afb7de"
+      - "4772471c1f62ed5f5810a823ae78de19f43d519b"
     agent: OpenCode V2 build
     provider: magpie
     model: group/deepseek-flash
