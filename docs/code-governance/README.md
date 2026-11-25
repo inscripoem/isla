@@ -1,6 +1,6 @@
 # Coding governance
 
-Status: **proposal (M6), for team review.** Owner: M6 (tooling) with M5 coordination. Revision 2026-10-16.1.
+Status: **proposal (M6), for team review.** Owner: M6 (tooling) with M5 coordination. Revision 2026-11-25.2.
 Course deliverables: **D3 (coding governance)** and **D4 (verification)** — see the table below.
 
 This folder holds the rules that bound the coding agent (D3) and the way its work is verified (D4). It is
@@ -10,11 +10,11 @@ This folder holds the rules that bound the coding agent (D3) and the way its wor
 
 | File | Deliverable | Normative for | Status |
 | --- | --- | --- | --- |
-| [`structural-constraints.md`](structural-constraints.md) | D3 | module organization, authority boundaries, stable identifiers, artifact authority, register ownership, and the enforcement state of every rule | PR #32 |
+| [`structural-constraints.md`](structural-constraints.md) | D3 | module organization, authority boundaries, stable identifiers, artifact authority, register ownership, and the enforcement state of every rule | on `main` |
 | [`../architecture/permission-model.md`](../architecture/permission-model.md) | D2.6 / D3 | role/path read-write matrix, default-deny policy, approvals, protected paths and enforcement state | local proposal |
 | [`../architecture/candidate-comparison.md`](../architecture/candidate-comparison.md) | D2 | qualitative comparison of the alternatives already recorded in the ADRs | local proposal |
 | [`verification-constraints.md`](verification-constraints.md) | D4 | structural / regression / behavioral verification tiers and the evidence each requires | on `main` |
-| [`mcp-tool-manifest.md`](mcp-tool-manifest.md) | D3 | the agent's external tool/context surface and the policy for extending it | this PR |
+| [`mcp-tool-manifest.md`](mcp-tool-manifest.md) | D3 | the agent's external tool/context surface and the policy for extending it | on `main` |
 
 ## Where the always-on instruction lives
 
@@ -28,7 +28,8 @@ this folder states the detail — the rule is not duplicated in both.
 The proposed role/path permission model is
 [`docs/architecture/permission-model.md`](../architecture/permission-model.md). Its machine-readable source is
 [`.opencode/permissions.jsonc`](../../.opencode/permissions.jsonc), compiled per role and task by
-[`tools/opencode/`](../../tools/opencode/) into ordinary JSON under `.cache/opencode/`. The model is a
+[`tools/opencode/`](../../tools/opencode/) into ordinary JSON under `.cache/opencode/` (generate/check
+commands in [`permission-model.md` §9](../architecture/permission-model.md)). The model is a
 local, under-review candidate: it is not auto-loaded, does not activate a blocking gate, and has not
 established native enforcement beyond the version-bound observations recorded in the model document.
 
@@ -39,10 +40,13 @@ numerical results remain reserved for the G4 evaluation table.
 
 ## Enforcement
 
-Each rule names the mechanism that fails when it is broken, and whether that mechanism is on `main` yet —
+Each rule names the mechanism that fails when it is broken, and whether that mechanism is on `main` —
 see [`structural-constraints.md`](structural-constraints.md) §4. The **tooling half** (fitness functions,
-frozen manifest, PR template, AI-use gate) lands with the R3 tooling PR (#27), deliberately separate from
-the rules in this folder so each can be reviewed on its own.
+frozen manifest, PR template, AI-use gate) merged with the R3 tooling PR (#158, `9492070`) and runs as
+steps of the required `verify` check. The remote `Protect Main` ruleset requires that check and an
+approval after the latest push, so those steps block a merge; see
+[`verification-constraints.md`](verification-constraints.md) ("Effective enforcement"). The proposed
+permission model is the only local, non-blocking candidate in this folder.
 
 ## How to change a governance document
 

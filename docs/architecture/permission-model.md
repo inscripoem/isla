@@ -4,9 +4,9 @@ Status: **proposal (M5), under review.** This document is not adopted by the tea
 branch protection, and not evidence that a member accepted it. No human author or human adoption is
 claimed.
 
-Revision: 2026-11-25.1. Reconciled against `main` `e2166cd047537042bd58a3c9999515fa9caf96e1`.
-The earlier candidate was prepared against `main` `e32bf1a6b532112ae00d9f29345668016f0f3a3a`; its
-version-bound observations are kept separately in §10.
+Revision: 2026-11-25.2. Reconciled against `main` `e2166cd047537042bd58a3c9999515fa9caf96e1`; also
+carried by the #192 candidate at `8a55f67`. The earlier candidate was prepared against `main`
+`e32bf1a6b532112ae00d9f29345668016f0f3a3a`; its version-bound observations are kept separately in §10.
 
 ## 1. Purpose and course basis
 
@@ -141,6 +141,51 @@ must be observed in a disposable worktree, not inferred from the policy file.
 6. Plugin exclusion uses the observed V2 form `plugins: ["-<name>"]`; a bare name would request the
    plugin rather than exclude it.
 
+### 9.1 Generate and check (human, before the session)
+
+The compiler is not in the policy's shell allowlist, and the policy denies `pnpm install*`, so both
+commands run in a **plain terminal before the scoped session starts**, not inside it. Run them from the
+checkout root:
+
+```sh
+# Generate the task-local configuration and its sidecar.
+pnpm exec tsx tools/opencode/cli.ts \
+  --role M5 --task M5-01 \
+  --model <provider>/<model> \
+  --exclude-plugin oh-my-opencode-slim \
+  --out .cache/opencode/m5-m5-01.json
+
+# Re-check the emitted pair against the current policy and the same flags.
+pnpm exec tsx tools/opencode/cli.ts \
+  --role M5 --task M5-01 \
+  --model <provider>/<model> \
+  --exclude-plugin oh-my-opencode-slim \
+  --check .cache/opencode/m5-m5-01.json
+```
+
+- `--role`, `--task` and `--model` are required. `--out` and `--check` are mutually exclusive.
+  `--overwrite` is required to replace an existing pair. `--approve` takes a comma-separated list of
+  the five approval classes from §5.
+- `--out` and `--check` must resolve inside `.cache/opencode/`; absolute paths, `..` and any other base
+  are rejected. The compiler refuses symlinks and writes the config and sidecar atomically.
+- `<provider>/<model>` is the member's local input; it is never committed. §10 records the specific
+  value used for the 2026-11-25 observation.
+- `--check` recompiles and fails on any drift: policy hash, config hash, role, task, grants, agent,
+  model or plugin exclusions.
+- On a fresh checkout, run `pnpm install --frozen-lockfile` before either command; that install is a
+  human prerequisite, since the policy denies it during the session.
+
+### 9.2 Disposable-worktree load
+
+1. Create a disposable git worktree or an empty directory **outside** the checkout, with no existing
+   `opencode.json`.
+2. Write the generated file there as `opencode.json` and keep the sidecar beside it.
+3. Start OpenCode in that directory and confirm `opencode debug config` lists the document, the agent,
+   the model and the ordered rules.
+4. Exercise one allowed read, one denied read, one allowed write and one denied write with harmless
+   synthetic paths.
+5. Delete the directory and do not commit the generated configuration.
+
 ## 10. Version-bound evidence and reconciliation
 
 The earlier candidate (`local/m5-governance-20261101` `88ab330`, refreshed as
@@ -161,7 +206,10 @@ The 2026-11-25 refresh runs on `main` `e2166cd`. OpenCode is `v2.4.1`. In a disp
 the checkout, the generated configuration was activated as that directory's `opencode.json`:
 
 - `opencode debug config` listed the generated document with 317 ordered rules, model
-  `self-api/deepseek-v4-flash` and `plugins: ["-oh-my-opencode-slim"]`.
+  `self-api/deepseek-v4-flash` and `plugins: ["-oh-my-opencode-slim"]`. The sidecar and the
+  `opencode debug config` summary in the external evidence directory record the compile inputs:
+  role **M5**, task **M5-01**, **no approval grants**. The rule count is role-specific — other roles
+  compile to a different count — so 317 describes the M5 policy only and is not a team-wide figure.
 - A bounded native session read `README.md` (allowed) and `synthetic-canary.txt` (denied with
   `Permission denied: read`).
 - A second bounded native session wrote `src/runtime/preflight-allowed.txt` (allowed) and
@@ -184,8 +232,12 @@ generates.
 - `.agent/rules.md` remains reviewer-managed and needs owner review.
 - The model, provider and plugin exclusion are local inputs. The committed policy contains no credential
   or gateway route.
-- The policy is advisory until a native load and branch-protection decision are recorded. It does not
-  activate G1, G4 or any blocking gate.
+- The policy is advisory: it is not part of the `verify` job, so the active `Protect Main` ruleset does
+  not enforce it. It does not activate G1, G4 or any blocking gate. G1's path scope is `src/` and
+  `prompts/` only (`CODE_OR_PROMPT_PREFIXES` in `src/evaluation/test-approval-gate.ts`), so this
+  compiler under `tools/opencode/` is outside G1; it is covered by G2 (typecheck + lint) and G5
+  (regression) instead. Broadening G1 to `tools/` would be a separate gate change with its own tests
+  and approval record.
 - RTK rewriting and exact shell matching are environment-specific and must be re-observed after a tool
   upgrade.
 
