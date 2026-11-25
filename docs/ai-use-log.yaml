@@ -10457,3 +10457,43 @@ entries:
         claimed. The token-overflow row is proposed, not implemented. The
         provider-authentication and database-corruption rows name their evidence
         gaps; they are not coverage claims.
+  - date: "2026-11-25"
+    task: d4-verification-governance-and-qa
+    change: >-
+      Tighten the verification rules: distinguish deterministic fit criteria
+      from pending metrics, add the mutation-check and gate-negative-test
+      rules, add the canonical coverage/mutation section, state that Tier 3 is
+      not run and that G4 is not a semantic evaluator, and mark the 2026-10-29
+      enforcement measurement as historical. Add the per-gate inventory with
+      positive/negative tests and recorded limits. Add the review-memo
+      template, verdict vocabulary, review-coverage table and an advisory
+      self-review of the artifact-closure branch. Expand the debt register to
+      all eight AI-era categories with a coverage table and DEBT-17..20. Fill
+      the missing reproduction/root-cause/invariant-gap fields in the bug
+      diary, including BUG-004..007.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: OpenCode V2 build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
+    supervision: >-
+      The member directed the artifact-closure branch and approved the D4
+      governance slice. The assistant wrote the records from the merged
+      verification, review, debt and bug history; the member reviews the diff
+      before any commit or publication.
+    verification:
+      base: 1161c2f30262bb5c628ad6ea65c62d35fc17b4dc
+      results: >-
+        pnpm test:trace passed 52 tests; pnpm test:readiness passed 50 tests;
+        pnpm test:gates passed 6 files / 196 tests; pnpm verify passed 99 files
+        / 2265 tests with a clean typecheck, lint and build; git diff --check
+        reported no whitespace errors; a local relative-link check over the
+        changed documents found no missing targets; the bug-diary field check
+        found all six fields in all 18 entries.
+      limits: >-
+        No live provider, G4 semantic result, acoustic output or Windows run is
+        claimed. The review memo records missing entries for the merged
+        #192-#196 batch rather than backfilling them. The self-review is
+        advisory and not a human approval.

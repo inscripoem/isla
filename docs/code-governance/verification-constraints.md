@@ -1,24 +1,64 @@
 # Verification constraints
 
-Status: under review. Owned by M6. Date: 2026-10-12.
+Status: under review. Owned by M6. Date: 2026-10-12; taxonomy, mutation rule and gate truth updated
+2026-11-25.
 
-The rules the verification agent applies and the QA records the team maintains.
+The rules the verification agent applies and the QA records the team maintains. The canonical
+requirement-to-component-to-test-to-monitor map is
+[`../architecture/trace-matrix.md`](../architecture/trace-matrix.md); this document states the rules
+and the evidence tiers.
 
 ## Rules
 
-1. Every fit criterion has at least one test.
-2. Every invariant has at least one test that **fails when the invariant is violated**
-   (a test that always passes proves nothing).
-3. Every test references the requirement or invariant it verifies.
+1. Every **deterministic** fit criterion has at least one test. A **pending metric** has a row in
+   [`../architecture/evaluation-thresholds.md`](../architecture/evaluation-thresholds.md) naming its
+   statistic, comparison, verification method, owner and status. A pending metric is not a pass.
+2. Every invariant has at least one test that **fails when the invariant is violated** (a test that
+   always passes proves nothing). The current register has four system invariants: INV-01, INV-02,
+   INV-03 and INV-12.
+3. Every test references the requirement, invariant or case it verifies.
 4. Every new round of work runs all previous rounds' test suites with **zero regressions**.
+5. Every new behaviour gets a positive test, a negative test and a **mutation check**: break the
+   behaviour, watch the intended test go red, restore it, and record the red/green result.
+6. Every gate has a negative test or an explicitly recorded mechanical limit. A gate that has never
+   been observed rejecting has not been shown to be a gate.
+7. A change to a test, gate, permission, threshold or CI step is reviewed more strictly than the
+   production diff. Never delete, skip or relax a check to make a change pass.
 
 ## Three-tier verification (gated; no skipping)
 
 | Tier | Applies | Command / evidence |
 | --- | --- | --- |
-| 1 — Structural | imports, module boundaries, permissions, architectural fitness functions | `pnpm test:readiness` (`contracts`, `requirements`, `boundaries`); `pnpm lint`; `pnpm typecheck` |
-| 2 — Regression | all prior suites pass | `pnpm test` (all offline suites) |
-| 3 — Behavioral | quality thresholds (faithfulness/relevance; zero safety escapes) | pending (semantic eval; provider access required) — NFR-03 |
+| 1 — Structural | imports, module boundaries, permissions, schemas, trace/frozen fitness | `pnpm test:readiness` (`contracts`, `requirements`, `boundaries`); `pnpm test:trace`; `pnpm lint`; `pnpm typecheck` |
+| 2 — Regression | all prior offline suites, zero regressions | `pnpm test` (99 files / 2265 tests at `1161c2f`) |
+| 3 — Behavioral | SEM1 faithfulness, SEM2 answer relevance, zero safety escapes | **pending / not run** — requires a fixed evaluation set, reviewed labels, provider access and thresholds. G4's condition scan is **not** a semantic evaluator. |
+
+**Tier 3 is not satisfied by a green G4.** G4 checks that a measured claim names its fixed conditions
+and that a claim row has a value; it does not run faithfulness or relevance. A G4 `not run` is not a
+pass, and a G4 pass is not a quality result.
+
+## Coverage and mutation
+
+- **Canonical coverage:** 32/32 requirements have a trace row; every monitor cell is a signal or a
+  reasoned `—`; four current invariants remain in the invariant register.
+- **Cases:** 69 registered, 64 implemented, 5 pending (C-05, C-08, C-09, C-16, C-75).
+- **Mutation:** the new trace checks were mutation-checked on this branch (missing requirement,
+  bare monitor, non-invariant register row), as was the taxonomy subtype requirement. See the
+  review memo and AI-use log for the red/green results.
+- **A test that cannot fail is a defect.** A test that asserts only the shape of a mock, or that
+  passes when the behaviour is removed, is not evidence.
+
+## Gate inventory and current truth
+
+The per-gate inventory is [`gate-inventory.md`](gate-inventory.md): trigger, position, reference data,
+failure action, positive test, negative test and owner. The current truth is:
+
+| Question | Answer |
+| --- | --- |
+| Is `verify` required? | **Yes per the recorded ruleset measurement**; re-read the active ruleset before repeating the claim. |
+| Is G1 blocking? | G1 is in `evidence` mode for PRs created at/after the 2026-11-16 cutover; a time-boxed waiver covers #170/#171/#175/#181 through 2026-11-27. A waiver is not a pass. |
+| Is G4 a semantic gate? | **No.** It is a condition/claim scan. Tier 3 semantic evaluation is not run. |
+| Does green CI prove product behavior? | **No.** Fixtures are not the product; live providers, acoustic output and Windows recovery are separate. |
 
 ## Reviewer's five questions (author first, then reviewer)
 
@@ -43,6 +83,9 @@ about a live setting or an issue thread is re-read at the moment of writing, not
 session.
 
 ## M6 coverage map (requirement/invariant → case → test)
+
+This table is the M6 evidence detail; the canonical requirement-to-component-to-test-to-monitor map is
+[`../architecture/trace-matrix.md`](../architecture/trace-matrix.md). It does not replace that matrix.
 
 Taxonomy note (2026-11-25): only `INV-01..03` and `INV-12` are system invariants. Rows below that use
 `INV-04..17` are retained as quality, governance or security NFR controls under their stable legacy IDs;
@@ -145,10 +188,14 @@ attempts or not-run entries”. Two variants, executed and not-run entries, temp
 R1 command are used; all-not-run refusal, output preservation and non-finite serialization refusal remain
 supporting boundary tests.
 
-## Effective enforcement — required status check (2026-10-29)
+## Historical enforcement record — required status check (2026-10-29)
+
+**Historical measurement, not a current claim.** Re-read the active ruleset before repeating it; the
+current truth table is in “Gate inventory and current truth” above.
 
 Records the enforcement half of issue #84 (checkpoint 01, target 2026-10-30). This is an **evidence note, not a
-rule change**: ADR-006 D2 remains the decision, and this section records which of its conditions hold today.
+rule change**: ADR-006 D2 remains the decision, and this section records which of its conditions held at that
+measurement.
 Measured on `main` `4e4f7cd` at 2026-10-29T10:57Z with `gh api repos/inscripoem/isla/rulesets/24803426` and
 `.../rules/branches/main`.
 

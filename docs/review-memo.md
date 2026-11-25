@@ -5,6 +5,39 @@ Status: under review. Owner: R3 / M6 tooling (D4). Every pull request reviewer a
 with **security and efficiency** checked throughout, ending in a verdict: **APPROVE**,
 **CHANGES REQUIRED**, or **REJECT**.
 
+## Entry template
+
+```markdown
+## PR #<number> — <title>
+- Date / reviewer / verdict: APPROVE | CHANGES REQUIRED | REJECT
+- Spec alignment: requirement/case IDs, fit criteria, scope, pending metrics.
+- Architecture alignment: ADR/invariant/authority boundary/module ownership.
+- Code and test quality: positive, negative, mutation, regression; no weakened tests.
+- Operational metadata: branch, exact head, CI run, commands/results, rollback.
+- Security and efficiency: secrets, permissions, injection, egress, token/cost.
+- Evidence limits: what was not verified.
+- Required actions and follow-up owner.
+```
+
+**Verdict vocabulary.** New entries use exactly `APPROVE`, `CHANGES REQUIRED` or `REJECT`. Historical
+entries below use non-standard wording such as “OK for handoff”; they are kept as history, not
+reinterpreted as a current verdict.
+
+**No retroactive approval.** A missing entry is a gap, not a silent approval. Do not backfill a review
+without a named reviewer and the evidence they actually read.
+
+## Review coverage (2026-11-25)
+
+| Change | State | Review-memo entry |
+| --- | --- | --- |
+| PR #192 — D2/D3/D9 governance candidate | merged | **none recorded here** |
+| PR #193 — team status reconciliation | merged | **none recorded here** |
+| PR #194 — D1 trace + D2 context design | merged | **none recorded here** |
+| PR #195 — architecture/evaluation reconciliation | merged | **none recorded here** |
+| PR #196 — G6 diagnostics | merged | **none recorded here** |
+| PR #187 — M2 console rebuild | merged | **none recorded here** |
+| Artifact-closure branch (`a58e8f0`, `57ef721`, `1161c2f`) | open, local | self-review below; human review pending |
+
 ## PR #9 — M6-01 storage ports, backend seam and traceability artifacts
 
 - Date: 2026-10-13 · Reviewer: M5 (`inscripoem`) · Verdict: **CHANGES REQUIRED**
@@ -205,3 +238,15 @@ with **security and efficiency** checked throughout, ending in a verdict: **APPR
   head on that date. Since then M4 reviewed #140 (`99df88b`, `dd4cebf`) and #142 (`1019bd5`), and M5
   approved #141 (`5d89284`). No merge or checkpoint acceptance is claimed.
 
+
+## M6 self-review — artifact-closure branch (a58e8f0, 57ef721, 1161c2f)
+
+- Date: 2026-11-25 · Reviewer: M6 (self, advisory) · Verdict: **CHANGES REQUIRED** (human review pending; not a self-approval)
+- Spec alignment: the branch closes the D1 taxonomy/trace gap, adds the D2.1 blueprint and proposed D2.2 ADR, adds the state/version-survival matrix, and adds the runtime failure rows. The remaining D2.9/D2.10 artifacts are explicitly marked not produced; G4/Tier 3 remain not run.
+- Architecture alignment: the blueprint/ADR keep M5 as the single live authority, M6 as the evidence owner, and the four system invariants (INV-01..03, INV-12). The master ADR is explicitly proposed and its number is pending #25.
+- Code and test quality: docs-only except the trace-fitness/registers/requirements schema changes in the first commit. The trace gate now rejects missing requirements, unreasoned monitors and non-invariant register rows; mutation checks went red for each guard. No test was weakened.
+- Operational metadata: branch `m6-artifact-closure-20261125`; commits `a58e8f0`, `57ef721`, `1161c2f`; local only, no push or PR.
+- Security and efficiency: no secrets, credentials or live provider calls; no runtime behavior changed. The permission model remains a local candidate and is not a blocking `verify` step.
+- Verification: `pnpm test:trace` 52, `pnpm test:readiness` 50, `pnpm test:gates` 196, `pnpm verify` 99 files / 2265 tests, `pnpm gate:ai-use-log` passed, relative-link check 0 missing, `git diff --check` clean.
+- Required actions: human review/merge decision; #25 confirmation for the ADR number and the new `COST-01`/`SEC-01`/`GOV-01` IDs; M4 review of the proposed token cap; owner review of the matrix rows.
+- Limits: no live provider, acoustic output, Windows recovery, G4 semantic result or human acceptance is claimed.

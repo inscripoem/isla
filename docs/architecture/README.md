@@ -42,7 +42,7 @@ optional artifact is not produced, the row says so rather than pointing at a pla
 | Review memo | [`../review-memo.md`](../review-memo.md) | under review; entries accrue per reviewed change |
 | Debt register | [`../debt-register.md`](../debt-register.md) | under review |
 | Bug diary | [`../bug-diary.md`](../bug-diary.md) | under review |
-| Gate inventory | **not produced as a standalone file** | Gate design is in `verification-constraints.md`, `runtime-policy-catalog.md` and `README.md`; a consolidated inventory remains a closure item. |
+| Gate inventory | [`../code-governance/gate-inventory.md`](../code-governance/gate-inventory.md) | under review; one row per gate with positive/negative test or recorded limit. |
 
 ## Reading order
 
