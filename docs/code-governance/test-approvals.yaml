@@ -77,6 +77,16 @@ approvals:
       - test/offline/voice-settings.test.ts
       - test/offline/m5-reference-live.test.ts
       - test/browser/console-voice-selection.mjs
+  - id: TA-005
+    task: "Record the versioned prompt manifest without changing any prompt text"
+    approved_at: "2026-11-25T16:43:09+08:00"
+    approved_by: M5
+    scope:
+      - "prompts/prompt_v1.0.yaml"
+    tests:
+      - test/offline/m3-decision.test.ts
+      - test/offline/m4-persona-recall.test.ts
+      - test/offline/m4-style.test.ts
   - id: TA-006
     task: "Drive the selected speaking avatar from observed Windows playback level and close it on Stop or terminal playback"
     approved_at: "2026-11-25T16:22:51+08:00"
