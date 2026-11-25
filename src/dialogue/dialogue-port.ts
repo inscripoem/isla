@@ -25,6 +25,7 @@ import type { BudgetPlan } from './budget'
 import type { CharacterState, StateBaseline, StateProfile } from './state'
 import type { ListenerHistoryPort, ListenerHistoryRead } from './listener-history'
 import type { WorkingMemoryStore } from './working-memory'
+import type { MemoryInspectObservation } from './memory-inspect'
 
 /**
  * Dialogue generation.
@@ -206,6 +207,19 @@ export interface DialoguePortOptions {
    * the generation result.
    */
   onOutcome?: (report: DialogueOutcomeReport) => void
+  /**
+   * Read-only retention seam for the memory-inspection diagnostic.
+   *
+   * Called once per successful assembly with the context that was actually used
+   * and the generating request's identity. M4's retention implementation builds
+   * the redacted `memory.inspect` payload here, so the protocol-1 boundary only
+   * reads an already-built observation. Omitted means no retention.
+   *
+   * A synchronous throw or a rejected promise from the callback is contained and
+   * never changes generation: the diagnostic plane must not be able to fail a
+   * turn.
+   */
+  onAssembledContext?: (observation: MemoryInspectObservation) => void
   /**
    * Render `[conflicting]` on turns the consistency scan flagged (see
    * `AssembleDialogueContextInput.markConflictingTurns`).
@@ -608,6 +622,29 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
         }
       }
       const view = await assemble()
+
+      /*
+       * Retain the assembled context for the read-only memory-inspection
+       * diagnostic. This runs after assembly succeeded and before any later
+       * Stop/deadline check, so the retained turn is the one that was actually
+       * built. A fault in the observer is contained exactly like `onOutcome`:
+       * the diagnostic plane must never change generation.
+       */
+      const retain = options.onAssembledContext
+      if (retain !== undefined) {
+        try {
+          const result: unknown = (retain as (value: MemoryInspectObservation) => unknown)({
+            context: view,
+            sessionId: request.sessionId,
+            turnId: request.turnId,
+          })
+          if (isThenable(result)) {
+            void Promise.resolve(result).catch(() => {})
+          }
+        } catch {
+          // Contained; see above.
+        }
+      }
 
       /*
        * Re-check after context assembly: a Stop or deadline that arrived during the

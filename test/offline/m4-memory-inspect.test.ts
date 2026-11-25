@@ -6,6 +6,7 @@ import {
   buildMemoryInspect,
   createDeliveryMemoryStore,
   createDialoguePort,
+  createMemoryInspectRetention,
 } from '../../src/dialogue'
 import type {
   AssembledDialogueContext,
@@ -142,5 +143,73 @@ describe('M4 memory.inspect diagnostic', () => {
     expect(
       payload.warnings.some((warning) => warning.includes('consistency audit is incomplete')),
     ).toBe(true)
+  })
+})
+
+describe('M4 memory.inspect retention', () => {
+  it('reports no observation before a turn is assembled', () => {
+    const retention = createMemoryInspectRetention()
+    expect(retention.read()).toBeNull()
+  })
+
+  it('retains the latest assembled context with the request identity', async () => {
+    const memory = createDeliveryMemoryStore()
+    await commitTurn(memory, 'turn-1', 'The capital of France is Paris.')
+    const context = await assemble(memory)
+    const retention = createMemoryInspectRetention()
+
+    retention.observe({ context, sessionId: FIXTURE_SESSION_ID, turnId: 'turn-current' })
+
+    const payload = retention.read()
+    expect(payload?.sessionId).toBe(FIXTURE_SESSION_ID)
+    expect(payload?.turnId).toBe('turn-current')
+    expect(payload?.admission.admitted).toBeGreaterThan(0)
+  })
+
+  it('replaces the previous observation and never retains memory text', async () => {
+    const memory = createDeliveryMemoryStore()
+    await commitTurn(memory, 'turn-1', 'A memorable private detail about the listener.')
+    const context = await assemble(memory)
+    const retention = createMemoryInspectRetention()
+
+    retention.observe({ context, sessionId: FIXTURE_SESSION_ID, turnId: 'turn-1' })
+    retention.observe({ context, sessionId: FIXTURE_SESSION_ID, turnId: 'turn-2' })
+
+    const payload = retention.read()
+    expect(payload?.turnId).toBe('turn-2')
+    expect(JSON.stringify(payload)).not.toContain('private detail')
+  })
+
+  it('contains a throwing observer without changing generation', async () => {
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      textSource: capturingTextSource({ view: null }),
+      onAssembledContext: () => {
+        throw new Error('observer failed')
+      },
+    })
+    const segments: DialogueSegment[] = []
+    const end = await port.generate(fixtureDialogueRequest(), createCallContext(), {
+      segment: async (segment) => {
+        segments.push(segment)
+      },
+    })
+    expect(end.status).toBe('completed')
+    expect(segments.map((segment) => segment.text)).toEqual(['Captured reply.'])
+  })
+
+  it('contains a rejected observer without an unhandled rejection', async () => {
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      textSource: capturingTextSource({ view: null }),
+      onAssembledContext: () => Promise.reject(new Error('observer failed')),
+    })
+    const end = await port.generate(fixtureDialogueRequest(), createCallContext(), {
+      segment: async () => {},
+    })
+    expect(end.status).toBe('completed')
+    // Give the contained rejection a turn to surface if the port failed to attach
+    // a handler.
+    await Promise.resolve()
   })
 })

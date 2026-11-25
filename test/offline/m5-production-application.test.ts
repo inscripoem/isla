@@ -3,6 +3,7 @@ import { request } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { WebSocket, type RawData } from 'ws'
 import type { EventStorePort, SelectionPort } from '../../src/contracts'
 import type { DialogueTextSource } from '../../src/dialogue'
 import { createMonotonicClock } from '../../src/runtime/clock'
@@ -182,6 +183,37 @@ function httpRequest(
     req.on('error', reject)
     req.end()
   })
+}
+
+function rawToString(data: RawData): string {
+  if (typeof data === 'string') return data
+  if (Buffer.isBuffer(data)) return data.toString('utf8')
+  if (data instanceof ArrayBuffer) return Buffer.from(data).toString('utf8')
+  return Buffer.concat(data).toString('utf8')
+}
+
+/** One JSON request/response over the diagnostics `/diag` socket. */
+async function diagRequest(port: number, message: unknown): Promise<Record<string, unknown>> {
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/diag`)
+  try {
+    await new Promise<void>((resolve, reject) => {
+      ws.once('open', () => resolve())
+      ws.once('error', reject)
+    })
+    return await new Promise<Record<string, unknown>>((resolve, reject) => {
+      ws.once('message', (data: RawData) => {
+        try {
+          resolve(JSON.parse(rawToString(data)) as Record<string, unknown>)
+        } catch (error) {
+          reject(error)
+        }
+      })
+      ws.once('error', reject)
+      ws.send(JSON.stringify(message))
+    })
+  } finally {
+    ws.close()
+  }
 }
 
 async function until<T>(
@@ -392,6 +424,52 @@ describe('production application audio resources', () => {
 
     await fixture.app.stop()
     expect(audio.retireSessionCalls).toEqual([LIVE_1])
+  })
+})
+
+describe('production application memory inspection', () => {
+  it('answers get_memory_inspect with the live assembled turn', async () => {
+    const fixture = await startApplication({ liveSessionId: LIVE_1 })
+    const client = fixture.newClient(LIVE_1)
+    await fixture.boot(client)
+
+    const before = await diagRequest(fixture.port, {
+      v: 1,
+      id: 'inspect-before',
+      kind: 'get_memory_inspect',
+    })
+    expect(before).toMatchObject({
+      ok: true,
+      kind: 'get_memory_inspect',
+      payload: {
+        section: 'memory.inspect',
+        outcome: 'unavailable',
+        reason: 'no-observation',
+      },
+    })
+
+    await client.input('a turn that must be inspectable')
+    await until(
+      async () => (await fixture.app.history.confirmedHistory(LIVE_1)).length,
+      (count) => count >= 1,
+    )
+
+    const after = await diagRequest(fixture.port, {
+      v: 1,
+      id: 'inspect-after',
+      kind: 'get_memory_inspect',
+    })
+    expect(after).toMatchObject({ ok: true, kind: 'get_memory_inspect' })
+    const payload = after.payload as {
+      section?: unknown
+      inspect?: Record<string, unknown>
+    }
+    expect(payload.section).toBe('memory.inspect')
+    expect(payload.inspect?.sessionId).toBe(LIVE_1)
+    expect(typeof payload.inspect?.turnId).toBe('string')
+    expect(payload.inspect?.turnId).not.toBe('')
+    // Redaction: neither the audience input nor memory text is echoed.
+    expect(JSON.stringify(payload)).not.toContain('a turn that must be inspectable')
   })
 })
 

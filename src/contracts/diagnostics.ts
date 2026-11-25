@@ -184,3 +184,15 @@ export interface MemoryInspectUnavailable {
 }
 
 export type MemoryInspectReply = MemoryInspectReplyPayload | MemoryInspectUnavailable
+
+/**
+ * Read-only provider of the most recently assembled, already-redacted
+ * inspection payload.
+ *
+ * `null` means no context has been assembled (or the composition has no
+ * observation to report); an implementation must never synthesize memory data
+ * to fill the gap. The runtime calls this only when answering
+ * `get_memory_inspect`, so a stopped or not-yet-started runtime remains a
+ * valid, correlatable answer rather than a protocol error.
+ */
+export type MemoryInspectSource = () => MemoryInspectPayload | null

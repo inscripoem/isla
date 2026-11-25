@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import type { AddressInfo } from 'node:net'
 import type { Duplex } from 'node:stream'
 import { WebSocket, WebSocketServer, type RawData } from 'ws'
-import { toErrorReply, type DiagnosticReply } from '../contracts'
+import { toErrorReply, type DiagnosticReply, type MemoryInspectSource } from '../contracts'
 import {
   DIAGNOSTICS_PATH,
   HEALTH_PATH,
@@ -54,6 +54,7 @@ export class DiagnosticsServer {
   private readonly wss: WebSocketServer
   private readonly appWss: WebSocketServer | undefined
   private readonly application: ApplicationEndpoint | undefined
+  private readonly memoryInspect: MemoryInspectSource | undefined
   private readonly host: string
   private readonly path: string
   private readonly graceMs: number
@@ -69,6 +70,11 @@ export class DiagnosticsServer {
     maxPayload?: number
     graceMs?: number
     application?: ApplicationEndpoint
+    /**
+     * Read-only supplier of the latest `memory.inspect` payload. Omitted means
+     * `get_memory_inspect` answers explicitly with `no-observation`.
+     */
+    memoryInspect?: MemoryInspectSource
   } = {}) {
     const config = normalizeRuntimeConfig({
       host: options.host,
@@ -81,6 +87,7 @@ export class DiagnosticsServer {
     this.path = options.path ?? DIAGNOSTICS_PATH
     this.graceMs = config.graceMs
     this.application = options.application
+    this.memoryInspect = options.memoryInspect
     this.http = createServer((req, res) => this.handleHttp(req, res))
     this.wss = new WebSocketServer({ noServer: true, maxPayload: config.maxPayload })
     this.http.on('upgrade', (req, socket, head) => this.handleUpgrade(req, socket, head))
@@ -308,7 +315,7 @@ export class DiagnosticsServer {
         )
         return
       }
-      this.sendReply(ws, processDiagnosticMessage(text, this.uptimeSec))
+      this.sendReply(ws, processDiagnosticMessage(text, this.uptimeSec, this.memoryInspect))
     })
     ws.on('error', (err) => this.logWsError('connection', err))
   }
