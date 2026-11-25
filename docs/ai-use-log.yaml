@@ -10671,7 +10671,7 @@ entries:
       the default rule behaviour are unchanged.
     requirements: [FR-01, FR-03, NFR-03, NFR-04]
     invariants: [INV-07, INV-13, INV-14, INV-16]
-    commits: ["7331c48eae2ee659faf5e09821add824443e901c"]
+    commits: ["8057b7fe9404c50319272305f599aa707fa89a79"]
     agent: OpenCode V2 build
     provider: self-api
     model: deepseek-v4-flash
