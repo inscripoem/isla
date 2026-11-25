@@ -19,9 +19,13 @@ import type { AvatarSource, AvatarSourceFrame } from './source.ts'
 
 export interface RelaySocket {
   readonly readyState?: number
+  readonly bufferedAmount?: number
   send(data: string | Uint8Array): void
   close(): void
 }
+
+export const MAX_CLIENTS = 4
+export const MAX_BUFFERED_BYTES = 8 * 1024 * 1024
 
 export interface AvatarRelayOptions {
   readonly source: AvatarSource
@@ -82,6 +86,7 @@ export function createAvatarRelay(options: AvatarRelayOptions): AvatarRelay {
 
   function sendTo(socket: RelaySocket, data: string | Uint8Array): void {
     if (socket.readyState !== undefined && socket.readyState !== OPEN) return
+    if (socket.bufferedAmount !== undefined && socket.bufferedAmount > MAX_BUFFERED_BYTES) return
     try {
       socket.send(data)
     } catch {
@@ -90,6 +95,7 @@ export function createAvatarRelay(options: AvatarRelayOptions): AvatarRelay {
   }
 
   function emit(frame: AvatarSourceFrame): void {
+    if (!running) return
     if (!isDimension(frame.width) || !isDimension(frame.height)) {
       onError('frame rejected: width and height must be integers within bounds')
       return
@@ -127,6 +133,15 @@ export function createAvatarRelay(options: AvatarRelayOptions): AvatarRelay {
 
   return {
     handleClient(socket) {
+      if (clients.size >= MAX_CLIENTS) {
+        onError(`client rejected: at most ${MAX_CLIENTS} clients`)
+        try {
+          socket.close()
+        } catch {
+          // ignore close failures on a rejected socket
+        }
+        return () => {}
+      }
       clients.add(socket)
       sendTo(socket, JSON.stringify(status()))
       return () => {

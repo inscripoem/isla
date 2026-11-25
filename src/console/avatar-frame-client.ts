@@ -32,6 +32,7 @@ export interface AvatarFrameClientOptions {
   readonly createSocket: (url: string) => AvatarSocket
   readonly onEvent: (event: AvatarClientEvent) => void
   readonly now?: () => number
+  readonly connectTimeoutMs?: number
 }
 
 export interface AvatarFrameClient {
@@ -49,8 +50,17 @@ function detach(socket: AvatarSocket): void {
 
 export function createAvatarFrameClient(options: AvatarFrameClientOptions): AvatarFrameClient {
   const now = options.now ?? (() => Date.now())
+  const connectTimeoutMs = options.connectTimeoutMs ?? 5000
   let socket: AvatarSocket | null = null
+  let timer: ReturnType<typeof setTimeout> | null = null
   let disposed = false
+
+  const clearTimer = (): void => {
+    if (timer !== null) {
+      clearTimeout(timer)
+      timer = null
+    }
+  }
 
   const handleMessage = (data: unknown): void => {
     if (typeof data === 'string') {
@@ -87,16 +97,41 @@ export function createAvatarFrameClient(options: AvatarFrameClientOptions): Avat
       options.onEvent({ type: 'frame-rejected', code: result.code, receivedAtMs })
       return
     }
+    if (result.frame.hasAlpha === false) {
+      options.onEvent({ type: 'frame-rejected', code: 'missing_alpha', receivedAtMs })
+      return
+    }
     options.onEvent({ type: 'frame', frame: result.frame, receivedAtMs })
   }
 
   const connect = (): void => {
     if (disposed || socket !== null) return
-    const next = options.createSocket(options.url)
+    let next: AvatarSocket
+    try {
+      next = options.createSocket(options.url)
+    } catch {
+      options.onEvent({ type: 'error', detail: 'relay url could not be opened' })
+      return
+    }
     socket = next
     next.binaryType = 'arraybuffer'
+    if (connectTimeoutMs > 0) {
+      timer = setTimeout(() => {
+        if (socket !== next) return
+        socket = null
+        clearTimer()
+        detach(next)
+        try {
+          next.close()
+        } catch {
+          // ignore a close failure during timeout teardown
+        }
+        options.onEvent({ type: 'error', detail: 'relay connection timed out' })
+      }, connectTimeoutMs)
+    }
     next.onopen = () => {
       if (socket !== next) return
+      clearTimer()
       options.onEvent({ type: 'open' })
     }
     next.onmessage = (event) => {
@@ -106,11 +141,20 @@ export function createAvatarFrameClient(options: AvatarFrameClientOptions): Avat
     next.onclose = () => {
       if (socket !== next) return
       socket = null
+      clearTimer()
+      detach(next)
       options.onEvent({ type: 'closed', detail: 'relay connection closed' })
     }
     next.onerror = () => {
       if (socket !== next) return
       socket = null
+      clearTimer()
+      detach(next)
+      try {
+        next.close()
+      } catch {
+        // ignore a close failure during error teardown
+      }
       options.onEvent({ type: 'error', detail: 'relay connection error' })
     }
   }
@@ -119,9 +163,14 @@ export function createAvatarFrameClient(options: AvatarFrameClientOptions): Avat
     if (disposed) return
     const current = socket
     socket = null
+    clearTimer()
     if (current !== null) {
       detach(current)
-      current.close()
+      try {
+        current.close()
+      } catch {
+        // ignore a close failure during reconnect teardown
+      }
     }
     connect()
   }
@@ -130,9 +179,14 @@ export function createAvatarFrameClient(options: AvatarFrameClientOptions): Avat
     disposed = true
     const current = socket
     socket = null
+    clearTimer()
     if (current !== null) {
       detach(current)
-      current.close()
+      try {
+        current.close()
+      } catch {
+        // ignore a close failure during dispose teardown
+      }
     }
   }
 

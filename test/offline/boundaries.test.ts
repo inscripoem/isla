@@ -126,6 +126,9 @@ const isPerformanceBrowserPath = (path: string): boolean =>
 
 const isTestPath = (path: string): boolean => /\/test\//.test(norm(path))
 
+/** Tooling (e.g. the Node relay) must never enter the browser graph. */
+const isToolPath = (path: string): boolean => /\/tools\//.test(norm(path))
+
 function walk(dir: string): string[] {
   const files: string[] = []
   for (const entry of readdirSync(dir)) {
@@ -139,12 +142,14 @@ function walk(dir: string): string[] {
 /** A console-edge is broken if it reaches Node/builtins/ws or non-browser backend code. */
 export function consoleEdgeBlocked(spec: string, resolved: string | null): boolean {
   if (isNodeSpec(spec)) return true
+  if (resolved !== null && isToolPath(resolved)) return true
   if (resolved !== null && isBackendPath(resolved) && !isPerformanceBrowserPath(resolved)) return true
   return false
 }
 
 export function contractsEdgeBlocked(spec: string, resolved: string | null): boolean {
   if (isNodeSpec(spec)) return true
+  if (resolved !== null && isToolPath(resolved)) return true
   if (resolved !== null && isBackendPath(resolved)) return true
   return false
 }
@@ -328,6 +333,25 @@ describe('import graph boundary checker', () => {
     expect(
       blocked.some((edge) => edge.spec === '../src/runtime/server' && edge.resolved !== null),
     ).toBe(true)
+  })
+
+  it('rejects the Node relay tools path entering the browser graph (negative)', () => {
+    const files: Record<string, string> = {
+      '/app/main.tsx': "import '../tools/avatar-relay/relay'\n",
+      '/tools/avatar-relay/relay.ts': "import WebSocket from 'ws'\nexport const relay = WebSocket\n",
+    }
+    const { read, exists } = virtualFiles(files)
+    const edges = collectEdges('/app/main.tsx', read, exists)
+    const blocked = edges.filter((edge) => consoleEdgeBlocked(edge.spec, edge.resolved))
+    expect(
+      blocked.some(
+        (edge) => edge.spec === '../tools/avatar-relay/relay' && edge.resolved !== null,
+      ),
+    ).toBe(true)
+    expect(blocked.some((edge) => edge.spec === 'ws')).toBe(true)
+    expect(consoleEdgeBlocked('../tools/avatar-relay/relay', '/repo/tools/avatar-relay/relay.ts')).toBe(
+      true,
+    )
   })
 
   it('traverses a forbidden transitive import under Windows path semantics (negative)', () => {

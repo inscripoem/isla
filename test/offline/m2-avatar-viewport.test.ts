@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   AVATAR_CANVAS_CONTEXT_OPTIONS,
   FRESHNESS_WINDOW_MS,
@@ -9,6 +9,7 @@ import {
   parseAvatarFrame,
   parseAvatarStatus,
   reduceAvatarViewport,
+  resolveAvatarRelayUrl,
 } from '../../src/console/avatar-viewport'
 import type {
   AvatarDecodeResult,
@@ -61,6 +62,14 @@ function frameBytes(width: number, height: number, payload: Uint8Array): Uint8Ar
   bytes[7] = height & 0xff
   bytes.set(payload, 8)
   return bytes
+}
+
+/** Pad a valid WebP payload with trailing bytes so the full envelope reaches `total`. */
+function frameBytesOfLength(width: number, height: number, total: number): Uint8Array {
+  const base = webpPayload(0x10)
+  const padded = new Uint8Array(total - 8)
+  padded.set(base, 0)
+  return frameBytes(width, height, padded)
 }
 
 function parsedFrame(result: AvatarFrameParseResult): AvatarFrame {
@@ -207,6 +216,62 @@ describe('avatar viewport state', () => {
     expect(reduceAvatarViewport(unavailable, { type: 'reconnect' })).toBe(unavailable)
   })
 
+  it('ignores a frame that arrives after the socket has closed', () => {
+    let state = createAvatarViewportState(true)
+    state = reduceAvatarViewport(state, { type: 'frame', receivedAtMs: 1000 })
+    expect(state.phase).toBe('live')
+
+    state = reduceAvatarViewport(state, { type: 'socket-closed' })
+    expect(state.phase).toBe('error')
+
+    const afterFrame = reduceAvatarViewport(state, { type: 'frame', receivedAtMs: 2000 })
+    expect(afterFrame).toBe(state)
+    expect(afterFrame.phase).toBe('error')
+  })
+
+  it('never lets the frame clock move backwards', () => {
+    let state = createAvatarViewportState(true)
+    state = reduceAvatarViewport(state, { type: 'frame', receivedAtMs: 2000 })
+    expect(state.lastFrameReceivedAtMs).toBe(2000)
+
+    state = reduceAvatarViewport(state, { type: 'frame', receivedAtMs: 1000 })
+    expect(state.lastFrameReceivedAtMs).toBe(2000)
+  })
+
+  it('keeps the maximum status lastFrameAt and ignores a null update', () => {
+    let state = createAvatarViewportState(true)
+    state = reduceAvatarViewport(state, { type: 'status', status: status('synthetic', 30, 500) })
+    expect(state.lastFrameAt).toBe(500)
+
+    state = reduceAvatarViewport(state, { type: 'status', status: status('synthetic', 30, null) })
+    expect(state.lastFrameAt).toBe(500)
+
+    state = reduceAvatarViewport(state, { type: 'status', status: status('synthetic', 30, 100) })
+    expect(state.lastFrameAt).toBe(500)
+  })
+
+  it('goes stale immediately when a live relay reports no source', () => {
+    let state = createAvatarViewportState(true)
+    state = reduceAvatarViewport(state, { type: 'frame', receivedAtMs: 1000 })
+    expect(state.phase).toBe('live')
+
+    state = reduceAvatarViewport(state, { type: 'status', status: status('none', null, null) })
+    expect(state.phase).toBe('stale')
+    expect(state.detail).toBe('relay reports no source')
+  })
+
+  it('ignores a late status while in error', () => {
+    let state = createAvatarViewportState(true)
+    state = reduceAvatarViewport(state, { type: 'socket-closed' })
+    expect(state.phase).toBe('error')
+
+    const afterStatus = reduceAvatarViewport(state, {
+      type: 'status',
+      status: status('synthetic', 30, 100),
+    })
+    expect(afterStatus).toBe(state)
+  })
+
   it('records a frame rejection without storing the frame bytes', () => {
     const state = reduceAvatarViewport(
       reduceAvatarViewport(createAvatarViewportState(true), { type: 'frame', receivedAtMs: 10 }),
@@ -220,6 +285,112 @@ describe('avatar viewport state', () => {
 
   it('requests an alpha-preserving canvas context', () => {
     expect(AVATAR_CANVAS_CONTEXT_OPTIONS.alpha).toBe(true)
+  })
+})
+
+describe('avatar relay url resolution', () => {
+  it('treats null, undefined and blank values as unconfigured', () => {
+    expect(resolveAvatarRelayUrl(null)).toEqual({ state: 'unconfigured' })
+    expect(resolveAvatarRelayUrl(undefined)).toEqual({ state: 'unconfigured' })
+    expect(resolveAvatarRelayUrl('')).toEqual({ state: 'unconfigured' })
+    expect(resolveAvatarRelayUrl('   ')).toEqual({ state: 'unconfigured' })
+  })
+
+  it('normalizes a scheme-less host and host:port to ws:// with the default path', () => {
+    expect(resolveAvatarRelayUrl('localhost:4320/avatar')).toEqual({
+      state: 'configured',
+      url: 'ws://localhost:4320/avatar',
+    })
+    expect(resolveAvatarRelayUrl('127.0.0.1:4320')).toEqual({
+      state: 'configured',
+      url: 'ws://127.0.0.1:4320/avatar',
+    })
+    expect(resolveAvatarRelayUrl('  localhost:4320  ')).toEqual({
+      state: 'configured',
+      url: 'ws://localhost:4320/avatar',
+    })
+  })
+
+  it('keeps explicit ws and wss and maps http and https', () => {
+    expect(resolveAvatarRelayUrl('ws://relay.test/avatar')).toEqual({
+      state: 'configured',
+      url: 'ws://relay.test/avatar',
+    })
+    expect(resolveAvatarRelayUrl('wss://relay.test/avatar')).toEqual({
+      state: 'configured',
+      url: 'wss://relay.test/avatar',
+    })
+    expect(resolveAvatarRelayUrl('http://localhost:4320/avatar')).toEqual({
+      state: 'configured',
+      url: 'ws://localhost:4320/avatar',
+    })
+    expect(resolveAvatarRelayUrl('https://relay.test/avatar')).toEqual({
+      state: 'configured',
+      url: 'wss://relay.test/avatar',
+    })
+  })
+
+  it('keeps an explicit non-root path and any query string', () => {
+    expect(resolveAvatarRelayUrl('http://relay.test/custom/path')).toEqual({
+      state: 'configured',
+      url: 'ws://relay.test/custom/path',
+    })
+    expect(resolveAvatarRelayUrl('ws://relay.test/avatar?token=abc')).toEqual({
+      state: 'configured',
+      url: 'ws://relay.test/avatar?token=abc',
+    })
+    expect(resolveAvatarRelayUrl('localhost:4320?token=abc')).toEqual({
+      state: 'configured',
+      url: 'ws://localhost:4320/avatar?token=abc',
+    })
+  })
+
+  it('rejects unsupported schemes and malformed urls without echoing the value', () => {
+    const ftp = resolveAvatarRelayUrl('ftp://x')
+    expect(ftp.state).toBe('invalid')
+    expect(ftp).toMatchObject({ state: 'invalid' })
+
+    const javascript = resolveAvatarRelayUrl('javascript:alert(1)')
+    expect(javascript.state).toBe('invalid')
+
+    const file = resolveAvatarRelayUrl('file:/tmp/relay')
+    expect(file.state).toBe('invalid')
+
+    expect(resolveAvatarRelayUrl('ws://').state).toBe('invalid')
+    expect(resolveAvatarRelayUrl('not a url').state).toBe('invalid')
+
+    if (ftp.state === 'invalid') {
+      expect(ftp.detail.includes('ftp://x')).toBe(false)
+    }
+    const malformed = resolveAvatarRelayUrl('ws://')
+    if (malformed.state === 'invalid') {
+      expect(malformed.detail).toBe('relay url is not a valid URL')
+    }
+    const unsupported = resolveAvatarRelayUrl('ftp://x')
+    if (unsupported.state === 'invalid') {
+      expect(unsupported.detail).toBe('unsupported relay url scheme: ftp')
+    }
+    const javascriptSchemeLess = resolveAvatarRelayUrl('javascript:alert(1)')
+    if (javascriptSchemeLess.state === 'invalid') {
+      expect(javascriptSchemeLess.detail).toBe(
+        'relay url must use ws://, wss://, http:// or https://',
+      )
+    }
+  })
+})
+
+describe('avatar viewport initial state', () => {
+  it('starts in error with the invalid-url detail when a detail is supplied', () => {
+    const state = createAvatarViewportState(true, 'bad url')
+    expect(state.phase).toBe('error')
+    expect(state.detail).toBe('bad url')
+    expect(state.configured).toBe(true)
+  })
+
+  it('starts connecting when configured without a detail', () => {
+    const state = createAvatarViewportState(true)
+    expect(state.phase).toBe('connecting')
+    expect(state.detail).toBeNull()
   })
 })
 
@@ -272,6 +443,24 @@ describe('avatar frame parsing', () => {
     expectRejected(parseAvatarFrame(frameBytes(64, 64, noWebp)), 'bad_webp')
   })
 
+  it('rejects an oversized frame but accepts one exactly at the byte limit', () => {
+    const exact = frameBytesOfLength(64, 64, MAX_FRAME_BYTES)
+    const parsed = parsedFrame(parseAvatarFrame(exact))
+    expect(parsed.payload.byteLength).toBe(MAX_FRAME_BYTES - 8)
+
+    expectRejected(parseAvatarFrame(frameBytesOfLength(64, 64, MAX_FRAME_BYTES + 1)), 'too_large')
+  })
+
+  it('reports a WebP payload without VP8X as an undetermined alpha', () => {
+    const payload = webpPayload(0x10)
+    payload[12] = 0x56
+    payload[13] = 0x50
+    payload[14] = 0x38
+    payload[15] = 0x20
+    const frame = parsedFrame(parseAvatarFrame(frameBytes(320, 200, payload)))
+    expect(frame.hasAlpha).toBeNull()
+  })
+
   it('validates the avatar status text message', () => {
     const valid = {
       protocolVersion: '0.1',
@@ -290,6 +479,7 @@ describe('avatar frame parsing', () => {
     })
 
     expect(parseAvatarStatus(null)).toBeNull()
+    expect(parseAvatarStatus({ ...valid, protocolVersion: '0.2' })).toBeNull()
     expect(parseAvatarStatus({ ...valid, kind: 'avatar.frame' })).toBeNull()
     expect(parseAvatarStatus({ ...valid, source: 'camera' })).toBeNull()
     expect(parseAvatarStatus({ ...valid, fps: -1 })).toBeNull()
@@ -375,10 +565,15 @@ describe('avatar frame client', () => {
       expect(rejected.receivedAtMs).toBe(901)
     }
 
-    // A typed-array view is accepted just like a raw ArrayBuffer.
+    // A frame without alpha is rejected as missing_alpha, not emitted.
     clock = 902
     first.message(frameBytes(32, 32, webpPayload(0)))
-    expect(events.at(-1)?.type).toBe('frame')
+    const missingAlpha = events.at(-1)
+    expect(missingAlpha?.type).toBe('frame-rejected')
+    if (missingAlpha?.type === 'frame-rejected') {
+      expect(missingAlpha.code).toBe('missing_alpha')
+      expect(missingAlpha.receivedAtMs).toBe(902)
+    }
 
     client.reconnect()
     expect(sockets).toHaveLength(2)
@@ -453,5 +648,139 @@ describe('avatar frame client', () => {
     expect(events.at(-1)).toEqual({ type: 'error', detail: 'invalid avatar status' })
 
     client.dispose()
+  })
+
+  it('detaches a socket closed before it opens and ignores its late events', () => {
+    const sockets: FakeAvatarSocket[] = []
+    const events: AvatarClientEvent[] = []
+
+    const client = createAvatarFrameClient({
+      url: 'ws://relay.test/avatar',
+      createSocket: () => {
+        const socket = new FakeAvatarSocket()
+        sockets.push(socket)
+        return socket
+      },
+      onEvent: (event) => events.push(event),
+    })
+
+    client.connect()
+    const first = sockets[0]!
+    client.reconnect()
+    expect(first.closeCount).toBe(1)
+    expect(sockets).toHaveLength(2)
+
+    const before = events.length
+    first.open()
+    first.message(JSON.stringify(status('synthetic', 30, 1)))
+    first.closeEvent()
+    first.errorEvent()
+    expect(events).toHaveLength(before)
+  })
+
+  it('closes each previous socket exactly once across repeated reconnects', () => {
+    const sockets: FakeAvatarSocket[] = []
+    const events: AvatarClientEvent[] = []
+
+    const client = createAvatarFrameClient({
+      url: 'ws://relay.test/avatar',
+      createSocket: () => {
+        const socket = new FakeAvatarSocket()
+        sockets.push(socket)
+        return socket
+      },
+      onEvent: (event) => events.push(event),
+    })
+
+    client.connect()
+    client.reconnect()
+    client.reconnect()
+    client.reconnect()
+    expect(sockets).toHaveLength(4)
+    expect(sockets[0]!.closeCount).toBe(1)
+    expect(sockets[1]!.closeCount).toBe(1)
+    expect(sockets[2]!.closeCount).toBe(1)
+    expect(sockets[3]!.closeCount).toBe(0)
+
+    const opensBefore = events.filter((event) => event.type === 'open').length
+    sockets[3]!.open()
+    expect(events.filter((event) => event.type === 'open').length).toBe(opensBefore + 1)
+  })
+
+  it('reports a socket creation failure without throwing', () => {
+    const events: AvatarClientEvent[] = []
+    const client = createAvatarFrameClient({
+      url: 'ws://relay.test/avatar',
+      createSocket: () => {
+        throw new Error('boom')
+      },
+      onEvent: (event) => events.push(event),
+    })
+
+    expect(() => client.connect()).not.toThrow()
+    expect(events).toEqual([{ type: 'error', detail: 'relay url could not be opened' }])
+  })
+
+  it('times out an unopened socket and allows a reconnect afterwards', () => {
+    vi.useFakeTimers()
+    try {
+      const sockets: FakeAvatarSocket[] = []
+      const events: AvatarClientEvent[] = []
+      const client = createAvatarFrameClient({
+        url: 'ws://relay.test/avatar',
+        connectTimeoutMs: 1000,
+        createSocket: () => {
+          const socket = new FakeAvatarSocket()
+          sockets.push(socket)
+          return socket
+        },
+        onEvent: (event) => events.push(event),
+      })
+
+      client.connect()
+      const first = sockets[0]!
+
+      vi.advanceTimersByTime(999)
+      expect(events).toEqual([])
+
+      vi.advanceTimersByTime(1)
+      expect(events).toEqual([{ type: 'error', detail: 'relay connection timed out' }])
+      expect(first.closeCount).toBe(1)
+
+      client.reconnect()
+      expect(sockets).toHaveLength(2)
+      const second = sockets[1]!
+      second.open()
+      expect(events.at(-1)).toEqual({ type: 'open' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('closes and detaches the socket on error', () => {
+    const sockets: FakeAvatarSocket[] = []
+    const events: AvatarClientEvent[] = []
+    const client = createAvatarFrameClient({
+      url: 'ws://relay.test/avatar',
+      createSocket: () => {
+        const socket = new FakeAvatarSocket()
+        sockets.push(socket)
+        return socket
+      },
+      onEvent: (event) => events.push(event),
+    })
+
+    client.connect()
+    const first = sockets[0]!
+    first.errorEvent()
+    expect(events.at(-1)).toEqual({ type: 'error', detail: 'relay connection error' })
+    expect(first.closeCount).toBe(1)
+
+    const before = events.length
+    first.open()
+    first.message(JSON.stringify(status('synthetic', 30, 1)))
+    first.closeEvent()
+    first.errorEvent()
+    expect(events).toHaveLength(before)
   })
 })

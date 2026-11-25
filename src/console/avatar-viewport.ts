@@ -14,6 +14,11 @@ export const MIN_DIMENSION = 1
 export const FRESHNESS_WINDOW_MS = 1500
 export const AVATAR_CANVAS_CONTEXT_OPTIONS = { alpha: true } as const
 
+export type AvatarRelayConfig =
+  | { readonly state: 'unconfigured' }
+  | { readonly state: 'invalid'; readonly detail: string }
+  | { readonly state: 'configured'; readonly url: string }
+
 export type AvatarSourceKind = 'none' | 'synthetic' | 'ndi'
 
 export interface AvatarStatus {
@@ -67,6 +72,75 @@ export function parseAvatarStatus(value: unknown): AvatarStatus | null {
   }
 }
 
+const DEFAULT_RELAY_PATH = '/avatar'
+
+/**
+ * True when the value has a scheme-looking prefix that is not a bare host:port,
+ * e.g. `javascript:…` or `file:…`. A `host:port` such as `localhost:4320/avatar`
+ * has digits after the colon and is treated as a host, not a scheme.
+ */
+function looksLikeNonRelayScheme(value: string): boolean {
+  const match = value.match(/^([a-zA-Z][a-zA-Z0-9+.-]*):(.*)$/)
+  if (match === null) return false
+  return !/^[0-9]/.test(match[2] ?? '')
+}
+
+/**
+ * Resolve the raw `VITE_AVATAR_RELAY_URL` value into a concrete websocket URL or
+ * a stable failure. A blank value is unconfigured, a scheme-less host is
+ * normalized to ws:// with the default relay path, and an unsupported or
+ * malformed value becomes an `invalid` result with a safe detail. The raw value
+ * is never echoed in a detail; this never throws.
+ */
+export function resolveAvatarRelayUrl(raw: string | null | undefined): AvatarRelayConfig {
+  if (raw === null || raw === undefined) return { state: 'unconfigured' }
+  const trimmed = raw.trim()
+  if (trimmed.length === 0) return { state: 'unconfigured' }
+
+  let candidate: string
+  const schemeEnd = trimmed.indexOf('://')
+  if (schemeEnd !== -1) {
+    const scheme = trimmed.slice(0, schemeEnd).toLowerCase()
+    const rest = trimmed.slice(schemeEnd + 3)
+    if (scheme === 'ws' || scheme === 'wss') {
+      candidate = trimmed
+    } else if (scheme === 'http') {
+      candidate = `ws://${rest}`
+    } else if (scheme === 'https') {
+      candidate = `wss://${rest}`
+    } else {
+      return { state: 'invalid', detail: `unsupported relay url scheme: ${scheme}` }
+    }
+  } else if (looksLikeNonRelayScheme(trimmed)) {
+    return {
+      state: 'invalid',
+      detail: 'relay url must use ws://, wss://, http:// or https://',
+    }
+  } else {
+    candidate = `ws://${trimmed}`
+  }
+
+  let url: URL
+  try {
+    url = new URL(candidate)
+  } catch {
+    return { state: 'invalid', detail: 'relay url is not a valid URL' }
+  }
+  if (url.protocol !== 'ws:' && url.protocol !== 'wss:') {
+    return {
+      state: 'invalid',
+      detail: `unsupported relay url scheme: ${url.protocol.replace(':', '')}`,
+    }
+  }
+  if (url.hostname.length === 0) {
+    return { state: 'invalid', detail: 'relay url is not a valid URL' }
+  }
+  if (url.pathname === '' || url.pathname === '/') {
+    url.pathname = DEFAULT_RELAY_PATH
+  }
+  return { state: 'configured', url: url.toString() }
+}
+
 export type AvatarPhase = 'unavailable' | 'connecting' | 'live' | 'stale' | 'error'
 
 export interface AvatarViewportState {
@@ -79,10 +153,35 @@ export interface AvatarViewportState {
   readonly detail: string | null
 }
 
-export function createAvatarViewportState(configured: boolean): AvatarViewportState {
+export function createAvatarViewportState(
+  configured: boolean,
+  detail: string | null = null,
+): AvatarViewportState {
+  if (!configured) {
+    return {
+      configured,
+      phase: 'unavailable',
+      source: 'none',
+      fps: null,
+      lastFrameAt: null,
+      lastFrameReceivedAtMs: null,
+      detail,
+    }
+  }
+  if (detail !== null) {
+    return {
+      configured,
+      phase: 'error',
+      source: 'none',
+      fps: null,
+      lastFrameAt: null,
+      lastFrameReceivedAtMs: null,
+      detail,
+    }
+  }
   return {
     configured,
-    phase: configured ? 'connecting' : 'unavailable',
+    phase: 'connecting',
     source: 'none',
     fps: null,
     lastFrameAt: null,
@@ -104,7 +203,10 @@ export type AvatarViewportAction =
 /**
  * Reduce one relay observation onto the viewport. A status alone never claims a
  * live avatar, and a live phase goes stale only after the freshness window.
- * Nothing here reconnects on its own: that is always an explicit operator action.
+ * Frame clocks are monotonic: a late or out-of-order frame never rewinds the
+ * received time or revives a closed socket, and once in `error`/`unavailable` a
+ * status or frame is ignored. Nothing here reconnects on its own: that is always
+ * an explicit operator action.
  */
 export function reduceAvatarViewport(
   state: AvatarViewportState,
@@ -115,19 +217,32 @@ export function reduceAvatarViewport(
     case 'socket-open':
       return { ...state, phase: 'connecting', detail: null }
     case 'status': {
+      if (state.phase === 'error' || state.phase === 'unavailable') return state
       const status = action.status
       const next: AvatarViewportState = {
         ...state,
         source: status.source,
         fps: status.fps,
-        lastFrameAt: status.lastFrameAt,
+        lastFrameAt:
+          status.lastFrameAt === null
+            ? state.lastFrameAt
+            : state.lastFrameAt === null
+              ? status.lastFrameAt
+              : Math.max(state.lastFrameAt, status.lastFrameAt),
       }
-      if (status.source === 'none' && state.phase === 'connecting') {
+      if (status.source === 'none' && (state.phase === 'connecting' || state.phase === 'live')) {
         return { ...next, phase: 'stale', detail: 'relay reports no source' }
       }
       return next
     }
     case 'frame':
+      if (state.phase === 'error') return state
+      if (
+        state.lastFrameReceivedAtMs !== null &&
+        action.receivedAtMs < state.lastFrameReceivedAtMs
+      ) {
+        return state
+      }
       return { ...state, phase: 'live', lastFrameReceivedAtMs: action.receivedAtMs, detail: null }
     case 'tick':
       if (
@@ -143,6 +258,7 @@ export function reduceAvatarViewport(
     case 'socket-error':
       return { ...state, phase: 'error', detail: action.detail ?? 'relay connection error' }
     case 'frame-rejected':
+      if (state.phase === 'error') return state
       return { ...state, detail: `frame rejected: ${action.code}` }
     case 'reconnect':
       if (state.phase !== 'stale' && state.phase !== 'error') return state
@@ -152,6 +268,7 @@ export function reduceAvatarViewport(
         lastFrameReceivedAtMs: null,
         lastFrameAt: null,
         fps: null,
+        source: 'none',
         detail: null,
       }
     default:

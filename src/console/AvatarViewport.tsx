@@ -6,6 +6,7 @@ import {
   createAvatarViewportState,
   decodeAvatarFrame,
   reduceAvatarViewport,
+  resolveAvatarRelayUrl,
 } from './avatar-viewport'
 import type { AvatarViewportAction, AvatarViewportState } from './avatar-viewport'
 
@@ -22,16 +23,21 @@ export interface AvatarViewportProps {
  * avatar and never accumulates decoded frames.
  */
 export function AvatarViewport({ relayUrl }: AvatarViewportProps) {
+  const relayConfig = resolveAvatarRelayUrl(relayUrl)
+  const relayTarget = relayConfig.state === 'configured' ? relayConfig.url : null
+  const invalidDetail = relayConfig.state === 'invalid' ? relayConfig.detail : null
+
   const [state, setState] = useState<AvatarViewportState>(() =>
-    createAvatarViewportState(relayUrl !== null),
+    createAvatarViewportState(relayTarget !== null, invalidDetail),
   )
   const [stateRelayUrl, setStateRelayUrl] = useState<string | null>(relayUrl)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const bitmapRef = useRef<ImageBitmap | null>(null)
   const clientRef = useRef<ReturnType<typeof createAvatarFrameClient> | null>(null)
+  const latestFrameSeq = useRef(0)
 
   useEffect(() => {
-    if (relayUrl === null) return
+    if (relayTarget === null) return
 
     let active = true
 
@@ -60,7 +66,7 @@ export function AvatarViewport({ relayUrl }: AvatarViewportProps) {
     }
 
     const client = createAvatarFrameClient({
-      url: relayUrl,
+      url: relayTarget,
       createSocket: (url) => {
         const socket = new WebSocket(url)
         socket.binaryType = 'arraybuffer'
@@ -76,7 +82,8 @@ export function AvatarViewport({ relayUrl }: AvatarViewportProps) {
           case 'status':
             dispatch({ type: 'status', status: event.status })
             return
-          case 'frame':
+          case 'frame': {
+            const seq = ++latestFrameSeq.current
             void decodeAvatarFrame(event.frame, (payload) => {
               const copy = payload.buffer.slice(
                 payload.byteOffset,
@@ -84,7 +91,7 @@ export function AvatarViewport({ relayUrl }: AvatarViewportProps) {
               ) as ArrayBuffer
               return createImageBitmap(new Blob([copy], { type: 'image/webp' }))
             }).then((result) => {
-              if (!active) {
+              if (!active || clientRef.current !== client || seq !== latestFrameSeq.current) {
                 if (result.ok) result.bitmap.close()
                 return
               }
@@ -100,6 +107,7 @@ export function AvatarViewport({ relayUrl }: AvatarViewportProps) {
               if (bitmapRef.current === result.bitmap) bitmapRef.current = null
             })
             return
+          }
           case 'frame-rejected':
             dispatch({ type: 'frame-rejected', code: event.code })
             return
@@ -127,24 +135,28 @@ export function AvatarViewport({ relayUrl }: AvatarViewportProps) {
       if (clientRef.current === client) clientRef.current = null
       closePreviousBitmap()
     }
-  }, [relayUrl])
+  }, [relayTarget])
 
   if (stateRelayUrl !== relayUrl) {
     setStateRelayUrl(relayUrl)
-    setState(createAvatarViewportState(relayUrl !== null))
+    setState(createAvatarViewportState(relayTarget !== null, invalidDetail))
   }
 
   const fpsLabel = state.fps === null ? 'fps unknown' : `${state.fps} fps`
   const badgeText =
-    relayUrl === null
+    relayConfig.state === 'unconfigured'
       ? 'Avatar · not configured'
-      : `Avatar · ${state.source} · ${fpsLabel} · ${state.phase}`
+      : relayConfig.state === 'invalid'
+        ? 'Avatar · invalid relay url · error'
+        : `Avatar · ${state.source} · ${fpsLabel} · ${state.phase}`
 
   return (
     <div className="avatar-viewport" data-avatar-phase={state.phase}>
       <canvas ref={canvasRef} aria-hidden="true" />
-      <span className="avatar-viewport__badge">{badgeText}</span>
-      {relayUrl !== null && (state.phase === 'stale' || state.phase === 'error') && (
+      <span className="avatar-viewport__badge" title={state.detail ?? undefined}>
+        {badgeText}
+      </span>
+      {relayTarget !== null && (state.phase === 'stale' || state.phase === 'error') && (
         <button
           type="button"
           className="avatar-viewport__reconnect"

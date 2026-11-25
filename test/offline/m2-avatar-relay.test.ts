@@ -1,9 +1,15 @@
+import { spawn, type ChildProcess } from 'node:child_process'
 import { describe, expect, it, vi } from 'vitest'
+import WebSocket from 'ws'
 import {
   MAX_FRAME_BYTES,
   parseAvatarFrame,
 } from '../../src/console/avatar-viewport'
-import { createAvatarRelay } from '../../tools/avatar-relay/relay'
+import {
+  MAX_BUFFERED_BYTES,
+  MAX_CLIENTS,
+  createAvatarRelay,
+} from '../../tools/avatar-relay/relay'
 import type { AvatarRelay, RelaySocket } from '../../tools/avatar-relay/relay'
 import {
   SYNTHETIC_WEBP,
@@ -12,12 +18,17 @@ import {
   createUnavailableNdiSource,
 } from '../../tools/avatar-relay/source'
 import type { AvatarSource, AvatarSourceFrame } from '../../tools/avatar-relay/source'
-import { parseArgs } from '../../tools/avatar-relay/index'
+import {
+  isAllowedRelayOrigin,
+  parseArgs,
+  startAvatarRelayServer,
+} from '../../tools/avatar-relay/index'
 
 class FakeSocket implements RelaySocket {
   sent: Array<string | Uint8Array> = []
   closed = 0
   readyState = 1
+  bufferedAmount = 0
   send(data: string | Uint8Array): void {
     this.sent.push(data)
   }
@@ -185,6 +196,69 @@ describe('avatar relay', () => {
     expect(binary(socket)).toHaveLength(1)
     expect(relay.lastFrameAt()).toBe(42)
   })
+
+  it('rejects clients beyond the cap and leaves the count unchanged', () => {
+    const source = createManualSource('synthetic', 15)
+    const errors: string[] = []
+    const relay = createAvatarRelay({
+      source,
+      onError: (message) => errors.push(message),
+    })
+    relay.start()
+    for (let index = 0; index < MAX_CLIENTS; index += 1) {
+      relay.handleClient(new FakeSocket())
+    }
+    expect(relay.clientCount()).toBe(MAX_CLIENTS)
+
+    const overflow = new FakeSocket()
+    relay.handleClient(overflow)
+
+    expect(relay.clientCount()).toBe(MAX_CLIENTS)
+    expect(overflow.closed).toBe(1)
+    expect(errors).toEqual([`client rejected: at most ${MAX_CLIENTS} clients`])
+  })
+
+  it('drops frames for a client whose send buffer is over the limit', () => {
+    const source = createManualSource('synthetic', 15)
+    const relay = createAvatarRelay({ source, now: () => 1 })
+    relay.start()
+
+    const backed = new FakeSocket()
+    backed.bufferedAmount = MAX_BUFFERED_BYTES + 1
+    const healthy = new FakeSocket()
+    relay.handleClient(backed)
+    relay.handleClient(healthy)
+
+    source.emit(VALID_FRAME)
+
+    expect(binary(backed)).toHaveLength(0)
+    expect(binary(healthy)).toHaveLength(1)
+  })
+
+  it('does not broadcast a late source callback after stop', () => {
+    let callback: ((frame: AvatarSourceFrame) => void) | null = null
+    const source: AvatarSource = {
+      kind: 'synthetic',
+      fps: 15,
+      start(emit) {
+        callback = emit
+      },
+      stop() {
+        // deliberately keeps the callback to simulate a late delivery
+      },
+    }
+    const relay = createAvatarRelay({ source, now: () => 1 })
+    relay.start()
+    const socket = new FakeSocket()
+    relay.handleClient(socket)
+
+    relay.stop()
+    const beforeLate = binary(socket).length
+    callback!(VALID_FRAME)
+
+    expect(binary(socket)).toHaveLength(beforeLate)
+    expect(relay.lastFrameAt()).toBeNull()
+  })
 })
 
 describe('avatar sources', () => {
@@ -229,14 +303,282 @@ describe('avatar sources', () => {
   })
 
   it('parses relay flags with both space and equals forms', () => {
-    expect(parseArgs([])).toEqual({ port: 4320, source: 'synthetic', fps: 15 })
+    expect(parseArgs([])).toEqual({ port: 4320, source: 'none', fps: 15 })
     expect(parseArgs(['--port', '5000', '--source=none', '--fps', '20'])).toEqual({
       port: 5000,
       source: 'none',
       fps: 20,
     })
+    expect(parseArgs(['--source', 'synthetic'])).toEqual({
+      port: 4320,
+      source: 'synthetic',
+      fps: 15,
+    })
     expect(() => parseArgs(['--port', 'abc'])).toThrow()
     expect(() => parseArgs(['--source', 'bogus'])).toThrow()
+  })
+})
+
+describe('relay origin policy', () => {
+  it('allows an absent or empty origin for local CLI clients', () => {
+    expect(isAllowedRelayOrigin(undefined)).toBe(true)
+    expect(isAllowedRelayOrigin('')).toBe(true)
+  })
+
+  it('allows loopback hostnames and rejects everything else', () => {
+    expect(isAllowedRelayOrigin('http://localhost:5173')).toBe(true)
+    expect(isAllowedRelayOrigin('http://127.0.0.1:4320')).toBe(true)
+    expect(isAllowedRelayOrigin('http://[::1]:4320')).toBe(true)
+    expect(isAllowedRelayOrigin('http://evil.test')).toBe(false)
+    expect(isAllowedRelayOrigin('null')).toBe(false)
+    expect(isAllowedRelayOrigin('not a url')).toBe(false)
+  })
+})
+
+interface WsTrace {
+  statusMessages: string[]
+  binaryFrames: Uint8Array[]
+  binaryOk: boolean
+  unexpectedStatus: number | null
+}
+
+function openClient(url: string, origin?: string): WebSocket {
+  return new WebSocket(url, origin === undefined ? {} : { origin })
+}
+
+function collectFrames(socket: WebSocket, expectedFrames: number): Promise<WsTrace> {
+  return new Promise((resolve, reject) => {
+    const trace: WsTrace = {
+      statusMessages: [],
+      binaryFrames: [],
+      binaryOk: false,
+      unexpectedStatus: null,
+    }
+    const timer = setTimeout(() => {
+      socket.terminate()
+      reject(new Error('timed out waiting for relay frames'))
+    }, 4000)
+    socket.on('message', (data, isBinary) => {
+      if (isBinary) {
+        const bytes = data as Buffer
+        trace.binaryFrames.push(new Uint8Array(bytes))
+        if (trace.binaryFrames.length >= expectedFrames && trace.statusMessages.length > 0) {
+          clearTimeout(timer)
+          resolve(trace)
+        }
+      } else {
+        trace.statusMessages.push(data.toString())
+        if (trace.binaryFrames.length >= expectedFrames) {
+          clearTimeout(timer)
+          resolve(trace)
+        }
+      }
+    })
+    socket.on('error', (error) => {
+      clearTimeout(timer)
+      reject(error)
+    })
+  })
+}
+
+function collectStatusOnly(socket: WebSocket): Promise<WsTrace> {
+  return new Promise((resolve, reject) => {
+    const trace: WsTrace = {
+      statusMessages: [],
+      binaryFrames: [],
+      binaryOk: false,
+      unexpectedStatus: null,
+    }
+    const timer = setTimeout(() => {
+      socket.terminate()
+      reject(new Error('timed out waiting for relay status'))
+    }, 4000)
+    socket.on('message', (data, isBinary) => {
+      if (!isBinary) {
+        trace.statusMessages.push(data.toString())
+        clearTimeout(timer)
+        resolve(trace)
+      }
+    })
+    socket.on('error', (error) => {
+      clearTimeout(timer)
+      reject(error)
+    })
+  })
+}
+
+function expectRejected(socket: WebSocket, code: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      socket.terminate()
+      reject(new Error('timed out waiting for rejection'))
+    }, 4000)
+    const settle = (): void => {
+      clearTimeout(timer)
+      resolve()
+    }
+    socket.on('unexpected-response', (_request, response) => {
+      expect(response.statusCode).toBe(code)
+      settle()
+    })
+    socket.on('error', () => settle())
+    socket.on('open', () => {
+      clearTimeout(timer)
+      reject(new Error('expected the relay to reject the connection'))
+    })
+  })
+}
+
+describe('avatar relay server integration', () => {
+  it('binds loopback on a free port and frees it on close', async () => {
+    const server = await startAvatarRelayServer({ port: 0, source: 'synthetic', fps: 20 })
+    try {
+      expect(server.host).toBe('127.0.0.1')
+      expect(server.port).toBeGreaterThan(0)
+    } finally {
+      await server.close()
+    }
+
+    const again = await startAvatarRelayServer({ port: server.port, source: 'none', fps: 15 })
+    try {
+      expect(again.port).toBe(server.port)
+    } finally {
+      await again.close()
+    }
+  })
+
+  it('accepts a localhost origin and streams a status then a valid frame', async () => {
+    const server = await startAvatarRelayServer({ port: 0, source: 'synthetic', fps: 20 })
+    const socket = openClient(`ws://127.0.0.1:${server.port}/avatar`, 'http://localhost:5173')
+    try {
+      const trace = await collectFrames(socket, 1)
+      expect(trace.statusMessages).not.toHaveLength(0)
+      const status = JSON.parse(trace.statusMessages[0]!)
+      expect(status.kind).toBe('avatar.status')
+      expect(status.source).toBe('synthetic')
+      expect(trace.binaryFrames).not.toHaveLength(0)
+      const parsed = parseAvatarFrame(trace.binaryFrames[0]!)
+      expect(parsed.ok).toBe(true)
+    } finally {
+      socket.terminate()
+      await server.close()
+    }
+  })
+
+  it('accepts a client with no origin and sends the status', async () => {
+    const server = await startAvatarRelayServer({ port: 0, source: 'none', fps: 15 })
+    const socket = openClient(`ws://127.0.0.1:${server.port}/avatar`)
+    try {
+      const trace = await collectStatusOnly(socket)
+      expect(trace.statusMessages).not.toHaveLength(0)
+      const status = JSON.parse(trace.statusMessages[0]!)
+      expect(status.source).toBe('none')
+    } finally {
+      socket.terminate()
+      await server.close()
+    }
+  })
+
+  it('rejects a non-local origin with HTTP 403', async () => {
+    const server = await startAvatarRelayServer({ port: 0, source: 'none', fps: 15 })
+    const socket = openClient(`ws://127.0.0.1:${server.port}/avatar`, 'http://evil.test')
+    try {
+      await expectRejected(socket, 403)
+    } finally {
+      socket.terminate()
+      await server.close()
+    }
+  })
+
+  it('rejects a wrong path with HTTP 404', async () => {
+    const server = await startAvatarRelayServer({ port: 0, source: 'none', fps: 15 })
+    const socket = openClient(`ws://127.0.0.1:${server.port}/not-avatar`)
+    try {
+      await expectRejected(socket, 404)
+    } finally {
+      socket.terminate()
+      await server.close()
+    }
+  })
+})
+
+const CLI_ENTRY = 'tools/avatar-relay/index.ts'
+const CHILD_TIMEOUT_MS = 8000
+
+function spawnCli(args: string[]): ChildProcess {
+  return spawn(process.execPath, ['--import', 'tsx', CLI_ENTRY, ...args], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+}
+
+function waitForExit(child: ChildProcess): Promise<{ code: number | null; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    let stderr = ''
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL')
+      reject(new Error('timed out waiting for the CLI to exit'))
+    }, CHILD_TIMEOUT_MS)
+    child.stderr?.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString('utf8')
+    })
+    child.once('exit', (code) => {
+      clearTimeout(timer)
+      resolve({ code, stderr })
+    })
+  })
+}
+
+function waitForListening(child: ChildProcess): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let stdout = ''
+    let settled = false
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      child.kill('SIGKILL')
+      reject(new Error('timed out waiting for the relay to listen'))
+    }, CHILD_TIMEOUT_MS)
+    child.stdout?.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString('utf8')
+      if (!settled && stdout.includes('listening on ws://127.0.0.1:')) {
+        settled = true
+        clearTimeout(timer)
+        resolve(stdout)
+      }
+    })
+    child.once('exit', (code) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      reject(new Error(`relay exited early with code ${String(code)}`))
+    })
+  })
+}
+
+describe.skipIf(process.platform === 'win32')('avatar relay CLI subprocess', () => {
+  it('exits 2 for the unimplemented ndi source', async () => {
+    const child = spawnCli(['--source', 'ndi'])
+    try {
+      const { code, stderr } = await waitForExit(child)
+      expect(code).toBe(2)
+      expect(stderr.length).toBeGreaterThan(0)
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+    }
+  })
+
+  it('reports the bound address and exits 0 on SIGTERM', async () => {
+    const child = spawnCli(['--port', '0'])
+    try {
+      const output = await waitForListening(child)
+      expect(output).toContain('listening on ws://127.0.0.1:')
+      const exited = waitForExit(child)
+      child.kill('SIGTERM')
+      const { code } = await exited
+      expect(code).toBe(0)
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+    }
   })
 })
 

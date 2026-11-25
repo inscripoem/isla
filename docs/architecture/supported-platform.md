@@ -97,6 +97,9 @@ seed remains deferred. X05 and X09 are deferred and outside the submission scope
 approved. No new user-visible feature was planned at the CP04 freeze; the later #190 console
 voice-selection change is recorded in §2 and is not covered by the `9577069` acceptance. After the
 freeze, changes are limited to demonstrated defect fixes and evidence/documentation corrections.
+The post-freeze M2 avatar viewport and local relay (PR #211, task M2-202) are recorded as a console-only
+scope addition under review; they are not part of the CP04 acceptance set and do not change the reference
+deployment.
 
 ## 6. Reproduction and acceptance
 
