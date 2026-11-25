@@ -9793,6 +9793,43 @@ entries:
       .opencode/permissions.jsonc, test/offline/opencode-policy.test.ts and
       this log entry. No runtime, source, schema, CI or frozen-path change.
   - date: "2026-11-25"
+    task: course-governance-review-fixes
+    change: >-
+      Address M6's review of the D3 permission candidate. Allow the documented
+      frozen install, read-only GitHub record views, M1 Kokoro live checks, M5
+      production startup and M6 gate commands. Narrow credential patterns so
+      ordinary tokenizer, auth and credential-policy source names are readable
+      while conventional secret files and directories remain denied. Refresh
+      the current base and document the shell and credential tradeoffs.
+    requirements: []
+    invariants: []
+    commits: ["57255ab52777c0e4ecc6205d8f521258bb509bac"]
+    agent: OpenCode V2 build
+    provider: magpie
+    model: deepseek-flash
+    variant: max
+    model_cli_id: "magpie/group/deepseek-flash#max"
+    sessions: [ses_dee5d0f57ffew8Ggko35WVPIhw]
+    supervision: >-
+      The orchestrating assistant supplied a task-local configuration with
+      writes limited to the policy, compiler, focused test and permission
+      document. It ran the focused suite, typecheck and lint outside the
+      session and reviewed each changed hunk. The policy remains a proposal and
+      no human adoption is claimed.
+    verification:
+      base: dc9cb7baeda55d77051c271c32f6985b0491b11e
+      results: >-
+        Focused policy suite 35/35; pnpm typecheck exited 0; rtk proxy pnpm lint
+        exited 0; git diff --check reported no whitespace errors.
+      limits: >-
+        No native role reload, human adoption or G4 result is claimed. Remote
+        CI is observed only after this entry is pushed.
+    scope: >-
+      .opencode/permissions.jsonc, tools/opencode/policy.ts,
+      test/offline/opencode-policy.test.ts, docs/architecture/permission-model.md,
+      docs/architecture/candidate-comparison.md, README.md and this log entry.
+      No runtime, production source, schema, CI or frozen-path change.
+  - date: "2026-11-25"
     task: g6-historical-identity
     change: >-
       Classify a G6 AI-use entry as historical by its content, not by its array
