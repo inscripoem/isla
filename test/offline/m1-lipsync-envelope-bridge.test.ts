@@ -110,7 +110,11 @@ interface BridgeFixture {
   readonly writes: number[]
 }
 
-async function startBridge(): Promise<BridgeFixture> {
+type BridgeWriter = (opening: number, signal: AbortSignal) => void | Promise<void>
+
+async function startBridge(
+  createWriter?: (writes: number[]) => BridgeWriter,
+): Promise<BridgeFixture> {
   const writes: number[] = []
   const server = createServer((_request, response) => {
     response.end('ok')
@@ -120,9 +124,11 @@ async function startBridge(): Promise<BridgeFixture> {
   const origin = `http://127.0.0.1:${port}`
   const bridge = createEnvelopeBridge({
     origin,
-    write: (opening) => {
-      writes.push(opening)
-    },
+    write:
+      createWriter?.(writes) ??
+      ((opening) => {
+        writes.push(opening)
+      }),
   })
   bridge.attach(server)
   cleanups.push(async () => {
@@ -132,6 +138,53 @@ async function startBridge(): Promise<BridgeFixture> {
     })
   })
   return { server, port, origin, bridge, writes }
+}
+
+interface HeldZeroFixture extends BridgeFixture {
+  readonly zeroStarted: Promise<void>
+  readonly zeroSettled: Promise<void>
+  readonly zeroSignal: () => AbortSignal | undefined
+  releaseZero(): void
+}
+
+async function startBridgeWithHeldZero(): Promise<HeldZeroFixture> {
+  let releaseZero: () => void = () => {}
+  let markZeroStarted: () => void = () => {}
+  let markZeroSettled: () => void = () => {}
+  const zeroGate = new Promise<void>((resolve) => {
+    releaseZero = resolve
+  })
+  const zeroStarted = new Promise<void>((resolve) => {
+    markZeroStarted = resolve
+  })
+  const zeroSettled = new Promise<void>((resolve) => {
+    markZeroSettled = resolve
+  })
+  let zeroSignal: AbortSignal | undefined
+  let held = false
+
+  const fixture = await startBridge((writes) => (opening, signal) => {
+    if (opening === 0 && !held) {
+      held = true
+      zeroSignal = signal
+      markZeroStarted()
+      return zeroGate.then(() => {
+        if (!signal.aborted) writes.push(0)
+        markZeroSettled()
+      })
+    }
+    writes.push(opening)
+  })
+  cleanups.push(() => {
+    releaseZero()
+  })
+  return {
+    ...fixture,
+    zeroStarted,
+    zeroSettled,
+    zeroSignal: () => zeroSignal,
+    releaseZero,
+  }
 }
 
 function tokenOf(bridge: BridgeFixture['bridge']): string {
@@ -452,6 +505,86 @@ describe('M1 envelope bridge', () => {
     sendClock(second, sample({ audioRef: 'audio-b' }, 'playing', 25))
     await waitUntil(() => fixture.writes.length > before)
     expect(fixture.writes.at(-1)).toBeCloseTo(0.5)
+  })
+
+  it('admits a replacement while the old terminal zero is held', async () => {
+    const fixture = await startBridgeWithHeldZero()
+    const token = tokenOf(fixture.bridge)
+    const protocols = ['isla-mouth-v1', token]
+    const oldClient = await openClock(fixture.port, protocols, fixture.origin)
+    fixture.bridge.supply(envelope())
+    sendClock(oldClient, sample())
+    await waitUntil(() => fixture.writes.at(-1) === 0.25)
+    let zeroObserved = false
+
+    try {
+      oldClient.close()
+      await withTimeout(fixture.zeroStarted)
+      zeroObserved = true
+
+      fixture.bridge.supply(envelope({ audioRef: 'audio-b' }))
+      const replacement = await openClock(fixture.port, protocols, fixture.origin)
+      sendClock(replacement, sample({ audioRef: 'audio-b' }, 'playing', 25))
+      await waitUntil(() => fixture.writes.at(-1) === 0.5)
+      expect(fixture.zeroSignal()?.aborted).toBe(true)
+
+      fixture.releaseZero()
+      await withTimeout(fixture.zeroSettled)
+      await delay(20)
+      expect(fixture.writes).toEqual([0.25, 0.5])
+
+      sendClock(replacement, sample({ audioRef: 'audio-b' }, 'playing', 45))
+      await waitUntil(() => fixture.writes.at(-1) === 1)
+      expect(replacement.readyState).toBe(WebSocket.OPEN)
+      expect(await handshakeStatus(fixture.port, protocols, fixture.origin)).toBe(409)
+    } finally {
+      fixture.releaseZero()
+      if (zeroObserved) await withTimeout(fixture.zeroSettled).catch(() => {})
+    }
+  })
+
+  it('leaves the old neutral effective when the replacement never writes', async () => {
+    const fixture = await startBridgeWithHeldZero()
+    const token = tokenOf(fixture.bridge)
+    const protocols = ['isla-mouth-v1', token]
+    const oldClient = await openClock(fixture.port, protocols, fixture.origin)
+    fixture.bridge.supply(envelope())
+    sendClock(oldClient, sample({}, 'playing', 25))
+    await waitUntil(() => fixture.writes.at(-1) === 0.5)
+    let zeroObserved = false
+
+    try {
+      oldClient.close()
+      await withTimeout(fixture.zeroStarted)
+      zeroObserved = true
+
+      fixture.bridge.supply(envelope({ audioRef: 'audio-b' }))
+      const replacement = await openClock(fixture.port, protocols, fixture.origin)
+      sendClock(replacement, sample({ audioRef: 'audio-b' }, 'waiting', 0))
+      await delay(20)
+      expect(fixture.writes).toEqual([0.5])
+      expect(fixture.zeroSignal()?.aborted).toBe(false)
+
+      fixture.releaseZero()
+      await withTimeout(fixture.zeroSettled)
+      await delay(20)
+      expect(fixture.writes).toEqual([0.5, 0])
+
+      sendClock(replacement, sample({ audioRef: 'audio-b' }, 'playing', 45))
+      await waitUntil(() => fixture.writes.at(-1) === 1)
+      expect(fixture.writes).toEqual([0.5, 0, 1])
+
+      replacement.close()
+      await waitUntil(() => fixture.writes.at(-1) === 0)
+      const third = await openClock(fixture.port, protocols, fixture.origin)
+      fixture.bridge.supply(envelope({ audioRef: 'audio-c' }))
+      sendClock(third, sample({ audioRef: 'audio-c' }, 'playing', 45))
+      await waitUntil(() => fixture.writes.at(-1) === 1)
+      expect(fixture.writes).toEqual([0.5, 0, 1, 0, 1])
+    } finally {
+      fixture.releaseZero()
+      if (zeroObserved) await withTimeout(fixture.zeroSettled).catch(() => {})
+    }
   })
 
   it('leaves other upgrade routes untouched and does not close the HTTP server', async () => {

@@ -205,6 +205,9 @@ export function createEnvelopeBridge(options: EnvelopeBridgeOptions): EnvelopeBr
   const pending: PendingEnvelope[] = []
 
   let active: BridgeSession | undefined
+  let writing:
+    | { readonly generation: number; readonly controller: AbortController }
+    | undefined
   let attached: Server | undefined
   let closed = false
   let closing: Promise<void> | undefined
@@ -234,8 +237,22 @@ export function createEnvelopeBridge(options: EnvelopeBridgeOptions): EnvelopeBr
       // A retiring owner may still emit its neutral write, but no late nonzero
       // value may reopen the mouth or follow the socket into a new generation.
       if (current.retired && opening !== 0) return
+
+      let writingSession = writing
+      if (writingSession === undefined || writingSession.generation !== sessionGeneration) {
+        // Supersede the last generation that actually wrote only when this
+        // generation writes. An idle replacement leaves the retired neutral
+        // live, while an animating replacement cancels that pending zero.
+        writingSession?.controller.abort()
+        writingSession = { generation: sessionGeneration, controller: new AbortController() }
+        writing = writingSession
+      }
+      const writeAbort = writingSession.controller.signal
+      if (writeAbort.aborted) return
       try {
-        return Promise.resolve(options.write(opening, signal)).catch(() => {
+        return Promise.resolve(
+          options.write(opening, AbortSignal.any([signal, writeAbort])),
+        ).catch(() => {
           // A local actuator failure must not break the clock channel.
         })
       } catch {
@@ -264,9 +281,15 @@ export function createEnvelopeBridge(options: EnvelopeBridgeOptions): EnvelopeBr
       socket.terminate()
       return
     }
-    if (active !== undefined) {
+    const previous = active
+    if (previous !== undefined && !previous.retired) {
       socket.close(1008, 'duplicate clock socket')
       return
+    }
+    if (previous !== undefined && previous.socket.readyState <= 1) {
+      // A disconnected generation may still be waiting on its terminal zero.
+      // Leave that neutral live until this replacement actually writes.
+      previous.socket.terminate()
     }
 
     const sessionGeneration = (generation += 1)
@@ -346,7 +369,7 @@ export function createEnvelopeBridge(options: EnvelopeBridgeOptions): EnvelopeBr
       rejectUpgrade(socket, 403, 'Forbidden')
       return
     }
-    if (active !== undefined) {
+    if (active !== undefined && !active.retired) {
       rejectUpgrade(socket, 409, 'Conflict')
       return
     }
@@ -405,6 +428,7 @@ export function createEnvelopeBridge(options: EnvelopeBridgeOptions): EnvelopeBr
           } catch {
             // Closing is idempotent and must still release the socket.
           }
+          if (writing?.generation === current.generation) writing.controller.abort()
           if (active === current) active = undefined
           current.retired = true
           try {
@@ -413,6 +437,7 @@ export function createEnvelopeBridge(options: EnvelopeBridgeOptions): EnvelopeBr
             // The socket may already be gone.
           }
         }
+        writing = undefined
         try {
           server.close()
         } catch {
