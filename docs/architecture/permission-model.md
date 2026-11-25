@@ -148,17 +148,20 @@ commands run in a **plain terminal before the scoped session starts**, not insid
 checkout root:
 
 ```sh
+# The model is the member's local input; it lives in this shell only.
+ISLA_OPENCODE_MODEL='<provider>/<model>'
+
 # Generate the task-local configuration and its sidecar.
 pnpm exec tsx tools/opencode/cli.ts \
   --role M5 --task M5-01 \
-  --model <provider>/<model> \
+  --model "$ISLA_OPENCODE_MODEL" \
   --exclude-plugin oh-my-opencode-slim \
   --out .cache/opencode/m5-m5-01.json
 
 # Re-check the emitted pair against the current policy and the same flags.
 pnpm exec tsx tools/opencode/cli.ts \
   --role M5 --task M5-01 \
-  --model <provider>/<model> \
+  --model "$ISLA_OPENCODE_MODEL" \
   --exclude-plugin oh-my-opencode-slim \
   --check .cache/opencode/m5-m5-01.json
 ```
@@ -167,9 +170,12 @@ pnpm exec tsx tools/opencode/cli.ts \
   `--overwrite` is required to replace an existing pair. `--approve` takes a comma-separated list of
   the five approval classes from §5.
 - `--out` and `--check` must resolve inside `.cache/opencode/`; absolute paths, `..` and any other base
-  are rejected. The compiler refuses symlinks and writes the config and sidecar atomically.
-- `<provider>/<model>` is the member's local input; it is never committed. §10 records the specific
-  value used for the 2026-11-25 observation.
+  are rejected. The compiler refuses symlinks and installs each generated file by writing a temporary
+  file and renaming it. The config and its sidecar are two separate renames, so the pair is not
+  replaced atomically; `--check` validates the pair (both hashes, role, task, grants, agent, model and
+  plugin exclusions).
+- `ISLA_OPENCODE_MODEL` is the member's local input; the quoted placeholder is replaced with a real
+  model and is never committed. §10 records the specific value used for the 2026-11-25 observation.
 - `--check` recompiles and fails on any drift: policy hash, config hash, role, task, grants, agent,
   model or plugin exclusions.
 - On a fresh checkout, run `pnpm install --frozen-lockfile` before either command; that install is a
