@@ -1,8 +1,8 @@
 # Requirements trace and approval record
 
-Date: 2026-10-15. Status: under review. Scope: shared preparation, M5-01 and the Step A attribution/storage-test increment; not complete product acceptance or coursework D1.
+Date: 2026-10-15; updated 2026-11-25 (D1 trace increment: INV-17 and C-76–C-78). Status: under review. Scope: shared preparation, M5-01 and the Step A attribution/storage-test increment; not complete product acceptance or coursework D1.
 
-This record links candidate requirements to machine-checkable acceptance criteria, cases, owners and automated checks. It records the actual supervisory review decision; it does not claim individual approval by all six team members.
+This record links candidate requirements to machine-checkable acceptance criteria, cases, owners and automated checks. It records the actual supervisory review decision; it does not claim individual approval by all six team members. The canonical requirement-to-component-to-test-to-monitor matrix is [`docs/architecture/trace-matrix.md`](../architecture/trace-matrix.md); this file remains the historical case-to-test and approval record and is not a second matrix.
 
 ## Registry, schema and case-to-test map
 
@@ -76,6 +76,10 @@ This record links candidate requirements to machine-checkable acceptance criteri
 | C-71 | implemented | `test/offline/m6-02-bench.test.ts` | runBench produces a recording consumed by the real R1 command without losing attempts or not-run entries |
 | C-73 | implemented | `test/offline/production-cli.test.ts` | `production CLI` — cooperative IPC shutdown, pending/failed release, duplicate/unrelated messages, startup/listen failure and raw exit reporting |
 | C-74 | implemented | `test/offline/m5-process-restart.test.ts` | `production process restart acceptance` — two-process IPC continuation and SIGKILL between a committed prefix and held tail; no replay or promotion |
+| C-75 | pending | — | Projection-cursor rebuild-equality under one extractor version; needs M4's derive rules through the composition adapter, so no rebuild claim is made here |
+| C-76 | implemented | `test/offline/m6-memory-store.test.ts` | Owner and derived writes require a durable consenting binding: `refuses owner and derived writes when durable is false even if consent is true` |
+| C-77 | implemented | `test/offline/m6-memory-store.test.ts` | A session-state write for a different audience returns conflict: `refuses a different audience instead of silently keeping the first` |
+| C-78 | implemented | `test/offline/m6-memory-store.test.ts` | Audience deletion and age-based retention leave events and deliveries untouched: `deletes one audience, cascades memory, and never deletes evidence` |
 
 > C-73/C-74 are M5 suite-level verifiers, coordinated in [Issue25](https://github.com/inscripoem/isla/issues/25) following [M6 scope review](https://github.com/inscripoem/isla/issues/25#issuecomment-6313932602). C-73 covers the separate FR-05 process-lifecycle clause; C-74 covers FR-06/INV-12. Neither proves full product, Windows, torn-write/power-loss or acoustic acceptance. Scope and INV-12 edits were accepted by [M6 review at `8c36cad`](https://github.com/inscripoem/isla/pull/53#pullrequestreview-5599418482).
 >
@@ -152,6 +156,14 @@ C-74 — `test/offline/m5-process-restart.test.ts`:
 | INV-14 | M6 | C-36 | — |
 | INV-15 | M5 | C-47, C-50 (turn reconstruction ordering and M4 agreement guard) | M4/M6 consumer acceptance |
 | INV-16 | M6 | C-52, C-53, C-54, C-55, C-69, C-70, C-71 | — |
+| INV-17 | M6 | C-76, C-77, C-78 | C-75 (cursor rebuild-equality, pending) |
+
+> **D1 registry increment (2026-11-25).** INV-17 and C-76–C-78 are registered
+> at main `d86dbc1` ([ADR-009](../architecture/adr/009-memory-tables.md),
+> `src/storage/memory-store.ts`). C-76, C-77 and C-78 are implemented by the
+> test titles named in the case map above; the registry claims only those
+> checks. C-75 stays `pending` and is not counted as a verifier: rebuild-equality
+> needs M4's derive rules through the composition adapter.
 
 > **M3-01 module-level prerequisite.** `src/decision/selection.ts` (FR-01) and
 > `src/decision/reaction.ts` (FR-03), with

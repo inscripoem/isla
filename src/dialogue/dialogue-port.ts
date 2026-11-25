@@ -20,6 +20,8 @@ import { recallItemKey } from './recall-ranking'
 import type { AudienceIdentity } from './audience'
 import { createFinalizedSegmentRegistry, deriveSegmentId } from './segment-id'
 import { isSubstantiveSpeech, normalizeFinalText } from './text'
+import { deriveStyleContract, repairStyledLines } from './style-contract'
+import type { DialogueStyleReport } from './style-contract'
 import { buildDialogueUsage } from './usage'
 import { FIXTURE_DIALOGUE_MODEL, FIXTURE_DIALOGUE_MODEL_VERSION } from './usage'
 import { resolveCharacterProfile } from './persona'
@@ -28,6 +30,9 @@ import type { BudgetPlan } from './budget'
 import type { CharacterState, StateBaseline, StateProfile } from './state'
 import type { ListenerHistoryPort, ListenerHistoryRead } from './listener-history'
 import type { WorkingMemoryStore } from './working-memory'
+import type { MemoryInspectObservation } from './memory-inspect'
+
+export type { DialogueStyleReport } from './style-contract'
 
 /**
  * Dialogue generation.
@@ -217,6 +222,51 @@ export interface DialoguePortOptions {
    * the generation result.
    */
   onOutcome?: (report: DialogueOutcomeReport) => void
+  /**
+   * Read-only retention seam for the memory-inspection diagnostic.
+   *
+   * Called once per successful assembly with the context that was actually used
+   * and the generating request's identity. M4's retention implementation builds
+   * the redacted `memory.inspect` payload here, so the protocol-1 boundary only
+   * reads an already-built observation. Omitted means no retention.
+   *
+   * A synchronous throw or a rejected promise from the callback is contained and
+   * never changes generation: the diagnostic plane must not be able to fail a
+   * turn.
+   */
+  onAssembledContext?: (observation: MemoryInspectObservation) => void
+  /**
+   * Enable the deterministic output-side style contract (issue #146 A06).
+   *
+   * Omitted or `false` means OFF, and that is the default: candidate lines are
+   * used exactly as the text source returned them, `repairStyledLines` is never
+   * called, no style report is produced, and the emitted segments, segment ids,
+   * outcome counts and prompt are byte-identical to the behaviour before this
+   * option existed.
+   *
+   * When enabled, the contract is derived once from the resolved character
+   * profile. Repair runs on the capped candidate lines after the text source
+   * returns and after the post-compose abort/deadline re-check, before the first
+   * sink write, and the repaired lines supply the segment text. `recentTurns` is
+   * the confirmed history text carried by the assembled view (oldest first),
+   * `replyIntent` comes from the same view, and `standingFacts` is the resolved
+   * profile's list. Repair is pure and deterministic: it adds no provider call
+   * (NFR-04), never changes the line count, and preserves the existing
+   * generated/emitted/discard accounting, the no-speech rule and the segment cap.
+   */
+  enforceStyleContract?: boolean
+  /**
+   * M4-owned style diagnostic. Omitted means no reporting; it is called at most
+   * once per `generate`, only when `enforceStyleContract` is true, immediately
+   * after repair.
+   *
+   * The report carries pre-repair violations, the repaired/fallback flags and
+   * unrepaired boundary line indexes. Those are indexes and rule identities,
+   * never line or statement text - the same redaction stance as the consistency
+   * audit. A synchronous throw or a rejected promise from the callback is
+   * contained exactly like `onOutcome` and never changes the generation result.
+   */
+  onStyleReport?: (report: DialogueStyleReport) => void
   /**
    * Render `[conflicting]` on turns the consistency scan flagged (see
    * `AssembleDialogueContextInput.markConflictingTurns`).
@@ -489,6 +539,27 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
     }
   }
 
+  const reportStyle = (styleReport: DialogueStyleReport): void => {
+    const observer = options.onStyleReport
+    if (observer === undefined) return
+    try {
+      const result: unknown = (observer as (value: DialogueStyleReport) => unknown)(styleReport)
+      /*
+       * Same containment as `onOutcome`: TypeScript permits an `async` callback
+       * in this `void` slot, so a rejected promise is handled rather than left
+       * unhandled. A style diagnostic must never change the generation result.
+       */
+      if (isThenable(result)) {
+        void Promise.resolve(result).catch(() => {})
+      }
+    } catch {
+      /*
+       * A consumer fault at this boundary is contained here, not converted into
+       * a rejected call: M4 owns generation, the callback is a diagnostic.
+       */
+    }
+  }
+
   return {
     async generate(
       request: DialogueRequest,
@@ -567,6 +638,16 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
         // would impersonate one the operator never selected.
         return terminal('failed', 'failed')
       }
+
+      /*
+       * Style contract (issue #146 A06). OFF by default: with the option absent
+       * or false the contract stays null, no repair runs and the candidate lines
+       * are used verbatim. When enabled it is derived once from the resolved
+       * profile; `repairStyledLines` freezes the profile's fallbacks into the
+       * contract, so the repair path performs no persona lookup of its own.
+       */
+      const styleContract =
+        options.enforceStyleContract === true ? deriveStyleContract(profile) : null
 
       /*
        * One listener-history read per generation. Only this call is contained: an
@@ -685,6 +766,29 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
       const view = await assemble()
 
       /*
+       * Retain the assembled context for the read-only memory-inspection
+       * diagnostic. This runs after assembly succeeded and before any later
+       * Stop/deadline check, so the retained turn is the one that was actually
+       * built. A fault in the observer is contained exactly like `onOutcome`:
+       * the diagnostic plane must never change generation.
+       */
+      const retain = options.onAssembledContext
+      if (retain !== undefined) {
+        try {
+          const result: unknown = (retain as (value: MemoryInspectObservation) => unknown)({
+            context: view,
+            sessionId: request.sessionId,
+            turnId: request.turnId,
+          })
+          if (isThenable(result)) {
+            void Promise.resolve(result).catch(() => {})
+          }
+        } catch {
+          // Contained; see above.
+        }
+      }
+
+      /*
        * Re-check after context assembly: a Stop or deadline that arrived during the
        * awaited assembly must not compose a reply, and must not emit a first segment
        * that the caller will then have to revoke.
@@ -749,13 +853,32 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
         return terminal('deadline_exceeded', 'timeout')
       }
 
-      for (const [index, candidate] of candidates.entries()) {
+      /*
+       * Style contract (issue #146 A06), opt-in. Runs after the post-compose
+       * abort/deadline re-check and before the first sink write, exactly at the
+       * documented wiring point. `repairStyledLines` never adds a provider call,
+       * keeps the line count and returns at most MAX_DIALOGUE_SEGMENTS lines, so
+       * the accounting, the no-speech rule and the cap below are unchanged.
+       * Off by default: `candidates` is used as-is and no report is produced.
+       */
+      let styledLines: readonly string[] = candidates
+      if (styleContract !== null) {
+        const styled = repairStyledLines(candidates, styleContract, {
+          recentTurns: view.history.map((delivery) => delivery.text),
+          replyIntent: view.replyIntent,
+          ...(profile.standingFacts === undefined ? {} : { standingFacts: profile.standingFacts }),
+        })
+        styledLines = styled.lines
+        reportStyle(styled.report)
+      }
+
+      for (const [index, candidate] of styledLines.entries()) {
         if (context.signal.aborted) {
-          discard('aborted', candidates.length - index)
+          discard('aborted', styledLines.length - index)
           return terminal('cancelled', 'cancelled')
         }
         if (deadlinePassed()) {
-          discard('deadline', candidates.length - index)
+          discard('deadline', styledLines.length - index)
           return terminal('deadline_exceeded', 'timeout')
         }
 
@@ -768,7 +891,7 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
          */
         if (!isSubstantiveSpeech(text)) {
           discard('no-speech', 1)
-          discard('leftover', candidates.length - index - 1)
+          discard('leftover', styledLines.length - index - 1)
           return terminal('completed', 'ok')
         }
 
@@ -807,7 +930,7 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
            * accounted as leftover. The original error is preserved.
            */
           discard('sink-uncertain', 1)
-          discard('leftover', candidates.length - index - 1)
+          discard('leftover', styledLines.length - index - 1)
           terminal('failed', 'failed')
           throw error
         }
@@ -818,11 +941,11 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
          */
         emitted += 1
         if (context.signal.aborted) {
-          discard('aborted', candidates.length - index - 1)
+          discard('aborted', styledLines.length - index - 1)
           return terminal('cancelled', 'cancelled')
         }
         if (deadlinePassed()) {
-          discard('deadline', candidates.length - index - 1)
+          discard('deadline', styledLines.length - index - 1)
           return terminal('deadline_exceeded', 'timeout')
         }
       }

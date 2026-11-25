@@ -40,6 +40,26 @@ function validEnv(): Record<string, string> {
   };
 }
 
+function generalEnv(): Record<string, string> {
+  return {
+    ...validEnv(),
+    ISLA_DECISION_MODE: 'general',
+    ISLA_LIVE_DECISION_BASE_URL: 'https://decision.example.test/v1',
+    ISLA_LIVE_DECISION_MODEL: 'general-model-id',
+    ISLA_LIVE_DECISION_API_KEY: 'sk-decision-example-value',
+  };
+}
+
+function jevEnv(): Record<string, string> {
+  return {
+    ...validEnv(),
+    ISLA_DECISION_MODE: 'jev',
+    ISLA_LIVE_JEV_BASE_URL: 'https://jev.example.test/v1',
+    ISLA_LIVE_JEV_MODEL: 'jev-model-id',
+    ISLA_LIVE_JEV_API_KEY: 'sk-jev-example-value',
+  };
+}
+
 function captureError(run: () => unknown): Error {
   try {
     run();
@@ -274,5 +294,168 @@ describe('parseReferenceLiveConfig', () => {
     expect(() =>
       parseReferenceLiveConfig({ ...validEnv(), ISLA_ALLOWED_HOSTS: 'bad host!' }),
     ).toThrow('ISLA_ALLOWED_HOSTS');
+  });
+
+  it('defaults to the rule decision ports when no mode is configured', () => {
+    for (const decisionMode of [undefined, '   ', 'rules']) {
+      const env = validEnv();
+      if (decisionMode === undefined) {
+        delete env.ISLA_DECISION_MODE;
+      } else {
+        env.ISLA_DECISION_MODE = decisionMode;
+      }
+
+      expect(parseReferenceLiveConfig(env).decision).toEqual({ mode: 'rules' });
+    }
+  });
+
+  it('parses a general-model decision provider from the live decision variables', () => {
+    const config = parseReferenceLiveConfig(generalEnv());
+
+    expect(config.decision).toEqual({
+      mode: 'general',
+      provider: {
+        baseUrl: 'https://decision.example.test/v1',
+        model: 'general-model-id',
+        apiKey: 'sk-decision-example-value',
+      },
+    });
+  });
+
+  it('parses the optional general-model token limit', () => {
+    const config = parseReferenceLiveConfig({
+      ...generalEnv(),
+      ISLA_LIVE_DECISION_MAX_TOKENS: ' 320 ',
+    });
+
+    expect(config.decision).toEqual({
+      mode: 'general',
+      provider: {
+        baseUrl: 'https://decision.example.test/v1',
+        model: 'general-model-id',
+        apiKey: 'sk-decision-example-value',
+        maxTokens: 320,
+      },
+    });
+  });
+
+  it('parses a dedicated Jev decision provider', () => {
+    const config = parseReferenceLiveConfig(jevEnv());
+
+    expect(config.decision).toEqual({
+      mode: 'jev',
+      provider: {
+        baseUrl: 'https://jev.example.test/v1',
+        model: 'jev-model-id',
+        apiKey: 'sk-jev-example-value',
+      },
+    });
+  });
+
+  it('ignores the Jev token-limit variable', () => {
+    const config = parseReferenceLiveConfig({
+      ...jevEnv(),
+      ISLA_LIVE_JEV_MAX_TOKENS: 'not-a-number',
+    });
+
+    expect(config.decision).toEqual({
+      mode: 'jev',
+      provider: {
+        baseUrl: 'https://jev.example.test/v1',
+        model: 'jev-model-id',
+        apiKey: 'sk-jev-example-value',
+      },
+    });
+  });
+
+  it('names only the missing general-model variables', () => {
+    const env = {
+      ...validEnv(),
+      ISLA_DECISION_MODE: 'general',
+      ISLA_LIVE_DECISION_BASE_URL: 'https://decision.example.test/v1',
+    };
+
+    const error = captureError(() => parseReferenceLiveConfig(env));
+    const reported = error.message
+      .slice('missing or invalid environment variables: '.length)
+      .split(', ');
+
+    expect(new Set(reported)).toEqual(
+      new Set(['ISLA_LIVE_DECISION_MODEL', 'ISLA_LIVE_DECISION_API_KEY']),
+    );
+    expect(error.message).not.toContain('sk-decision-example-value');
+  });
+
+  it('names only the missing Jev variables', () => {
+    const env = {
+      ...validEnv(),
+      ISLA_DECISION_MODE: 'jev',
+      ISLA_LIVE_JEV_MODEL: 'jev-model-id',
+    };
+
+    const error = captureError(() => parseReferenceLiveConfig(env));
+    const reported = error.message
+      .slice('missing or invalid environment variables: '.length)
+      .split(', ');
+
+    expect(new Set(reported)).toEqual(
+      new Set(['ISLA_LIVE_JEV_BASE_URL', 'ISLA_LIVE_JEV_API_KEY']),
+    );
+    expect(error.message).not.toContain('ISLA_LIVE_DECISION_BASE_URL');
+  });
+
+  it('rejects an unknown decision mode by variable name without echoing the value', () => {
+    const env = { ...validEnv(), ISLA_DECISION_MODE: 'hybrid-experimental' };
+
+    const error = captureError(() => parseReferenceLiveConfig(env));
+
+    expect(error.message).toContain('ISLA_DECISION_MODE');
+    expect(error.message).not.toContain('hybrid-experimental');
+    expect(error.message).not.toContain('ISLA_LIVE_DECISION_BASE_URL');
+  });
+
+  it('rejects a decision provider base URL that is not https or loopback http', () => {
+    const rejected = [
+      'http://decision.example.test/v1',
+      'https://user:secret@decision.example.test/v1',
+      'https://decision.example.test/v1#fragment',
+    ];
+
+    for (const baseUrl of rejected) {
+      const env = { ...generalEnv(), ISLA_LIVE_DECISION_BASE_URL: baseUrl };
+      expect(() => parseReferenceLiveConfig(env)).toThrow(
+        'ISLA_LIVE_DECISION_BASE_URL',
+      );
+    }
+
+    const loopback = parseReferenceLiveConfig({
+      ...jevEnv(),
+      ISLA_LIVE_JEV_BASE_URL: 'http://127.0.0.1:8080/v1',
+    });
+    expect(loopback.decision).toMatchObject({
+      provider: { baseUrl: 'http://127.0.0.1:8080/v1' },
+    });
+  });
+
+  it('rejects an invalid decision token limit by variable name without echoing the value', () => {
+    for (const raw of ['0', '-1', '1.5', 'two', '99999999999999999999']) {
+      const env = { ...generalEnv(), ISLA_LIVE_DECISION_MAX_TOKENS: raw };
+
+      const error = captureError(() => parseReferenceLiveConfig(env));
+
+      expect(error.message).toContain('ISLA_LIVE_DECISION_MAX_TOKENS');
+      expect(error.message).not.toContain(raw);
+    }
+  });
+
+  it('ignores decision provider variables when the rule mode is selected', () => {
+    const env = {
+      ...validEnv(),
+      ISLA_DECISION_MODE: 'rules',
+      ISLA_LIVE_DECISION_BASE_URL: 'not a url',
+      ISLA_LIVE_JEV_MODEL: '   ',
+    };
+
+    expect(parseReferenceLiveConfig(env).decision).toEqual({ mode: 'rules' });
   });
 });

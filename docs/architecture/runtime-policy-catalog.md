@@ -1,10 +1,12 @@
 # Runtime policy catalog
 
 Status: under review. M6 rows contributed here; other owners' rows pending. Shared document —
-M5 coordination pending. Date: 2026-10-12.
+M5 coordination pending. Date: 2026-10-12; playback/voice rows for merged #189/#190 and the
+dialogue/synthesis/renderer/startup rows added 2026-11-25.
 
 What the system does when each degraded or failure path is triggered. Each failure mode has a
-defined response and operational fallback.
+defined response and operational fallback. Rows in the main table are implemented unless their
+detection cell names an evidence gap; the separate “Proposed rows” subsection is design only.
 
 | Failure mode | Detection | Response | Fallback (concrete) | Owner |
 | --- | --- | --- | --- | --- |
@@ -27,9 +29,53 @@ defined response and operational fallback.
 | Context block dropped for size or for a non-finite dimension | The rendered state or working-memory block exceeds its section cap (`state` / `workingMemory` under a plan, `maxCharacters` without one) or the state and working-memory blocks together exceed `maxCharacters`; or `renderStateBlock` returns null because a dimension is not finite | Drop the block whole (`null`) and record one budget warning naming the block; a state block with a non-finite dimension is dropped with its own distinct validation warning and is not counted as a budget drop (`used` and `dropped` stay 0) | Context assembles without that block; history and recall are unchanged for a dropped working-memory block, and the remaining budget is spent on the other sections in the persona → state → workingMemory order | M4 |
 | State-plus-plan combination (former refusal retired) | `assembleDialogueContext` receives `state` together with a `budgetPlan`; the earlier implementation threw for that combination instead of assembling it | Do not refuse: keep the block only when it fits the plan's `state` section, charge the kept block to `state.used`, and still subtract it from the shared pool so history cannot exceed `maxCharacters` | A block longer than its section cap is dropped whole with the budget warning; the state block keeps precedence and the working-memory block yields first, and the plan's history floor is unchanged | M4 |
 | Contract-violating listener-history source | A `ListenerHistoryPort` returns the selected input's own event, or returns turns out of `(receivedAtMs, eventId)` order | Filter out the selected input's event without recording an exclusion, then stably re-sort by `(receivedAtMs, eventId)` before any cap or budget decision | The assembly is identical to a conforming source with the same turns: the cap keeps and the budget drops the same rows, and the exclusion order does not change | M4 |
+| Browser audio playback failure (`play()`) | `playFailureReason` reads a readable `error.name`: `NotAllowedError` yields `play_not_allowed`; any other value, an unreadable name or message-only `NotAllowedError` text yields `play_failed` | Emit exactly one `failed` receipt with that reason, detach the handle, unsubscribe and release the lease; a prior terminal receipt (for example from Stop) is retained | The segment is not treated as delivered and the existing terminal receipt is not overwritten; a failed detach retains the lease and reports `cleanup_failed` | M1 |
+| Voice selection refused or preference save fails | `voice.select` rejects with `unknown_voice` for an id that is not installed, or `persistence_failed` when the save write throws; the console admits only an operator (`voiceApplyAllowed`) | Reject the selection and leave the active voice unchanged; confirm a new active voice only from the matching `voice.state` acknowledgement | Keep using the prior confirmed voice; a begun turn keeps its starting voice even when another is adopted mid-reply, and preview samples are fenced after Stop, disconnect or replacement | M5 / M2 |
+| Dialogue provider timeout, rejection, malformed end or segment-count mismatch | M5 observes a non-resolved dialogue call, a schema-invalid/mis-correlated end, or a `segmentCount` disagreement | Record `dependency.failed` stage `dialogue`; do not dispatch a fabricated completion; a completed end that disagrees is a failed cycle | Deliver only segments already accepted before the fault; no later segment; a new turn is required | M4 / M5 |
+| Synthesis prepare refusal, timeout or invalid result | M5 observes the bounded prepare outcome: Stop/abort revokes the segment before dispatch; timeout, thrown/rejected or schema-invalid results record `dependency.failed` with stage `synthesis`; a mismatched identity records `result.stale`; a resolved `ok:false` records `dependency.failed` with its `reasonCode` and no stage. No coordinator test asserts a resolved `ok:false` payload or the `result.stale` event; the correlation-breaking regression checks only that nothing is dispatched (`regressions.test.ts:495`). Timeout: `m5-coordinator.test.ts:969`; rejection: `m5-evaluation-adapter.test.ts:691`, `m5-i1-adoption.test.ts:979`; later-segment rejection: `m5-i1-adoption.test.ts:1045`. | Do not register an output, dispatch audio or commit a delivery for the failed segment. Preserve any earlier fully-delivered prefix and record the actual turn end: a completed dialogue with a failed cycle persists `turn.ended.status='failed'` while `CycleOutcome.status` remains the coarse `'cancelled'`. | No automatic synthesis retry, replacement, defer or replay. A fresh turn requires current runtime authority and confirmed output. A logical failure/abort does not release M1's physical provider occupancy; in the M1 Kokoro path that occupancy ends only when the original provider promise settles (`whenIdle()` or the owned worker release). Prefix and fresh-turn coverage: `m5-i1-adoption.test.ts:1045` (prefix preserved, failed turn end) and `:979` (fresh input after a failed turn, no replay). | M1 / M5 |
+| VTS trigger disconnect, error or unknown result | M1 distinguishes a confirmed API refusal (`failed`), a pre-send cancellation (`cancelled`), a post-send abort/close/error/timeout/malformed reply (`unknown`), and a successful trigger response (`accepted`, not observed completion). Physical close, action completion and audible silence remain separate observations. The coordinator does not persist the renderer outcome and consumes no avatar receipt; `m5-coordinator.test.ts:986` proves only that speech continues. | Do not replay the trigger or treat acceptance as completion. The renderer result does not change the speech classification; avatar failure is decoration and does not cancel otherwise valid speech. An invalidated renderer fails closed for later calls. Avatar outcome recording is an evidence gap, not implemented. | No automatic reconnect, replacement or trigger replay. M5 retains acquisition/release and replacement authority; pending cleanup blocks replacement and failed cleanup stays quarantined. Replacement requires independently established old-resource cleanup. Close completion, action completion and audible silence require their respective observations. | M1 / M5 |
+| Playback timeout or unknown terminal outcome | Player `execute` never settles or returns malformed/uncorrelated evidence | Record the unknown outcome; block further segments until the outcome is confirmed | Keep the delivery unconfirmed; never replay or quote the segment as spoken; Stop remains responsive | M1 / M5 / M6 |
+| Provider authentication or configuration failure (no offline verifier; live config path only) | Provider call rejects with an auth/config failure; startup validation rejects a missing or invalid deployment value | Record the failure; produce no output; no retry in the same turn | Operator fixes credentials/configuration; a new turn is required; never fall back to an unconfigured provider | M3 / M4 / M5 |
+| Database file unreadable or corrupt (no dedicated corruption verifier; schema-version refusal is tested) | `openDatabase`/`migrate` throws, the file is not a database, or a schema version is unsupported | Refuse to start; do not serve or write | Restore the pre-migration backup or a known-good copy; start stopped; no replay | M6 |
+| Startup or listen failure | Deployment module missing/invalid, seeded live id, port bind error or listener error | Report the failure; release owned resources once; exit explicitly | Start stopped with corrected configuration; no fake ready state | M5 |
+| Character budget exhausted | Rendered history/recall exceeds `maxCharacters` after the section plan | Drop in trim order, add a rollup when it fits, record exclusions/warnings | Answer with reduced context; never exceed the cap; the dropped content remains stored | M4 |
 
-Decision rows are recorded above; synthesis failure and renderer disconnect remain owned by M1/M5
-and pending their entries here.
+### Proposed rows (not implemented)
+
+These rows record a design decision, not runtime behaviour. The 4,096-token cap and 70%/90% thresholds
+are proposed in the system ADR and require M4 review and a real tokenizer before implementation.
+
+| Failure mode | Detection | Response | Fallback | Owner |
+| --- | --- | --- | --- | --- |
+| Prompt exceeds the proposed token cap after compaction | Proposed tokenizer preflight at 70% (compact) and 90% (hard stop) of a 4,096-token prompt cap | Compact history/recall; if still over 90%, return `context_overflow` and make no provider call | Operator starts a new session or reduces context; never send a prompt missing identity, standing constraints or the current task | M4 / M5 |
+
+The layer order, budget units and trim rules behind the context rows are
+documented in [context-assembly](context-assembly.md). Supporting checks for the
+two rows added 2026-11-25:
+
+- the two `m1-performance.test.ts` cases that classify a named
+  `NotAllowedError` thrown or rejected by `play()` as `play_not_allowed`;
+- `m1-performance.test.ts::keeps the cancelled terminal when a pending play
+  promise later rejects with a named NotAllowedError`;
+- `voice-settings.test.ts::refuses an unknown or unavailable voice and a failed
+  save without changing the active voice`;
+- `voice-settings.test.ts::keeps both segments of a begun turn in its starting
+  voice and uses the adopted voice next turn`;
+- `console-voice-selection.test.ts::does not let a viewer apply a voice
+  selection`;
+- `console-voice-selection.test.ts::fences stale preview samples after Stop,
+  disconnect and replacement`.
+
+Supporting checks for the synthesis and VTS rows:
+
+- synthesis: `m5-coordinator.test.ts:969` (bounded prepare failure), `m5-evaluation-adapter.test.ts:691` (`cycleStatus 'cancelled'` / `turnEndStatus 'failed'`), `m5-i1-adoption.test.ts:979/1045` (fresh input after a failed turn; completed prefix preserved), `m1-performance.test.ts:3637/3785` (Kokoro settlement / `whenIdle()`), `m5-physical-synthesis.test.ts:464`.
+- synthesis evidence gap: no coordinator verifier asserts the resolved `ok:false` payload or the `result.stale` event; `regressions.test.ts:495` checks only that nothing is dispatched.
+- VTS: `m1-performance.test.ts:5841/6325/6353/6442/6647/6898` (accepted is not completion, post-send unknown, API refusal, fail-closed, no replay), `m5-vts-acquisition.test.ts:173/201/324/684` (pending cleanup blocks replacement, failed cleanup quarantined).
+- VTS evidence gap: `m5-coordinator.test.ts:986` proves continuous speech only; the coordinator does not persist or consume the renderer result.
+
+Dialogue, synthesis, renderer, playback, startup and character-budget rows were added 2026-11-25;
+the provider-authentication and database-corruption rows name their missing verifiers rather than
+claiming coverage. The token-overflow row is a proposed design, not shipped behaviour.
 
 ## Pipeline gates (M6)
 
@@ -52,7 +98,7 @@ itself fails but no dedicated record is written. A failure record is written und
 | POL-G4-04 | a claim exemption passed its expiry | block the merge; an expired exemption is debt that must be re-reviewed, not renewed silently | fail-closed | `document`, `line`, `expires` | none | `eval-gate.test.ts::fails the same line after the exemption expires` | M6 |
 | POL-G6-01 | code or prompt changed without a log update | block the merge; never append an entry on the author's behalf | fail-closed | `changed_files`, `log_changed` | none | `ai-use-log-gate.test.ts::requires the log when a code file changes` | M6 |
 | POL-G6-02 | a new entry cites a commit not reachable from HEAD, or any cited case/invariant does not exist | block the merge; the entry owner corrects the reference, the gate never rewrites it | fail-closed | `entry`, `field`, `value` | none; entry owner named | `ai-use-log-gate.test.ts::rejects a new entry whose commit is not reachable from HEAD` | M6 |
-| POL-G6-03 | a register, the object database, a commit history or a log copy is unreadable or unclassifiable: `object-database`, `commit-history`, `case-registry`, `invariant-register`, `base-log` or `head-log` evidence from a missing or unreadable file, unparsable YAML, a document whose `entries` is not a list, or a recursive alias in the base or head log | block the merge; an unreadable register or log copy is a failure, never an empty register or an unclassified entry | fail-closed | `register` | none | `ai-use-log-gate.test.ts::fails closed when the object database is unavailable`; `ai-use-log-gate.test.ts::fails closed when the base log is not valid YAML`; `ai-use-log-gate.test.ts::fails closed when the base cannot be read as an entries list`; `ai-use-log-gate.test.ts::fails closed on a recursive alias in the base log`; `ai-use-log-gate.test.ts::fails closed on a recursive alias in the head log` | M6 |
+| POL-G6-03 | a register, the object database, a commit history or a log copy is unreadable or unclassifiable: `object-database`, `commit-history`, `case-registry`, `invariant-register`, `base-log` or `head-log` evidence from a missing or unreadable file, unparsable YAML, a document whose `entries` is not a list, or a recursive alias in the base or head log | block the merge; an unreadable register or log copy is a failure, never an empty register or an unclassified entry | fail-closed | `register` | none | `ai-use-log-gate.test.ts::fails closed when the object database is unavailable`; `ai-use-log-gate.test.ts::fails closed when the base log is not valid YAML`; `ai-use-log-gate.test.ts::fails closed when the base cannot be read as an entries list`; `ai-use-log-gate.test.ts::fails closed on a recursive alias in the base log`; `ai-use-log-gate.test.ts::fails closed on a recursive alias in the head log`; `ai-use-log-gate.test.ts::reports a missing base file with the variable, path and reason`; `ai-use-log-gate.test.ts::reports an unreadable base path with the variable, path and reason`; `ai-use-log-gate.test.ts::names the base-log finding and skips identity classification when the base file is missing` | M6 |
 | POL-G6-04 | a baseline exemption expired | block the merge; the exemption expired and must be re-reviewed or removed | fail-closed | `value`, `expires` | none | `ai-use-log-gate.test.ts::rejects a baselined missing commit after its expiry` | M6 |
 | POL-TR-01 | missing component, unknown case, missing test file or unknown test title | block the merge; the row owner repairs the code, test or citation the row names | fail-closed | `row_key`, `code`, `detail` | none | `trace-fitness.test.ts::rejects a citation whose title the file does not contain` | M6 |
 | POL-TR-02 | ADR cell names no number and has no unexpired exemption | block the merge; name an allocated ADR or record an explicit em dash | fail-closed | `row_key`, `cell` | none | `trace-fitness.test.ts::rejects an ADR cell that names no ADR number` | M6 |

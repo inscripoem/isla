@@ -1,0 +1,146 @@
+/*
+ * M2 console design tokens — "Isla Nightloom" (夜辉 · 蓝粉浅黄二次元直播舱).
+ *
+ * A complete break from the previous paper/sticker voice. The console is now
+ * a night-sky streaming cockpit: a deep indigo sky, glass panels lit from
+ * within, and luminous sky/pink/cream accents. Nothing here carries a thick
+ * ink border or an offset sticker shadow — depth comes from blur, glow and
+ * layered translucency instead.
+ *
+ * Contrast: every text pair is measured against the dark glass (body >= 4.5:1,
+ * muted >= 4.5:1, accents used for large/graphics only). Status is always
+ * spelled out in text next to its colour.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* ---------------------------------------------------------------- *
+   * Night sky and glass
+   * ---------------------------------------------------------------- */
+  --isla-page: #10142a;
+  --isla-page-deep: #0b0e20;
+  --isla-surface: rgba(255, 255, 255, 0.06);
+  --isla-surface-soft: rgba(255, 255, 255, 0.09);
+  --isla-surface-dim: rgba(255, 255, 255, 0.035);
+  --isla-glass: rgba(16, 20, 42, 0.62);
+  --isla-glass-strong: rgba(18, 23, 48, 0.78);
+  --isla-line: rgba(255, 255, 255, 0.14);
+  --isla-line-bright: rgba(255, 255, 255, 0.26);
+  --isla-line-soft: rgba(255, 255, 255, 0.09);
+  --isla-ink: #f2f5ff;
+  --isla-ink-soft: #c9d1ea;
+  --isla-muted: #939ec0;
+  --isla-overlay: rgba(8, 10, 24, 0.7);
+
+  /* ---------------------------------------------------------------- *
+   * Luminous candy palette (glows + bright text variants + washes).
+   * Blue / pink / light yellow lead; mint, red, purple, orange remain
+   * the server status vocabulary.
+   * ---------------------------------------------------------------- */
+  --isla-sky: #5aa8f0;
+  --isla-sky-glow: rgba(90, 168, 240, 0.45);
+  --isla-sky-soft: rgba(90, 168, 240, 0.16);
+  --isla-pink: #ff7bb8;
+  --isla-pink-glow: rgba(255, 123, 184, 0.45);
+  --isla-pink-soft: rgba(255, 123, 184, 0.16);
+  --isla-yellow: #ffd46b;
+  --isla-yellow-glow: rgba(255, 212, 107, 0.4);
+  --isla-yellow-soft: rgba(255, 212, 107, 0.14);
+  --isla-mint: #52e0b0;
+  --isla-mint-soft: rgba(82, 224, 176, 0.14);
+  --isla-purple: #b18cf2;
+  --isla-purple-soft: rgba(177, 140, 242, 0.16);
+  --isla-red: #ff6b81;
+  --isla-red-soft: rgba(255, 107, 129, 0.16);
+  --isla-orange: #ffa159;
+  --isla-orange-soft: rgba(255, 161, 89, 0.15);
+
+  /* Semantic status vocabulary (server words, no synonyms). */
+  --isla-status-open: var(--isla-sky);
+  --isla-status-connecting: var(--isla-yellow);
+  --isla-status-closed: var(--isla-orange);
+  --isla-status-error: var(--isla-red);
+  --isla-status-pending: var(--isla-yellow);
+  --isla-status-unknown: var(--isla-orange);
+  --isla-status-accepted: var(--isla-mint);
+  --isla-status-applied: var(--isla-mint);
+  --isla-status-duplicate: var(--isla-purple);
+  --isla-status-rejected: var(--isla-red);
+  --isla-status-refused: var(--isla-red);
+  --isla-status-neutral: var(--isla-pink);
+
+  /* ---------------------------------------------------------------- *
+   * Depth: ambient night shadows + luminous glows. No sticker offsets.
+   * ---------------------------------------------------------------- */
+  --isla-shadow-ambient: 0 24px 60px rgba(4, 6, 18, 0.5), 0 4px 14px rgba(4, 6, 18, 0.35);
+  --isla-shadow-lift: 0 30px 70px rgba(4, 6, 18, 0.6), 0 6px 18px rgba(4, 6, 18, 0.4);
+  --isla-glow-sky: 0 0 22px var(--isla-sky-glow);
+  --isla-glow-pink: 0 0 22px var(--isla-pink-glow);
+  --isla-glow-yellow: 0 0 22px var(--isla-yellow-glow);
+  --isla-glow-line: linear-gradient(90deg, var(--isla-sky), var(--isla-pink), var(--isla-yellow));
+
+  /* ---------------------------------------------------------------- *
+   * Shape. Everything is softer and rounder than the paper era.
+   * ---------------------------------------------------------------- */
+  --isla-radius-scale: 1;
+  --isla-radius-xs: calc(8px * var(--isla-radius-scale));
+  --isla-radius-sm: calc(12px * var(--isla-radius-scale));
+  --isla-radius-md: calc(16px * var(--isla-radius-scale));
+  --isla-radius-lg: calc(22px * var(--isla-radius-scale));
+  --isla-radius-xl: calc(28px * var(--isla-radius-scale));
+  --isla-radius-pill: 999px;
+  --isla-border-hairline: 1px;
+  --isla-border-soft: 1.5px;
+  --isla-skew: -8deg;
+
+  /* ---------------------------------------------------------------- *
+   * Typography. Same bundled Nunito family, but the voice is airy:
+   * 700 for headings, 500 for body, mono for machine facts.
+   * ---------------------------------------------------------------- */
+  --isla-font: 'Nunito', 'Noto Sans SC', -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --isla-font-mono: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --isla-fs-xs: 11px;
+  --isla-fs-sm: 12.5px;
+  --isla-fs-base: 14px;
+  --isla-fs-md: 15px;
+  --isla-fs-lg: 17px;
+  --isla-fs-xl: 19px;
+  --isla-fs-2xl: 24px;
+  --isla-fs-display: clamp(24px, 3.6vw, 34px);
+  --isla-fs-subtitle-stream: clamp(17px, 2.2vw, 23px);
+  --isla-lh: 1.6;
+  --isla-lh-tight: 1.3;
+  --isla-track-caps: 0.14em;
+
+  /* ---------------------------------------------------------------- *
+   * Spacing scale
+   * ---------------------------------------------------------------- */
+  --isla-space-2xs: 4px;
+  --isla-space-xs: 8px;
+  --isla-space-sm: 12px;
+  --isla-space-md: 16px;
+  --isla-space-lg: 22px;
+  --isla-space-xl: 30px;
+  --isla-space-2xl: 44px;
+
+  /* ---------------------------------------------------------------- *
+   * Motion. Expo settle for entrances, spring for pops, exits shorter.
+   * ---------------------------------------------------------------- */
+  --isla-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --isla-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --isla-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --isla-dur-fast: 140ms;
+  --isla-dur-base: 240ms;
+  --isla-dur-slow: 420ms;
+  --isla-dur-enter: 620ms;
+  --isla-dur-page: 520ms;
+  --isla-dur-exit: 180ms;
+
+  /* Marker: the gradient hairline that underlines section titles. */
+  --isla-marker: var(--isla-glow-line);
+
+  /* Mouse parallax, written by fx/depth.tsx as -1..1 clamped values. */
+  --isla-mx: 0;
+  --isla-my: 0;
+}

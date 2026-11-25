@@ -9691,6 +9691,347 @@ entries:
         browser phases passed 31 and 16 checks. Heart and Emma speech matched
         their expected WAVs and a new runtime process retained Emma. Playback
         and SQLite were real, with controlled dialogue text and avatar peers.
+
+  - date: "2026-11-22"
+    task: M2-console-nightloom-v2-visual-rebuild
+    branch: feat/m2-console-nightloom-v2
+    change: >-
+      Rebuild the M2 console frontend as "Isla Nightloom" v2 without touching
+      any behaviour module. New src/console/design (tokens, base, layout,
+      components, ui, charts, format, toast), src/console/fx (depth, petals,
+      cursor, typewriter) and src/console/pages (Session, Playback, Selection,
+      Diagnostics). The standalone stage mascot and its sticker decoration are
+      removed from the stage: it is now a HUD row (lifecycle, pipeline stage,
+      active output), a nine-bar waveform visualizer that animates only while
+      the performer speaks, and the streamed subtitle as the hero line. The
+      mascot artwork was not removed from the console: the header brand flip
+      board renders KanbanRow, which draws the nine-member cast from
+      src/console/assets/kanban/spritesheet.webp (the MIT-licensed
+      aemeath_withclaude sheet) on the board's kanban face. Paint cost is
+      reduced: the animated full-screen blur and hue-rotate background layers,
+      two extra background canvases and the per-click particle burst are gone,
+      scrolling panels no longer use backdrop-filter (a follow-up fix later
+      removed the remaining .isla-chat__item backdrop-filter too), and the
+      petal canvas is capped at 12 petals and DPR 1.5. Behaviour, wire
+      messages, transport, performer machine and recovery control are
+      unchanged.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    opencode_version: "1.19.4"
+    launch_flags: [--agent, build, --format, json, --variant, xhigh]
+    sessions: [ses_e010e789affeNUAkBFW70sYaxs]
+    supervision: >-
+      The M2 member set the slice: scope limited to src/console/, the mascot
+      removed, the existing design primitives reused, and the load-time and
+      over-design problems fixed. OpenCode authored the design, fx and pages
+      modules, the ConsoleApp layout rewrite and this entry.
+    human_review: >-
+      The M2 member reviewed the result. Visual sign-off for the #174 rows is
+      requested in #182; a human team member performs the final merge and no
+      agent merged anything.
+    transcript_record: >-
+      OpenCode session ses_e010e789affeNUAkBFW70sYaxs is exported to
+      ~/Library/Caches/isla-opencode-exports/ outside the checkout.
+    verification:
+      base: e095c67
+      results: >-
+        pnpm exec tsc -b passed; pnpm test:m2 passed 101 tests in 1 file; a
+        headless browser walk at 756px and 375px confirmed the HUD stage (no
+        stage mascot) with its waveform and tags, the header brand flip board
+        rendering the KanbanRow sprite cast, a submitted input settling in the
+        ledger and no horizontal overflow.
+      independent: >-
+        None; a single operator ran the local checks on this machine.
+    scope: >-
+      src/console/ (ConsoleApp.tsx, console.css, design/, fx/, pages/),
+      src/index.css root token references,
+      docs/team/CONSOLE-FRONTEND-SPEC-M2.en.md and docs/ai-use-log.yaml. No
+      contract, transport, machine, storage or workflow file changed.
+
+  - date: "2026-11-22"
+    task: M2-console-nightloom-v2-g1-waiver
+    branch: feat/m2-console-nightloom-v2
+    change: >-
+      Extend the time-boxed G1 waiver to pull request 187, the M2 console
+      visual rebuild, so its pull-request event uses the label/advise rule
+      through the existing 2026-11-27 window. A waiver is a recorded
+      exception, not evidence; the G1 step still prints which rule it used.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    supervision: >-
+      The M2 member chose this route after the G1 scope-miss was reported.
+      OpenCode made the edit and wrote this entry.
+    human_review: >-
+      The M2 member approved adding 187 to the waiver list. A human team
+      member performs the final merge and no agent merged anything.
+    transcript_record: >-
+      OpenCode session recorded locally; the branch commits carry the change.
+    verification:
+      base: e32bf1a
+      results: >-
+        pnpm gate:test-approval auto with GITHUB_EVENT_NAME=pull_request and
+        PR_NUMBER=187 prints the waiver rule and exits 0; pnpm test:m2 and
+        pnpm gate:ai-use-log pass.
+      independent: >-
+        None; a single operator ran the local checks on this machine.
+    scope: >-
+      src/evaluation/test-approval-gate.ts and docs/ai-use-log.yaml. No
+      console source changed.
+
+  - date: "2026-11-22"
+    task: M2-VIS-V2-DANMAKU
+    branch: feat/m2-console-nightloom-v2
+    change: >-
+      Each stage danmaku comment now drifts across the stage once instead of
+      looping. A one-line CSS change: the drift animation runs a single
+      iteration and keeps its end position.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    supervision: >-
+      The M2 member reported that the local-audience danmaku repeats and asked
+      for a single pass. OpenCode made the edit and wrote this entry.
+    human_review: >-
+      The M2 member asked for this change. A human team member performs the
+      final merge and no agent merged anything.
+    transcript_record: >-
+      OpenCode session recorded locally; the branch commits carry the change.
+    verification:
+      base: e32bf1a
+      results: >-
+        pnpm test:m2 passed; the change is CSS-only and no TypeScript changed.
+      independent: >-
+        None; a single operator ran the local checks on this machine.
+    scope: >-
+      src/console/design/components.css and docs/ai-use-log.yaml.
+
+  - date: "2026-11-25"
+    task: M2-PR187-review-fix-and-main-integration
+    branch: local/pr187-fix-20261125
+    change: >-
+      Integrate pull request 187 with origin/main and close its review findings
+      without contract or backend changes. Merge origin/main (#181, #190 and the
+      G1 waiver reconciliation) and restore the C07/C08/C10 and recovery-ack
+      behaviour overwritten by the visual rebuild, keeping the Nightloom
+      VoiceCard in the console. Fix P1-1 by gating Speaking on the M1 `started`
+      receipt and showing Preparing while `accepted`; P1-2 by labelling local
+      receipts as browser-local evidence with a receipt timestamp, adding the
+      HUD's latest receipt/reason/fault count and the ticker's receipt-stage
+      fallback; P1-4 by disabling floating card geometry at or below 1100px and
+      wrapping the stage, selection and control surfaces at 320x800, 375x812,
+      756x900 and 1280x800; P1-5 by mixing status tones against the dark page
+      and darkening the primary/danger/stop gradients to at least 4.5:1; P2-7
+      by correcting FactChip polarity for `none`, `not reported` and a
+      synthetic plan; P2-9 by disabling Attach performer and Bootstrap operator
+      after disconnect; and the EventsSection regression by rendering the full
+      reversed event list instead of the newest seven. Add 16 server-rendered
+      unit tests to test/offline/m2-console.test.ts.
+    requirements: [FR-04, FR-05, FR-06, NFR-04]
+    invariants: []
+    commits: [441b9cc41b1975bd160c14159c94616016f33cb6, a805b07b6383ca06a012e409837745230e49f393]
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: "2.4.1"
+    launch_flags: [--agent, build, --format, json, -m, "self-api/deepseek-v4-flash#xhigh"]
+    sessions: [ses_deefdb749ffeaHiIIbNHgviIDy]
+    supervision: >-
+      The M5 member and the captain authorized and reviewed the local merge and
+      review fixes in this worktree, scoped to src/console/,
+      src/evaluation/test-approval-gate.ts, test/offline/m2-console.test.ts and
+      this log; the agent authored no contract or backend change. Round 1
+      restored behaviour lost in the visual rebuild, Round 2 addressed the P1/P2
+      review findings, and Round 3 restored full event rendering and added the
+      offline tests.
+    human_review: >-
+      The M5 member and the captain verified Round 3a locally and committed it.
+      This work was not pushed and no agent merged anything; a human team member
+      performs the final merge. M2/M1/M3/M4/M6 review of the updated candidate
+      remains open until it is pushed and confirmed.
+    transcript_record: >-
+      OpenCode session ses_deefdb749ffeaHiIIbNHgviIDy is exported to the CS5351
+      evidence directory outside the checkout.
+    verification:
+      base: e2166cd
+      results: >-
+        Against origin/main e2166cd: pnpm exec tsc -b exit 0; oxlint exit 0;
+        vite build 155 modules exit 0; the full pnpm test suite passed 2199
+        tests in 98 files with 0 failures and 0 skipped, including 118 tests in
+        test/offline/m2-console.test.ts and 11 in
+        test/offline/console-voice-selection.test.ts. A Nix Chromium
+        156.0.8078.47 run against the Vite preview and production CLI passed
+        formal-console-acceptance.mjs (12 steps, 0 page/console errors) and both
+        console-voice-selection.mjs phases (31 and 16 checks) with local Kokoro
+        CPU synthesis. Chromium checks covered the diagnostics socket reporting
+        `not started` before connect, waveform/Speaking strictly gated on
+        `started` with Preparing during `accepted`, stale rejected input keeping
+        the composer text, post-disconnect disabling of Attach performer and
+        Bootstrap operator plus the hidden operator tag and the ticker
+        receipt-stage fallback, and Reconnect restoring the open session.
+        Viewport checks at 320x800, 375x812, 756x900 and 1280x800 held
+        docScrollWidth equal to innerWidth, no Control Deck occlusion by Local
+        Receipts, and at least 5.06:1 contrast on all 17 tag/button pairs.
+      independent: >-
+        None; a single operator ran the local checks on this machine. The
+        deployment was a local controlled test deployment: no live LLM, VTS or
+        Windows check was performed.
+    scope: >-
+      src/console/ (ConsoleApp.tsx, VoiceCard.tsx, console.css, design/,
+      pages/), src/evaluation/test-approval-gate.ts (the G1_TIME_WAIVER_PRS
+      merge reconciliation `[170, 171, 175, 181, 187]`),
+      test/offline/m2-console.test.ts and docs/ai-use-log.yaml. No contract,
+      transport, machine, storage, backend or workflow file changed.
+
+  - date: "2026-11-25"
+    task: course-governance-d2-d3-d9-candidate
+    change: >-
+      Prepare the local D2/D3/D9 course-governance candidate on main e2166cd.
+      Add the machine-readable role/path policy, the human-only rules draft, the
+      project covenant, the permission-model document and the task-local policy
+      compiler and CLI, with focused tests. The compiler emits the observed V2
+      plugin-exclusion form ("-<name>") and keeps the caller's names in the
+      sidecar. Add a qualitative architecture candidate comparison consolidated
+      from the existing ADRs, a static Prompt.md with the plan-and-approval
+      gate, and short AGENTS/README index changes. No runtime, contract,
+      dependency or frozen path changes.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: OpenCode V2 build
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    sessions:
+      - ses_deeda366dffeRO9QWu0PLEsRH7
+      - ses_deed588c0ffegf2JF7qkcQdgIe
+      - ses_deed54a28ffet2zoG0pHmf55xg
+    supervision: >-
+      The orchestrating assistant (Claude Code) supervised the OpenCode build
+      session under a task-local project configuration that keeps one build
+      agent, excludes oh-my-opencode-slim and denies subagents, credential
+      reads and external directories. The session authored the policy,
+      compiler, CLI, focused test and tsconfig change. The orchestrator ran the
+      focused test, typecheck, lint, full verification and the two bounded
+      native preflight sessions outside the build session.
+    human_review: >-
+      Captain authorized local preparation only. No push, pull request,
+      comment, review, merge or upload was performed. The policy, rule files
+      and covenant remain proposals; no human adoption is claimed. G1 does not
+      apply to this change because it touches no src/ or prompts/ file; the
+      PR-time label and branch-protection state remain separate.
+    transcript_record: >-
+      The genuine sessions are exported to the external evidence directory
+      evidence/20261125-course-governance/ after a local secret scan, together
+      with the build run's JSON events and the native preflight records. Raw
+      values are not displayed in the repository.
+    verification:
+      base: e2166cd047537042bd58a3c9999515fa9caf96e1
+      results: >-
+        Linux, Node 22.23.4, pnpm 12.9.0, OpenCode 2.4.1. Focused policy test
+        33/33; pnpm typecheck exited 0; rtk proxy pnpm lint exited 0; pnpm
+        verify passed 99 files / 2216 tests, typecheck, lint and build;
+        pnpm test:readiness 47/47; pnpm test:trace 49/49; pnpm gate:eval
+        reported not run. Native preflight in a disposable directory loaded
+        the generated config (317 ordered rules, model and plugin exclusion)
+        and matched read allow/deny and write allow/deny for harmless synthetic
+        paths.
+      limits: >-
+        No remote CI, branch protection, human review, team adoption or G4
+        result is claimed. The native preflight was observed in a disposable
+        directory, not in this worktree and not through the committed
+        opencode.json. G1 approval is not recorded. Fixture-level rule
+        evaluation is not native enforcement evidence, and the native canaries
+        do not prove that the shell matcher or every path rule behaves
+        identically in another environment.
+    scope: >-
+      .opencode/permissions.jsonc, .opencode/rules.md, .agent/rules.md,
+      tools/opencode/policy.ts, tools/opencode/cli.ts,
+      test/offline/opencode-policy.test.ts, tsconfig.node.json, AGENTS.md,
+      Prompt.md, README.md, docs/architecture/permission-model.md,
+      docs/architecture/candidate-comparison.md, docs/code-governance/README.md,
+      docs/code-governance/structural-constraints.md and this log entry.
+  - date: "2026-11-25"
+    task: course-governance-merged-test-roles
+    change: >-
+      Assign the merged #190 console, voice-settings and root-entry browser
+      tests to M2, M5 and M1 in the default-deny policy. Add a focused
+      regression that proves each path is editable by its owning role and
+      denied to M6.
+    requirements: []
+    invariants: []
+    commits: ["5c5625b7ddef185339a2e60f15f90a8bbee225fb"]
+    agent: OpenCode V2 build
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    sessions: [ses_dee928480ffej5otUlfpmfTSvV]
+    supervision: >-
+      The orchestrating assistant narrowed the session after an over-broad
+      read, supplied a task-local configuration limited to the policy file,
+      reviewed the resulting two-file diff and ran the checks outside the
+      session. The policy remains a proposal and no human adoption is claimed.
+    verification:
+      base: c67e31ebe371387dde54d1577411f3a68b20ba39
+      results: >-
+        Focused policy suite 34/34; pnpm typecheck exited 0; rtk proxy
+        pnpm lint exited 0; git diff --check reported no whitespace errors.
+      limits: >-
+        No native role reload, remote CI, human adoption or G4 result is
+        claimed for this follow-up.
+    scope: >-
+      .opencode/permissions.jsonc, test/offline/opencode-policy.test.ts and
+      this log entry. No runtime, source, schema, CI or frozen-path change.
+  - date: "2026-11-25"
+    task: course-governance-review-fixes
+    change: >-
+      Address M6's review of the D3 permission candidate. Allow the documented
+      frozen install, read-only GitHub record views, M1 Kokoro live checks, M5
+      production startup and M6 gate commands. Narrow credential patterns so
+      ordinary tokenizer, auth and credential-policy source names are readable
+      while conventional secret files and directories remain denied. Refresh
+      the current base and document the shell and credential tradeoffs.
+    requirements: []
+    invariants: []
+    commits: ["57255ab52777c0e4ecc6205d8f521258bb509bac"]
+    agent: OpenCode V2 build
+    provider: magpie
+    model: deepseek-flash
+    variant: max
+    model_cli_id: "magpie/group/deepseek-flash#max"
+    sessions: [ses_dee5d0f57ffew8Ggko35WVPIhw]
+    supervision: >-
+      The orchestrating assistant supplied a task-local configuration with
+      writes limited to the policy, compiler, focused test and permission
+      document. It ran the focused suite, typecheck and lint outside the
+      session and reviewed each changed hunk. The policy remains a proposal and
+      no human adoption is claimed.
+    verification:
+      base: dc9cb7baeda55d77051c271c32f6985b0491b11e
+      results: >-
+        Focused policy suite 35/35; pnpm test:readiness 47/47; pnpm test:trace
+        49/49; pnpm verify passed 99 files / 2235 tests with typecheck, lint and
+        build; G6 and G1 passed; git diff --check reported no whitespace errors.
+      limits: >-
+        No native role reload, human adoption or G4 result is claimed. Remote
+        CI is observed only after this entry is pushed.
+    scope: >-
+      .opencode/permissions.jsonc, tools/opencode/policy.ts,
+      test/offline/opencode-policy.test.ts, docs/architecture/permission-model.md,
+      docs/architecture/candidate-comparison.md, README.md and this log entry.
+      No runtime, production source, schema, CI or frozen-path change.
   - date: "2026-11-25"
     task: g6-historical-identity
     change: >-
@@ -9772,6 +10113,738 @@ entries:
         observed. The entry rule's existing message still says "at both the
         base and the head" when the counts differ; that wording predates this
         change and was left alone.
+
+  - date: "2026-11-25"
+    task: M2-PR187-hud-pipeline-label-fix
+    branch: feat/m2-console-nightloom-v2
+    change: >-
+      Answer the M1 re-review at 2ababcc: the stage HUD tag now reads
+      "Pipeline: <stage>" and pulses only while browser playback is actually
+      speaking, the connection is open and the session lifecycle is not
+      stopped, so an admitted-but-not-playing turn or a mid-play disconnect no
+      longer shows an unlabelled pulsing SPEAKING pill. The Retiring and
+      Session retiring fact rows use tone "bad" when the value is yes instead
+      of rendering a green checkmark. Runtime pipeline vocabulary and wire
+      behaviour are unchanged.
+    requirements: [FR-04, FR-05]
+    invariants: []
+    commits: [596f12de0a7716d565b9299e27872064388bb8fa]
+    agent: opencode/deepseek-v4-flash
+    provider: self-api
+    model: deepseek-v4-flash
+    opencode_version: "2.4.1"
+    launch_flags: [--agent, build, --format, json, -m, "self-api/deepseek-v4-flash#xhigh"]
+    sessions: [ses_dee79119dffew5AVI1HbL6s1Cq]
+    supervision: >-
+      The OpenCode session ran with a worktree-scoped opencode.json that allows
+      read and edit and denies shell, glob, grep and subagent tools. The edit
+      was limited to the two console files and the M2 offline test file.
+    human_review: >-
+      The diff was reviewed and the checks below were run before this entry
+      was recorded. This entry records local work only; the final merge is
+      performed by a human team member, and M1 re-review of the new head
+      remains open.
+    transcript_record: >-
+      OpenCode session ses_dee79119dffew5AVI1HbL6s1Cq is exported to the CS5351
+      evidence directory outside the checkout.
+    verification:
+      base: 55e36d3
+      results: >-
+        On this Linux worktree at commit 596f12d against main 55e36d3: pnpm
+        typecheck (tsc -b) exit 0; pnpm lint (oxlint) exit 0; vite build exit
+        0; the full pnpm test suite passed 2217 tests in 98 files with 0
+        failures, including 119 tests in test/offline/m2-console.test.ts and
+        the new retiring-row polarity test. No browser or live-provider run was
+        repeated for this small UI change.
+      independent: >-
+        None; a single operator ran the local checks. No live LLM, VTS, Windows
+        or remote CI check was performed before this entry was written.
+    scope: >-
+      src/console/ConsoleApp.tsx, src/console/pages/SessionPage.tsx,
+      test/offline/m2-console.test.ts and docs/ai-use-log.yaml. No contract,
+      transport, machine, storage, backend or workflow file changed.
+  - date: "2026-11-25"
+    task: M2-PR187-wiring-harness
+    branch: m2-wiring-harness
+    change: >-
+      Add a reproducible browser acceptance harness for console wiring that was
+      previously verified only once by hand. test/browser/console-wiring-acceptance.mjs
+      mounts the real ConsoleApp through a test-only entry page and a local
+      application WebSocket, then checks six behaviours: a rejected input
+      acknowledgement restores the composer without clobbering text typed after
+      submission; a duplicate acknowledgement does not clear the draft a second
+      time; Reconnect after a socket close bootstraps exactly once without
+      replay; performer disposal disables the performer actions; the diagnostics
+      socket renders not-started, open and closed; and a viewport below 1100px
+      does not float Local Receipts or occlude the Control Deck. No production
+      file changed: the pipeline HUD label and retiring-row tone were fixed
+      separately in commit 596f12d by the M5 member, and this harness verifies
+      that head instead of duplicating the fix.
+    requirements: [FR-04, FR-05, FR-06, NFR-04]
+    invariants: []
+    commits: [6a9e252a82f2febcdc38044fa3f90c6cb3e8f216]
+    agent: opencode/build
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    opencode_version: "1.19.4"
+    launch_flags: [--agent, build, --format, json, -m, "personal-deepseek/deepseek-v4-flash", --variant, xhigh]
+    sessions: [ses_dee7397b0ffeYhypVR88s31g0r]
+    supervision: >-
+      The M2 member asked for the six wiring checks after the captain declined a
+      separate test document. The OpenCode session wrote the harness and the
+      test-only entry page; the supervising agent reviewed the diff, ran the
+      script and the unit and type checks, and committed. A duplicate HUD fix
+      produced in the same session was discarded when the M5 member's identical
+      fix landed on the branch first.
+    human_review: >-
+      Not yet reviewed. Re-review by M1 and the merging human remain pending;
+      no agent merged anything.
+    transcript_record: >-
+      OpenCode session ses_dee7397b0ffeYhypVR88s31g0r is exported to
+      ~/Library/Caches/isla-opencode-exports/M2-PR187-pipeline-hud-20261125.json
+      outside the checkout.
+    verification:
+      base: 66b0621794b0c1b7dc0f27e93f0e9ba4c62b5f5f
+      results: >-
+        All six harness checks passed against the real console in local
+        Chromium. pnpm test:m2 exited 0, oxlint reported 0 warnings and 0 errors
+        over test/browser, and tsc -b exited 0.
+      independent: >-
+        None; one operator ran the checks on this machine. No live provider,
+        VTS or Windows observation was made, and the harness needs an external
+        Playwright module and Chromium path, so it is not part of pnpm test.
+    scope: >-
+      test/browser/console-wiring-acceptance.mjs, test/browser/console-wiring.tsx,
+      test/browser/console-wiring.html and docs/ai-use-log.yaml. No src/,
+      contract, package, lockfile or workflow change.
+  - date: "2026-11-25"
+    task: g6-log-diagnostics-followup
+    change: >-
+      Address the four non-blocking follow-ups from the approval of #191.
+      A missing or unreadable base log file now fails closed with one
+      POL-G6-03 finding naming base-log instead of ending the run with a stack
+      trace: readLogBase returns a result and runCli records it, then skips
+      identity classification while still running the shape and log-update
+      checks. The non-list message now separates a top-level list document, a
+      mapping whose entries value is not a list, and a document with no
+      top-level entries list. A cyclic head entry is reported once by the
+      reference check, and the shape check keeps only its field-presence
+      checks. The entry rule names both counts rather than claiming they are
+      equal. Delta-006 and the INV-14 verification row describe the changes.
+    requirements: []
+    invariants: [INV-14]
+    commits: ["e68d83e209d6fb9a653081ee19142bf88704bc88"]
+    agent: OpenCode V2 build
+    provider: self-api
+    model: deepseek-v4-flash
+    sessions: ["ses_deea36027ffe05391FdxH2F0Eu"]
+    supervision: >-
+      The implement session changed the gate, tests and documentation after
+      the plan and the two design answers were confirmed. The outer assistant
+      reviewed the diff, re-ran the suites and the CLI matrix and prepared
+      this entry.
+    verification:
+      base: 55e36d31534261b51baf274184a402e9945235bb
+      results: >-
+        pnpm test:gates passed 6 files / 192 tests; pnpm test:trace passed 49
+        tests; pnpm test:readiness passed 47 tests; pnpm verify passed 98
+        files / 2206 tests with a clean typecheck, lint and build; git diff
+        --check reported no whitespace errors. The CLI matrix exited 0 on a
+        valid base and exited 1 with one POL-G6-03 record for entries: {},
+        entries: 5, a cyclic base, a cyclic head and a nonexistent base path;
+        a cyclic head printed one alias diagnostic.
+      limits: >-
+        No push, pull request, merge, live provider run or Windows run. CI on
+        this head is not observed. The entry-rule message says "1 entries" for
+        a single entry; pluralisation was left as it was.
+  - date: "2026-11-25"
+    task: g6-log-diagnostics-rereview
+    change: >-
+      Address the two evidence gaps in the #196 review. Add a subprocess test
+      that runs the real gate entry with an unwritten base path and asserts
+      exit status 1, one POL-G6-03 record with trigger log-unreadable and
+      evidence naming base-log, no identity classification and no stack trace.
+      Refresh the INV-14 trace row with the missing or unreadable base case,
+      the single head-alias diagnostic and exact citations for the three new
+      tests; add the same tests to the POL-G6-03 catalog Test cell and name the
+      subprocess test in the INV-14 verification row and delta-006.
+    requirements: []
+    invariants: [INV-14]
+    commits: ["7683644b623965070e2cef6eaae7ab3085e2e240"]
+    agent: OpenCode V2 build
+    provider: self-api
+    model: deepseek-v4-flash
+    sessions: ["ses_dee64cb4affeLYa1c5ogFkvwx7"]
+    supervision: >-
+      The implement session added the subprocess test and refreshed the shared
+      rows after the review. The outer assistant reviewed the diff, re-ran the
+      suites and prepared this entry.
+    verification:
+      base: 55e36d31534261b51baf274184a402e9945235bb
+      results: >-
+        pnpm test:gates passed 6 files / 193 tests; pnpm test:trace passed 49
+        tests; pnpm test:readiness passed 47 tests; pnpm verify passed 98
+        files / 2207 tests with a clean typecheck, lint and build; git diff
+        --check reported no whitespace errors. The subprocess test runs the
+        real CLI entry in a temporary directory and asserts the single
+        POL-G6-03 base-log record, exit status 1 and the absence of a stack
+        trace or identity classification.
+      limits: >-
+        No push, pull request update, merge, live provider run or Windows run.
+        CI on this head is not observed. The branch is two commits behind main
+        and the #192 conflict on the log tail is unresolved until one of the
+        two merges.
+  - date: "2026-11-25"
+    task: submission-materials-prompt-manifest-opencode
+    change: >-
+      Add prompts/prompt_v1.0.yaml as a manifest for the existing M3 and M4
+      prompt sources, with source paths, SHA-256 values and renderer paths;
+      no prompt text changed. Add the evaluation table generated from the
+      local Magpie group/deepseek-flash pilot, the pilot spec, and a README
+      that describes the repository without issue status. The documentation
+      was written in OpenCode session ses_dee1ab4f6ffe0bBAMLH62GtnCf; two
+      directory descriptions were corrected in the same session. The
+      orchestrator generated the table and recorded TA-005.
+    requirements: [FR-01, FR-02]
+    invariants: [INV-14]
+    commits:
+      - "7e433763c33b7a2457f6e60e39687b89b3afb7de"
+      - "4772471c1f62ed5f5810a823ae78de19f43d519b"
+    agent: OpenCode V2 build
+    provider: magpie
+    model: group/deepseek-flash
+    variant: high
+    sessions: ["ses_dee1ab4f6ffe0bBAMLH62GtnCf"]
+    supervision: >-
+      The user chose option B and approved the test approval and commit
+      sequence. OpenCode wrote README.md, prompts/prompt_v1.0.yaml and the
+      pilot spec in the recorded session; the orchestrator generated the
+      evaluation table with pnpm evaluation:report and recorded TA-005. No
+      product source, prompt text, test assertion or dependency changed.
+    verification:
+      base: 2b83017736929863210498ed2383ab23e8cd186f
+      results: >-
+        pnpm gate:eval passed with the generated table; pnpm test:gates passed
+        6 files / 193 tests; pnpm test:readiness passed 47 tests; pnpm verify
+        passed 99 files / 2,259 tests with typecheck, lint and build clean;
+        git diff --check reported no whitespace errors. The pilot recorded one
+        case, one completed attempt and no not-run case.
+      limits: >-
+        No push, pull request, merge or live deployment. The pilot used the
+        local Magpie gateway with one selection case; all stage latencies are
+        unobserved and usage is unknown, so the table is not a p95 or a
+        threshold baseline. No Windows run.
+  - date: "2026-11-25"
+    task: m6-artifact-closure-trace-coverage
+    change: >-
+      Make the canonical trace matrix cover all 32 registered requirements,
+      move the previously orphaned table rows into the canonical table, replace
+      every bare runtime-monitor cell with a recorded reason, and teach the
+      trace fitness function to reject a missing requirement, an empty monitor
+      cell or a bare em dash. Add negative tests for the new checks and update
+      the structural-constraints enforcement row and the historical trace
+      record note. Also correct the requirement taxonomy: add course categories
+      and NFR subtypes, reclassify the former storage/evaluation invariants as
+      quality, governance or security NFRs under their stable IDs, reduce the
+      invariant register to the four true system invariants (INV-01..03 and
+      INV-12), and add a guard that rejects a non-invariant row in that register.
+      The requirements registry version is bumped to 0.3 because the category
+      enum change is a breaking schema change. Split the three mixed rows:
+      NFR-04 is now performance/efficiency, with new COST-01 for token and cost;
+      NFR-05 is now security/access-control, with new SEC-01 for consent-bound
+      audience memory; INV-17 is now quality/data-integrity, with new GOV-01 for
+      audience-scoped retention and deletion. The new IDs are type-prefixed
+      entries reserved in #25 (comment 7159011745); the reservation does not
+      approve the taxonomy.
+    requirements: [NFR-04, COST-01, NFR-05, SEC-01, GOV-01, INV-17]
+    invariants: []
+    commits: ["8a9cd13"]
+    agent: OpenCode V2 build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
+    supervision: >-
+      The member directed the artifact-closure branch and the first trace
+      slice. The assistant edited the matrix, gate and tests; the member
+      reviews the diff before any commit or publication.
+    verification:
+      base: dba25e0
+      results: >-
+        pnpm test:trace passed 52 tests; pnpm test:readiness passed 50 tests;
+        pnpm test:gates passed 6 files / 196 tests; pnpm test:m6 passed 23
+        files / 347 tests; pnpm verify passed 99 files / 2265 tests with a clean
+        typecheck, lint and build. Mutation checks: changing the
+        requirement-coverage code made the missing-row test red; changing the
+        monitor-coverage code made the bare-monitor test red; changing the
+        invariant-register guard made the non-invariant-row test red; removing
+        an NFR subtype made the subtype test red. All restored.
+      limits: >-
+        No commit, push, pull request, merge, live provider or Windows run.
+        The trace matrix owner review for M1/M2/M3/M4/M5 rows is pending. The
+        new IDs COST-01, SEC-01 and GOV-01 are reserved in #25
+        (comment 7159011745); the reservation does not approve the taxonomy.
+        INV-17 now carries only the pending C-75 rebuild-equality evidence.
+  - date: "2026-11-25"
+    task: d2-architecture-baseline
+    change: >-
+      Add the current D2.1 architecture blueprint, the proposed D2.2 system-level
+      ADR with its ADD process and layered AI context design, and the D2 artifact
+      index. The ADR records the chosen local-first modular runtime, the rejected
+      system-level alternatives, the implemented context layers and assembly,
+      a proposed token cap/compaction threshold/reinjection policy that is not
+      shipped, and the reopen conditions. Extend the qualitative candidate
+      comparison with system-level and AI-context candidates; add the
+      corresponding rejected options to the option ledger; point AGENTS.md and
+      Prompt.md at the current docs blueprint while keeping the root blueprint
+      as the frozen historical snapshot.
+    requirements: []
+    invariants: []
+    commits: ["50bb859"]
+    agent: OpenCode V2 build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
+    supervision: >-
+      The member directed the artifact-closure branch and approved the
+      architecture-baseline slice. The assistant wrote the documents from the
+      merged requirements, context, permission, memory and trace records; the
+      member reviews the diff before any commit or publication.
+    verification:
+      base: 8a9cd13
+      results: >-
+        pnpm test:trace passed 52 tests; pnpm test:readiness passed 50 tests;
+        pnpm test:gates passed 6 files / 196 tests; pnpm verify passed 99 files
+        / 2265 tests with a clean typecheck, lint and build; git diff --check
+        reported no whitespace errors; a local relative-link check over the new
+        and changed documents found no missing targets.
+      limits: >-
+        The master ADR is ADR-010, reserved in #25 (comment 7159011745);
+        it is proposed and no human has accepted it. The 4,096-token cap, 70% compaction trigger and 90% hard
+        stop are design proposals, not shipped behavior or a measured baseline.
+        No live provider, G4 semantic result, acoustic output or Windows run is
+        claimed. The branch is PR #199; the review-fix commit is the current head.
+  - date: "2026-11-25"
+    task: d2-state-runtime-policy-closure
+    change: >-
+      Add the session/restart/version-survival matrix to the memory/state
+      design, with the version axes and the rules that keep contract, schema,
+      extractor, persona and prompt versions separate. Add the remaining
+      dialogue, synthesis, renderer, playback, provider-auth, database and
+      startup failure rows to the runtime policy catalog, plus a clearly
+      separate proposed token-overflow row. Mark the provider-auth and
+      database-corruption rows with their missing verifiers rather than
+      claiming coverage, and update the D2 artifact index.
+    requirements: [FR-06, NFR-05, SEC-01, GOV-01, INV-17]
+    invariants: [INV-12]
+    commits: ["b50a511"]
+    agent: OpenCode V2 build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
+    supervision: >-
+      The member directed the artifact-closure branch and approved the
+      state/runtime-policy slice. The assistant wrote the documents from the
+      merged storage, context and runtime records; the member reviews the diff
+      before any commit or publication.
+    verification:
+      base: 50bb859
+      results: >-
+        pnpm test:trace passed 52 tests; pnpm test:readiness passed 50 tests;
+        pnpm test:gates passed 6 files / 196 tests; pnpm verify passed 99 files
+        / 2265 tests with a clean typecheck, lint and build; git diff --check
+        reported no whitespace errors.
+      limits: >-
+        No live provider, acoustic output, G4 semantic result or Windows run is
+        claimed. The branch is PR #199; the review-fix commit is the current head. The token-overflow row is proposed, not implemented. The
+        provider-authentication and database-corruption rows name their evidence
+        gaps; they are not coverage claims.
+  - date: "2026-11-25"
+    task: d4-verification-governance-and-qa
+    change: >-
+      Tighten the verification rules: distinguish deterministic fit criteria
+      from pending metrics, add the mutation-check and gate-negative-test
+      rules, add the canonical coverage/mutation section, state that Tier 3 is
+      not run and that G4 is not a semantic evaluator, and mark the 2026-10-29
+      enforcement measurement as historical. Add the per-gate inventory with
+      positive/negative tests and recorded limits. Add the review-memo
+      template, verdict vocabulary, review-coverage table and an advisory
+      self-review of the artifact-closure branch. Expand the debt register to
+      all eight AI-era categories with a coverage table and DEBT-17..20. Fill
+      the missing reproduction/root-cause/invariant-gap fields in the bug
+      diary, including BUG-004..007.
+    requirements: []
+    invariants: []
+    commits: ["03af868"]
+    agent: OpenCode V2 build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
+    supervision: >-
+      The member directed the artifact-closure branch and approved the D4
+      governance slice. The assistant wrote the records from the merged
+      verification, review, debt and bug history; the member reviews the diff
+      before any commit or publication.
+    verification:
+      base: b50a511
+      results: >-
+        pnpm test:trace passed 52 tests; pnpm test:readiness passed 50 tests;
+        pnpm test:gates passed 6 files / 196 tests; pnpm verify passed 99 files
+        / 2265 tests with a clean typecheck, lint and build; git diff --check
+        reported no whitespace errors; a local relative-link check over the
+        changed documents found no missing targets; the bug-diary field check
+        found all six fields in all 18 entries.
+      limits: >-
+        No live provider, G4 semantic result, acoustic output or Windows run is
+        claimed. The branch is PR #199; the review-fix commit is the current head. The review memo records missing entries for the merged
+        #192-#196 batch rather than backfilling them. The self-review is
+        advisory and not a human approval.
+  - date: "2026-11-25"
+    task: d2-evaluation-table-reconciliation
+    change: >-
+      Reconcile the D2 artifact index, blueprint, candidate comparison, gate
+      inventory and verification constraints with the pilot evaluation table
+      that landed on main. The table records one attempt with declared
+      conditions; it passes G4's condition scan but is not a semantic or
+      threshold baseline.
+    requirements: []
+    invariants: []
+    commits: ["b2becdd"]
+    agent: OpenCode V2 build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
+    supervision: >-
+      The member directed the artifact-closure branch and the review fixes. The
+      assistant reconciled the D2 text with the merged evaluation table; the
+      member reviews the diff before merge.
+    verification:
+      base: 03af868
+      results: >-
+        pnpm gate:eval passed with the pilot table; pnpm test:trace passed 52
+        tests; pnpm test:readiness passed 50 tests; pnpm test:gates passed 6
+        files / 196 tests; pnpm verify passed 99 files / 2265 tests with a clean
+        typecheck, lint and build; git diff --check reported no whitespace
+        errors.
+      limits: >-
+        The pilot is one attempt, not a p95 or quality baseline. No live
+        provider, acoustic output or Windows run is claimed.
+  - date: "2026-11-25"
+    task: pr199-review-fixes
+    change: >-
+      Address the PR #199 review: correct the requirement count to 32, replace
+      pre-publication hashes with resolvable commits, add canonical/column
+      fail-closed trace guards and negative tests, rename TA-007 to avoid the
+      #200 collision, record the G1 replay exception as DEBT-21, rename the
+      master ADR to ADR-010 with the #25 reservation, reconcile generatedFrom
+      and the team snapshot, cite slice commits in the AI-use entries, refresh
+      the self-review metadata, add the proposed D1 taxonomy decision record,
+      state the subtype enforcement boundary, and reconcile D2.8 with the
+      merged pilot evaluation table.
+    requirements: []
+    invariants: []
+    commits: ["2a0c009"]
+    agent: OpenCode V2 build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
+    supervision: >-
+      The member requested the review fixes and the branch rebuild. The
+      assistant applied the changes; the human review owns the remaining
+      judgment, including the G1 replay exception.
+    verification:
+      base: b2becdd
+      results: >-
+        pnpm test:trace passed 55 tests; pnpm test:readiness passed 50 tests;
+        pnpm test:gates passed 6 files / 199 tests; pnpm verify passed 99 files
+        / 2268 tests with a clean typecheck, lint and build; pnpm gate:eval
+        passed the condition scan; relative links 0 missing; git diff --check
+        clean. Mutation checks for the canonical-table and monitor-column
+        guards went red then were restored.
+      limits: >-
+        G1 ordering passes with TA-007 but is an explicit replay exception
+        (DEBT-21), not evidence of pre-implementation approval. The taxonomy
+        and ADR-010 remain proposed pending M5/registrar acceptance. No live
+        provider, acoustic output or Windows run is claimed.
+  - date: "2026-11-25"
+    task: m3-jev-decisions-adapter
+    change: >-
+      Add the Jev decisions selection and reaction adapters for M3-02. The
+      adapters call the OpenAI Decisions-compatible /v1/decisions endpoint with
+      fixed untrusted-data instructions, map candidate event ids and allowed
+      intents to choice questions, validate the returned proposal against the
+      request, and record the served model and token usage honestly. The
+      m3-jev comparison variant now uses the decisions adapters, while
+      m3-general-model keeps the OpenAI-compatible chat adapters.
+    requirements: [FR-01, FR-03, NFR-03, NFR-04]
+    invariants: [INV-07, INV-13, INV-14, INV-16]
+    cases: [C-06, C-11, C-13, C-14, C-15]
+    commits: ["c462ca0c4b6ccffc9be9e49fe22b753a21dc5867"]
+    agent: OpenCode V2 build
+    provider: self-api
+    model: deepseek-v4-flash
+    sessions: ["ses_dedf1daa3ffeQZGBZC8c6s7MNq"]
+    supervision: >-
+      Implemented in the OpenCode V2 build session from the task brief; the
+      change was reviewed and verified locally.
+    verification:
+      base: 259d075ce7a1089d3748b3612c9a23bee6d9ab88
+      results: >-
+        pnpm test:m3 passed 130 tests; pnpm test:composition passed 12 tests;
+        pnpm test:trace passed 55 tests; pnpm verify passed 99 files / 2284
+        tests with a clean typecheck, lint and build. The opt-in live Jev suite
+        passed 3/3 against the local magpie gateway with typesafe/jev-latest;
+        that live run is not part of the offline gate.
+      limits: >-
+        No push, pull request, merge, CI run or product-wiring run. The live
+        result depends on the local magpie gateway and the configured Jev
+        access and is not a remote-host claim.
+  - date: "2026-11-25"
+    task: m5-memory-inspect-wiring
+    change: >-
+      Connect the existing memory-inspection builder to the read-only
+      diagnostics endpoint. A successful dialogue assembly now exposes a
+      redacted memory-inspection payload through onAssembledContext and a
+      read-only MemoryInspectSource; the diagnostic protocol accepts
+      get_memory_inspect and returns an explicit unavailable result when no
+      observation exists. Existing ping/get_health behaviour and the
+      application protocol are unchanged.
+    requirements: []
+    invariants: []
+    commits: ["9390bd77834258a17561f2afb3c223897c955acb"]
+    agent: OpenCode V2 build
+    provider: self-api
+    model: deepseek-v4-flash
+    sessions: ["ses_dee007402ffeEiHs7qnsSgPs2p"]
+    supervision: >-
+      Implemented in the OpenCode V2 build session from the task brief; the
+      change was reviewed and verified locally.
+    verification:
+      base: a5c92ddd381178bfa27418892ec490b2ce573e2c
+      results: >-
+        pnpm test:m5 passed 296 tests; pnpm test:m2 passed 119 tests;
+        pnpm test:readiness passed 50 tests; pnpm test:trace passed 55 tests;
+        pnpm verify passed 99 files / 2298 tests with a clean typecheck, lint
+        and build.
+      limits: >-
+        No push, pull request, merge, CI run or live browser click. The
+        end-to-end check uses a real SQLite store and the real runtime
+        composition over /diag, not a live provider or product acceptance.
+  - date: "2026-11-25"
+    task: m4-style-contract-wiring
+    change: >-
+      Wire the existing deterministic style contract into the dialogue
+      generation path behind an opt-in DialoguePortOptions flag. When enabled,
+      the contract is derived once from the resolved profile, repaired lines
+      supply the segment text after the text source returns, and an optional
+      M4-owned onStyleReport callback exposes the redacted report. The default
+      remains off, so existing generated segments, accounting and prompts are
+      unchanged.
+    requirements: []
+    invariants: []
+    commits: ["4e229d6f346b04cf6b36a7f3501f31839b2d0656"]
+    agent: OpenCode V2 orchestrator
+    provider: self-api
+    model: deepseek-v4-flash
+    sessions: ["ses_dee015852ffe3zdtecbwYuJ9m0"]
+    supervision: >-
+      Implemented in the OpenCode V2 orchestrator session from the task brief;
+      the change was reviewed and verified locally.
+    verification:
+      base: 6e59e3f9b5681576a97bb3a419aad10e1af12805
+      results: >-
+        pnpm test:m4 passed 465 tests; pnpm test:m5 passed 296 tests;
+        pnpm test:composition passed 12 tests; pnpm test:trace passed 55
+        tests; pnpm verify passed 99 files / 2303 tests with a clean
+        typecheck, lint and build.
+      limits: >-
+        No push, pull request, merge, CI run or live provider run. Production
+        composition does not opt in, so the default product path is unchanged.
+  - date: "2026-11-25"
+    task: m5-decision-provider-wiring
+    change: >-
+      Add opt-in decision provider modes to the reference live deployment.
+      ISLA_DECISION_MODE selects rules (default), general (OpenAI-compatible
+      chat ports) or jev (Jev decisions ports at POST /v1/decisions). Selection
+      and reaction follow the same mode; missing provider variables fail startup
+      by name only. The Jev group reads only baseUrl/model/apiKey and ignores
+      the Jev token-limit variable. Existing factory injection precedence and
+      the default rule behaviour are unchanged.
+    requirements: [FR-01, FR-03, NFR-03, NFR-04]
+    invariants: [INV-07, INV-13, INV-14, INV-16]
+    commits: ["784113e054012990ba251468881ee16106cf89ce"]
+    agent: OpenCode V2 build
+    provider: self-api
+    model: deepseek-v4-flash
+    sessions: ["ses_dee0d1031ffeScDCTktZgxaof7"]
+    supervision: >-
+      Implemented in the OpenCode V2 build session from the task brief; the
+      change was reviewed and verified locally.
+    verification:
+      base: b4ee35b46cc2a2ac58df305a7e9d1f53c23c19be
+      results: >-
+        pnpm test:m5 passed 311 tests; pnpm test:m3 passed 130 tests;
+        pnpm test:composition passed 12 tests; pnpm test:trace passed 55
+        tests; pnpm verify passed 99 files / 2318 tests with a clean
+        typecheck, lint and build. The opt-in live Jev suite passed 3/3
+        against the local magpie gateway with typesafe/jev-latest; that live
+        run is not part of the offline gate.
+      limits: >-
+        No push, pull request, merge, CI run or live product run. The mode is
+        opt-in and no recorded run uses a provider-backed decision port.
+  - date: "2026-11-25"
+    task: m1-windows-speaking-mouth
+    change: >-
+      Add a Windows speaking-mouth demo for the normal operator console.
+      The companion combines accepted playback state with the render-session
+      level of the dedicated browser. The model preparer gives the local
+      Hiyori copy independent mouth inputs and removes competing mouth curves
+      from its animations while preserving their body movement. The launcher
+      starts the reference peers with a real renderer pinned to that copy.
+    requirements: [FR-03, FR-04, FR-05]
+    invariants: [INV-01, INV-02]
+    commits: ["88d3d57a7fc76a12e3d3f2971d1827286ed4c311", "2bf96702c24e0f8bd58465dd6ab9d38550f14d53"]
+    agent: OpenCode V2 build
+    provider: mistral
+    model: deepseek-v4-1-flash-1017
+    variant: max
+    sessions:
+      - "ses_dee2e6543ffeh2Qf9oAH36NPYA"
+      - "ses_dee285653ffe7RykEOZ1jBaksa"
+      - "ses_dee23c3d9ffe6bxk0ER9Hvwyym"
+      - "ses_dee1b51dfffeZ6fy1HbG82zP3M"
+      - "ses_dee1af33fffe9kVOKLTIKj6xsM"
+      - "ses_dee14e823ffeHyxEWsA9oubAJ7"
+      - "ses_dee19a8a4ffeNDB0ZlOgSnmhk5"
+    export:
+      model: {providerID: mistral, id: deepseek-v4-1-flash-1017, variant: max}
+      source: "info.model and the model object on every assistant message in all seven listed sessions"
+      variant_choice: "M1 selected the maximum reasoning effort for Isla implementation and review."
+      sample_session: ses_dee1af33fffe9kVOKLTIKj6xsM
+      sample_sha256: 95c369a273a474306e3de480ac4d35b51a066bc25cc8d101972ad9674130b452
+    supervision: >-
+      The member selected the speaking-level scope, with natural completion
+      and mid-speech Stop as acceptance cases. The supervising assistant
+      coordinated the implementation, stock-model preparation, first pairing,
+      launcher and tests. Independent review compared captured VTS frames
+      with the audio and SQLite receipts and identified a stale-epoch case.
+      The implementation was revised after a Windows import failure, an
+      original animation that held the mouth closed, and a transient model
+      switch in which the API acknowledgement preceded the visible load.
+      The integration commits cited above carry the original author dates and
+      source commit references from PR #200. At PR revision 2d1a00c the
+      feature and test files matched that implementation byte for byte.
+    verification:
+      base: 2b83017736929863210498ed2383ab23e8cd186f
+      author_retained_report: release-01/terminal-optics.json
+      report_sha256: 1311382958ee9c6ed5e6e1af8522207e2731f85eb2ed6c1be6f4ca30cfb91efa
+      results: >-
+        The M1 role suite passed 353 tests, the focused release suite passed
+        four and the Python state suite passed 26. On Windows, the formal
+        console played actual Kokoro speech through its dedicated Chromium
+        process. The first segment completed and the second was cancelled.
+        All six browser receipts matched SQLite. On the release baseline,
+        the mouth was visibly open in 92 of 98 and 110 of 116 frames sampled
+        during audible speech. It was stably closed from about 84 ms after
+        Stop in that run. The stock model's 19 source files were unchanged.
+      limits: >-
+        The recorded inputs used the local text echo. The physical run used
+        one Windows machine and its default audio endpoint. M1 retains the
+        original exports, captured frames, audio and SQLite receipts outside
+        the shared repository. The frame counts and Stop timing come from
+        that device run. The full Windows verify run passed 2253 tests,
+        skipped nine, and reproduced the
+        pre-existing missing-base G6 CLI test failure when Node loaded an
+        absolute Windows path. The base run failed the same test. The
+        Windows build and the feature-specific checks passed.
+  - date: "2026-11-25"
+    task: m1-synthesis-volume-envelope
+    change: >-
+      Compute one RMS level per 20 ms from the same Kokoro PCM used to encode
+      each WAV. Associate the optional curve with the normal audio lease. The
+      dedicated console sends the current media position to the local mouth
+      driver. Pause, completion and Stop close the speaking Hiyori model.
+    requirements: [FR-03, FR-04, FR-05]
+    invariants: [INV-01, INV-02]
+    commits: ["92bb66d65e580ca8adcde8892441b3e46c1d9137", "9bf1902ddf41659dc3dc321d6cba7331bf29dc45", "b9af89f911d8ff174308537259bc3b8a2b259563"]
+    agent: OpenCode V2 build
+    provider: mistral
+    model: deepseek-v4-1-flash-1017
+    variant: max
+    sessions:
+      - "ses_dedb1a007ffekCgPddl7mxVUuW"
+      - "ses_dedb26eacffeMW2k65ho0IWr28"
+      - "ses_dedb11274ffe9wgid2K0mMXoxb"
+      - "ses_dedb11281ffeNMeVYuJ52qaJJx"
+      - "ses_deda5c4ecffedIIrjXSrGwgWjp"
+    export:
+      model: {providerID: mistral, id: deepseek-v4-1-flash-1017, variant: max}
+      source: "info.model and the model object on every assistant message in all five listed sessions at 2d1a00c"
+      variant_choice: "M1 retained its maximum reasoning effort setting when it selected the Mistral-hosted model."
+      sample_session: ses_dedb1a007ffekCgPddl7mxVUuW
+      sample_sha256: af122581f2d4ecf2e0f2a3333964cbc64b17fc4ade9a9c786d9064cfab86d52d
+    supervision: >-
+      M1 chose synthesis-time measurement and excluded device and player
+      volume settings. Independent review tested the WAV values, resource
+      lifetime and stale media events. Windows recordings exposed delayed
+      mouth writes. A CPU profile identified Vite file watching in the
+      launcher. The team disabled it for the demo and verified that the
+      selected model accepts mouth updates on its existing VTS connection.
+      The integration commits cited above carry the original author dates and
+      source commit references from PR #200. At PR revision 2d1a00c the
+      feature and test files matched that implementation byte for byte.
+    verification:
+      base: 14d3910e9e1c976a07aa5df55e049b8e84cc1ec7
+      author_retained_report: device-08/verification.json
+      report_sha256: cb430b426147c55da515d8a253fae90c486710d77a7ae7f7bbe88e78937829a5
+      results: >-
+        All 429 focused role and integration tests passed. Across three real
+        Kokoro clips, the same WAV bytes were published with the optional
+        curve enabled or disabled. In the final Windows run, all 462 RMS
+        windows matched the two actual WAVs and all six browser receipts
+        matched SQLite. Hiyori was visibly closed about 72 ms after pausing
+        and 123 ms after clicking Stop, and stayed closed until playback
+        resumed or the recording ended. The standalone build passed.
+      limits: >-
+        The physical run used one Windows machine, Hiyori and the local English
+        text echo. M1 retains the original exports, WAVs, recording, frame
+        measurements and SQLite receipts outside the shared repository. The
+        462 windows, six receipts and visible closure times come from that
+        device run. The full Windows suite passed 2325 tests and skipped nine.
+        It reproduced the baseline missing-base G6 CLI test failure on an
+        absolute Windows path.
+  - date: "2026-11-25"
+    task: m1-mouth-clock-reconnect
+    change: >-
+      Let the next media handle connect while the disconnected handle's
+      final mouth-close write is pending. An idle replacement allows the
+      previous zero to finish. The replacement's first write supersedes it.
+    requirements: [FR-04, FR-05]
+    invariants: [INV-01]
+    commits: ["4e84868800fedd53abbda89c68e3461af9357c6f"]
+    agent: OpenCode V2 build
+    provider: mistral
+    model: deepseek-v4-1-flash-1017
+    variant: max
+    sessions: ["ses_dedb11274ffe9wgid2K0mMXoxb"]
+    supervision: >-
+      M1 resumed the bridge author's session with the reviewer's case from
+      PR #213. A separate loopback test reproduced the lost segment and
+      caught an early cancellation of the final zero when the replacement
+      stayed idle. Both follow-up exports carry the same model identifiers
+      and reasoning setting as the original bridge session.
+    verification:
+      base: 2d1a00ce783bba4adaa40d098c0417811b1517b0
+      results: >-
+        All 431 focused M1 tests, 130 console and voice-selection tests and
+        26 Python speaking-mouth tests passed. A Node-based test exercised
+        the browser observer and a real loopback WebSocket with playing,
+        idle and stopped replacements. The test project typecheck and build
+        passed.
+      limits: >-
+        The handoff tests use a controlled mouth writer. The physical
+        Windows measurements above predate this change. The local full
+        Windows run reproduced the existing missing-base G6 CLI test failure
+        when Node loaded an absolute Windows path.
   - date: "2026-11-25"
     task: m4-a04-recall-ranking-v2
     change: >-

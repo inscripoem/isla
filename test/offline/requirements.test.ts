@@ -17,7 +17,7 @@ const REQ_DIR = join(ROOT, 'docs/req')
 
 function registry(acceptance: RequirementsRegistry['requirements'][number]['acceptance']): RequirementsRegistry {
   return {
-    version: '0.2',
+    version: '0.3',
     generatedFrom: 'test',
     requirements: [
       {
@@ -53,7 +53,7 @@ describe('requirements registry structure', () => {
 
   it('rejects duplicate requirement ids', () => {
     const entry = parseRequirementsRegistry(
-      'version: "0.2"\ngeneratedFrom: test\nrequirements:\n  - id: FR-01\n    title: t\n    category: functional\n    priority: must\n    owner: M5\n    collaborators: []\n    source: t\n    status: under-review\n    acceptance:\n      - kind: pending-metric\n        description: d\n        cases: []\n',
+      'version: "0.3"\ngeneratedFrom: test\nrequirements:\n  - id: FR-01\n    title: t\n    category: functional\n    priority: must\n    owner: M5\n    collaborators: []\n    source: t\n    status: under-review\n    acceptance:\n      - kind: pending-metric\n        description: d\n        cases: []\n',
     )
     expect(entry.ok).toBe(true)
     if (!entry.ok) return
@@ -65,11 +65,55 @@ describe('requirements registry structure', () => {
   })
 
   it('rejects duplicate YAML keys and duplicate case ids', () => {
-    expect(parseRequirementsRegistry('version: "0.2"\nversion: "0.3"\n').ok).toBe(false)
+    expect(parseRequirementsRegistry('version: "0.3"\nversion: "0.4"\n').ok).toBe(false)
     const duplicated = parseCaseRegistry(
       'version: "0.2"\ncases:\n  - {id: C-01, status: pending, title: a, verifier: null}\n  - {id: C-01, status: pending, title: b, verifier: null}\n',
     )
     expect(duplicated.ok).toBe(false)
+  })
+})
+
+describe('requirement taxonomy', () => {
+  const parsed = parseRequirementsRegistry(
+    readFileSync(join(REQ_DIR, 'requirements.yaml'), 'utf8'),
+  )
+  if (!parsed.ok) throw new Error(parsed.errors.join('; '))
+  const requirements = parsed.registry.requirements
+  const categories = new Set([
+    'functional',
+    'invariant',
+    'security',
+    'governance',
+    'performance',
+    'cost',
+    'quality',
+  ])
+
+  it('uses only the course requirement categories', () => {
+    for (const requirement of requirements) {
+      expect(categories.has(requirement.category), requirement.id).toBe(true)
+    }
+  })
+
+  it('gives every non-functional requirement a subtype', () => {
+    for (const requirement of requirements) {
+      if (requirement.category === 'functional') continue
+      expect(requirement.subtype, requirement.id).toBeDefined()
+    }
+  })
+
+  it('keeps the current invariant register equal to the invariant category', () => {
+    const text = readFileSync(join(ROOT, 'docs/architecture/invariants.md'), 'utf8')
+    const current = text.split('## Reclassified legacy controls')[0] ?? text
+    const registered = new Set(
+      Array.from(current.matchAll(/^\|\s*(INV-\d+)\s*\|/gm), (match) => match[1] as string),
+    )
+    const invariants = new Set(
+      requirements
+        .filter((requirement) => requirement.category === 'invariant')
+        .map((requirement) => requirement.id),
+    )
+    expect(registered).toEqual(invariants)
   })
 })
 

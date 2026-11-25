@@ -1,14 +1,19 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  AI_USE_LOG_BASE_ENV,
   AI_USE_LOG_PATH,
   collectAiUseLogEntryViolations,
   collectAiUseLogReferenceFindings,
   collectAiUseLogReferenceViolations,
   collectAiUseLogShapeViolations,
   collectAiUseLogViolations,
+  readLogBase,
   type AiUseReferenceDeps,
 } from '../../src/evaluation/ai-use-log-gate'
 import { caseIdsFromRegistry, invariantIdsFromRegister } from '../../src/evaluation/registers'
@@ -138,13 +143,30 @@ entries:
     expect(collectAiUseLogShapeViolations('version: "1"\n').join(' ')).toContain('entries')
   })
 
-  it('rejects a valid YAML document whose entries is not a list', () => {
-    const violations = collectAiUseLogShapeViolations('entries: {}\n')
-    expect(violations.join(' ')).toContain('cannot be read as an entries list')
-    expect(violations.join(' ')).not.toContain('not valid YAML')
+  it('rejects a valid YAML document whose entries value is not a list', () => {
+    for (const document of ['entries: {}\n', 'entries: 5\n']) {
+      const violations = collectAiUseLogShapeViolations(document)
+      expect(violations.join(' '), document).toContain('cannot be read as an entries list')
+      expect(violations.join(' '), document).toContain('the "entries" value is not a list')
+      expect(violations.join(' '), document).not.toContain('no top-level')
+      expect(violations.join(' '), document).not.toContain('not valid YAML')
+    }
   })
 
-  it('rejects a recursive alias in an entry', () => {
+  it('rejects a top-level list document', () => {
+    const violations = collectAiUseLogShapeViolations('- date: 2026-11-13\n')
+    expect(violations.join(' ')).toContain(
+      'the document is a list, not a mapping with an "entries" key',
+    )
+  })
+
+  it('rejects a scalar document with no entries list', () => {
+    expect(collectAiUseLogShapeViolations('5\n').join(' ')).toContain(
+      'the document has no top-level "entries" list',
+    )
+  })
+
+  it('leaves a recursive alias to the reference check', () => {
     const cyclic = (tail: string): string =>
       [
         'entries:',
@@ -160,14 +182,119 @@ entries:
         '',
       ].join('\n')
     for (const tail of ['self: *a', 'self: [*a]']) {
-      const violations = collectAiUseLogShapeViolations(cyclic(tail))
-      expect(violations, tail).toHaveLength(1)
-      expect(violations[0], tail).toContain('recursive alias')
+      expect(collectAiUseLogShapeViolations(cyclic(tail)), tail).toEqual([])
     }
   })
 
   it('rejects invalid YAML', () => {
     expect(collectAiUseLogShapeViolations('entries: [\n  - date: 2026').join(' ')).toContain('not valid YAML')
+  })
+})
+
+describe('the base log file is read as a result, not a throw', () => {
+  it('returns a null text when the variable is unset', () => {
+    expect(readLogBase({})).toEqual({ text: null })
+  })
+
+  it('returns the text of a readable base file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'g6-base-'))
+    const file = join(dir, 'base.yaml')
+    writeFileSync(file, 'entries: []\n')
+    try {
+      expect(readLogBase({ [AI_USE_LOG_BASE_ENV]: file })).toEqual({ text: 'entries: []\n' })
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('reports a missing base file with the variable, path and reason', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'g6-base-'))
+    const path = join(dir, 'not-written.yaml')
+    try {
+      const result = readLogBase({ [AI_USE_LOG_BASE_ENV]: path })
+      expect('error' in result).toBe(true)
+      if ('error' in result) {
+        expect(result.error.detail).toContain(AI_USE_LOG_BASE_ENV)
+        expect(result.error.detail).toContain(path)
+        expect(result.error.detail).toContain('does not exist')
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('reports an unreadable base path with the variable, path and reason', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'g6-base-'))
+    try {
+      const result = readLogBase({ [AI_USE_LOG_BASE_ENV]: dir })
+      expect('error' in result).toBe(true)
+      if ('error' in result) {
+        expect(result.error.detail).toContain(AI_USE_LOG_BASE_ENV)
+        expect(result.error.detail).toContain(dir)
+        expect(result.error.detail).toContain('could not be read')
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('the gate CLI fails closed on a missing base log (finding 2, subprocess)', () => {
+  const log = `version: "1"
+entries:
+  - date: 2026-11-25
+    task: probe
+    change: A real change.
+    requirements: [FR-06]
+    invariants: []
+    commits: []
+    agent: opencode/build
+`
+
+  it('names the base-log finding and skips identity classification when the base file is missing', () => {
+    // The unit tests read the base log directly; this runs the documented entry
+    // point (`tsx src/evaluation/ai-use-log-gate.ts`) so a throw in the CLI path
+    // cannot hide behind an assertion that only inspects `readLogBase`.
+    const tsxLoader = createRequire(import.meta.url).resolve('tsx')
+    const entry = resolve(fileURLToPath(new URL('../..', import.meta.url)), 'src/evaluation/ai-use-log-gate.ts')
+    const dir = mkdtempSync(join(tmpdir(), 'g6-cli-'))
+    try {
+      mkdirSync(join(dir, 'docs'), { recursive: true })
+      writeFileSync(join(dir, 'docs', 'ai-use-log.yaml'), log)
+      writeFileSync(join(dir, 'changed.txt'), 'src/x.ts\0docs/ai-use-log.yaml\0')
+      const missing = join(dir, 'not-written.yaml')
+      const result = spawnSync(process.execPath, ['--import', tsxLoader, entry], {
+        cwd: dir,
+        env: {
+          ...process.env,
+          [CHANGED_FILES_ENV]: join(dir, 'changed.txt'),
+          [AI_USE_LOG_BASE_ENV]: missing,
+        },
+        encoding: 'utf8',
+      })
+      const output = `${result.stdout ?? ''}${result.stderr ?? ''}`
+      expect(result.status).toBe(1)
+      expect(output).toContain(AI_USE_LOG_BASE_ENV)
+      expect(output).toContain('does not exist')
+      expect(output).toContain('cannot classify entries')
+      expect(output).not.toContain('RangeError')
+      expect(output).not.toContain('Maximum call stack')
+      expect(output).not.toContain('not reachable from HEAD')
+
+      const recordDir = join(dir, '.cache', 'gate-failures')
+      const records = readdirSync(recordDir).filter((name) => name.endsWith('.json'))
+      expect(records).toHaveLength(1)
+      const record = JSON.parse(readFileSync(join(recordDir, records[0] as string), 'utf8')) as {
+        policy: string
+        trigger: string
+        evidence: unknown
+      }
+      expect(record.policy).toBe('POL-G6-03')
+      expect(record.trigger).toBe('log-unreadable')
+      expect(record.evidence).toEqual({ register: 'base-log' })
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
 
@@ -198,7 +325,8 @@ describe('the log change must add an entry (not merely touch or edit one)', () =
     const violations = collectAiUseLogEntryViolations(['src/x.ts', AI_USE_LOG_PATH], BASE, edited)
     expect(violations).toHaveLength(1)
     expect(violations[0]).toContain('edited rather than a new one recorded')
-    expect(violations[0]).toContain('1 entries at both')
+    expect(violations[0]).toContain('it has 1 entries at the head and 1 at the base')
+    expect(violations[0]).toContain('(gate G6)')
   })
 
   it('rejects a change that adds one entry and removes another', () => {
@@ -206,8 +334,10 @@ describe('the log change must add an entry (not merely touch or edit one)', () =
     expect(collectAiUseLogEntryViolations(['src/x.ts', AI_USE_LOG_PATH], BASE, replaced)).not.toEqual([])
   })
 
-  it('rejects a head with fewer entries than the base', () => {
-    expect(collectAiUseLogEntryViolations(['src/x.ts', AI_USE_LOG_PATH], ADDED, BASE)).not.toEqual([])
+  it('rejects a head with fewer entries than the base and names both counts', () => {
+    const violations = collectAiUseLogEntryViolations(['src/x.ts', AI_USE_LOG_PATH], ADDED, BASE)
+    expect(violations).toHaveLength(1)
+    expect(violations[0]).toContain('it has 1 entries at the head and 2 at the base')
   })
 
   it('treats an absent base log as a log with no entries', () => {
@@ -228,6 +358,7 @@ describe('the log change must add an entry (not merely touch or edit one)', () =
       ADDED,
     ).join(' ')
     expect(violations).toContain('cannot be read as an entries list')
+    expect(violations).toContain('the "entries" value is not a list')
     expect(violations).not.toContain('not valid YAML')
   })
 
@@ -576,6 +707,7 @@ describe('G6 historical classification follows entry identity, not position (mid
     expect(findings[0]?.policy).toBe('POL-G6-03')
     expect(findings[0]?.evidence).toEqual({ register: 'base-log' })
     expect(findings[0]?.message).toContain('cannot be read as an entries list')
+    expect(findings[0]?.message).toContain('the "entries" value is not a list')
     expect(findings[0]?.message).not.toContain('not valid YAML')
   })
 
@@ -629,8 +761,10 @@ describe('register loaders agree with the committed registers (T0)', () => {
   it('sees the committed invariant ids', () => {
     const ids = invariantIdsFromRegister(readFileSync('docs/architecture/invariants.md', 'utf8'))
     expect(ids).not.toBeNull()
+    expect(ids?.has('INV-12')).toBe(true)
+    expect(ids?.has('INV-03')).toBe(true)
+    // A reclassified id remains resolvable for historical log entries.
     expect(ids?.has('INV-14')).toBe(true)
-    expect(ids?.has('INV-13')).toBe(true)
   })
 
   it('returns null rather than an empty set for an unparsable register', () => {

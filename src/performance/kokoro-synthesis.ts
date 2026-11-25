@@ -10,6 +10,8 @@ import type {
   KokoroVoiceProfile,
 } from './kokoro-types'
 import { KokoroProviderError } from './kokoro-types'
+import type { VolumeEnvelope } from './lipsync/volume-envelope'
+import { computeVolumeEnvelope } from './lipsync/volume-envelope'
 import { MONO_FLOAT32_WAV_FORMAT, encodeMonoFloat32Wav } from './wav'
 
 /**
@@ -303,19 +305,36 @@ export function createKokoroSynthesis(deps: KokoroSynthesisDeps): KokoroSynthesi
           if (abortedOrExpired()) return failure(validRequest, REASON_CANCELLED)
           const bytes = encodeMonoFloat32Wav(raw.samples, raw.sampleRate)
           const durationMs = (raw.samples.length / raw.sampleRate) * 1000
+          // The opt-in is read at completion from the same live registry used
+          // for registration. An absent or faulty optional observation surface
+          // is a valid, disabled registry; mandatory audio validation above is
+          // unaffected and the normal WAV still publishes.
+          let volumeEnvelope: VolumeEnvelope | undefined
+          try {
+            if (deps.registry.wantsVolumeEnvelope === true) {
+              volumeEnvelope = computeVolumeEnvelope(raw.samples, raw.sampleRate)
+            }
+          } catch {
+            volumeEnvelope = undefined
+          }
+          const registrationRequest = {
+            requestId: validRequest.requestId,
+            sessionId: validRequest.sessionId,
+            epoch: validRequest.epoch,
+            turnId: validRequest.turnId,
+            segmentId: validRequest.segmentId,
+            voiceProfileId: profile.voiceProfileId,
+            voiceProfileVersion: profile.voiceProfileVersion,
+            format: MONO_FLOAT32_WAV_FORMAT,
+            bytes,
+          }
           let audioRef: string
           try {
-            const registration = deps.registry.register({
-              requestId: validRequest.requestId,
-              sessionId: validRequest.sessionId,
-              epoch: validRequest.epoch,
-              turnId: validRequest.turnId,
-              segmentId: validRequest.segmentId,
-              voiceProfileId: profile.voiceProfileId,
-              voiceProfileVersion: profile.voiceProfileVersion,
-              format: MONO_FLOAT32_WAV_FORMAT,
-              bytes,
-            })
+            const registration = deps.registry.register(
+              volumeEnvelope === undefined
+                ? registrationRequest
+                : { ...registrationRequest, volumeEnvelope },
+            )
             audioRef = registration.audioRef
           } catch (error) {
             return failure(validRequest, mapRegistryFailure(error))

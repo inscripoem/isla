@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { WebSocket, type RawData } from 'ws'
-import { DIAGNOSTICS_PROTOCOL_VERSION } from '../../src/contracts'
+import {
+  DIAGNOSTICS_PROTOCOL_VERSION,
+  MEMORY_INSPECT_SCHEMA_VERSION,
+  type MemoryInspectPayload,
+  type MemoryInspectSource,
+} from '../../src/contracts'
 import { DiagnosticsServer } from '../../src/runtime/server'
 
 interface HealthBody {
@@ -31,6 +36,7 @@ async function createServer(
     path?: string
     maxPayload?: number
     graceMs?: number
+    memoryInspect?: MemoryInspectSource
   } = {},
 ): Promise<DiagnosticsServer> {
   const server = new DiagnosticsServer({ port: 0, graceMs: GRACE_MS, ...options })
@@ -165,6 +171,63 @@ describe('WebSocket diagnostics boundary', () => {
     const reply = await sendJson(ws, { v: 1, kind: 'get_health' })
     expect(reply).toMatchObject({ ok: true, kind: 'get_health' })
     expect((reply.payload as HealthBody).loopbackOnly).toBe(true)
+    ws.close()
+  })
+
+  it('answers get_memory_inspect explicitly when no context is retained', async () => {
+    const server = await createServer()
+    const ws = await openClient(server)
+    const reply = await sendJson(ws, { v: 1, id: 'm1', kind: 'get_memory_inspect' })
+    expect(reply).toMatchObject({
+      v: 1,
+      id: 'm1',
+      ok: true,
+      kind: 'get_memory_inspect',
+      payload: {
+        section: 'memory.inspect',
+        outcome: 'unavailable',
+        reason: 'no-observation',
+      },
+    })
+    ws.close()
+  })
+
+  it('answers get_memory_inspect with the retained observation', async () => {
+    const inspect: MemoryInspectPayload = {
+      schemaVersion: MEMORY_INSPECT_SCHEMA_VERSION,
+      sessionId: 'session-server',
+      turnId: 'turn-server',
+      replyIntent: 'reply',
+      admission: { admitted: 0, exclusions: {}, noteM6Confirmed: 'audit-only' },
+      recall: { persona: { used: 0, dropped: 0 }, delivery: { used: 0, dropped: 0 }, results: [] },
+      budget: {
+        estimatedCharacters: 0,
+        truncatedByTurnLimit: false,
+        truncatedByCharacterLimit: false,
+      },
+      consistency: {
+        findings: 0,
+        incomplete: false,
+        statementsOffered: 0,
+        statementsVisited: 0,
+        statementsExamined: 0,
+        textUnits: 0,
+        claims: 0,
+        comparisons: 0,
+      },
+      historySource: 'none',
+      warnings: [],
+    }
+    const server = await createServer({ memoryInspect: () => inspect })
+    const ws = await openClient(server)
+    const reply = await sendJson(ws, { v: 1, id: 'm2', kind: 'get_memory_inspect' })
+    expect(reply).toMatchObject({
+      v: 1,
+      id: 'm2',
+      ok: true,
+      kind: 'get_memory_inspect',
+      payload: { section: 'memory.inspect', inspect },
+    })
     ws.close()
   })
 

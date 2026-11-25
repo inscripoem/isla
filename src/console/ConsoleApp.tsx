@@ -1,31 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import classNames from 'classnames'
-import {
-  Badge,
-  Button,
-  Card,
-  Checkbox,
-  CodeBlock,
-  Collapse,
-  Divider,
-  Input,
-  Select,
-  Tabs,
-  Tag,
-  Title,
-  notificationOpen,
-} from 'animal-island-ui'
-import { PlayIcon, RefreshIcon, SendIcon, StopIcon } from 'naive-icons'
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ErrorInfo, ReactNode } from 'react'
 import {
   APPLICATION_CONTRACT_VERSION,
   DIAGNOSTICS_PROTOCOL_VERSION,
-  INPUT_SOURCES,
   type ApplicationServerMessage,
   type BootstrapSnapshot,
   type ConsoleTransportPort,
   type ControlResumeMessage,
   type ControlStopMessage,
-  type DiagnosticReply,
   type InputSource,
   type InputSubmitMessage,
   type ServerMessage,
@@ -35,6 +17,18 @@ import type { PlaybackBinding, PlaybackCallbacks, PlaybackFactory } from './play
 import type { PerformerMachine, PerformerMachineHooks, PerformerState } from './performer-machine'
 import { snapshotMessageFromBootstrap } from './performer-adapter'
 import { recoveryControlView } from './recovery-control'
+import { AudioBars, Glyph, HandwrittenIslaStudio, KanbanRow, Particle, PopNum, Tag } from './design/ui'
+import { OutcomeRing, SeqTicker, SourceBars } from './design/charts'
+import { capWord } from './design/format'
+import { toast } from './design/toast'
+import { DepthLayers } from './fx/depth'
+import { CursorLayer } from './fx/cursor'
+import { useTypewriter } from './fx/typewriter'
+import { ControlDeck, EventsSection, SessionFacts } from './pages/SessionPage'
+import { PlaybackSection } from './pages/PlaybackPage'
+import { PipelineStepper, SelectionSection } from './pages/SelectionPage'
+import { DiagnosticsPage } from './pages/DiagnosticsPage'
+import type { ConnectionStatus, ConsoleState, PendingDraft } from './console-state'
 import {
   createInitialVoiceSelectionState,
   parseVoiceServerMessage,
@@ -54,11 +48,9 @@ import { VoiceCard } from './VoiceCard'
 import {
   canDispatch,
   createInitialConsoleState,
-  diagnosticsSocketLabel,
   isDuplicateSubmit,
   reduceApplicationMessage,
   reduceControlAck,
-  reduceDiagnosticsSocket,
   reduceInputAck,
   reduceServerMessage,
   settleDraftOnAck,
@@ -73,41 +65,19 @@ import {
   withPlaybackStatus,
   withReceipt,
   withSubtitle,
-  type ConnectionStatus,
-  type ConsoleState,
-  type DiagnosticsSocketState,
-  type PendingDraft,
-  type RequestOutcome,
 } from './console-state'
 import { runOperatorBootstrap } from './operator-bootstrap'
 import './console.css'
 
-const HEALTH_PATH = '/health'
-const DIAGNOSTICS_PATH = '/diag'
-const PING_KIND = 'ping'
+const LIVE_CLASS: Record<ConnectionStatus, string> = {
+  connecting: 'connecting',
+  open: 'open',
+  closed: 'closed',
+  error: 'error',
+}
+
 /** Bounded wait for one correlated voice-list reply on a mixed-version runtime. */
 const VOICE_LIST_TIMEOUT_MS = 5000
-
-type StatusColor = 'app-green' | 'app-teal' | 'app-yellow' | 'app-orange' | 'app-red'
-
-const CONNECTION_COLORS: Record<ConnectionStatus, StatusColor> = {
-  connecting: 'app-yellow',
-  open: 'app-green',
-  closed: 'app-orange',
-  error: 'app-red',
-}
-
-const OUTCOME_COLORS: Record<RequestOutcome, StatusColor> = {
-  pending: 'app-yellow',
-  unknown: 'app-orange',
-  accepted: 'app-green',
-  applied: 'app-green',
-  duplicate: 'app-teal',
-  rejected: 'app-red',
-  refused: 'app-red',
-}
-
-const SOURCE_OPTIONS = INPUT_SOURCES.map((value) => ({ key: value, label: value }))
 
 /**
  * A status channel the console needs but the transport port does not declare:
@@ -149,9 +119,45 @@ function identify(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function isInputSource(value: string): value is InputSource {
-  return (INPUT_SOURCES as readonly string[]).includes(value)
+/**
+ * Console error fence: a render fault must never blank the operator surface.
+ * It names the failure and keeps the rest of the cockpit visible.
+ */
+class ConsoleErrorFence extends Component<{ children: ReactNode; area: string }, { error: Error | null }> {
+  state = { error: null as Error | null }
+
+  static getDerivedStateFromError(error: Error): { error: Error } {
+    return { error }
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo): void {
+    console.error(`console ${this.props.area} render fault`, error, info.componentStack)
+  }
+
+  render(): ReactNode {
+    if (this.state.error !== null) {
+      return (
+        <div className="isla-card isla-card--orange" role="alert">
+          <h2 className="isla-card__title">console fault — {this.props.area}</h2>
+          <pre className="isla-code">{this.state.error.message}</pre>
+          <p className="isla-hint">{String(this.state.error.stack ?? '').slice(0, 600)}</p>
+        </div>
+      )
+    }
+    return this.props.children
+  }
 }
+
+/**
+ * The Isla cockpit: one screen, everything visible. The stage is the
+ * permanent centre of the console; the operator panels sit beside it as
+ * glass sections. Everything rendered here comes from pure view state;
+ * dispatch, playback and receipt observation live in their own modules and
+ * are injected. Behaviour — transport bootstrap, performer machine wiring,
+ * request correlation, the honesty rules — is unchanged from the M2
+ * conformance baseline; only the visual voice and the single-surface layout
+ * are new.
+ */
 
 /**
  * A local audition must never play over real product output. The first message
@@ -179,265 +185,6 @@ function stopsLocalAudition(message: ApplicationServerMessage): boolean {
   }
 }
 
-function Facts({ rows }: { readonly rows: readonly (readonly [string, string])[] }) {
-  return (
-    <dl className="facts">
-      {rows.flatMap(([label, value]) => [
-        <dt key={`${label}-label`}>{label}</dt>,
-        <dd key={`${label}-value`}>{value}</dd>,
-      ])}
-    </dl>
-  )
-}
-
-/* ------------------------------------------------------------------ *
- * Diagnostics protocol 1 panel. It stays a separate tab so protocol 1
- * traffic is never mixed with application protocol 0.2 behaviour.
- * ------------------------------------------------------------------ */
-
-interface HealthView {
-  service: string
-  version: string
-  role: string
-  loopbackOnly: boolean
-  diagnosticsVersion: number
-  applicationVersion: number | null
-  capabilities: string[]
-  uptimeSec: number
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function parseHealth(value: unknown): HealthView | null {
-  if (!isRecord(value) || value.ok !== true) return null
-  if (typeof value.service !== 'string' || typeof value.version !== 'string') return null
-  if (typeof value.role !== 'string' || typeof value.loopbackOnly !== 'boolean') return null
-  if (typeof value.uptimeSec !== 'number' || !isRecord(value.protocol)) return null
-  const diagnosticsVersion = value.protocol.diagnostics
-  const applicationVersion = value.protocol.application
-  if (typeof diagnosticsVersion !== 'number') return null
-  if (applicationVersion !== null && typeof applicationVersion !== 'number') return null
-  if (!Array.isArray(value.capabilities) || !value.capabilities.every((entry) => typeof entry === 'string')) {
-    return null
-  }
-  return {
-    service: value.service,
-    version: value.version,
-    role: value.role,
-    loopbackOnly: value.loopbackOnly,
-    diagnosticsVersion,
-    applicationVersion,
-    capabilities: value.capabilities,
-    uptimeSec: value.uptimeSec,
-  }
-}
-
-function parseReply(value: unknown): DiagnosticReply | null {
-  if (!isRecord(value)) return null
-  if (value.v !== DIAGNOSTICS_PROTOCOL_VERSION) return null
-  if (typeof value.ok !== 'boolean' || typeof value.kind !== 'string') return null
-  if (value.ok === false && (!isRecord(value.error) || typeof value.error.code !== 'string')) {
-    return null
-  }
-  return value as unknown as DiagnosticReply
-}
-
-function DiagnosticsPanel() {
-  const [health, setHealth] = useState<HealthView | null>(null)
-  const [healthError, setHealthError] = useState<string | null>(null)
-  const [healthLoading, setHealthLoading] = useState(true)
-  const [socketState, setSocketState] = useState<DiagnosticsSocketState>('closed')
-  const [socketStarted, setSocketStarted] = useState(false)
-  const [socketError, setSocketError] = useState<string | null>(null)
-  const [lastReply, setLastReply] = useState<string | null>(null)
-  const [showHealth, setShowHealth] = useState(true)
-  const [showSocket, setShowSocket] = useState(true)
-
-  const socketRef = useRef<WebSocket | null>(null)
-  const healthAbortRef = useRef<AbortController | null>(null)
-  const activeRef = useRef(true)
-
-  const refreshHealth = useCallback(async () => {
-    healthAbortRef.current?.abort()
-    const controller = new AbortController()
-    healthAbortRef.current = controller
-    const isCurrent = (): boolean =>
-      activeRef.current && !controller.signal.aborted && healthAbortRef.current === controller
-    try {
-      const response = await fetch(HEALTH_PATH, {
-        signal: controller.signal,
-        headers: { accept: 'application/json' },
-      })
-      if (!response.ok) throw new Error(`health request failed with status ${response.status}`)
-      const parsed = parseHealth(await response.json())
-      if (parsed === null) throw new Error('health response failed validation')
-      if (!isCurrent()) return
-      setHealth(parsed)
-      setHealthError(null)
-    } catch (error) {
-      if (!isCurrent()) return
-      setHealth(null)
-      setHealthError(error instanceof Error ? error.message : String(error))
-    } finally {
-      if (isCurrent()) setHealthLoading(false)
-    }
-  }, [])
-
-  const startSocket = useCallback(() => {
-    if (socketRef.current !== null) return
-    const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const socket = new WebSocket(`${scheme}://${window.location.host}${DIAGNOSTICS_PATH}`)
-    socketRef.current = socket
-    setSocketState((state) => reduceDiagnosticsSocket(state, 'start'))
-    setSocketStarted(true)
-    socket.onopen = () => {
-      setSocketState((state) => reduceDiagnosticsSocket(state, 'open'))
-      setSocketError(null)
-    }
-    socket.onclose = (event) => {
-      setSocketState((state) => reduceDiagnosticsSocket(state, 'close'))
-      healthAbortRef.current?.abort()
-      setHealth(null)
-      setHealthLoading(false)
-      setHealthError('backend health cleared because the diagnostics socket closed')
-      if (!event.wasClean) {
-        setSocketError(`diagnostics socket closed unexpectedly (code ${event.code})`)
-      }
-    }
-    socket.onerror = () => {
-      setSocketState((state) => reduceDiagnosticsSocket(state, 'error'))
-      setSocketError('diagnostics socket error')
-      healthAbortRef.current?.abort()
-      setHealth(null)
-      setHealthLoading(false)
-      setHealthError('backend health cleared because the diagnostics socket errored')
-    }
-    socket.onmessage = (event) => {
-      try {
-        const parsed = parseReply(JSON.parse(String(event.data)))
-        setLastReply(
-          parsed === null ? 'Unrecognised reply from diagnostics server' : JSON.stringify(parsed, null, 2),
-        )
-      } catch {
-        setLastReply('Unrecognised reply from diagnostics server')
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    activeRef.current = true
-    const initialFetchTimer = setTimeout(() => {
-      void refreshHealth()
-    }, 0)
-    return () => {
-      activeRef.current = false
-      clearTimeout(initialFetchTimer)
-      healthAbortRef.current?.abort()
-      const socket = socketRef.current
-      socketRef.current = null
-      if (socket !== null) {
-        socket.onopen = null
-        socket.onclose = null
-        socket.onerror = null
-        socket.onmessage = null
-        if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
-          socket.close(1000, 'console unmounting')
-        }
-      }
-    }
-  }, [refreshHealth])
-
-  const sendPing = useCallback(() => {
-    const socket = socketRef.current
-    if (socket === null || socket.readyState !== WebSocket.OPEN) return
-    socket.send(JSON.stringify({ v: DIAGNOSTICS_PROTOCOL_VERSION, id: `console-${Date.now()}`, kind: PING_KIND }))
-  }, [])
-
-  const socketColor: StatusColor =
-    socketState === 'open' ? 'app-green' : socketState === 'error' ? 'app-red' : 'app-orange'
-
-  // Before the operator clicks the path button no socket exists, so the idle label is
-  // 'not started' rather than 'closed': 'closed' would claim a connection that has ended.
-  const socketLabel = diagnosticsSocketLabel(socketStarted, socketState)
-
-  const healthRows: readonly (readonly [string, string])[] =
-    health === null
-      ? []
-      : [
-          ['Service', health.service],
-          ['Version', health.version],
-          ['Role', health.role],
-          ['Loopback only', health.loopbackOnly ? 'yes' : 'no'],
-          ['Diagnostics protocol', String(health.diagnosticsVersion)],
-          ['Application protocol', health.applicationVersion === null ? 'not implemented' : String(health.applicationVersion)],
-          ['Capabilities', health.capabilities.join(', ')],
-          ['Uptime', `${health.uptimeSec.toFixed(1)} s`],
-        ]
-
-  return (
-    <div className="console__stack">
-      <Card>
-        <div className="console__card-head">
-          <Title size="middle">Diagnostics backend health</Title>
-          <Tag variant="soft" color={health !== null ? 'app-green' : healthError !== null ? 'app-red' : 'app-yellow'}>
-            {health !== null ? 'ok' : healthError !== null ? 'unavailable' : 'unknown'}
-          </Tag>
-        </div>
-        <div className="console__actions">
-          <Button
-            size="small"
-            icon={<RefreshIcon size={18} />}
-            loading={healthLoading}
-            onClick={() => {
-              setHealthLoading(true)
-              setHealthError(null)
-              void refreshHealth()
-            }}
-          >
-            Refresh health
-          </Button>
-          <Button size="small" onClick={() => setShowHealth((value) => !value)} aria-expanded={showHealth}>
-            {showHealth ? 'Hide details' : 'Show details'}
-          </Button>
-        </div>
-        {healthError !== null && <p className="console__alert">{healthError}</p>}
-        {showHealth && health !== null && <Facts rows={healthRows} />}
-      </Card>
-
-      <Card>
-        <div className="console__card-head">
-          <Title size="middle">Diagnostics socket</Title>
-          <Tag variant="soft" color={socketColor}>
-            {socketLabel}
-          </Tag>
-        </div>
-        <div className="console__actions">
-          <Button size="small" onClick={startSocket} disabled={socketState === 'open'}>
-            {DIAGNOSTICS_PATH} {socketState === 'open' ? 'connected' : 'not connected'}
-          </Button>
-          <Button size="small" onClick={sendPing} disabled={socketState !== 'open'}>
-            Ping diagnostics
-          </Button>
-          <Button size="small" onClick={() => setShowSocket((value) => !value)} aria-expanded={showSocket}>
-            {showSocket ? 'Hide reply' : 'Show reply'}
-          </Button>
-        </div>
-        {socketError !== null && <p className="console__alert">{socketError}</p>}
-        {showSocket && lastReply !== null && <CodeBlock code={lastReply} />}
-        {showSocket && lastReply === null && <p className="console__hint">No diagnostics reply yet.</p>}
-      </Card>
-    </div>
-  )
-}
-
-/* ------------------------------------------------------------------ *
- * Application console. Everything rendered here comes from pure view
- * state; dispatch, playback and receipt observation live in their own
- * modules and are injected.
- * ------------------------------------------------------------------ */
-
 export function ConsoleApp({
   transportFactory,
   performerFactory,
@@ -452,6 +199,23 @@ export function ConsoleApp({
   const [recoveryAcknowledged, setRecoveryAcknowledged] = useState(false)
   const [operatorRequestPending, setOperatorRequestPending] = useState(false)
   const [operatorRequestError, setOperatorRequestError] = useState<string | null>(null)
+  /** Brand board: the handwritten ISLA holds, then flips out to the kanban cast.
+   * Reduced-motion sessions park on the mascots from the first render. */
+  const [brandFace, setBrandFace] = useState<'write' | 'kanban'>(() =>
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      ? 'kanban'
+      : 'write',
+  )
+  const [brandCycle, setBrandCycle] = useState(0)
+  /** Local stage presentation (player bar): danmaku overlay and cinema dim. */
+  const [danmakuOn, setDanmakuOn] = useState(true)
+  const [cinema, setCinema] = useState(false)
+  /** Audience display: local view switch and a freeze control. */
+  const [displayView, setDisplayView] = useState<'feed' | 'sources' | 'outcomes'>('feed')
+  const [displayFrozen, setDisplayFrozen] = useState<readonly { readonly seq: number; readonly source: string; readonly text: string }[] | null>(null)
+  /** Status window: one large rolling bar cycling the stage messages. */
+  const [statusExpanded, setStatusExpanded] = useState(false)
+  const [statusIndex, setStatusIndex] = useState(0)
   const [transportEpoch, setTransportEpoch] = useState(0)
   const [voice, setVoice] = useState<VoiceSelectionState>(createInitialVoiceSelectionState)
   const [voiceAudition, setVoiceAudition] = useState<VoiceAuditionView>(IDLE_VOICE_AUDITION)
@@ -477,6 +241,64 @@ export function ConsoleApp({
   useEffect(() => {
     stateRef.current = state
   }, [state])
+
+  // The brand board timeline: the whole "ISLA STUDIO" signature handwrites
+  // (~5.2s), holds, then the ENTIRE line flips over to the kanban cast; a
+  // later cycle flips back and replays the strokes. Reduced-motion sessions
+  // park on the mascots.
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    let mounted = true
+    const timers: number[] = []
+    const cycle = (): void => {
+      setBrandFace('write')
+      setBrandCycle((value) => value + 1)
+      timers.push(
+        window.setTimeout(() => {
+          if (mounted) setBrandFace('kanban')
+        }, 6800),
+      )
+    }
+    cycle()
+    const interval = window.setInterval(cycle, 14500)
+    return () => {
+      mounted = false
+      window.clearInterval(interval)
+      for (const timer of timers) window.clearTimeout(timer)
+    }
+  }, [])
+
+  const stageRef = useRef<HTMLDivElement | null>(null)
+  const toggleFullscreen = useCallback(() => {
+    const stage = stageRef.current
+    if (stage === null) return
+    if (document.fullscreenElement === stage) {
+      void document.exitFullscreen().catch(() => undefined)
+    } else if (stage.requestFullscreen !== undefined) {
+      void stage.requestFullscreen().catch(() => undefined)
+    }
+  }, [])
+
+  // Player-bar keyboard shortcuts. Typing inside the composer is never
+  // intercepted, and none of these touch session or playback state: they are
+  // local presentation toggles only.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      const target = event.target
+      if (
+        target instanceof HTMLElement &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+      ) {
+        return
+      }
+      const key = event.key.toLowerCase()
+      if (key === 'd') setDanmakuOn((value) => !value)
+      else if (key === 'c') setCinema((value) => !value)
+      else if (key === 'f') toggleFullscreen()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [toggleFullscreen])
 
   const nextId = useCallback((prefix: string): string => {
     counterRef.current += 1
@@ -943,7 +765,6 @@ export function ConsoleApp({
   }, [clearVoiceListTimer, setProductPlayback, stopVoiceAudition])
 
   const dispatchable = canDispatch(state)
-
   const machine = machineState
 
   const submitInput = useCallback(async () => {
@@ -974,7 +795,7 @@ export function ConsoleApp({
         accepted = activeMachine.input(text, message.messageId, source)
       } catch (error) {
         setState((previous) => withInputFailure(previous, message.messageId, identify(error)))
-        notificationOpen({ type: 'error', message: 'Input dispatch failed', description: identify(error) })
+        toast({ type: 'error', message: 'Input dispatch failed', description: identify(error) })
         restoreDraft()
         return
       }
@@ -997,15 +818,15 @@ export function ConsoleApp({
       if (pending !== null && pending.messageId === message.messageId) pendingDraftRef.current = null
       setState((previous) => reduceInputAck(previous, ack))
       if (ack.status === 'rejected') {
-        notificationOpen({
+        toast({
           type: 'error',
           message: 'Input rejected',
           description: `${ack.code}: ${ack.message}`,
           duration: 4,
         })
       } else {
-        setDraft((composer) => (composer === rawDraft ? '' : composer))
-        notificationOpen({
+        setDraft((composer) => settleDraftOnAck(composer, pending, ack))
+        toast({
           type: ack.status === 'accepted' ? 'success' : 'info',
           message: `Input ${ack.status}`,
           description: `${ack.eventId} at sequence ${ack.seq}`,
@@ -1014,7 +835,7 @@ export function ConsoleApp({
       }
     } catch (error) {
       setState((previous) => withInputFailure(previous, message.messageId, identify(error)))
-      notificationOpen({ type: 'error', message: 'Input dispatch failed', description: identify(error) })
+      toast({ type: 'error', message: 'Input dispatch failed', description: identify(error) })
       const pending = pendingDraftRef.current
       if (pending !== null && pending.messageId === message.messageId) pendingDraftRef.current = null
       restoreDraft()
@@ -1065,7 +886,7 @@ export function ConsoleApp({
               : activeMachine.resume(requestId, message.messageId)
         } catch (error) {
           setState((previous) => withControlFailure(previous, requestId, identify(error)))
-          notificationOpen({ type: 'error', message: `Control ${action} failed`, description: identify(error) })
+          toast({ type: 'error', message: `Control ${action} failed`, description: identify(error) })
           return
         }
         if (accepted === null) {
@@ -1079,14 +900,14 @@ export function ConsoleApp({
       try {
         const ack = await transport.sendControl(message)
         setState((previous) => reduceControlAck(previous, ack))
-        notificationOpen({
+        toast({
           type: ack.status === 'applied' ? 'success' : ack.status === 'refused' ? 'error' : 'info',
           message: `Control ${action} ${ack.status}`,
           description: `epoch ${ack.previousEpoch} -> ${ack.epoch} · lifecycle ${ack.lifecycle}`,
         })
       } catch (error) {
         setState((previous) => withControlFailure(previous, requestId, identify(error)))
-        notificationOpen({ type: 'error', message: `Control ${action} failed`, description: identify(error) })
+        toast({ type: 'error', message: `Control ${action} failed`, description: identify(error) })
       }
     },
     [nextId, stopVoiceAudition, updateVoice],
@@ -1256,79 +1077,8 @@ export function ConsoleApp({
   const session = state.session
   const connectionSummary =
     session === null
-      ? 'no session snapshot yet'
-      : `session ${session.sessionId} · epoch ${session.epoch} · lifecycle ${session.lifecycle}`
-  const dispatchSummary =
-    session === null
-      ? 'unknown'
-      : `${session.activeTurnId === null ? 'no active turn' : `turn ${session.activeTurnId}`} · performer ${session.performerStatus}`
-
-  const inputRows: readonly (readonly [string, string])[] = [
-    ['Session', session === null ? 'unknown' : session.sessionId],
-    ['Epoch', session === null ? 'unknown' : String(session.epoch)],
-    ['Lifecycle', session === null ? 'unknown' : session.lifecycle],
-    ['Active turn', session === null ? 'unknown' : (session.activeTurnId ?? 'none')],
-    ['Performer', session === null ? 'unknown' : session.performerStatus],
-    ['Output confirmation', session === null ? 'unknown' : session.outputConfirmation],
-    ['Capability revision', session === null ? 'unknown' : String(session.capabilityRevision)],
-    ['Accepted sequence', session === null ? 'unknown' : String(session.lastSeq)],
-    ['Retiring', session === null ? 'unknown' : session.retiring ? 'yes' : 'no'],
-  ]
-
-  const playbackRows: readonly (readonly [string, string])[] = [
-    ['Idle', String(state.playback.idle)],
-    ['Active output', state.playback.activeOutputId ?? 'none'],
-    ['Last stage', state.playback.lastStage ?? 'none'],
-    ['Last subtitle', state.playback.subtitleText ?? 'none'],
-  ]
-
-  const selection = state.selection
-  const plan = selection.plan
-  const selectionRows: readonly (readonly [string, string])[] = [
-    ['Waiting stage', selection.stage],
-    ['Plan disposition', plan === null ? 'none' : plan.disposition],
-    ['Selected event ids', plan === null ? 'none' : plan.selectedEventIds.join(', ') || 'none'],
-    ['Reply intent', plan === null ? 'none' : (plan.replyIntent ?? 'none')],
-    ['Plan reason code', plan === null ? 'none' : plan.reasonCode],
-    ['Plan synthetic', plan === null ? 'unknown' : plan.synthetic ? 'yes' : 'no'],
-    ['Turn reply intent', selection.replyIntent === null ? 'none' : selection.replyIntent.replyIntent],
-    [
-      'Turn id',
-      selection.replyIntent === null
-        ? 'none'
-        : selection.replyIntent.turnId === null
-          ? 'not reported'
-          : selection.replyIntent.turnId,
-    ],
-    [
-      'Delivery classification',
-      selection.serverDelivery === null ? 'none' : selection.serverDelivery.classification,
-    ],
-    [
-      'Delivery output',
-      selection.serverDelivery === null
-        ? 'none'
-        : selection.serverDelivery.outputId === null
-          ? 'not reported'
-          : selection.serverDelivery.outputId,
-    ],
-    [
-      'Delivery turn',
-      selection.serverDelivery === null
-        ? 'none'
-        : selection.serverDelivery.turnId === null
-          ? 'not reported'
-          : selection.serverDelivery.turnId,
-    ],
-    [
-      'Delivery segment',
-      selection.serverDelivery === null
-        ? 'none'
-        : selection.serverDelivery.segmentId === null
-          ? 'not reported'
-          : selection.serverDelivery.segmentId,
-    ],
-  ]
+      ? 'No session snapshot yet'
+      : `Session ${session.sessionId} · epoch ${session.epoch} · lifecycle ${session.lifecycle}`
 
   const machinePath = machine !== null
   const retiring = session?.retiring === true
@@ -1336,7 +1086,6 @@ export function ConsoleApp({
   const operatorButtonVisible = requestOperatorToken !== undefined && machinePath
   const voicePlaybackBusy =
     machine !== null && (productPlaybackActive || machine.playerStatus.idle === false)
-  const recovery = machine?.recovery
   // Recovery does not wait for `retiring`: the runtime only retires the session
   // after the operator's first valid request. Eligibility requires the current
   // connected session, an attached performer, operator authority, an explicit
@@ -1347,402 +1096,438 @@ export function ConsoleApp({
     machine,
     acknowledged: recoveryAcknowledged,
   })
-  const recoveryAvailable = recoveryControls.available
-  const recoveryRequestable = recoveryControls.requestable
 
-  const sessionView = (
-    <div className="console__stack">
-      {machinePath && (
-        <VoiceCard
-          state={voice}
-          audition={voiceAudition}
-          connected={state.connection === 'open' && session !== null}
-          retiring={retiring}
-          operator={machine?.operator === true}
-          productPlaybackBusy={voicePlaybackBusy}
-          voiceListUnavailable={voiceListUnavailable}
-          canEnableVoiceChanges={operatorButtonVisible && machine?.operator !== true}
-          operatorRequestPending={operatorRequestPending}
-          operatorRequestError={operatorRequestError}
-          onDraftChange={changeVoiceDraft}
-          onPreview={previewVoice}
-          onStopPreview={stopPreview}
-          onApply={applyVoice}
-          onEnableVoiceChanges={() => void bootstrapOperator()}
-        />
-      )}
+  const localEvidenceNote = machinePath
+    ? 'Receipts here are observed in this browser and are local evidence only. They are distinct from the runtime-reported delivery in the plan panel; local observation is not runtime confirmation.'
+    : playbackMounted
+      ? 'Receipts here are observed in this browser and are local evidence only. The fallback binding exposes no runtime-confirmed delivery; the runtime-reported delivery is never claimed from these observations.'
+      : 'No local player is mounted for this console; playback cannot be observed here.'
 
-      <Card>
-        <div className="console__card-head">
-          <Title size="middle">Session</Title>
-          <Tag variant="soft" color={session === null ? 'app-orange' : 'app-teal'}>
-            {dispatchable ? 'dispatching' : 'non-dispatching'}
-          </Tag>
-        </div>
-        <Facts rows={inputRows} />
-        <p className="console__hint">{dispatchSummary}</p>
-      </Card>
+  // The stage is the permanent centre of the cockpit: its subtitle streams
+  // here and its facts read out below it.
+  const { shown, typing } = useTypewriter(state.playback.subtitleText)
+  // Speaking is a narrower claim than "not idle": only the M1 `started`
+  // receipt proves output is actually playing. `accepted` is preparation, and
+  // cancelled/failed/unknown must never animate as a live voice.
+  const speaking = !state.playback.idle && state.playback.lastStage === 'started'
+  const preparing = !state.playback.idle && state.playback.lastStage === 'accepted'
+  const latestReceipt =
+    state.playback.receipts.length === 0
+      ? null
+      : state.playback.receipts[state.playback.receipts.length - 1]
+  const lastStageDisplay =
+    state.playback.lastStage ?? (state.playback.receipts.length > 0 ? latestReceipt?.stage ?? null : null)
+  const stageStateLabel =
+    session?.lifecycle === 'stopped'
+      ? 'Stopped'
+      : speaking
+        ? 'Speaking'
+        : preparing
+          ? 'Preparing'
+          : state.playback.lastStage !== null &&
+              (state.playback.lastStage === 'completed' ||
+                state.playback.lastStage === 'cancelled' ||
+                state.playback.lastStage === 'failed' ||
+                state.playback.lastStage === 'unknown')
+            ? capWord(state.playback.lastStage)
+            : state.playback.idle
+              ? 'Idle'
+              : 'Live'
+  // Audience data charts: everything below is derived from what the console
+  // actually observed — accepted inputs, request outcomes and the rolling
+  // sequence feed. Nothing is invented.
+  const sourceBars = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const entry of state.selection.acceptedInputs) {
+      counts.set(entry.source, (counts.get(entry.source) ?? 0) + 1)
+    }
+    return [...counts.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count)
+  }, [state.selection.acceptedInputs])
 
-      <Card>
-        <Title size="middle">Input</Title>
-        <form
-          className="console__form"
-          onSubmit={(event) => {
-            event.preventDefault()
-            void submitInput()
-          }}
-        >
-          <div className="console__field">
-            <span className="console__label" id="console-source-label">
-              Input source
-            </span>
-            <Select
-              aria-labelledby="console-source-label"
-              options={SOURCE_OPTIONS}
-              value={source}
-              disabled={!allowDispatch}
-              onChange={(key) => {
-                if (isInputSource(key)) setSource(key)
-              }}
-            />
-          </div>
-          <div className="console__field">
-            <label className="console__label" htmlFor="console-text">
-              Message text
-            </label>
-            <Input
-              id="console-text"
-              value={draft}
-              disabled={!allowDispatch}
-              placeholder="Type an audience message"
-              allowClear
-              onClear={() => setDraft('')}
-              onChange={(event) => setDraft(event.target.value)}
-            />
-          </div>
-          <Button
-            type="primary"
-            htmlType="submit"
-            icon={<SendIcon size={20} />}
-            disabled={!allowDispatch || draft.trim().length === 0}
-          >
-            Submit input
-          </Button>
-        </form>
-        {state.inputs.length === 0 ? (
-          <p className="console__hint">No input requests yet.</p>
-        ) : (
-          <ul className="console__list">
-            {[...state.inputs].reverse().map((input) => (
-              <li
-                key={input.messageId}
-                className={classNames('console__list-item', {
-                  'console__list-item--pending': input.outcome === 'pending',
-                })}
-              >
-                <Tag size="small" variant="soft" color={OUTCOME_COLORS[input.outcome]}>
-                  {input.outcome}
-                </Tag>
-                <span className="console__list-text">{input.text}</span>
-                <span className="console__list-meta">
-                  {input.source}
-                  {input.eventId === null ? '' : ` · ${input.eventId}`}
-                  {input.seq === null ? '' : ` · seq ${input.seq}`}
-                </span>
-                {input.detail !== null && <span className="console__list-detail">{input.detail}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+  const outcomeSlices = useMemo(() => {
+    const order = ['accepted', 'duplicate', 'rejected', 'pending', 'unknown']
+    const counts = new Map<string, number>()
+    for (const input of state.inputs) {
+      counts.set(input.outcome, (counts.get(input.outcome) ?? 0) + 1)
+    }
+    return order.filter((label) => counts.has(label)).map((label) => ({ label, count: counts.get(label) ?? 0 }))
+  }, [state.inputs])
 
-      <Card>
-        <Title size="middle">Control</Title>
-        <div className="console__actions">
-          <Button danger icon={<StopIcon size={20} />} disabled={!allowDispatch} onClick={() => void sendControl('stop')}>
-            Stop
-          </Button>
-          <Button icon={<PlayIcon size={20} />} disabled={!allowDispatch} onClick={() => void sendControl('resume')}>
-            Resume
-          </Button>
-        </div>
-        <p className="console__hint">
-          Stop and Resume are the only authorized controls. They are dispatched as requests; the runtime decides the
-          resulting epoch and lifecycle.
-        </p>
-        {state.controls.length === 0 ? (
-          <p className="console__hint">No control requests yet.</p>
-        ) : (
-          <ul className="console__list">
-            {[...state.controls].reverse().map((control) => (
-              <li
-                key={control.messageId}
-                className={classNames('console__list-item', {
-                  'console__list-item--pending': control.outcome === 'pending',
-                })}
-              >
-                <Tag size="small" variant="soft" color={OUTCOME_COLORS[control.outcome]}>
-                  {control.outcome}
-                </Tag>
-                <span className="console__list-text">{control.action}</span>
-                <span className="console__list-meta">
-                  {control.previousEpoch === null || control.epoch === null
-                    ? control.requestId
-                    : `epoch ${control.previousEpoch} -> ${control.epoch}`}
-                </span>
-                {control.detail !== null && <span className="console__list-detail">{control.detail}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      <Card>
-        <div className="console__card-head">
-          <Title size="middle">Performer and authority</Title>
-          <Tag variant="soft" color={machine === null ? 'app-orange' : machine.performer ? 'app-green' : 'app-yellow'}>
-            {machine === null
-              ? 'no machine'
-              : machine.performer
-                ? 'attached'
-                : 'not attached'}
-          </Tag>
-        </div>
-        <div className="console__actions">
-          <Button size="small" disabled={!machinePath} onClick={attachPerformer}>
-            Attach performer
-          </Button>
-          {operatorButtonVisible && (
-            <Button size="small" loading={operatorRequestPending} onClick={() => void bootstrapOperator()}>
-              Bootstrap operator
-            </Button>
-          )}
-          {machine !== null && machine.operator && (
-            <Tag variant="outlined" color="app-teal">
-              operator
-            </Tag>
-          )}
-        </div>
-        <Facts
-          rows={[
-            ['Performer attached', machine === null ? 'unknown' : machine.performer ? 'yes' : 'no'],
-            ['Operator authority', machine === null ? 'unknown' : machine.operator ? 'yes' : 'no'],
-            ['Session retiring', session === null ? 'unknown' : session.retiring ? 'yes' : 'no'],
-          ]}
-        />
-        {operatorRequestError !== null && <p className="console__alert">{operatorRequestError}</p>}
-        {machine?.error !== undefined && machine.error !== null && <p className="console__alert">{machine.error}</p>}
-        <Divider type="hairline" />
-        <Title size="middle">Recovery</Title>
-        <p className="console__hint">
-          Recovery is an operator decision, not measured delivery. It retires this session and continues in a fresh
-          successor over the same store. The first request does not require retirement to be reported: the server
-          starts retirement only after a valid request, so acknowledge below and request recovery once the performer
-          and operator are attached to this connected session. A successor session requires reconnect, operator
-          bootstrap and performer attach, followed by an explicit Resume. A failed attempt remains retryable, so
-          acknowledge again and request recovery once more.
-        </p>
-        <Checkbox
-          size="small"
-          direction="vertical"
-          options={[
-            {
-              label:
-                "I acknowledge, as the operator's decision, that local playback in this session has ended.",
-              value: 'recovery-ack',
-            },
-          ]}
-          value={recoveryAcknowledged ? ['recovery-ack'] : []}
-          disabled={!recoveryAvailable}
-          onChange={(values) => setRecoveryAcknowledged(values.includes('recovery-ack'))}
-        />
-        <div className="console__actions">
-          <Button
-            size="small"
-            danger
-            disabled={!recoveryRequestable}
-            onClick={requestRecovery}
-          >
-            Request recovery
-          </Button>
-        </div>
-        <Facts
-          rows={[
-            ['Recovery status', recovery === undefined ? 'none' : recovery.status],
-            ['Retired session', recovery?.retiredSessionId ?? 'none'],
-            ['Successor session', recovery?.successorSessionId ?? 'none'],
-            ['Recoveries', recovery === undefined ? 'none' : String(recovery.recoveries)],
-            [
-              'Remaining recoveries',
-              recovery === undefined || recovery.remainingRecoveries === null
-                ? 'unknown'
-                : String(recovery.remainingRecoveries),
-            ],
-          ]}
-        />
-      </Card>
-
-      <Card>
-        <div className="console__card-head">
-          <Title size="middle">Selection and delivery</Title>
-          <Tag variant="outlined" color="app-blue">
-            runtime-reported
-          </Tag>
-        </div>
-        <Facts rows={selectionRows} />
-        <p className="console__hint">
-          These facts are reported by the runtime as accepted session events. They are not local playback evidence and
-          do not prove that this browser released media.
-        </p>
-        <Divider type="hairline" />
-        <Title size="middle">Accepted inputs</Title>
-        {selection.acceptedInputs.length === 0 ? (
-          <p className="console__hint">No accepted inputs observed.</p>
-        ) : (
-          <ul className="console__list">
-            {[...selection.acceptedInputs].reverse().map((entry) => (
-              <li key={entry.eventId} className="console__list-item">
-                <Tag size="small" variant="soft" color="app-teal">
-                  #{entry.seq}
-                </Tag>
-                <span className="console__list-text">{entry.text}</span>
-                <span className="console__list-meta">
-                  {entry.source} · {entry.eventId}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
-      <Card>
-        <div className="console__card-head">
-          <Title size="middle">Playback and receipts</Title>
-          <Tag variant="outlined" color="app-yellow">
-            local evidence only
-          </Tag>
-        </div>
-        <Facts rows={playbackRows} />
-        <p className="console__hint">
-          {machinePath
-            ? 'Receipts here are observed in this browser and are local evidence only. They are distinct from the runtime-reported delivery in the Selection and delivery card; local observation is not runtime confirmation.'
-            : playbackMounted
-              ? 'Receipts here are observed in this browser and are local evidence only. The fallback binding exposes no runtime-confirmed delivery; the runtime-reported delivery is never claimed from these observations.'
-              : 'No local player is mounted for this console; playback cannot be observed here.'}
-        </p>
-        {state.playback.receipts.length === 0 ? (
-          <p className="console__hint">No receipts observed.</p>
-        ) : (
-          <ul className="console__list">
-            {[...state.playback.receipts].reverse().map((receipt) => (
-              <li key={receipt.receiptId} className="console__list-item">
-                <Tag size="small" variant="soft" color="app-teal">
-                  {receipt.stage}
-                </Tag>
-                <span className="console__list-text">{receipt.outputId}</span>
-                <span className="console__list-meta">
-                  {receipt.modality}
-                  {receipt.reasonCode === null ? '' : ` · ${receipt.reasonCode}`}
-                  {receipt.localTimeMs === null ? '' : ` · ${receipt.localTimeMs} ms`}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {state.playback.faults.length > 0 && (
-          <>
-            <Divider type="hairline" />
-            <ul className="console__list">
-              {[...state.playback.faults].reverse().map((fault, index) => (
-                <li key={`${index}-${fault}`} className="console__list-item">
-                  <Tag size="small" variant="soft" color="app-red">
-                    fault
-                  </Tag>
-                  <span className="console__list-detail">{fault}</span>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </Card>
-
-      <Card>
-        <Title size="middle">Events and errors</Title>
-        <p className="console__hint">Only events above the accepted sequence are shown; replayed history is never rendered.</p>
-        {state.events.length === 0 ? (
-          <p className="console__hint">No new events.</p>
-        ) : (
-          [...state.events]
-            .reverse()
-            .map((event) => (
-              <Collapse
-                key={event.seq}
-                question={`#${event.seq} ${event.type}`}
-                answer={<CodeBlock code={JSON.stringify(event.data, null, 2)} />}
-              />
-            ))
-        )}
-        {state.errors.length > 0 && (
-          <>
-            <Divider type="hairline" />
-            <ul className="console__list">
-              {[...state.errors].reverse().map((error, index) => (
-                <li key={`${index}-${error.code}-${error.message}`} className="console__list-item">
-                  <Tag size="small" variant="soft" color="app-red">
-                    {error.code}
-                  </Tag>
-                  <span className="console__list-detail">{error.message}</span>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </Card>
-    </div>
+  const tickerPoints = useMemo(
+    () =>
+      state.selection.acceptedInputs.slice(-20).map((entry) => ({
+        seq: entry.seq,
+        label: `${entry.source}: ${entry.text.slice(0, 28)}`,
+      })),
+    [state.selection.acceptedInputs],
   )
+
+  // Roll the status bar every 2.8s; hovering the window pauses it via CSS
+  // is not needed — the record expander freezes it for careful reading.
+  useEffect(() => {
+    if (statusExpanded) return
+    const interval = window.setInterval(() => {
+      setStatusIndex((value) => value + 1)
+    }, 2800)
+    return () => window.clearInterval(interval)
+  }, [statusExpanded])
+
+  // Frozen copy for the display freeze toggle: refreshed on every render
+  // while live, held constant while frozen.
+  const feedSnapshot = state.selection.acceptedInputs.slice(-7).map((entry) => ({
+    seq: entry.seq,
+    source: entry.source,
+    text: entry.text,
+  }))
+
+  const subtitle = state.playback.subtitleText
+  // The status window messages: human phrasing on the ticker, the exact
+  // protocol values in the expandable records.
+  const statusMessages: readonly { readonly label: string; readonly tile: string; readonly value: string; readonly text: string }[] = [
+    {
+      label: 'Idle',
+      tile: 'Idle',
+      value: String(state.playback.idle),
+      text: state.playback.idle ? 'Stage is idle' : 'Stage is performing',
+    },
+    {
+      label: 'Active output',
+      tile: 'Active Output',
+      value: state.playback.activeOutputId ?? 'none',
+      text: state.playback.activeOutputId === null ? 'No active output' : `Output ${state.playback.activeOutputId}`,
+    },
+    {
+      label: 'Last stage',
+      tile: 'Last Stage',
+      // Transport loss/disposal can null the live stage while receipts remain;
+      // the newest local receipt is the only honest stage evidence then.
+      value: lastStageDisplay ?? 'none',
+      text:
+        lastStageDisplay === null
+          ? 'No stage activity yet'
+          : state.playback.lastStage === null
+            ? `Latest local receipt stage: ${lastStageDisplay}`
+            : `Last stage: ${lastStageDisplay}`,
+    },
+    {
+      label: 'Last subtitle',
+      tile: 'Last Subtitle',
+      value: subtitle ?? 'none',
+      text: subtitle === null || subtitle.length === 0 ? 'No subtitle yet' : subtitle,
+    },
+  ]
 
   return (
     <main className="console">
+      <DepthLayers />
+      <CursorLayer />
+
+      {/* The Isla Studio lockup floats in the blank sky strip above the HUD,
+        * not inside the header. */}
+      <div className="console__brandband" role="img" aria-label="Isla Studio">
+        <span className={`isla-brand__flip ${brandFace === 'kanban' ? 'is-kanban' : ''}`.trim()}>
+          <span className="isla-brand__face isla-brand__face--write" aria-hidden="true">
+            <HandwrittenIslaStudio key={`write-${brandCycle}`} className="isla-brand__write" />
+          </span>
+          <span className="isla-brand__face isla-brand__face--kanban" aria-hidden="true">
+            <KanbanRow size={126} />
+          </span>
+        </span>
+      </div>
+
       <header className="console__header">
-        <Title size="large">Isla runtime console</Title>
-        <p className="console__subtitle">
-          Local control surface for application contract {APPLICATION_CONTRACT_VERSION}. Input, control and playback
-          evidence only; diagnostics stay on their own protocol.
-        </p>
         <div className="console__connection" role="status" aria-atomic="true">
-          <Badge dot color={CONNECTION_COLORS[state.connection]} />
-          <span className="console__connection-label">{state.connection}</span>
-          <span className="console__connection-detail">{connectionSummary}</span>
+          <span className={`isla-live isla-live--${LIVE_CLASS[state.connection]}`}>
+            <span className="isla-live__dot" aria-hidden="true" />
+            {/* The protocol word stays verbatim for the conformance scripts;
+              * the pill shows the capitalized voice beside it. */}
+            <span className="console__connection-label isla-visually-hidden">{state.connection}</span>
+            <span aria-hidden="true">{capWord(state.connection)}</span>
+          </span>
         </div>
-        {state.connection !== 'open' && (
-          <div className="console__actions">
-            <Button size="small" icon={<RefreshIcon size={18} />} onClick={reconnect}>
-              Reconnect
-            </Button>
-            <p className="console__hint">
-              Reconnect starts a new session bootstrap. Nothing from the previous session is replayed, resumed or
-              claimed.
-            </p>
-          </div>
-        )}
-        {state.connectionDetail !== null && <p className="console__alert">{state.connectionDetail}</p>}
+
+        <div className="isla-header__meta">
+          <PopNum value={session === null ? 'none' : session.lastSeq}>
+            <span className="isla-stat" title={connectionSummary}>
+              #{session === null ? '—' : session.lastSeq}
+            </span>
+          </PopNum>
+          <span className="isla-stat" title="application and diagnostics protocol versions">
+            app {APPLICATION_CONTRACT_VERSION} · diag {DIAGNOSTICS_PROTOCOL_VERSION}
+          </span>
+          {session !== null && (
+            <Tag tone={state.connection === 'open' ? 'accepted' : state.connection === 'error' ? 'error' : 'pending'} dot pulse={state.connection === 'open'}>
+              {session.lifecycle}
+            </Tag>
+          )}
+        </div>
+
+        <span className="console__connection-detail">{connectionSummary}</span>
+        {state.connectionDetail !== null && <p className="console__hint">{state.connectionDetail}</p>}
       </header>
 
-      <Divider type="dashed-brown" />
+      <div className={`console__deck ${cinema ? 'is-cinema' : ''}`.trim()}>
+        <section className="console__stagewall" aria-label="Live stage">
+          <ConsoleErrorFence area="stage">
+            {/* The pipeline runs as a single row above the stage. */}
+            <div className="console__piperow isla-rise">
+              <PipelineStepper stage={state.selection.stage} />
+            </div>
 
-      <Tabs
-        aria-label="Console sections"
-        defaultActiveKey="session"
-        items={[
-          { key: 'session', label: 'Session', children: sessionView },
-          { key: 'diagnostics', label: 'Diagnostics', children: <DiagnosticsPanel /> },
-        ]}
-      />
+            {/* The stage box: a proper 16:9 live window. */}
+            <div ref={stageRef} className="isla-stage console__stagebox isla-rise isla-rise--focus">
+              <div className="isla-stage__laser" aria-hidden="true" />
+              {danmakuOn && state.selection.acceptedInputs.length > 0 && (
+                <div className="isla-stage__danmaku" aria-hidden="true">
+                  {state.selection.acceptedInputs.slice(-6).map((entry, index, list) => (
+                    <span
+                      key={entry.eventId}
+                      className="isla-danmaku__item"
+                      style={
+                        {
+                          '--drift': `${10 + (entry.seq % 5)}s`,
+                          '--drift-delay': `${(list.length - index) * -1.7}s`,
+                          top: `${14 + ((entry.seq * 37) % 52)}%`,
+                        } as Record<string, string>
+                      }
+                    >
+                      <span className="isla-danmaku__name">{entry.source}</span>
+                      {entry.text}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="isla-stage__hud">
+                <Tag tone={state.connection === 'open' ? 'accepted' : state.connection === 'error' ? 'error' : 'pending'} dot pulse={state.connection === 'open'}>
+                  {session === null ? 'No session' : session.lifecycle}
+                </Tag>
+                <Tag
+                  tone="neutral"
+                  dot
+                  pulse={speaking && state.connection === 'open' && session?.lifecycle !== 'stopped'}
+                >
+                  Pipeline: {state.selection.stage}
+                </Tag>
+                <span className="isla-stage__meta">
+                  <span className="isla-stage__output">
+                    {state.playback.idle ? 'No active output' : `Out ${state.playback.activeOutputId ?? 'unknown'}`}
+                  </span>
+                  {latestReceipt !== null && (
+                    <span className="isla-stage__receipt">
+                      Receipt {latestReceipt.stage}
+                      {latestReceipt.reasonCode === null ? '' : ` · ${latestReceipt.reasonCode}`}
+                    </span>
+                  )}
+                  {state.playback.faults.length > 0 && (
+                    <span className="isla-stage__faults">
+                      {state.playback.faults.length} local fault{state.playback.faults.length === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </span>
+              </div>
 
-      <p className="console__footnote">
-        Diagnostic protocol {DIAGNOSTICS_PROTOCOL_VERSION} is deliberately separate from application contract{' '}
-        {APPLICATION_CONTRACT_VERSION}; the diagnostics tab never drives session behaviour.
-      </p>
+              {session?.lifecycle === 'stopped' && (
+                <div className="isla-stage__stopped" role="status">
+                  <span className="isla-stage__stopped-ico" aria-hidden="true">
+                    <Glyph name="pause" size={22} />
+                  </span>
+                  Live stopped
+                </div>
+              )}
+              <div className="isla-stage__viz">
+                <AudioBars speaking={speaking && session?.lifecycle !== 'stopped'} />
+                <span className="isla-stage__state">
+                  <Particle on={!state.playback.idle && session?.lifecycle !== 'stopped'} pulse={speaking} />
+                  {stageStateLabel}
+                </span>
+              </div>
+
+              {state.playback.subtitleText !== null && state.playback.subtitleText.length > 0 ? (
+                <p className="isla-subtitle">
+                  {shown}
+                  {typing && <span className="isla-subtitle__caret" aria-hidden="true" />}
+                </p>
+              ) : (
+                <p className="isla-subtitle isla-subtitle--empty">Waiting for the next line…</p>
+              )}
+              {machine?.display.reaction !== null && machine?.display.reaction !== undefined && (
+                <span className="isla-reaction" key={machine.display.reaction}>
+                  Reaction: <strong>{machine.display.reaction}</strong>
+                </span>
+              )}
+
+              <div className="isla-player" role="group" aria-label="Local stage player controls">
+                <button
+                  type="button"
+                  className={`isla-player__btn ${danmakuOn ? 'is-on' : ''}`.trim()}
+                  aria-pressed={danmakuOn}
+                  aria-label="Toggle danmaku comments (shortcut D)"
+                  onClick={() => setDanmakuOn((value) => !value)}
+                >
+                  <Glyph name="danmaku" size={16} />
+                </button>
+                <span className="isla-player__keys" aria-hidden="true">
+                  <kbd>D</kbd>
+                  <kbd>C</kbd>
+                  <kbd>F</kbd>
+                </span>
+              </div>
+            </div>
+
+            {/* The audience display sits directly beneath the stage: a live-room
+              * screen with the rolling input feed and the chart views. */}
+            <div className="isla-display isla-rise" aria-label="Audience display">
+              <div className="isla-display__bar">
+                <span className="isla-display__live">
+                  <Particle on={!state.playback.idle} pulse={speaking} />
+                  Audience feed
+                </span>
+                <span className="isla-display__views" role="group" aria-label="Display view">
+                  {(['feed', 'sources', 'outcomes'] as const).map((view) => (
+                    <button
+                      key={view}
+                      type="button"
+                      className="isla-display__view"
+                      aria-pressed={displayView === view}
+                      onClick={() => setDisplayView(view)}
+                    >
+                      {capWord(view)}
+                    </button>
+                  ))}
+                </span>
+                <button
+                  type="button"
+                  className={`isla-player__btn ${displayFrozen === null ? 'is-on' : ''}`.trim()}
+                  aria-label={displayFrozen === null ? 'Freeze the audience feed (local view)' : 'Resume the audience feed (local view)'}
+                  onClick={() => setDisplayFrozen((current) => (current === null ? feedSnapshot : null))}
+                >
+                  <Glyph name={displayFrozen === null ? 'pause' : 'play'} size={14} />
+                </button>
+              </div>
+              {displayView === 'feed' && (
+                <ul className="isla-display__feed">
+                  {(displayFrozen ?? state.selection.acceptedInputs.slice(-7)).map((entry) => (
+                    <li key={entry.seq} className="isla-display__row">
+                      <span className="isla-display__seq">#{entry.seq}</span>
+                      <span className="isla-display__source">
+                        <Glyph name={entry.source === 'local-audience' ? 'ticket' : entry.source === 'cohost-text' ? 'mic' : 'plug'} size={13} />
+                      </span>
+                      <span className="isla-display__text">{entry.text}</span>
+                    </li>
+                  ))}
+                  {(displayFrozen ?? state.selection.acceptedInputs).length === 0 && (
+                    <li className="isla-display__row is-empty">No inputs on the feed yet.</li>
+                  )}
+                </ul>
+              )}
+              {displayView === 'sources' && <SourceBars entries={sourceBars} />}
+              {displayView === 'outcomes' && <OutcomeRing slices={outcomeSlices} />}
+              {displayView === 'feed' && <SeqTicker points={tickerPoints} />}
+            </div>
+
+            <div className="console__statuswin isla-rise" aria-label="Stage status">
+              <div className="console__statuswin-roll" role="status" aria-label="Stage status">
+                <div
+                  className="console__statuswin-track"
+                  style={{ transform: `translateX(-${(statusIndex % statusMessages.length) * 100}%)` }}
+                >
+                  {statusMessages.map((message) => (
+                    <div key={message.label} className="console__statuswin-slide">
+                      <span className="console__statuswin-chip">{message.tile}</span>
+                      <span className="console__statuswin-big">{message.text}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="console__statuswin-dots">
+                  {statusMessages.map((message, index) => (
+                    <button
+                      key={message.label}
+                      type="button"
+                      className={`console__statuswin-dot ${index === statusIndex % statusMessages.length ? 'is-here' : ''}`.trim()}
+                      aria-label={`Show status: ${message.tile}`}
+                      onClick={() => setStatusIndex(index)}
+                    />
+                  ))}
+                </div>
+              </div>
+              <button
+                type="button"
+                className={`console__statuswin-expand ${statusExpanded ? 'is-open' : ''}`.trim()}
+                aria-expanded={statusExpanded}
+                onClick={() => setStatusExpanded((value) => !value)}
+              >
+                Records
+                <span className="isla-collapse__chevron is-collapsed" aria-hidden="true" />
+              </button>
+              <div className={`console__statuswin-detail ${statusExpanded ? 'is-open' : ''}`.trim()}>
+                <div className="console__statuswin-inner">
+                  <dl className="facts">
+                    {statusMessages.map((message) => [
+                      <dt key={`${message.label}-label`}>{message.label}</dt>,
+                      <dd key={`${message.label}-value`}>{message.value}</dd>,
+                    ])}
+                  </dl>
+                </div>
+              </div>
+            </div>
+          </ConsoleErrorFence>
+        </section>
+
+        <div className="console__panels">
+          <ConsoleErrorFence area="panels">
+            {machinePath && (
+              <VoiceCard
+                state={voice}
+                audition={voiceAudition}
+                connected={state.connection === 'open' && session !== null}
+                retiring={retiring}
+                operator={machine?.operator === true}
+                productPlaybackBusy={voicePlaybackBusy}
+                voiceListUnavailable={voiceListUnavailable}
+                canEnableVoiceChanges={operatorButtonVisible && machine?.operator !== true}
+                operatorRequestPending={operatorRequestPending}
+                operatorRequestError={operatorRequestError}
+                onDraftChange={changeVoiceDraft}
+                onPreview={previewVoice}
+                onStopPreview={stopPreview}
+                onApply={applyVoice}
+                onEnableVoiceChanges={() => void bootstrapOperator()}
+              />
+            )}
+            <ControlDeck
+              state={state}
+              machine={machine}
+              source={source}
+              onSourceChange={setSource}
+              draft={draft}
+              onDraftChange={setDraft}
+              allowDispatch={allowDispatch}
+              machinePath={machinePath}
+              onSubmit={() => void submitInput()}
+              onControl={(action: 'stop' | 'resume') => void sendControl(action)}
+              onAttach={attachPerformer}
+              onBootstrapOperator={() => void bootstrapOperator()}
+              operatorPending={operatorRequestPending}
+              operatorError={operatorRequestError}
+              operatorButtonVisible={operatorButtonVisible}
+              recovery={recoveryControls}
+              recoveryAcknowledged={recoveryAcknowledged}
+              onRecoveryAcknowledge={setRecoveryAcknowledged}
+              onRequestRecovery={requestRecovery}
+              onReconnect={reconnect}
+              cinema={cinema}
+              onToggleCinema={() => setCinema((value) => !value)}
+              onFullscreen={toggleFullscreen}
+            />
+            <PlaybackSection playback={state.playback} localEvidenceNote={localEvidenceNote} />
+            <SessionFacts state={state} machine={machine} />
+            <SelectionSection selection={state.selection} />
+            <EventsSection state={state} />
+            <DiagnosticsPage />
+          </ConsoleErrorFence>
+        </div>
+      </div>
+
     </main>
   )
 }

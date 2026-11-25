@@ -1,6 +1,6 @@
 # Team Development
 
-Revision: 2026-11-12.1. Coordination draft, under review. Module allocation remains unchanged; the CP02 inspection decision is recorded below.
+Revision: 2026-11-25.1. Coordination draft, under review. Module allocation remains unchanged. This revision records the CP03-CP05 acceptance state against remote main `55e36d3` (2026-11-25) and adds the D1-D9 deliverable status; original targets and accepted scope are unchanged.
 
 ## Find your work
 
@@ -21,7 +21,9 @@ Record consequential interface, scope and acceptance decisions briefly on the re
 
 ## Next product results
 
-CP01 and CP02 are closed under their recorded decisions. The November 1 joint inspection did not take place; M5's [CP02 decision](https://github.com/inscripoem/isla/issues/72#issuecomment-6719195922) accepted a November 8 controlled single-machine inspection with stated gaps. The five tracked CP03 deliveries are closed, but full I1 acceptance remains open. The [delivery plan](DELIVERY-PLAN.en.md#schedule) links the current decisions and remaining work.
+CP01 and CP02 are closed under their recorded decisions. The November 1 joint inspection did not take place; M5's [CP02 decision](https://github.com/inscripoem/isla/issues/72#issuecomment-6719195922) accepted a November 8 controlled single-machine inspection with stated gaps. The five tracked CP03 deliveries are closed, and CP03 closed under the controlled offline I1 acceptance; the acceptance record's decision date is 2026-11-14, and GitHub's closure timestamp is 2026-11-13T17:39Z (2026-11-14 HKT) ([#73 comment 6860393261](https://github.com/inscripoem/isla/issues/73#issuecomment-6860393261)). The original target and scope are unchanged. The [delivery plan](DELIVERY-PLAN.en.md#schedule) links the current decisions and remaining work.
+
+Current status (2026-11-25): CP04 was accepted on 2026-11-20 for the reduced deployed-product scope at `9577069` ([#74 comment 7033211812](https://github.com/inscripoem/isla/issues/74#issuecomment-7033211812)); #74 itself, #96 and #97 remain open and no full-product acceptance is claimed. CP05 was accepted the same day as option A with every threshold explicitly pending ([#75 comment 7038421545](https://github.com/inscripoem/isla/issues/75#issuecomment-7038421545)); #75 remains open and #98 closed on 2026-11-22. Windows follow-up #135 merged on 2026-11-12 and console proxy follow-up #153 merged on 2026-11-16.
 
 | Target, UTC+8 | Observable result |
 | --- | --- |
@@ -31,6 +33,23 @@ CP01 and CP02 are closed under their recorded decisions. The November 1 joint in
 | November 22, 21:00 | Complete submission candidate, with November 23-25 contingency. |
 
 The [delivery plan](DELIVERY-PLAN.en.md) contains the full schedule and acceptance tests. Checkpoint 01 is M5's setup record. Joint checks may use asynchronous consumer observations of the same agreed revision; record who actually ran each part and leave unobserved results as not-run. Captain may reconcile planning metadata and conditionally carry unchanged code reviews forward as specified there; routine schedule updates do not restart all-member review.
+
+## Course deliverables D1-D9
+
+Status against remote main `191edb5` (2026-11-25). Paths exist in this checkout unless marked PR #192; [#192](https://github.com/inscripoem/isla/pull/192) remains open for review and is not adopted, so its files are cited by pull-request link until merged. CP09 [#79](https://github.com/inscripoem/isla/issues/79) and CP10 [#80](https://github.com/inscripoem/isla/issues/80) remain open past their original targets. D5, D6 and the demo have no repository artifact: D5/D6 are pending formal assembly from external evidence; a separate submission is required for the demo and its completion is unverified, so no video status or upload is assumed.
+
+| D | Required evidence | Repository state | Status |
+| --- | --- | --- | --- |
+| D1 | PRD/requirements and schema, MoSCoW, measurable criteria, sources | [prd.yaml](../req/prd.yaml), [requirements.yaml](../req/requirements.yaml), [case-registry.yaml](../req/case-registry.yaml); [candidate register](REQUIREMENTS.en.md) | Candidate, not an approved D1 registry; priority tradeoffs were added by [#194](https://github.com/inscripoem/isla/pull/194) (merged `c98a998`), while numerical targets remain pending; CP07 [#77](https://github.com/inscripoem/isla/issues/77) open |
+| D2 | Architecture and alternatives, context/budget/compaction, invariants, state/privacy, permissions, runtime policy | [architecture blueprint](../../architecture-blueprint.md), [invariants](../architecture/invariants.md), [memory design](../architecture/memory-design.md), [runtime policies](../architecture/runtime-policy-catalog.md), [supported platform](../architecture/supported-platform.md), [control/privacy verification](../architecture/control-privacy-verification.md); candidate comparison and permission model in [PR #192](https://github.com/inscripoem/isla/pull/192) | Present except the two #192 files; CP08 [#78](https://github.com/inscripoem/isla/issues/78) open |
+| D3/D9 | AGENTS, structural rules, tool manifest, permission/rule files, static Prompt | [AGENTS.md](../../AGENTS.md), [structural constraints](../code-governance/structural-constraints.md), [tool manifest](../code-governance/mcp-tool-manifest.md), [Prompt.md](../../Prompt.md); `.opencode` and `.agent` rule files in [PR #192](https://github.com/inscripoem/isla/pull/192) | Present except the three #192 rule files; human adoption pending; CP08 [#78](https://github.com/inscripoem/isla/issues/78) open |
+| D4 | Verification tiers, negative tests, review/debt/bug records | [verification constraints](../code-governance/verification-constraints.md), [gate baseline](../code-governance/gate-baseline.yaml), [debt register](../debt-register.md), [bug diary](../bug-diary.md), [review memo](../review-memo.md) | Present; CP08 [#78](https://github.com/inscripoem/isla/issues/78) open |
+| D5 | Authentic annotated transcripts | None in checkout; raw transcripts stay external | Absent, pending formal assembly; CP09 [#79](https://github.com/inscripoem/isla/issues/79) open, target passed |
+| D6 | One English `Report.md`, at most 10,000 words, over 15 pages, with member reflections | None in checkout | Absent, pending formal assembly; CP09 [#79](https://github.com/inscripoem/isla/issues/79) open, target passed |
+| D7/D8 | History, blocking CI, source/tests, honest offline/live/full run instructions | [CI workflow](../../.github/workflows/ci.yml), git history, `src/`, `test/`, [project README](../../README.md); live provider tests are a separate opt-in suite | Present; offline gates run in CI; default CI reports G4 not run without measured evidence; CP08 [#78](https://github.com/inscripoem/isla/issues/78) open |
+| Demo | 10-minute video, before/after behaviour; separate submission | None in checkout | Separate submission is required; completion unverified; do not imply an upload; CP09 [#79](https://github.com/inscripoem/isla/issues/79) open |
+
+D2's control/privacy verification was merged by [#184](https://github.com/inscripoem/isla/pull/184) on 2026-11-24; #107 closed the same day without a recorded M1/M4/M6 named acceptance. The opt-in live provider command is documented in [test/live/README.md](../../test/live/README.md) and is not part of the offline gate; G4 is not opt-in: default CI reports it not run without measured evidence.
 
 ## Develop and review
 

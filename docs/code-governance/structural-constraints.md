@@ -1,7 +1,11 @@
 # Structural constraints
 
-Status: **proposal (M6), for team review.** Owner: M6 (tooling) with M5 coordination. Revision 2026-10-16.1.
+Status: **proposal (M6), for team review.** Owner: M6 (tooling) with M5 coordination. Revision 2026-11-25.2.
 Course deliverable: **D3 (coding governance)**. Companion: `verification-constraints.md` (D4).
+
+The enforcement states in §4 were re-read on 2026-11-25 against `main` `e2166cd`; the remote ruleset
+values in §4 come from the measurement recorded in `verification-constraints.md` ("Effective
+enforcement").
 
 These rules bound how the coding agent may structure work: which module owns which element, how modules
 extend the baseline, how every function stays traceable, the authority boundaries, how **stable
@@ -88,8 +92,8 @@ New IDs carry the declaring module's **owner prefix**; the trailing number is pr
 2. **New IDs carry the owner prefix.** A module adds only IDs under its own prefix (`C-M6-1`).
 3. **Prefix must match the recorded owner.** The owner already recorded for a row must agree with the id
    prefix; drift (or reassignment) is a violation, not a silent renumber. Where a register exposes the owner
-   as a column — the `Owner` column that lands with the R3 tooling PR (§4) — that column is the value
-   checked; until then the owner is read from the row's existing component/verification text.
+   as a column — the `Owner` column merged with #158 (§4) — that column is the value
+   checked; where a register lacks the column, the owner is read from its component/verification text.
 4. **Append-only.** A retired ID is never reused.
 5. **Renumbering is recorded**, never silent — it goes in the change log (delta), with an old→new mapping.
 
@@ -136,8 +140,8 @@ rules above, which apply today.
 hold, and the third is what records the decision:
 
 1. this document, corrected, and the `AGENTS.md` rule are merged;
-2. the supporting ID validation is merged — the `CASE_ID` recogniser and the owner check that land with the
-   R3 tooling (#27);
+2. the supporting ID validation is merged — the `CASE_ID` recogniser and the owner check (both merged
+   on `main` with the R3 tooling, #158);
 3. an **adoption revision** is recorded here naming that decision.
 
 Until then, a prefixed id is **not** operative merely because this document exists; reservations continue in
@@ -155,25 +159,28 @@ that does not exist.
 | --- | --- | --- |
 | Module boundary: production must not import `test/`; cross-module calls go through ports (§1.4) | import-boundary tests | ✅ on `main` |
 | Registers are schema-valid; ids are unique and reference existing rows (§3) | readiness suite over `requirements.yaml` / `case-registry.yaml` | ✅ on `main` |
-| The trace chain is complete; dangling references fail (§1.3) | `src/evaluation/trace-fitness.ts` + the `trace` gate | 🧩 code on R3 (#27), **not blocking** |
-| Frozen paths require an ADR and human review (§7) | `docs/architecture/frozen.yaml` + the `frozen-modified` check, run against the **change set CI supplies** | 🧩 code on R3 (#27), **not blocking** |
-| Every change updates the AI-use log (G6) | `ai-use-log-gate.ts` + the G6 gate | 🧩 code on R3 (#27), **not blocking** |
-| One task = one commit; no agent merges; PR checklist | `.github/PULL_REQUEST_TEMPLATE.md` (+ `AGENTS.md`) | ⏳ **R3 (#27)** / ✅ `AGENTS.md` |
-| A new id's prefix matches its `Owner` (§3.2) | `invariant-owner-mismatch` / `trace-case-owner-mismatch` in `trace-fitness.ts` | ✅ **R3 (#27)** |
-| The case recogniser accepts prefixed ids (§3.1) | `CASE_ID` in `trace-fitness.ts` matches both `C-12` and `C-M6-1` | ✅ **R3 (#27)** |
+| Every cited trace link resolves; every registered requirement has a canonical row and no bare monitor cell (§1.3) | `src/evaluation/trace-fitness.ts` + the `trace` gate (`trace-requirement-missing`, `trace-monitor-missing`, `trace-monitor-unreasoned`) | ✅ on `main` (#158, `9492070`); a failing step makes the required `verify` check red |
+| Frozen paths require an ADR and human review (§7) | `docs/architecture/frozen.yaml` + the `frozen-modified` check, run against the **change set CI supplies** | ✅ on `main` (#158, `9492070`); red `verify` on a violation |
+| Every change updates the AI-use log (G6) | `ai-use-log-gate.ts` + the G6 gate | ✅ on `main` (#158, `9492070`); red `verify` on a violation |
+| One task = one commit; no agent merges; PR checklist | `.github/PULL_REQUEST_TEMPLATE.md` (+ `AGENTS.md`) | ✅ template on `main`; G1 evidence is enforced by the gate, not yet listed in the template (follow-up) |
+| Agent writes are role-scoped and default-deny (permission model) | `tools/opencode/` compiler + `test/offline/opencode-policy.test.ts` | 🧩 local candidate, **not blocking**; native checks are version-bound and re-observed per candidate |
+| A new id's prefix matches its `Owner` (§3.2) | `invariant-owner-mismatch` / `trace-case-owner-mismatch` in `trace-fitness.ts` | ✅ on `main` (#158, `9492070`) |
+| The case recogniser accepts prefixed ids (§3.1) | `CASE_ID` in `trace-fitness.ts` matches both `C-12` and `C-M6-1` | ✅ on `main` (#158, `9492070`) |
 
-Until the ⏳ rows land, they are **convention + review**, not gates — and the document says so rather than
-implying otherwise. The R3 tooling PR is the enforcement half of this document; the two halves are
-deliberately separate so the rules can be reviewed on their own.
+Every row above except the permission model is on `main` and runs as a step of the `verify` job. The
+permission-model row is the **only** local, non-blocking candidate: it is a proposal whose native
+checks were observed in a disposable directory, not a gate.
 
-**Code present is not protection enforced.** Every row marked *R3 (#27)* is code that exists on that
-branch and runs as a step of the `verify` job. **None of it blocks a merge until branch protection requires
-the `verify` check**, which is a human/remote setting and is **not** in place today — so today these gates
-inform a reviewer rather than prevent a merge. Both rows that the previous revision listed as *to be added*
-are now implemented on that branch: the frozen check receives the change set CI supplies (so changing a
-frozen path can fail the run), and the owner-prefix check runs.
+**Enforcement is active, not just coded.** The gate steps block a merge because the remote ruleset
+`Protect Main` (id 24803426) is `enforcement: active` on `main` with required check `verify`
+(measured 2026-10-29 in `verification-constraints.md`; the coordinator re-read the active ruleset
+through GitHub on 2026-11-25). The ruleset also requires one approving review **after the latest
+push** and linear history. Classic branch protection returns 404; the ruleset is the enforcement path.
+The `verify` job (`.github/workflows/ci.yml`) is the only workflow, so a red G1/G2/G3/trace/G4/G5/G6
+or build step makes the required check red. Two conditions still apply: branch-up-to-date is off and
+the initial branch creation is not enforced, so a stale branch is not refused before merge.
 
-**Tooling cost of the prefix convention (paid, with the R3 tooling PR):** the case recogniser in
+**Tooling cost of the prefix convention (paid, merged with #158):** the case recogniser in
 `trace-fitness.ts` now accepts both `C-12` and `C-M6-1`, and the **prefix ↔ `Owner`** check is in place
 (`invariant-owner-mismatch`, `trace-case-owner-mismatch`). Legacy ids keep matching unchanged, and a legacy
 numeric id carries no module claim, so it is not checked against the `Owner` cell.
@@ -213,17 +220,16 @@ truth.
    announce it in the coordination thread, and expect the shared file to merge-conflict while several
    owners are active — resolve by **union** (keep every owner's row), never by dropping a row that is not
    yours.
-4. **The register records its own owner.** Where a register carries an owner (the `Owner` column that lands
-   with the R3 tooling PR on `invariants.md` and `trace-matrix.md`) it is authoritative for who answers for
-   the row, and it must agree with the id prefix (§3.2). Until that column is on `main`, ownership is read
-   from the row's existing `Enforcing component` text.
+4. **The register records its own owner.** Where a register carries an owner (the `Owner` column,
+   merged on `invariants.md` and `trace-matrix.md` with #158) it is authoritative for who answers for
+   the row, and it must agree with the id prefix (§3.2).
 
 ## 7. Change policy
 
 - Paths in `docs/architecture/frozen.yaml` require an ADR and human review (fail-closed).
   ADR-006 permits only a verified feature-push restoration to an immutable main ancestor,
   with matching committed and checked-file contents/mode; the full event diff remains checked. *(The manifest and
-  its `frozen-modified` check land with the R3 tooling PR; see §4.)*
+  its `frozen-modified` check merged with #158; see §4.)*
 - This document is **reviewer-managed**; changes go through a pull request with M5 coordination.
 
 ## 8. Follow-up (proposed)

@@ -36,7 +36,7 @@ export const M3_COMPARISON_VARIANT_DESCRIPTIONS: Readonly<
   'm3-general-model':
     'General OpenAI-compatible model baseline for NFR-03 and Issue #98. It runs the split M3 selection and reaction adapters against a general-purpose provider model and records the served model and measured usage honestly.',
   'm3-jev':
-    'Jev dedicated model variant for NFR-03 and Issue #98. It runs the split M3 selection and reaction adapters against the dedicated Jev model configuration so that variant can be compared with the rules and general-model baselines.',
+    'Jev dedicated model variant for NFR-03 and Issue #98. It runs the split M3 selection and reaction adapters against the TypeSafe Jev decisions endpoint (`/v1/decisions`) with typed choice questions so that variant can be compared with the rules and general-model baselines.',
   'm3-m4-combined':
     'Single combined selection+dialogue baseline for NFR-03 and Issue #98. It requires full-turn composition because one call covers both decision and dialogue; it is not a selection-port-only mode and must not be run through that harness.',
 }

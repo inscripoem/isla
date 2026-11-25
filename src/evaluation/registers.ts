@@ -20,15 +20,27 @@ export function caseIdsFromRegistry(text: string): ReadonlySet<string> | null {
   return new Set(parsed.registry.cases.map((entry) => entry.id))
 }
 
-/** Invariant ids from the invariant register table; `null` when no table is found. */
+/**
+ * Invariant ids from every register table; `null` when no ID table is found.
+ *
+ * The current-invariant table and the clearly separated reclassified-legacy table
+ * are both read. Historical AI-use entries may cite an id that was an invariant
+ * when the entry was written; resolving it keeps the historical record checkable
+ * without treating the id as a current system invariant. Current status is
+ * decided by `requirements.yaml`'s `category`, not by presence in this file.
+ */
 export function invariantIdsFromRegister(text: string): ReadonlySet<string> | null {
+  const ids = new Set<string>()
   for (const table of parseTables(text)) {
-    const idColumn = columnIndex(table.header, 'ID')
+    const idColumn =
+      columnIndex(table.header, 'ID') >= 0
+        ? columnIndex(table.header, 'ID')
+        : columnIndex(table.header, 'Former ID')
     if (idColumn < 0) continue
-    const ids = table.rows
-      .map((row) => (row[idColumn] ?? '').trim())
-      .filter((id) => /^INV-\d+$/.test(id))
-    if (ids.length > 0) return new Set(ids)
+    for (const row of table.rows) {
+      const id = (row[idColumn] ?? '').trim()
+      if (/^INV-\d+$/.test(id)) ids.add(id)
+    }
   }
-  return null
+  return ids.size === 0 ? null : ids
 }

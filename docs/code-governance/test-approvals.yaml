@@ -77,6 +77,102 @@ approvals:
       - test/offline/voice-settings.test.ts
       - test/offline/m5-reference-live.test.ts
       - test/browser/console-voice-selection.mjs
+  - id: TA-005
+    task: "Record the versioned prompt manifest without changing any prompt text"
+    approved_at: "2026-11-25T16:43:09+08:00"
+    approved_by: M5
+    scope:
+      - "prompts/prompt_v1.0.yaml"
+    tests:
+      - test/offline/m3-decision.test.ts
+      - test/offline/m4-persona-recall.test.ts
+      - test/offline/m4-style.test.ts
+  - id: TA-007
+    task: "Artifact-closure traceability: requirement taxonomy, canonical trace coverage and register loader (G1 ordering record; see DEBT-21 for the replay exception)"
+    approved_at: "2026-11-25T10:00:55Z"
+    approved_by: M6
+    scope:
+      - "src/contracts/requirements.ts"
+      - "src/evaluation/"
+      - "test/offline/"
+    tests:
+      - test/offline/requirements.test.ts
+      - test/offline/trace-fitness.test.ts
+      - test/offline/ai-use-log-gate.test.ts
+  - id: TA-010
+    task: "Add Jev decisions selection/reaction adapters and the m3-jev comparison path"
+    approved_at: "2026-11-25T17:55:00+08:00"
+    approved_by: M3
+    scope:
+      - "src/decision/jev-decisions-core.ts"
+      - "src/decision/provider-jev.ts"
+      - "src/decision/index.ts"
+      - "src/decision/variants.ts"
+      - "test/support/decision-runner.ts"
+    tests:
+      - test/offline/m3-decision.test.ts
+      - test/live/m3-jev-decisions.live.test.ts
+  - id: TA-011
+    task: "Connect the memory-inspection diagnostic end to end"
+    approved_at: "2026-11-25T18:00:00+08:00"
+    approved_by: M5
+    scope:
+      - "src/contracts/diagnostics.ts"
+      - "src/contracts/protocol.ts"
+      - "src/dialogue/dialogue-port.ts"
+      - "src/dialogue/memory-inspect.ts"
+      - "src/runtime/composition.ts"
+      - "src/runtime/diagnostics.ts"
+      - "src/runtime/evaluation-adapter.ts"
+      - "src/runtime/production.ts"
+      - "src/runtime/server.ts"
+    tests:
+      - test/offline/m4-memory-inspect.test.ts
+      - test/offline/m5-dialogue-outcome.test.ts
+      - test/offline/m5-production-application.test.ts
+      - test/offline/m5-runtime.test.ts
+      - test/offline/protocol.test.ts
+      - test/offline/server.test.ts
+  - id: TA-012
+    task: "Wire the default-off style contract into dialogue generation"
+    approved_at: "2026-11-25T17:58:00+08:00"
+    approved_by: M4
+    scope:
+      - "src/dialogue/dialogue-port.ts"
+    tests:
+      - test/offline/m4-dialogue.test.ts
+  - id: TA-013
+    task: "Add opt-in decision provider modes to the reference live deployment"
+    approved_at: "2026-11-25T18:02:00+08:00"
+    approved_by: M5
+    scope:
+      - "src/runtime/deployments/reference-live-config.ts"
+      - "src/runtime/deployments/reference-live.ts"
+    tests:
+      - test/offline/m5-reference-live-config.test.ts
+      - test/offline/m5-reference-live.test.ts
+  - id: TA-006
+    task: "Drive the selected speaking avatar from observed Windows playback level and close it on Stop or terminal playback"
+    approved_at: "2026-11-25T16:22:51+08:00"
+    approved_by: M1
+    scope:
+      - "src/performance/lipsync/"
+    tests:
+      - test/offline/test_m1_speaking_mouth.py
+      - test/offline/m1-speaking-release.test.ts
+  - id: TA-008
+    task: "Drive mouth opening from the synthesis-time 20 ms RMS envelope and the admitted player's media position"
+    approved_at: "2026-11-25T18:37:42+08:00"
+    approved_by: M1
+    scope:
+      - "src/performance/kokoro-synthesis.ts"
+      - "src/performance/audio-resources.ts"
+      - "src/performance/browser/"
+      - "src/performance/lipsync/"
+    tests:
+      - test/offline/m1-performance.test.ts
+      - test/offline/m1-lipsync-envelope-playback.test.ts
+      - test/offline/m1-lipsync-envelope-bridge.test.ts
   - id: TA-014
     task: "M4 A04 - multi-factor recall ranking v2 (#146)"
     approved_at: "2026-11-25T19:37:36+08:00"
@@ -95,6 +191,7 @@ approvals:
       - "src/dialogue/"
     tests:
       - test/offline/m4-style-anchors.test.ts
+      - test/offline/m4-style-anchors-listener.test.ts
       - test/offline/m4-persona-probe.test.ts
       - test/offline/m4-style.test.ts
       - test/offline/m4-dialogue.test.ts

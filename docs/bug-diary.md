@@ -3,6 +3,15 @@
 Status: under review. Owner: R3 / M6 tooling (D4); all owners contribute. One entry per significant
 bug: **symptom, reproduction, classification, root cause, fix, and the invariant gap it exposed**.
 
+## Entry template
+
+- Symptom:
+- Reproduction:
+- Classification:
+- Root cause:
+- Fix:
+- Invariant gap:
+
 ## BUG-001 — Fault-injection controls exposed as production API
 - Symptom: `createEventStore` accepted `beforeAppend`/`beforeCommit` failure hooks.
 - Reproduction: construct a store with a throwing `beforeCommit`.
@@ -16,36 +25,52 @@ bug: **symptom, reproduction, classification, root cause, fix, and the invariant
 - Reproduction: append the same `eventId` in two sessions.
 - Classification: correctness (`INTERFACES` C7).
 - Root cause: the index was keyed by `eventId` alone.
-- Fix: key by `(sessionId, eventId)` (`b4decf3`). Invariant: INV-04.
+- Fix: key by `(sessionId, eventId)` (`b4decf3`).
+- Invariant gap: INV-04 — session-scoped identity was not enforced.
 
 ## BUG-003 — Committed records were mutable references
 - Symptom: mutating an input or a returned event changed committed state and JSONL export.
 - Reproduction: append an event, mutate its `payload`, re-read.
 - Classification: correctness / isolation.
 - Root cause: the backend stored and returned caller references.
-- Fix: deep-copy on write and read (`b5da14e`). Invariant: INV-07.
+- Fix: deep-copy on write and read (`b5da14e`).
+- Invariant gap: INV-07 — committed records were not isolated from caller mutation.
 
 ## BUG-004 — Confirmed history was unordered
 - Symptom: `confirmedHistory` depended on insertion order, not the supporting event `seq`.
+- Reproduction: commit deliveries out of event-sequence order in one session, then read `confirmedHistory`; the result followed insertion order.
 - Classification: correctness (`INTERFACES` C7; issue #22).
-- Fix: order by supporting event `seq` (`b52e12e`). Invariant: INV-08.
+- Root cause: the history query iterated the delivery map in insertion order instead of sorting by the supporting event sequence.
+- Fix: order by supporting event `seq` (`b52e12e`).
+- Invariant gap: INV-08 — confirmed history was not ordered by the supporting event sequence.
 
 ## BUG-005 — WAL backup could be incomplete
 - Symptom: copying `isla.db` alone could miss committed data still in the `-wal` file.
+- Reproduction: hold a committed row in the WAL with a concurrent reader, copy only `isla.db`, and open the copy; committed data was absent.
 - Classification: durability / recovery.
-- Fix: `PRAGMA wal_checkpoint(TRUNCATE)` before the copy (`9a54663`). Invariant: INV-10.
+- Root cause: the pre-migration backup copied the main file after a best-effort `PRAGMA wal_checkpoint(TRUNCATE)` whose result row was discarded, so a pinned reader could leave committed data outside the copy.
+- Historic handling: the pre-migration backup copied the file after that checkpoint; `backedUp: true` did not prove the snapshot was complete.
+- Current fix: `VACUUM INTO` writes a consistent, self-contained snapshot and fails closed rather than
+  copying a file that may be missing committed data (`7aa0303`, 2026-10-15;
+  `src/storage/sqlite/migrations.ts` records why not checkpoint-then-copy).
+- Invariant gap: INV-10 — storage configuration/recovery did not guarantee a complete backup.
 
 ## BUG-006 — Migrations were not atomic as a unit
 - Symptom: a failing migration could leave partial schema (each migration had its own transaction).
+- Reproduction: run a migration set whose later step fails after an earlier step succeeded; inspect the schema and `schema_version`.
 - Classification: durability / recovery.
+- Root cause: each migration committed its own transaction and the version bump was not atomic with the set.
 - Fix: apply all pending migrations and the version bump in one transaction; rollback on failure.
-  Invariant: INV-10.
+- Invariant gap: INV-11 — a failed migration could leave a partially migrated database.
 
 ## BUG-007 — Invariants missing from the register
 - Symptom: INV-01..03 and INV-11 were absent from `docs/architecture/invariants.md`.
+- Reproduction: add an invariant to `requirements.yaml` without a register row; run the trace fitness function.
 - Classification: governance / traceability.
+- Root cause: the register was maintained by hand and no coverage check required every invariant to have a row.
 - Found by: the new traceability fitness functions.
-- Fix: the register was completed (INV-01..13). Invariant: INV-12.
+- Fix: the register was completed (INV-01..13); the trace gate now rejects an unregistered invariant.
+- Invariant gap: INV-13 — the traceability chain was not machine-checked for this link.
 
 ## BUG-008 — The frozen-path check could not fail in CI
 - Symptom: changing a path listed in `frozen.yaml` did not redden the `trace` gate.

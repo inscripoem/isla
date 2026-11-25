@@ -1,6 +1,7 @@
 # Delta-007 — Evaluation bench: measurement, runner, report and case shape
 
-Change record for **ADR-007**. Date: 2026-10-16. Branch `m6-02-bench` (based on `main`).
+Change record for **ADR-007**. Date: 2026-10-16. Branch `m6-02-bench` (based on `main`); merged in
+#40 (`d1b040b`, 2026-10-19).
 Scope: **additive** — no contract or schema change; S5 adds the INV-16/C-52…C-55 register rows.
 
 ## Change
@@ -22,8 +23,8 @@ The runner (`comparison.ts`), the eval set and the generated report follow in la
 
 ## Traceability
 
-Per `docs/code-governance/structural-constraints.md` §3 (lands with **PR #32**), a new id is **allocated in the register before it
-is used, and nobody self-assigns one**. So this slice records its traceability intent here and leaves the
+Per `docs/code-governance/structural-constraints.md` §3 (merged in #32, `c2f9b38`), a new id is
+**allocated in the register before it is used, and nobody self-assigns one**. So this slice records its traceability intent here and leaves the
 ids **pending allocation**:
 
 - **Invariant (pending id):** *every attempt is accounted for — including failures and cancellations — and
@@ -32,7 +33,7 @@ ids **pending allocation**:
   sample is incomplete (it never reports a partial total).
 - **ADR:** ADR-007 (this change).
 
-Once the id convention is agreed (PR #32), the rows are added to `docs/req/requirements.yaml` and
+The id convention was agreed in #32 (`c2f9b38`); the rows are added to `docs/req/requirements.yaml` and
 `docs/req/case-registry.yaml`, and an `invariants.md` row is added with its verification and owner.
 
 ## Not in this slice

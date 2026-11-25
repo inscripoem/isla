@@ -16,6 +16,7 @@ import {
 } from '../support/fixture-data'
 import {
   ALLOWED_DELIVERY_PAIRS,
+  AUTHOR_CHARACTER_PROFILE,
   CHARACTER_CONTENT,
   FIXTURE_CHARACTER_PROFILE,
   MAX_STANDING_FACT_CHARACTERS,
@@ -44,6 +45,7 @@ import {
 import type {
   AssembledDialogueContext,
   DialogueOutcomeReport,
+  DialogueStyleReport,
   DialogueTextSource,
   DeliveryMemoryStore,
 } from '../../src/dialogue'
@@ -55,8 +57,10 @@ import type {
   DialogueRequest,
   DialogueSegment,
   DialogueSink,
+  ReplyIntent,
 } from '../../src/contracts'
 import { REPLY_INTENTS } from '../../src/contracts'
+import { deriveStyleContract, validateStyle } from '../../src/dialogue/style-contract'
 
 /** Captures the assembled context handed to a text source. */
 function captureView(): { view: AssembledDialogueContext | null } {
@@ -362,6 +366,133 @@ describe('M4 generation invariants', () => {
     expect(isSubstantiveSpeech('Hello there.')).toBe(true)
     expect(isSubstantiveSpeech('...')).toBe(false)
     expect(isSubstantiveSpeech('  ')).toBe(false)
+  })
+})
+
+describe('M4 style contract wiring', () => {
+  const BOUNDARY_LINE = 'I can cure your illness with real magic.'
+  const authoredContract = deriveStyleContract(AUTHOR_CHARACTER_PROFILE)
+
+  function authoredRequest(intent: ReplyIntent): DialogueRequest {
+    return fixtureDialogueRequest({
+      characterProfileId: CHARACTER_CONTENT.profileId,
+      characterProfileVersion: CHARACTER_CONTENT.version,
+      responsePlan: {
+        ...fixtureDialogueRequest().responsePlan,
+        replyIntent: intent,
+      },
+    })
+  }
+
+  it('leaves a boundary-violating line unchanged and reports nothing when off', async () => {
+    for (const enforceStyleContract of [undefined, false]) {
+      const reports: DialogueStyleReport[] = []
+      const port = createDialoguePort({
+        clock: FIXTURE_CLOCK,
+        textSource: fixedTextSource([BOUNDARY_LINE]),
+        ...(enforceStyleContract === undefined ? {} : { enforceStyleContract }),
+        onStyleReport: (report) => reports.push(report),
+      })
+      const outcome = await generate(port)
+
+      expect(outcome.segments).toHaveLength(1)
+      expect(outcome.segments[0]?.text).toBe(BOUNDARY_LINE)
+      expect(reports).toEqual([])
+    }
+  })
+
+  it('repairs a boundary hit with the authored fallback when enabled', async () => {
+    const reports: DialogueStyleReport[] = []
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      textSource: fixedTextSource([BOUNDARY_LINE]),
+      enforceStyleContract: true,
+      onStyleReport: (report) => reports.push(report),
+    })
+    const outcome = await generate(port, authoredRequest('support'))
+
+    expect(outcome.segments).toHaveLength(1)
+    const text = outcome.segments[0]?.text ?? ''
+    expect(text).toBe(CHARACTER_CONTENT.intentTemplates.support[0])
+    expect(validateStyle([text], authoredContract, { replyIntent: 'support' })).toEqual([])
+    expect(reports).toHaveLength(1)
+    expect(reports[0]?.fallbackUsed).toBe(true)
+    expect(reports[0]?.violations.some((v) => v.kind === 'boundary' && v.lineIndex === 0)).toBe(true)
+  })
+
+  it('uses confirmed history for tic frequency and repairs the surplus tic', async () => {
+    const memory = createDeliveryMemoryStore()
+    await memory.commit(
+      fixtureCommitDelivery({
+        turnId: 'turn-earlier-tic',
+        segmentId: 'seg-earlier-tic',
+        textHash: 'hash-earlier-tic',
+        text: 'Earlier, nya.',
+      }),
+    )
+    const reports: DialogueStyleReport[] = []
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      memory,
+      textSource: fixedTextSource(['Another nya one.']),
+      enforceStyleContract: true,
+      onStyleReport: (report) => reports.push(report),
+    })
+    const outcome = await generate(port)
+
+    // Without the confirmed-history window this lone line would not violate.
+    expect(outcome.segments[0]?.text).toBe('Another one.')
+    expect(reports).toHaveLength(1)
+    expect(
+      reports[0]?.violations.some((v) => v.kind === 'tic-frequency' && v.lineIndex === 0),
+    ).toBe(true)
+    expect(reports[0]?.repaired).toBe(true)
+  })
+
+  it('passes standing facts into the contradiction scan', async () => {
+    const reports: DialogueStyleReport[] = []
+    const port = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      textSource: fixedTextSource(['I am 160 cm tall.']),
+      enforceStyleContract: true,
+      onStyleReport: (report) => reports.push(report),
+    })
+    const outcome = await generate(port, authoredRequest('answer'))
+
+    // Report-only: the line still speaks, unchanged.
+    expect(outcome.segments[0]?.text).toBe('I am 160 cm tall.')
+    expect(reports).toHaveLength(1)
+    expect(
+      reports[0]?.violations.some((v) => v.kind === 'fact-contradiction' && v.lineIndex === 0),
+    ).toBe(true)
+  })
+
+  it('contains a throwing or rejecting onStyleReport callback', async () => {
+    const expected = CHARACTER_CONTENT.intentTemplates.support[0]
+
+    const throwing = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      textSource: fixedTextSource([BOUNDARY_LINE]),
+      enforceStyleContract: true,
+      onStyleReport: () => {
+        throw new Error('style observer failed')
+      },
+    })
+    const thrown = await generate(throwing, authoredRequest('support'))
+    expect(thrown.end.status).toBe('completed')
+    expect(thrown.segments.map((segment) => segment.text)).toEqual([expected])
+
+    const rejecting = createDialoguePort({
+      clock: FIXTURE_CLOCK,
+      textSource: fixedTextSource([BOUNDARY_LINE]),
+      enforceStyleContract: true,
+      onStyleReport: async () => {
+        throw new Error('style observer rejected')
+      },
+    })
+    const rejected = await generate(rejecting, authoredRequest('support'))
+    expect(rejected.end.status).toBe('completed')
+    expect(rejected.segments.map((segment) => segment.text)).toEqual([expected])
   })
 })
 

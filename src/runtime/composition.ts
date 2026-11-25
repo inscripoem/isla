@@ -6,6 +6,7 @@ import type {
   EventStorePort,
   HistoryQueryPort,
   MemoryCommitPort,
+  MemoryInspectSource,
   PlayerPort,
   ReactionPort,
   RendererPort,
@@ -14,6 +15,7 @@ import type {
 } from '../contracts'
 import { createDialoguePort } from '../dialogue/dialogue-port'
 import type { DialogueTextSource } from '../dialogue/dialogue-port'
+import { createMemoryInspectRetention } from '../dialogue/memory-inspect'
 import type { AssembledTurn } from '../dialogue/context'
 import { createDeliveryMemoryStore } from '../dialogue/memory-commit'
 import type { DeliveryMemoryStore } from '../dialogue/memory-commit'
@@ -63,6 +65,12 @@ export interface RuntimeCompositionDeps {
   selection: SelectionPort
   reaction: ReactionPort
   dialogue: DialoguePort
+  /**
+   * Read-only supplier of the latest `memory.inspect` payload. Omitted means the
+   * runtime has no observation and answers `get_memory_inspect` explicitly with
+   * `no-observation` instead of inventing values.
+   */
+  memoryInspect?: MemoryInspectSource
   commit: MemoryCommitPort
   store: EventStorePort
   /** Reaction/avatar adapter; the merged M1 mapped renderer in production. */
@@ -100,6 +108,12 @@ export interface RuntimeComposition {
   readonly bridge: PerformanceBridge
   readonly synthesis: SynthesisPort
   readonly sessionId: string
+  /**
+   * Read-only source of the most recently assembled `memory.inspect` payload;
+   * `null` before any assembly. The diagnostics boundary reads this and never
+   * writes it.
+   */
+  readonly memoryInspect: MemoryInspectSource
   /** Releases bridge and gate resources; safe to call once on shutdown. */
   dispose(): void
 }
@@ -146,10 +160,17 @@ export interface DialogueComposition {
   readonly dialogue: DialoguePort
   /** M4 MemoryCommitPort and attribution/audit store. */
   readonly memory: DeliveryMemoryStore
+  /**
+   * Read-only source of the most recently assembled `memory.inspect` payload.
+   * It returns `null` until a turn has been assembled; the runtime reports that
+   * state as an explicit `unavailable` reply, never as invented memory data.
+   */
+  readonly memoryInspect: MemoryInspectSource
 }
 
 export function createDialogueComposition(deps: DialogueCompositionDeps): DialogueComposition {
   const memory = createDeliveryMemoryStore()
+  const memoryInspect = createMemoryInspectRetention()
   const onDialogueOutcome = deps.onDialogueOutcome
   const dialogue = createDialoguePort({
     clock: deps.clock,
@@ -162,6 +183,7 @@ export function createDialogueComposition(deps: DialogueCompositionDeps): Dialog
       ? { explicitlySelectedSessionIds: deps.explicitlySelectedSessionIds }
       : {}),
     ...(deps.ownerAudienceIdOf !== undefined ? { ownerAudienceIdOf: deps.ownerAudienceIdOf } : {}),
+    onAssembledContext: memoryInspect.observe,
     ...(onDialogueOutcome === undefined
       ? {}
       : {
@@ -174,7 +196,7 @@ export function createDialogueComposition(deps: DialogueCompositionDeps): Dialog
           onOutcome: (report) => onDialogueOutcome(projectDialogueOutcome(report)),
         }),
   })
-  return { dialogue, memory }
+  return { dialogue, memory, memoryInspect: memoryInspect.read }
 }
 
 /**
@@ -361,6 +383,7 @@ export async function createReconstructedRuntimeComposition(
     selection: deps.selection,
     reaction: deps.reaction,
     dialogue: dialogueComposition.dialogue,
+    memoryInspect: dialogueComposition.memoryInspect,
     commit: dialogueComposition.memory,
     store: deps.store,
     renderer: deps.renderer,
@@ -462,6 +485,7 @@ export function createRuntimeComposition(deps: RuntimeCompositionDeps): RuntimeC
     bridge,
     synthesis,
     sessionId,
+    memoryInspect: deps.memoryInspect ?? (() => null),
     dispose(): void {
       if (disposed) return
       disposed = true

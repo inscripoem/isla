@@ -7,6 +7,7 @@ import type {
   EventStorePort,
   HistoryQueryPort,
   MemoryCommitPort,
+  MemoryInspectSource,
   ReactionPort,
   SelectionPort,
   SynthesisPort,
@@ -374,6 +375,7 @@ export async function createLoopHarness(options: LoopHarnessOptions = {}): Promi
   } else {
     let dialoguePort = options.dialogue
     let commitPort = options.commit
+    let memoryInspect: MemoryInspectSource | undefined
     if (realM4) {
       const textSource =
         options.dialogueTextSource ??
@@ -388,6 +390,7 @@ export async function createLoopHarness(options: LoopHarnessOptions = {}): Promi
       m4Memory = composed.memory
       dialoguePort = dialoguePort ?? composed.dialogue
       commitPort = commitPort ?? composed.memory
+      memoryInspect = composed.memoryInspect
     }
     composition = createRuntimeComposition({
       clock,
@@ -395,6 +398,7 @@ export async function createLoopHarness(options: LoopHarnessOptions = {}): Promi
       selection: selectionPort,
       reaction: options.reaction ?? correct.createFixtureReactionPort(),
       dialogue: dialoguePort ?? correct.createFixtureDialoguePort(),
+      ...(memoryInspect !== undefined ? { memoryInspect } : {}),
       commit: commitPort ?? correct.createFixtureMemoryCommit(),
       store,
       renderer,

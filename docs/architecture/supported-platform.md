@@ -9,7 +9,9 @@ acceptance for any platform it does not name.
 
 `pnpm verify` on Linux (the CI `verify` job) is the regression baseline: typecheck, lint, every offline
 suite and the production build. It requires no live provider, VTube Studio, Kokoro model or audio
-device. The Node and pnpm versions are the ones pinned by the CI workflow and the lockfile.
+device. The Node and pnpm versions are the ones pinned by the CI workflow and the lockfile. The
+`test/live` entrypoints are a separate live suite: they are excluded from the root typecheck and from
+`pnpm verify`, and need a standalone `tsc --noEmit` check and the pinned model (`src/performance/README.md`).
 
 ## 2. Live product target
 
@@ -34,14 +36,40 @@ Evidence: [M1 Windows live run](https://github.com/inscripoem/isla/issues/94#iss
 [M1 Windows deployment evidence](https://github.com/inscripoem/isla/issues/96#issuecomment-6920647994),
 [six browser receipts](https://github.com/inscripoem/isla/issues/97#issuecomment-6918501769).
 
+**Decision provider mode (opt-in, not observed).** The deployment reads `ISLA_DECISION_MODE`
+and keeps its deterministic rule selection and reaction ports unless the mode is `general` or
+`jev`. `general` builds the OpenAI-compatible chat adapters over the `ISLA_LIVE_DECISION_*` group;
+`jev` builds the Jev decisions adapters, which call the dedicated classifier on
+`POST /v1/decisions` (not chat completions) and read only the `ISLA_LIVE_JEV_BASE_URL`,
+`ISLA_LIVE_JEV_MODEL` and `ISLA_LIVE_JEV_API_KEY` settings. Both ports always follow the same mode,
+an injected factory keeps precedence, and a provider group is read only when its mode is selected.
+No recorded run in this section used a provider decision mode, so this record makes no model,
+latency or decision-quality claim for either group. The variables, their base-URL rule and their
+names-only startup failure are documented in the repository README.
+
+The CP04 checkpoint (#74) remains open; the dated deployment record is the `9577069` run.
+
+**Merged after CP04.** Two changes postdate the run in this section and are not part of its evidence.
+#189 (merged `3a54e6b`, 2026-11-24) sends three VTube Studio requests per hotkey and reports the
+`play_not_allowed` / `play_failed` failure reasons. #190 (merged `2889136`, 2026-11-25) adds console
+`voice.list`, `voice.preview` and `voice.select` for installed Kokoro voices and persists the selection
+in `<databasePath>.voices.json`. Both are merged; #190's offline tests are
+`test/offline/console-voice-selection.test.ts` and `test/offline/voice-settings.test.ts`. This record
+contains no live run or named acceptance for either change.
+
 ## 3. Supported and not supported
 
-Supported: the regression baseline in §1 and the live product target in §2.
+Supported: the regression baseline in §1 and the live product target in §2. Since #190, installed
+Kokoro voices can be listed, previewed and selected from the console; only `af_heart` was exercised in
+the recorded run, so this record makes no quality or acoustic claim for another voice.
+
+The decision provider mode is implemented but outside the recorded acceptance: `ISLA_DECISION_MODE`
+defaults to `rules`, and no live run in this record selected `general` or `jev`.
 
 Not supported or claimed by this record: macOS live VTS/Kokoro; Windows builds other than build
-26300; VTube Studio models other than `Hiyori_A`; Kokoro voices other than `af_heart`; browser output
-device enumeration beyond the sink used in the recorded run; multi-host or multi-user deployment; any
-provider, model or platform without its own recorded live run.
+26300; VTube Studio models other than `Hiyori_A`; browser output device enumeration beyond the sink used
+in the recorded run; multi-host or multi-user deployment; any provider, model, platform or voice
+without its own recorded live run, including the `general` and `jev` decision provider groups.
 
 ## 4. Known limits
 
@@ -56,17 +84,19 @@ provider, model or platform without its own recorded live run.
 
 ## 5. Frozen functional scope
 
-The submission's live feature set is the merged reference deployment at `9577069`: live text
+The CP04 live feature set is the merged reference deployment at `9577069`: live text
 dialogue, deterministic rule selection/reaction, Kokoro synthesis, the audio resource route, the
 VTS-backed renderer with the three pinned actions, operator Stop/cancellation, durable SQLite
 persistence and recovery.
 
-No new user-visible feature is planned after CP04. X01, X02, X06 and X07 are implemented and merged
-(#159, #163, #161, #157) but are not wired into the reference deployment, so they add no live behavior
-to the frozen scope. X06 is the default-off, opt-in offline expression policy merged as `2a3f9d3`;
-the reference deployment continues to use its existing renderer path. X03, X04, X05, X08 and X09 are
-deferred and outside the submission scope unless separately approved. After this freeze, changes are
-limited to demonstrated defect fixes and evidence/documentation corrections.
+X01, X02, X03, X06, X07 and X08 are implemented and merged (#159, #163, #161, #157) but are not wired
+into the reference deployment, so they add no live behavior to the CP04 scope. X06 is the default-off,
+opt-in offline expression policy merged as `2a3f9d3`; the reference deployment continues to use its
+existing renderer path. X04's `session_state` storage shipped in #157 (`d86dbc1`); its audience-level
+seed remains deferred. X05 and X09 are deferred and outside the submission scope unless separately
+approved. No new user-visible feature was planned at the CP04 freeze; the later #190 console
+voice-selection change is recorded in §2 and is not covered by the `9577069` acceptance. After the
+freeze, changes are limited to demonstrated defect fixes and evidence/documentation corrections.
 
 ## 6. Reproduction and acceptance
 

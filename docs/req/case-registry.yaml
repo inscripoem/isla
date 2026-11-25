@@ -28,6 +28,16 @@ cases:
       file: test/conformance/runtime.conformance.ts
       test: c04-second-partial
 
+  # Proposed verifier mapping, pending case-owner confirmation; the status stays
+  # pending because a pending case must not declare a verifier. Exact offline
+  # tests in test/offline/m3-decision.test.ts:
+  # "C-05 times out an in-flight selection and suppresses the late resolved
+  # result" (primary), "C-05 rejects a schema-valid selection returned exactly at
+  # the deadline" and "C-05 keeps non-blocking speech when the reaction times out
+  # to a no-op". Delivered by PR #156 (`09bb73e`) after M4/M5/M6 approval; #104
+  # records the verification delivery as accepted. NFR-02 still carries a pending
+  # recovery-duration metric, so closure needs the NFR-02 owner (M5) and the case
+  # owner (M3) to confirm the scope.
   - id: C-05
     status: pending
     title: Decision timeout
@@ -47,11 +57,31 @@ cases:
       file: test/conformance/runtime.conformance.ts
       test: untrusted-control-refused
 
+  # Proposed verifier mapping, pending case-owner confirmation; the status stays
+  # pending. Offline application tests:
+  # test/offline/i1-application.test.ts::reconnects snapshot-first without
+  # silently clearing unknown delivery (the server refuses Resume, grants no
+  # audio and commits no delivery on the replacement connection) and
+  # test/offline/m5-i1-adoption.test.ts::accepts fresh input after an unconfirmed
+  # reconnect but blocks before selection or playback. Both are loopback
+  # scenarios; the accepted records still require the joint formal-console
+  # reload and recovery inspection, so the case stays pending.
   - id: C-08
     status: pending
     title: Reconnect while audio pending
     verifier: null
 
+  # Proposed verifier mapping, pending case-owner confirmation; the status stays
+  # pending. Exact offline test:
+  # test/offline/m5-i1-adoption.test.ts::keeps a completed prefix when a later
+  # synthesis fails and records a failed turn end. It uses the real M4 memory
+  # store and M6 confirmed history: the first segment stays fully delivered, the
+  # failed second segment commits no delivery and is absent from spoken memory,
+  # and the turn ends failed. Supporting evidence for failure before any output:
+  # test/offline/m5-i1-adoption.test.ts::fails before any output and then
+  # completes fresh input without replaying the failed work. Delivered by PR #131
+  # (`dd5f40b`) with peer approval; the accepted records still scope C-09 to a
+  # joint controlled run, so the case stays pending.
   - id: C-09
     status: pending
     title: Synthesis failure after dialogue
@@ -99,6 +129,9 @@ cases:
       file: test/offline/regressions.test.ts
       test: "adds exactly one attempt per new eligible input and none while unchanged"
 
+  # C-16 remains pending: no quality scorer or reviewed human labels exist. The
+  # draft rubric docs/decision/m3-quality-rubric-v0.1.md is not a verifier, so no
+  # quality score or semantic acceptance is claimed here.
   - id: C-16
     status: pending
     title: Intent and late fallback semantics
@@ -449,6 +482,20 @@ cases:
       file: test/offline/m5-process-restart.test.ts
       test: "production process restart acceptance"
 
+  # Supporting (not registered) cursor tests in test/offline/m6-memory-store.test.ts:
+  # "does not lower the cursor when a same-version rebuild sees fewer events",
+  # "rebuilds rows and cursor under a new extractor version" and
+  # "refuses a rebuild whose episode carries a different extractor version".
+  # C-75 stays pending: rebuild-equality needs M4's derive rules through the
+  # composition adapter, so these tests are recorded as supporting evidence only.
+  # Missing verifier: a composition-level rebuild-equality test that builds M4's
+  # DeriveSourceTurn records from admitted turns through the M4-owned adapter at
+  # the M5 composition boundary, calls deriveEpisodes/deriveTopics through
+  # rebuildDerived under one extractor version, and compares the rebuild with
+  # incremental derivation. The adapter does not exist yet
+  # (test/fixtures/memory/README.md), so this is a product gap as well as a test
+  # gap. Owner: M4 for the adapter, M5 for the composition boundary, M6 for the
+  # store and this registry row.
   - id: C-75
     status: pending
     title: The projection cursor is monotonic within one extractor version, and derived rows and cursor share that version

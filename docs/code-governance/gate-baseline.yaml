@@ -16,10 +16,11 @@ items: []
 # Trace rows whose ADR cell cannot yet name a number. The key is the SHA-256 of
 # `requirement|component|interface`; editing any of those cells invalidates the
 # exemption, so the row cannot drift while it stays exempt.
-traceRows:
-  - key: "888c336c864ec6bf5b60da0ac012ba5e1fd33c70d6a226136dfd52b981d9cc3a"
-    expires: "2026-12-15"
-    reason: "INV-15 / FR-06 row links #25 coordination instead of an ADR; M5 owns the row"
+#
+# No row exemptions are current. The former INV-15 exemption was removed on
+# 2026-11-25 after that row recorded a reasoned `—` and a design-note pointer
+# instead of the Issue #25 coordination link.
+traceRows: []
 
 # Reviewed prose-claim exceptions. The key is the SHA-256 of `path|trimmed line`,
 # so editing the sentence invalidates the exemption.
