@@ -2,7 +2,7 @@
 
 Status: coordination draft, under review · 2026-11-25.1 · [Project overview](../../README.md)
 
-Current scheduling and review carry-forward are recorded in the [delivery plan](DELIVERY-PLAN.en.md). CP02 is closed under its recorded single-machine inspection decision. CP03 closed on 2026-11-13 under the controlled offline I1 acceptance ([#73 comment 6860393261](https://github.com/inscripoem/isla/issues/73#issuecomment-6860393261)). CP04 and CP05 were accepted on 2026-11-20 for the recorded reduced deployed-product scope (with #96/#97 residual) and option A (thresholds pending). Original target dates remain visible. Module responsibilities and product criteria below are unchanged except for the recorded CP02 inspection decision.
+Current scheduling and review carry-forward are recorded in the [delivery plan](DELIVERY-PLAN.en.md). CP02 is closed under its recorded single-machine inspection decision. CP03 closed under the controlled offline I1 acceptance on 2026-11-14 (HKT; GitHub closure 2026-11-13T17:39Z) ([#73 comment 6860393261](https://github.com/inscripoem/isla/issues/73#issuecomment-6860393261)). CP04 and CP05 were accepted on 2026-11-20 for the recorded reduced deployed-product scope (with #96/#97 residual) and option A (thresholds pending). Original target dates remain visible. Module responsibilities and product criteria below are unchanged except for the recorded CP02 inspection decision.
 
 ## Requirements and course-deliverable work
 
