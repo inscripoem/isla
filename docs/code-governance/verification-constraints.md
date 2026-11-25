@@ -178,12 +178,15 @@ console UI-defect slice, is G1-only, and merged in `6d8f8d2`; this waiver does n
 console scope. The waiver is PR-scoped: any additional PR must be requested explicitly to M5 (PM) and
 M6 (gate owner).
 
-**What this does not establish.**
+**What this establishes and what it does not establish.**
 
-- No refusal has been observed. One merge has occurred since the rule took effect: PR #57 merged as
-  `c1decc2` on 2026-10-29T11:58Z with a green `verify` (observed 2026-10-30). That is consistent with the
-  rule being satisfied, but it is not a refusal test. No merge with a failing `verify` has been attempted,
-  so enforcement remains unobserved.
+- A failing required check has been observed to block mergeability. PR #197
+  (`83666ff4fe63b13c1ecfba9439d7fe25d1a4e134`) had a red pull-request `verify` run
+  ([45565786945](https://github.com/inscripoem/isla/actions/runs/45565786945)); the failing step was G6
+  with `POL-G6-02` (`commit-unreachable`). GitHub reported `mergeStateStatus: BLOCKED`, and the PR was
+  closed unmerged on 2026-11-25; its content is not accepted. This is the negative evidence that an
+  applicable gate failure makes the PR unmergeable. An attempted merge command was not run, so a refused
+  merge call itself remains unobserved; PR #57 (`c1decc2`, 2026-10-29) remains the green-merge case.
 - The maintainer records that they applied the setting (issue #84, 2026-10-29T10:15:50Z), consistent with
   the ruleset's `updated_at`. The previous required-check value is not recorded.
 - The maintainer records that an **administrator PR-only bypass** remains (same comment). It is not readable
