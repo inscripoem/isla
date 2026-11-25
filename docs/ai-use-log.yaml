@@ -9663,19 +9663,7 @@ entries:
       refusal, persistence, retry and stop behavior.
     requirements: [FR-04, FR-05, NFR-05, NFR-06]
     invariants: [INV-01, INV-03]
-    commits:
-      - "ab8f84dded49ed453ff30e7acbafcbe324b3f413"
-      - "246bf4b8ed7a9567d222e1ce41d4117361129d3c"
-      - "2408cd896d387316d922f37dfad7bee45cf196b7"
-      - "67fe018f70b6178da4f745662171db90bb57790a"
-      - "eff22ce1a0da36e5f1be1c634034089ea73a3c80"
-      - "b2fc9dcf001f4b5a4d3ee31ccf6139c8dd638561"
-      - "328c2f97e04aef16557124fae4c10a04e3aeb33c"
-      - "e859d26451867120361515b4957992b2d5d4788e"
-      - "355e477ce484e4e3b3b8ce606211b99b1e119f9b"
-      - "26bf07aeed7604c9356a5f69bb4d65b01e62ad23"
-      - "2e8d989ec47fbc8c56a2f4d5eab1bd198da40bda"
-      - "2e22bd435639f4724a9702d4eaba5536f2addb53"
+    commits: ["2889136a69f545a6aea4f63d192dc5f979586877"]
     agent: OpenCode V2 build
     provider: deepseek
     model: deepseek-flash
