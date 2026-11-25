@@ -58,8 +58,12 @@ type LogRead = { readonly entries: readonly unknown[] } | { readonly error: LogR
  * parse-error, missing-`entries` or non-list cases.
  *
  * `invalid-yaml` is a syntax error. `no-entry-list` means the YAML is valid but
- * `entries` is not a list; `recursive-alias` is reported by the identity walker,
- * because a cyclic entry is readable but never comparable.
+ * cannot be read as a list of entries; `recursive-alias` is reported by the
+ * identity walker, because a cyclic entry is readable but never comparable.
+ *
+ * The `no-entry-list` detail separates the three cases an operator meets: the
+ * document is itself a list, a mapping has an `entries` value that is not a list,
+ * or the document has no top-level `entries` list at all.
  */
 function readLogEntries(text: string): LogRead {
   if (text.trim().length === 0) return { entries: [] }
@@ -74,19 +78,30 @@ function readLogEntries(text: string): LogRead {
       },
     }
   }
-  const entries = (parsed as { entries?: unknown } | null)?.entries
-  if (entries === undefined || entries === null) return { entries: [] }
-  if (!Array.isArray(entries)) {
+  if (Array.isArray(parsed)) {
     return {
       error: {
         kind: 'no-entry-list',
-        detail: Array.isArray(parsed)
-          ? 'the document is a list, not a mapping with an "entries" key'
-          : 'the document has no top-level "entries" list',
+        detail: 'the document is a list, not a mapping with an "entries" key',
       },
     }
   }
-  return { entries }
+  if (parsed !== null && typeof parsed === 'object') {
+    const entries = (parsed as { entries?: unknown }).entries
+    if (entries === undefined || entries === null) return { entries: [] }
+    if (!Array.isArray(entries)) {
+      return {
+        error: { kind: 'no-entry-list', detail: 'the "entries" value is not a list' },
+      }
+    }
+    return { entries }
+  }
+  return {
+    error: {
+      kind: 'no-entry-list',
+      detail: 'the document has no top-level "entries" list',
+    },
+  }
 }
 
 /** The operator-facing phrase for a log text that cannot be read. */
@@ -103,9 +118,9 @@ function describeLogReadError(error: LogReadError): string {
  * one historical entry predates it, so requiring it would fail every run for a change
  * nobody can date accurately.
  *
- * A recursive YAML alias parses into a real cycle, which is not log data: it can
- * never be given an identity, so it is a shape violation here rather than a crash
- * later in the reference check.
+ * A recursive YAML alias alone is not a shape violation: an entry with valid fields
+ * can still be read as a mapping. The reference check owns it, because a cyclic entry
+ * cannot be given an identity and must be reported once as a POL-G6-03 diagnostic.
  */
 export function collectAiUseLogShapeViolations(text: string): string[] {
   const read = readLogEntries(text)
@@ -123,15 +138,6 @@ export function collectAiUseLogShapeViolations(text: string): string[] {
     }
     const record = entry as Record<string, unknown>
     const label = typeof record.task === 'string' ? record.task : `entry ${index}`
-    try {
-      entryIdentity(record)
-    } catch (error) {
-      if (!(error instanceof RecursiveAliasError)) throw error
-      violations.push(
-        `${label} (entry ${index}) cannot be read as log data: a recursive alias at ${error.path}`,
-      )
-      return
-    }
     for (const field of REQUIRED_TEXT_FIELDS) {
       const value = record[field]
       if (typeof value !== 'string' || value.trim().length === 0) {
@@ -183,7 +189,7 @@ export function collectAiUseLogEntryViolations(
   if (head.count > base.count) return []
 
   return [
-    `the ${AI_USE_LOG_PATH} change must add an entry; it has ${head.count} entries at both the base and the head, so an existing entry was edited rather than a new one recorded (gate G6)`,
+    `the ${AI_USE_LOG_PATH} change must add an entry; it has ${head.count} entries at the head and ${base.count} at the base, so an existing entry was edited rather than a new one recorded (gate G6)`,
   ]
 }
 
@@ -265,26 +271,43 @@ function countEntries(text: string): { count: number } | { error: LogReadError }
   return 'error' in read ? { error: read.error } : { count: read.entries.length }
 }
 
+/** Why the base log file could not be read; names the variable and path, never a value. */
+export interface LogBaseReadError {
+  readonly detail: string
+}
+
+/** A readable base log text, or why the file could not be read. */
+export type LogBaseRead =
+  | { readonly text: string | null }
+  | { readonly error: LogBaseReadError }
+
 /**
  * The log at the base revision, or null when the variable is unset or empty.
- * Set-but-missing throws.
+ * A set-but-missing or unreadable file is an error result, not a throw, so the
+ * CLI can record the named POL-G6-03 finding instead of printing a stack trace.
  *
- * A null result is the push-integration scope: the run has no base copy, so the
+ * A null text is the push-integration scope: the run has no base copy, so the
  * caller treats every entry as historical and checks only entry shape and the
  * log-update rule. A pull request supplies the base and remains strict for the
  * entries it adds; see `baseLogText`.
  */
-function readLogBase(env: NodeJS.ProcessEnv = process.env): string | null {
+export function readLogBase(env: NodeJS.ProcessEnv = process.env): LogBaseRead {
   const path = env[AI_USE_LOG_BASE_ENV]
-  if (path === undefined || path.trim().length === 0) return null
+  if (path === undefined || path.trim().length === 0) return { text: null }
   if (!existsSync(path)) {
-    throw new Error(`${AI_USE_LOG_BASE_ENV} points at ${path}, which does not exist — the base log was not acquired`)
+    return {
+      error: {
+        detail: `${AI_USE_LOG_BASE_ENV} points at ${path}, which does not exist — the base log was not acquired`,
+      },
+    }
   }
   try {
-    return readFileSync(path, 'utf8')
+    return { text: readFileSync(path, 'utf8') }
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error)
-    throw new Error(`${AI_USE_LOG_BASE_ENV} (${path}) could not be read: ${reason}`)
+    return {
+      error: { detail: `${AI_USE_LOG_BASE_ENV} (${path}) could not be read: ${reason}` },
+    }
   }
 }
 
@@ -683,26 +706,41 @@ function runCli(changedFiles: readonly string[]): number {
   // Read the base once. The printed violations and the failure record must come
   // from deps that saw it: rebuilding deps without the base dropped the
   // POL-G6-03 `base-log` record and repeated the git lookups.
-  const baseText = readLogBase()
+  const base = readLogBase()
+  const baseText = 'error' in base ? null : base.text
 
   if (headText !== null) {
-    let unreachable = 0
-    const referenceFindings = collectAiUseLogReferenceFindings(
-      headText,
-      buildReferenceDeps(
+    if ('error' in base) {
+      // A base file that is missing or unreadable takes the same fail-closed path
+      // as an unparsable base: one named POL-G6-03 record and no identity
+      // classification, instead of a stack trace.
+      const finding: GateFinding = {
+        policy: 'POL-G6-03',
+        trigger: 'log-unreadable',
+        message: `${AI_USE_LOG_PATH} at the base ${base.error.detail}, so G6 cannot classify entries`,
+        evidence: { register: 'base-log' },
+      }
+      violations.push(finding.message)
+      findings.push(finding)
+    } else {
+      let unreachable = 0
+      const referenceFindings = collectAiUseLogReferenceFindings(
         headText,
-        () => {
-          unreachable += 1
-        },
-        baseText,
-      ),
-    )
-    violations.push(...referenceFindings.map((finding) => finding.message))
-    findings.push(...referenceFindings)
-    if (unreachable > 0) {
-      process.stdout.write(
-        `G6 advisory: ${unreachable} historical citation(s) were not verified in this clone (squash-merge history)\n`,
+        buildReferenceDeps(
+          headText,
+          () => {
+            unreachable += 1
+          },
+          baseText,
+        ),
       )
+      violations.push(...referenceFindings.map((finding) => finding.message))
+      findings.push(...referenceFindings)
+      if (unreachable > 0) {
+        process.stdout.write(
+          `G6 advisory: ${unreachable} historical citation(s) were not verified in this clone (squash-merge history)\n`,
+        )
+      }
     }
   }
 
@@ -710,10 +748,14 @@ function runCli(changedFiles: readonly string[]): number {
     process.stderr.write('G6: no changed files provided; the log-update rule is not verified\n')
   } else {
     violations.push(...collectAiUseLogViolations(changedFiles))
-    if (baseText === null) {
-      process.stderr.write(`G6: no ${AI_USE_LOG_BASE_ENV}; the entry rule is not verified\n`)
-    } else if (headText !== null) {
-      violations.push(...collectAiUseLogEntryViolations(changedFiles, baseText, headText))
+    // With an unreadable base there is no entry count to compare; the
+    // POL-G6-03 record above already fails the run.
+    if (!('error' in base)) {
+      if (baseText === null) {
+        process.stderr.write(`G6: no ${AI_USE_LOG_BASE_ENV}; the entry rule is not verified\n`)
+      } else if (headText !== null) {
+        violations.push(...collectAiUseLogEntryViolations(changedFiles, baseText, headText))
+      }
     }
   }
   if (violations.length === 0) {
