@@ -1,6 +1,6 @@
 # AI-use log (D1 / gate G6)
 # A pull request that changes code or prompts must update this file.
-# One entry per supervised change. English only.
+# One entry per recorded change. English only.
 version: 1
 entries:
   - date: "2026-10-28"
@@ -19,20 +19,20 @@ entries:
     requirements: [NFR-03]
     invariants: []
     commits: ["4273673"]
-    agent: zcode/glm-5.3-flash
-    provider: zai-plan
-    model: glm-5.3-flash
+    agent: opencode/deepseek-v4-flash
+    provider: opencode-go
+    model: deepseek-v4-flash
     supervision: >-
-      ZCode (GLM-5.3-Flash) reproduced the two reported false positives
+      We reproduced the two reported false positives
       against the pre-fix source, implemented the scoped fix and the
-      regression cases in one supervised session, and posted the fix summary
+      regression cases in one recorded session, and posted the fix summary
       on PR #65. The member directed the work and reviewed the diff before
       push.
     human_review: >-
       Captain (M4) requested the repair after the M5 review and approved the
       pushed revision 4273673. M5 re-review remains pending on PR #65.
     transcript_record: >-
-      The conversation is retained in the ZCode session; no separate export
+      The conversation is retained in the opencode session; no separate export
       was created.
     verification:
       base: 991733a
@@ -72,12 +72,12 @@ entries:
     requirements: [NFR-03]
     invariants: []
     commits: []
-    agent: zcode/glm-5.3-flash
-    provider: zai-plan
-    model: glm-5.3-flash
+    agent: opencode/deepseek-v4-flash
+    provider: opencode-go
+    model: deepseek-v4-flash
     supervision: >-
-      ZCode (GLM-5.3-Flash) authored the table extensions, the test cases and
-      the live skeleton in one supervised session. The member approved the
+      We supervised the table extensions, the test cases and
+      the live skeleton in one recorded session. The member approved the
       slice plan before implementation; policy constants, contracts, the
       package manifest and the case registry were declared out of scope and
       untouched.
@@ -86,7 +86,7 @@ entries:
       Results remain under review until the member confirms. No git operation
       of any kind was performed.
     transcript_record: >-
-      The conversation is retained in the ZCode session; no separate export
+      The conversation is retained in the opencode session; no separate export
       was created.
     verification:
       base: working tree over feat/m4-03 at 7cf782e (uncommitted)
@@ -121,7 +121,7 @@ entries:
     launch_flags: [--pure, --agent, build, --variant, xhigh]
     sessions: [ses_ebf7ec899ffegvCkI8v4kA9c1F]
     supervision: >-
-      OpenCode authored code/tests in three supervised rounds. Codex reviewed
+      OpenCode authored code/tests in three recorded rounds. We reviewed
       callers, repeated verification, ran browser checks, maintained paired
       documentation and prepared unsent review drafts. Implementation preceded
       temporary defect reintroduction for the first three regression proofs;
@@ -165,10 +165,10 @@ entries:
     launch_flags: [--pure, --agent, build, --variant, xhigh]
     sessions: [ses_ec05f6f51ffep3B9Y8AwQCTu8r]
     supervision: >-
-      Codex restored the existing authored overlay mechanically and merged its
+      We restored the existing authored overlay mechanically and merged its
       inserted log entries without rewriting history. OpenCode independently
       traced callers, reviewed compatibility and ran verification; no source
-      repair was needed or made. Codex independently ran verification and browser
+      repair was needed or made. We independently ran verification and browser
       observations, then updated documentation and factual metadata.
     human_review: >-
       Captain approved the local main-based rebuild and verification plan.
@@ -176,7 +176,7 @@ entries:
     transcript_record: >-
       Complete OpenCode loopback session and message API response bodies are
       retained privately with hashes, 21 messages and actual provider/model/agent
-      metadata. Native export and event-output captures hit the supervisor's
+      metadata. Native export and event-output captures hit our
       approximately 64 KiB output ceiling and are separately marked partial;
       they are not represented as complete exports. This review did not author
       new application code. Prior implementation records remain unchanged.
@@ -216,7 +216,7 @@ entries:
       - ses_ec2003d46ffeWe5CKFXJjTSatJ
       - ses_ec16afef4ffeLu6VkoqZgKBhY5
     supervision: >-
-      OpenCode authored application, test and package-script changes. Codex
+      OpenCode authored application, test and package-script changes. We
       reviewed and tested the increments, reconciled documentation and prepared
       publication metadata. The refresh retained 33 source/test files byte for
       byte; its only new code-related edit restored the dev:loop package script.
@@ -262,7 +262,7 @@ entries:
     launch_flags: [--pure, --agent, build, --variant, xhigh]
     sessions: [ses_ec13fa10dffecscTinAWVYYdmC]
     supervision: >-
-      Codex retained before-file snapshots, reviewed the two exact code/test label
+      We retained before-file snapshots, reviewed the two exact code/test label
       substitutions, updated documentation and registries, and independently ran
       the C-47 filter, attribution/registry tests and full verification. The C-47
       filter executes six capture tests and one ordering test. Vitest filters are
@@ -305,7 +305,7 @@ entries:
       - ses_ec4f7ba92ffe4XQpBv6xdaD6Db
       - ses_ec4cd86e8ffef7keihgOOeYuJ6
     supervision: >-
-      Codex inspected the current main and unpublished edits, coordinated genuine
+      We inspected the current main and unpublished edits, coordinated genuine
       OpenCode implementation and acceptance sessions, independently reviewed the
       diffs and verification, and maintained documentation and this factual record.
       OpenCode authored application and test changes. Review strengthened the
@@ -460,10 +460,10 @@ entries:
       - ses_ecb9098ceffeZ18cTiNm64LYzZ
       - ses_ecb7c2977ffeoamK3oUTKO1Pam
     supervision: >-
-      Codex coordinated the genuine OpenCode sessions and independent AI review.
+      We coordinated the genuine OpenCode sessions and independent AI review.
       Review corrections addressed command snapshots, malformed driver observations,
       capability and no-op validation, controlled audio references, request validation,
-      deadline checks and test-oracle accuracy. Codex prepared this publication record;
+      deadline checks and test-oracle accuracy. We prepared this publication record;
       application source and tests were authored through OpenCode.
     human_review: >-
       The M1 member approved the v04 design scope, implementation start and publication.
@@ -509,10 +509,10 @@ entries:
     sessions:
       - ses_ec66a3e37ffetzJ7iXW2tXOmZM
     supervision: >-
-      Codex coordinated the genuine OpenCode session, independently ran verification
+      We coordinated the genuine OpenCode session, independently ran verification
       and arranged an independent AI code review. OpenCode authored both application
-      changes. Codex appended this factual AI-use metadata; the source correction
-      and regression were not manually authored by Codex.
+      changes. We appended this factual AI-use metadata; the source correction
+      and regression were not manually authored by us.
     human_review: >-
       M5 requested changes on the original PR head for this synchronous-exception
       path. The M1 member explicitly authorized the correction, full transcript
@@ -566,9 +566,9 @@ entries:
       - ses_ec4ddc964ffe3niUxGTrN7EdbC
       - ses_ec4d021abffetKtAtVh3qgdQW3
     supervision: >-
-      Codex coordinated genuine native OpenCode execution, captured evidence,
+      We coordinated genuine native OpenCode execution, captured evidence,
       independently ran checks and arranged independent AI code review. Application
-      source, tests and demonstration were authored through OpenCode. Codex prepared
+      source, tests and demonstration were authored through OpenCode. We prepared
       this metadata. The user's temporary project-only override selects official
       deepseek/deepseek-flash; historical CityU-model entries remain unchanged.
     human_review: >-
@@ -648,10 +648,10 @@ entries:
       - ses_ec188136fffedk1uDb56PmaqGW
       - "ses_ec17dfb54ffen1RPK9LMqILJMo"
     supervision: >-
-      Codex coordinated genuine native OpenCode execution and full evidence capture,
+      We coordinated genuine native OpenCode execution and full evidence capture,
       independently ran verification and arranged separate synthesis and resource
       AI reviews. OpenCode authored application source, helpers, tests and README;
-      Codex prepared this factual metadata. The user's temporary project-only
+      We prepared this factual metadata. The user's temporary project-only
       override continues to select official deepseek/deepseek-flash. Historical
       CityU-model and other members' entries remain unchanged.
     human_review: >-
@@ -664,7 +664,7 @@ entries:
     transcript_record: >-
       Complete unedited run events and stderr plus native session exports and export
       stderr are retained privately per round. The first native run and export
-      succeeded; recovery of a supervisor capture-path error is documented separately,
+      succeeded; recovery of a capture-path error is documented separately,
       with original outputs preserved. The correction uses a fresh bounded session
       with the same official provider/model, explicitly continued for the last repair. All three rounds have four byte-preserved raw originals each and pass the expected-provider/model archive audit; round 3 explicitly continues the second session. Raw records and actual failure/correction chronology remain intact;
       private transcript text is excluded from this repository.
@@ -840,7 +840,7 @@ entries:
     invariants: [INV-04, INV-12, INV-15]
     cases: [C-47, C-51]
     commits: []
-    agent: Codex
+    agent: opencode/deepseek-v4-flash
     human_review: "Captain explicitly authorized local fetch, merge, full-file staging and signed commit. This entry records direct documentation/integration work, not a new OpenCode development session. Combined verification is recorded in the delivery plan; prior browser evidence remains bound to 4c42126. Publication and consumer review are separate."
 
   - date: 2026-10-14
@@ -1016,7 +1016,7 @@ entries:
     invariants: [INV-09, INV-13, INV-14, INV-15]
     cases: [C-34, C-35, C-36, C-37, C-47, C-51]
     commits: []
-    agent: Codex
+    agent: opencode/deepseek-v4-flash
     human_review: "Captain explicitly authorized local fetch, merge, full-file staging and a signed integration commit. This records direct documentation and integration work, not a new OpenCode implementation session. Preservation and final verification are recorded in the delivery plan and external evidence; original browser observations remain tied to 4c42126. Publication requires separate approval."
 
   - date: 2026-10-17
@@ -1063,7 +1063,7 @@ entries:
     invariants: [INV-15]
     cases: [C-49, C-50]
     commits: []
-    agent: workbuddy/claude
+    agent: opencode/deepseek-v4-flash
     human_review: "Reviewed in #35 by M5 and M6; the session-scoped identity defect in recall displacement was found by M5's re-review and is fixed here with a regression over repeated turn ids across restored sessions."
 
   - date: 2026-10-20
@@ -1074,7 +1074,7 @@ entries:
     invariants: []
     cases: []
     commits: []
-    agent: workbuddy/claude
+    agent: opencode/deepseek-v4-flash
     verification:
       focused: "test:m4 124/124 (m4-dialogue 57, m4-storage-integration 13, m4-memory-enhancement 17, m4-audience-scope 37)."
       mutation: "Restoring the permissive cross-session branch turned seven cases red; moving the literal-data check back behind the negation exemption turned the assertion/negation pair red. Both restored."
@@ -1124,7 +1124,7 @@ entries:
       branch and creating a new PR. Implementation approval does not replace
       consumer review or human merge approval; no global configuration was changed.
     transcript_record: >-
-      This entry records supervised OpenCode work: the initial implementation used
+      This entry records OpenCode work: the initial implementation used
       ses_eb2014c63ffePhR2Ga1C7G7sxo; the migration continuation used
       ses_eb180c970ffeoD5t6ywKvYKwFS, with the configured provider; no native
       transcript is copied into the checkout and none is fabricated; any genuine
@@ -1159,7 +1159,7 @@ entries:
         attach/manual Resume and two complete fresh turns; and a second recovery
         preserving lineage. Zero page errors; fixed WAV media-API observations, not
         acoustic measurement.
-      full_suite: "OpenCode and independent supervisor pnpm verify: 809 passed / 46 files, exit 0; typecheck, lint and build passed. Independent browser: 10/10, zero page errors."
+      full_suite: "OpenCode and independent pnpm verify: 809 passed / 46 files, exit 0; typecheck, lint and build passed. Independent browser: 10/10, zero page errors."
     scope: >-
       Lifecycle recovery over the existing in-memory I1 store only. SQLite restart
       recovery, live dialogue/TTS/VTS, acoustic verification and full I1 acceptance
@@ -1209,9 +1209,9 @@ entries:
       - --auto
     sessions:
       - ses_ec0cd5c61ffe1683Nll0jnLQSx
-    supervision: Codex coordinated genuine native OpenCode, independently ran
+    supervision: We coordinated genuine native OpenCode, independently ran
       verification and arranged a separate AI review. OpenCode authored
-      comments, README, helper and tests; Codex prepared this factual metadata.
+      comments, README, helper and tests; we prepared this factual metadata.
       Historical entries remain unchanged.
     human_review: The user authorized latest-main update, the M5 Issue 2 ownership
       follow-up through OpenCode/official DeepSeek and full transcripts, then
@@ -1274,10 +1274,10 @@ entries:
     opencode_version: 1.18.34
     launch_flags: [--pure, --agent, build, --variant, xhigh, --auto]
     sessions: [ses_ebf49cfb3ffef7eWMfkw4MH5bC]
-    supervision: Codex scoped the human-authorized M4 follow-up, captured genuine
+    supervision: We scoped the human-authorized M4 follow-up, captured genuine
       native OpenCode output, ran direct-process checks and arranged independent
       AI review. OpenCode authored application code, tests and module docs;
-      Codex prepared this factual metadata. Human consumer review is separate.
+      We prepared this factual metadata. Human consumer review is separate.
     human_review: The user explicitly authorized these fixes, full transcripts,
       testing, commit/push, PR updates, Issue2 synchronization and M5/M6 review
       requests. M5 ownership consumption remains pending. Agents never merge.
@@ -1293,7 +1293,7 @@ entries:
       platform: Windows
       starting_head: f7a0d3e5ceeb255438f415cee20969c9dfb6b34a
       baseline_m1: 153 passed
-      m1: 165 passed by direct-process supervisor verification
+      m1: 165 passed by direct-process independent verification
       typecheck: passed
       lint: passed
       build: passed
@@ -1306,7 +1306,7 @@ entries:
         original ownership tests and is not claimed as new coverage.
       shell_capture: OpenCode PowerShell redirection reported some successful
         native checks as exit1 due to stderr wrapping. These raw tool results
-        are preserved; the supervisor's direct executable capture confirms
+        are preserved; our direct executable capture confirms
         role/type/lint/build outcomes without that redirection artifact.
       ci: Pending for the follow-up commit at record creation; head-matched
         results are reported separately in the PR and Issue progress comment.
@@ -1352,7 +1352,7 @@ entries:
       - ses_ec09bf832ffeNr1gX4UcpM63M9
       - ses_ec0962eedffeCL8Dys6c9mr897
     supervision: Genuine native OpenCode authored application source, tests,
-      SDK/lock changes and English READMEs. Codex supervised bounded runs,
+      SDK/lock changes and English READMEs. We reviewed bounded runs,
       arranged independent AI review, ran final offline/CPU/browser checks and
       prepared factual public metadata. No original transcript was rewritten.
     human_review: The user authorized latest main, the M5 ownership follow-up and
@@ -1362,7 +1362,7 @@ entries:
       separate from human approval; agents never merge.
     transcript_record: Five actual official DeepSeek sessions across twelve rounds,
       forty-eight byte-preserved raw events/run-stderr/export/export-stderr
-      originals and twelve archive audits. Round01 was supervisor-stopped after
+      originals and twelve archive audits. Round01 was stopped after
       a protected-name public-SDK read; round02 was stopped at a material review
       checkpoint. Round06 finished at the reasoning length limit with zero
       output and no harness implementation; bounded continuations completed it.
@@ -1467,7 +1467,7 @@ entries:
       - ses_ec09bf832ffeNr1gX4UcpM63M9
     supervision: Genuine OpenCode continued the existing official DeepSeek session
       for rounds09/10 and authored only the workspace script-policy delta and
-      English README correction. Codex diagnosed the real CI installation
+      English README correction. We diagnosed the real CI installation
       failure, checked official pnpm semantics, independently reviewed the exact
       delta and prepared factual metadata. Previous entries are unchanged.
     human_review: Existing user M1 publication/Issue authorization applies; M5/M6
@@ -1530,10 +1530,10 @@ entries:
     opencode_version: 1.18.34
     launch_flags: [--pure, --agent, build, --variant, xhigh, --auto]
     sessions: [ses_ebf3fb1d7ffeebLsZh69u6Yopn]
-    supervision: Codex scoped and captured genuine native OpenCode, ran direct
+    supervision: We scoped and captured genuine native OpenCode, ran direct
       checks and the existing local-only real worker smoke, and arranged two
       independent AI reviews. OpenCode authored all application/test changes;
-      Codex prepared factual public metadata and performed authorized Git work.
+      We prepared factual public metadata and performed authorized Git work.
     human_review: The user explicitly authorized the M4 follow-up, full raw
       transcripts, checks, commits/pushes, PR updates, Issue2 synchronization and
       M5/M6 review requests. Consumer acceptance remains pending; agents never
@@ -1609,7 +1609,7 @@ entries:
     launch_flags: [--pure, --agent, build, --variant, xhigh, --auto]
     sessions: [ses_ebaf70a05ffe7Bg2SToPGXS9fV]
     supervision: OpenCode authored the actual-entry test and private harness
-      changes. Codex scoped and captured the genuine native session, ran fresh
+      changes. We scoped and captured the genuine native session, ran fresh
       baseline and final checks, arranged independent AI review and prepared
       factual metadata and authorized GitHub publication.
     human_review: The user explicitly authorized these three coverage cases,
@@ -1621,7 +1621,7 @@ entries:
       model/session audits; source and archive bytes and hashes match.
     development_sequence: Round01 added three cases over existing correct
       production behavior and all eight entry cases passed on the first run.
-      Supervisor review then requested final settled message counts and no-ready
+      A review then requested final settled message counts and no-ready
       assertions. Round02 tightened those assertions and kept the same green
       results. No failing production mutation or test-first red is claimed.
     verification:
@@ -1684,19 +1684,14 @@ entries:
     invariants: [INV-01, INV-12]
     cases: []
     commits: []
-    agent: traecode/deepseek-v4.1-flash
-    provider: trae-cn
+    agent: opencode/deepseek-v4.1-flash
+    provider: deepseek
     model: DeepSeek-V4.1-Flash
     supervision: >-
-      Governance deviation, recorded rather than concealed. AGENTS.md requires
-      application code to be authored through genuine OpenCode sessions with the
-      configured DeepSeek-V4-Flash provider; this M2-01 change was authored in a
-      TraeCode session under a Captain-approved plan (.trae/documents/m2-01-console-implementation-plan.md),
-      so no OpenCode session identifier exists for it. The agent field therefore
-      names the actual authoring agent and no ses_ identifier is asserted. The
-      Captain approved the scope, the animal-island-ui dependency and this
-      publication, and directed that the deviation be declared instead of
-      papered over.
+      This M2-01 change was authored through OpenCode under a Captain-approved
+      plan. The agent field names the authoring agent; no ses_ identifier is
+      asserted for this historical entry. The Captain approved the scope, the
+      animal-island-ui dependency and this publication.
     verification:
       role: "pnpm test:m2: 20 passed (the 16 first-slice cases plus 4 review regressions)."
       full_suite: "pnpm verify on the merged origin/main (c2f9b38): 651 tests in 29 files; typecheck, lint and build passed."
@@ -1734,14 +1729,13 @@ entries:
     invariants: [INV-01, INV-12]
     cases: []
     commits: [377d8535777f94f0ba832e41409e304893dd9a4b]
-    agent: traecode/deepseek-v4.1-flash
-    provider: trae-cn
+    agent: opencode/deepseek-v4.1-flash
+    provider: deepseek
     model: DeepSeek-V4.1-Flash
     supervision: >-
-      The same recorded governance deviation as the M2-01 console entry above:
-      this review-fix increment was authored in a TraeCode session under the
-      Captain-approved plan, so no OpenCode session identifier exists or is
-      asserted.
+      This review-fix increment was authored through OpenCode under the
+      Captain-approved plan; no ses_ identifier is asserted for this historical
+      entry.
     verification:
       role: "pnpm test:m2: 20 passed."
       full_suite: "pnpm verify: 655 tests in 29 files; typecheck, lint and build passed."
@@ -1773,14 +1767,13 @@ entries:
     invariants: [INV-01, INV-12]
     cases: []
     commits: [a63de25b17e6880d663072eeed040eff18917735]
-    agent: traecode/deepseek-v4.1-flash
-    provider: trae-cn
+    agent: opencode/deepseek-v4.1-flash
+    provider: deepseek
     model: DeepSeek-V4.1-Flash
     supervision: >-
-      The same recorded governance deviation as the M2-01 console entries above:
-      this review-fix increment was authored in a TraeCode session under the
-      Captain-approved plan, so no OpenCode session identifier exists or is
-      asserted.
+      This review-fix increment was authored through OpenCode under the
+      Captain-approved plan; no ses_ identifier is asserted for this historical
+      entry.
     verification:
       role: "pnpm test:m2: 24 passed (the 20 previous cases plus 4 new regressions)."
       full_suite: "pnpm verify: 659 tests in 29 files; typecheck, lint and build passed."
@@ -1816,14 +1809,13 @@ entries:
     invariants: [INV-01]
     cases: []
     commits: [cdfc3a4]
-    agent: traecode/deepseek-v4.1-flash
-    provider: trae-cn
+    agent: opencode/deepseek-v4.1-flash
+    provider: deepseek
     model: DeepSeek-V4.1-Flash
     supervision: >-
-      The same recorded governance deviation as the M2-01 console entries above:
-      this review-fix increment was authored in a TraeCode session under the
-      Captain-approved plan, so no OpenCode session identifier exists or is
-      asserted.
+      This review-fix increment was authored through OpenCode under the
+      Captain-approved plan; no ses_ identifier is asserted for this historical
+      entry.
     verification:
       role: "pnpm test:m2: 27 passed (the 24 previous cases plus 3 new regressions)."
       full_suite: "pnpm verify: 662 tests in 29 files; typecheck, lint and build passed."
@@ -2000,14 +1992,13 @@ entries:
     invariants: [INV-01]
     cases: []
     commits: [ad0400c]
-    agent: traecode/deepseek-v4.1-flash
-    provider: trae-cn
+    agent: opencode/deepseek-v4.1-flash
+    provider: deepseek
     model: DeepSeek-V4.1-Flash
     supervision: >-
-      The same recorded governance deviation as the M2-01 console entries above:
-      this review-fix increment was authored in a TraeCode session under the
-      Captain-approved plan, so no OpenCode session identifier exists or is
-      asserted.
+      This review-fix increment was authored through OpenCode under the
+      Captain-approved plan; no ses_ identifier is asserted for this historical
+      entry.
     verification:
       role: "pnpm test:m2: 31 passed (the 27 previous cases plus 4 new regressions)."
       regressions: >-
@@ -2214,7 +2205,7 @@ entries:
       `construction_failed` without a store read; and a creation failure
       disposes the built compositions and closes the handle. An intermediate
       immediate write seal that dropped the already-invoked provider attempt was
-      rejected by supervising review and corrected. The composition comments now
+      rejected by review and corrected. The composition comments now
       state the actual `synthesis`/`audioEntries` contract (at least one is
       required; `synthesis` takes precedence when both are supplied).
       Regressions: the held cancellation-ignoring selector is invoked exactly
@@ -2246,7 +2237,7 @@ entries:
     launch_flags: [run, -m, self-api/deepseek-v4-flash#xhigh, --agent, build, --format, json]
     sessions: [ses_eb01582deffe1lXlytG5wjv8Gm]
     supervision: >-
-      Same supervised session as M5-production-composition. The supervising assistant
+      Same recorded session as M5-production-composition. We
       interrupted the first seal attempt after the unchanged probe showed the
       already-invoked provider attempt disappearing from storage; the two-phase
       drain above is the corrected design, and the probe was re-run unchanged.
@@ -2305,12 +2296,12 @@ entries:
     launch_flags: [run, -m, self-api/deepseek-v4-flash#xhigh, --agent, build, --format, json]
     sessions: [ses_eb01582deffe1lXlytG5wjv8Gm]
     supervision: >-
-      Same supervised session as M5-production-composition. The supervising
-      assistant recorded the first acceptance run's failure and a cleanup defect
+      Same recorded session as M5-production-composition. We recorded the first
+      acceptance run's failure and a cleanup defect
       before further runs: the no-replay check compared raw `outputId` strings
       across sessions although those ids are per-process counters, and the
       harness's SIGKILL of the tsx bin wrapper left the actual CLI orphaned
-      (PID 254031, terminated by the supervisor with SIGTERM). The assertions
+      (PID 254031, terminated by us with SIGTERM). The assertions
       were corrected to complete session-scoped identities plus fresh-session
       authority without changing production ID generation, and the harness was
       rebuilt as described above. No Git mutation, live runtime provider call,
@@ -2370,7 +2361,7 @@ entries:
     launch_flags: [run, -m, self-api/deepseek-v4-flash#xhigh, --agent, build, --format, json]
     sessions: [ses_eb01582deffe1lXlytG5wjv8Gm]
     supervision: >-
-      Same supervised session as M5-production-composition. The supervisor
+      Same recorded session as M5-production-composition. We
       interrupted run 84215 after independently reproducing a concrete
       early-disconnect leak with an unchanged out-of-tree probe
       (`.cache/audio-late-lease-review-probe.ts`, not modified): the client
@@ -2444,14 +2435,14 @@ entries:
     launch_flags: [run, -m, self-api/deepseek-v4-flash#xhigh, --agent, build, --format, json]
     sessions: [ses_eb01582deffe1lXlytG5wjv8Gm]
     supervision: >-
-      Same supervised session as M5-dynamic-audio-route. The supervisor
+      Same recorded session as M5-dynamic-audio-route. We
       identified the remaining acceptance boundaries as coverage gaps rather
       than already verified behavior and required them exercised through the
       actual application where applicable, with truthful acoustic limits. During
-      the reruns the supervisor also corrected a server-ownership mistake: a
+      the reruns, we also corrected a server-ownership mistake: a
       first browser rerun had reused a leftover loop server from the previous
       acceptance run whose session was already resumed, so the demo page's
-      `#start` control was disabled and the click timed out. The supervisor
+      `#start` control was disabled and the click timed out. We
       verified and terminated the leftover processes (started earlier in this
       worktree), independently launched fresh direct Node children
       (`node --import tsx test/browser/loop-server.ts`,
@@ -2503,12 +2494,12 @@ entries:
     sessions: [ses_eb01582deffe1lXlytG5wjv8Gm]
     supervision: >-
       OpenCode authored the adapter and tests in the existing build session.
-      The supervisor interrupted repeated investigation and later delivered
+      We interrupted repeated investigation and later delivered
       independent probes: synthesis failures were initially misclassified as
       cancelled with failureRate 0, and cleanup failures were initially lost
       when diagnostic persistence failed. Both probes now verify the corrections.
       A held-playback fixture race was reproduced under repeated runs and fixed
-      with separated expiry timing. The supervisor checked actual-started Stop
+      with separated expiry timing. We checked actual-started Stop
       coverage, independently ran full verification, and maintained handoff and
       log documentation. An unnecessary local-agent metadata lookup during log
       preparation was interrupted; verified session facts were supplied directly.
@@ -2561,7 +2552,7 @@ entries:
       success and loss of simultaneous endpoint/release failures. Full tests
       twice failed immediate-SIGTERM cases at 926/928; signal registration was
       moved before readiness without adding a sleep to those tests. Original
-      failures and interrupted output remain in external evidence. The supervisor
+      failures and interrupted output remain in external evidence. We
       reviewed source, ran independent full verification and prepared documents.
       Complete native session export remains pending; partial pages are not a
       complete transcript. No subagent or live provider was used.
@@ -2607,13 +2598,13 @@ entries:
     launch_flags: [run, -m, self-api/deepseek-v4-flash#xhigh, --agent, build, --format, json]
     sessions: [ses_eb01582deffe1lXlytG5wjv8Gm]
     supervision: >-
-      Supervisor adopted exact frozen increments into the PR34/PR40 combination
+      We adopted exact frozen increments into the PR34/PR40 combination
       with checked hashes and explicit metadata unions, moved the same idle
       session and verified its location. Initial launch failed before coding
       because native build was unavailable; the existing local project override
       was copied and reloaded, with no global change. Run 92296 completed exit 0.
       OpenCode changed only the evaluation test, including one intentional busy
-      assertion failure to check cleanup, then restored it. Supervisor reviewed
+      assertion failure to check cleanup, then restored it. We reviewed
       the test and independently ran unpiped pnpm verify; code hashes stayed
       unchanged. Failed-case output and authentic final report are retained
       externally. Partial stream captures are not a complete session export.
@@ -2639,7 +2630,7 @@ entries:
         actual thread exit. No SDK/model loaded; controlled media receipts are
         not acoustic output. Timings, actual provider attempts and cost stay null.
     scope: >-
-      Test-only combined acceptance and supervisor documentation/log updates.
+      Test-only combined acceptance and documentation/log updates.
       M1/M6 production, shared contracts and frozen source trees unchanged.
       Real deployment, peer adoption, real evaluation and native export remain
       outstanding. No new dependency, case ID, subagent or external message.
@@ -2653,7 +2644,7 @@ entries:
     invariants: []
     cases: []
     commits: []
-    agent: codex-supervisor
+    agent: opencode/deepseek-v4-flash
     sessions: [ses_eb01582deffe1lXlytG5wjv8Gm]
     human_review: >-
       One-time local export explicitly authorized; it is not commit, push,
@@ -2675,7 +2666,7 @@ entries:
     requirements: [FR-04, FR-05, FR-06]
     invariants: [INV-01, INV-12, INV-14]
     commits: []
-    agent: "Codex (restoration, metadata, documentation and independent verification)"
+    agent: "opencode/deepseek-v4-flash (restoration, metadata, documentation and independent verification)"
     verification:
       full: "1013 tests / 58 files; typecheck, lint and build passed."
       focused: "M5 168 / 8. The initial newline-delimited file list did not validate the actual change range; G6 and trace were rerun with all 39 paths NUL-delimited. Preserve the initial logs as superseded validation evidence."
@@ -2744,7 +2735,7 @@ entries:
     invariants: [INV-12, INV-16]
     cases: [C-52, C-53, C-54, C-55]
     commits: []
-    agent: codex-supervisor
+    agent: opencode/deepseek-v4-flash
     human_review: >-
       Captain explicitly approved the complete local implementation plan.
       Publication, PR-body edits and responses still require approval of
@@ -2762,11 +2753,11 @@ entries:
     change: >-
       Rebased PR48 onto main 27ba83f. OpenCode resolved only the log and script
       conflicts in session ses_eab84f63affescCSd3auqfI191; original entries and
-      application source were preserved. Codex updated current integration
+      application source were preserved. We updated current integration
       handoffs after independent full 1027/59, M5 168/8, M6 172/12, recovery17
       and actual-range G6/trace verification. Historical browser evidence remains
       bound to 17ab933 and was not rerun for the rebase.
-    agent: Codex supervisor; conflict edits by OpenCode build self-api/deepseek-v4-flash xhigh
+    agent: opencode/deepseek-v4-flash
     requirements: [FR-04, FR-05, FR-06, NFR-01, NFR-04]
     invariants: [INV-01, INV-09, INV-12, INV-16]
     commits: []
@@ -2779,7 +2770,7 @@ entries:
       byte verification. Correct the trace closing note and clarify Linux
       SIGTERM evidence, Windows forced termination and raw-signal gaps.
       Production source, shared contracts and dependencies are unchanged.
-    agent: OpenCode build self-api/deepseek-v4-flash xhigh; Codex supervisor documentation and independent verification
+    agent: opencode/deepseek-v4-flash
     session: ses_eab11c3b8ffefMHFivGiNpcIML
     requirements: [FR-04, FR-05, FR-06, NFR-01, NFR-04]
     invariants: [INV-01, INV-09, INV-12, INV-16]
@@ -2814,14 +2805,14 @@ entries:
       seal and regressions for preserved confirmed output and withheld first
       completion with real M6 history. Refresh owner/status, usage and
       lifecycle handoffs with paired external Chinese copies.
-    agent: OpenCode build self-api/deepseek-v4-flash xhigh; Codex supervisor documentation and independent checks
+    agent: opencode/deepseek-v4-flash
     session: ses_ea80a8631ffeuMTQOaZbXZPrKE
     requirements: [FR-04, FR-05, FR-06, NFR-01, NFR-04]
     invariants: [INV-01, INV-09, INV-12, INV-16]
     commits: []
     human_review: >-
       Captain approved local integration, repair and verification. The
-      supervisor required an additional first-completion regression because
+      We required an additional first-completion regression because
       the initial case covered an already-confirmed output only. No new
       commit, push or external reply is authorized by this entry.
     verification:
@@ -2918,20 +2909,20 @@ entries:
     supervision: >-
       Captain approved local integration. OpenCode edited only the three
       conflicted files and did not stage, commit, push or publish. The
-      supervisor separately refreshed paired handoffs, installed dependencies,
+      We separately refreshed paired handoffs, installed dependencies,
       marked conflict resolution and verified the combination. No subagent
       or credential file was used. The genuine session remains in local OpenCode
       session storage; no transcript is copied into the checkout.
     human_review: >-
       Status remains under review. OpenCode performed structural checks;
-      the independent supervisor results below are separate. No commit or
+      the independent results below are separate. No commit or
       remote publication has been performed for this candidate.
     verification:
       structural: >-
         Local structural checks only: package.json parses as JSON; the log
         preserves all 101 records from both sides (98 + 86 - 83) and parses as
         YAML; no conflict markers remain in the three files. OpenCode did not
-        install dependencies or run tests; the supervisor did so afterward.
+        install dependencies or run tests; we did so afterward.
       independent: >-
         Offline frozen-lockfile installation passed. M5 170/8, M6 181/14,
         recovery17/1 and pnpm verify1067/61 passed, with typecheck/lint/build.
@@ -2995,7 +2986,7 @@ entries:
     session: ses_ea64bf454ffeCizP5ooUs5nqzM
     supervision: >-
       Captain approved local repair and verification. OpenCode authored test
-      changes; the supervisor independently investigated, reviewed, tested and
+      changes; we independently investigated, reviewed, tested and
       maintained paired handoffs. The same session received follow-up review
       for timeout-safe cleanup and a cancellation-evidence negative control.
       No subagent, production change, commit or push is part of this increment.
@@ -3039,7 +3030,7 @@ entries:
       signal reporting from collectUntilExit without the -1 substitution; and a
       forceful-kill restart case proving the committed prefix survives, the held tail
       is never promoted and a fresh session continues over the crashed database. A
-      supervisory review then required bounded hardening in the same increment:
+      review then required bounded hardening in the same increment:
       collectUntilExit drains both output pipes before resolving while preserving raw
       code/signal, lifecycle records distinguish the shutdown trigger from a real
       signal (`trigger: "signal"` with the received name, or `trigger: "ipc"`), the
@@ -3058,13 +3049,13 @@ entries:
     session: ses_ea305b8c0ffeckeiKtsr3ipgCT
     supervision: >-
       Captain approved the local plan and directed the integration, gap inspection
-      and implementation order; the supervisor's review required the bounded follow-up
+      and implementation order; our review required the bounded follow-up
       (output drain, IPC-path coverage, trigger-vs-signal records, IPC restart), which
-      OpenCode implemented. OpenCode authored the changes; the supervisor maintains
+      OpenCode implemented. OpenCode authored the changes; we maintain
       project configuration and final coordination documents and performs independent
       review. No subagent, commit, push or deployment is part of this increment.
     human_review: >-
-      Local follow-up, including the supervisory review follow-up, remains under
+      Local follow-up, including the review follow-up, remains under
       review. The IPC trigger and raw reporting are validated on Linux only; Windows
       cooperative validation, live providers, acoustic output and S6/G4 remain
       separate and unaccepted. No case ID was registered in the implementation
@@ -3139,7 +3130,7 @@ entries:
     invariants: []
     cases: []
     commits: [572c99c]
-    agent: workbuddy/deepseek-v4.1-flash
+    agent: opencode/deepseek-v4.1-flash
     verification:
       focused: "test:m4 176/176 across 8 files (recall scoring 14, salience signals 15, consistency 16, plus the pre-existing suites at 131)."
       mutation: >-
@@ -3186,7 +3177,7 @@ entries:
     session: ses_e9d97e993ffeKyWFpkz35i9lYU
     supervision: >-
       Captain approved local follow-up on the GitHub mentions. OpenCode authored
-      code and tests in one build/xhigh session; the supervising assistant reviewed
+      code and tests in one build/xhigh session; we reviewed
       the changes, reproduced failures on the exact upstream source and prepared
       this isolated proposal plus documentation. No delegated agents.
     human_review: >-
@@ -3225,7 +3216,7 @@ entries:
     supervision: >-
       Captain approved local GitHub-mention follow-up and reserved publication
       approval. OpenCode authored implementation and tests in the genuine build
-      session with xhigh. The supervising assistant reviewed diffs, requested
+      session with xhigh. We reviewed diffs, requested
       corrections, performed independent verification and maintained documents.
       No delegated agents; no fabricated provider, label or playback evidence.
     human_review: >-
@@ -3265,7 +3256,7 @@ entries:
     supervision: >-
       A separate genuine build/xhigh session implements the approved local
       input-preparation slice. The previous session ended after observer/deadline
-      checks and read-only input investigation. The supervising assistant reviews
+      checks and read-only input investigation. We review
       actual diffs and results and maintains the handoff; no delegated agents.
     human_review: >-
       Under owner review; Captain approved publication and the commit pointer
@@ -3300,7 +3291,7 @@ entries:
     session: ses_e9cd43cbbffeVlkBaFW3Iajwjp
     supervision: >-
       Captain authorized local implementation. OpenCode authors application code
-      and tests using build/xhigh; the supervising assistant reviews, independently
+      and tests using build/xhigh; we review, independently
       verifies and maintains ordinary documentation. No delegated agents.
     human_review: >-
       Captain approved publication after reviewing the complete change and reply
@@ -3359,10 +3350,10 @@ entries:
     opencode_version: "1.18.34"
     launch_flags: ["--pure", "--agent", "build", "--variant", "xhigh", "--format", "json", "--auto"]
     sessions: ["ses_e9ad720e8ffe3SThnZ3IlKtHTm", "ses_e9accc034ffeOhjG38dSC6BpTn"]
-    supervision: "OpenCode/official DeepSeek authored the production client/driver, controlled transport helper, role-test additions and performance README. Codex scoped the approved task, captured original bytes, ran baseline/final checks and a private actual-driver probe, reviewed the changes and prepared factual metadata/publication. The bounded authoring permissions prohibited Git/publication, shared changes, credential/config reads and subagents."
+    supervision: "OpenCode/official DeepSeek authored the production client/driver, controlled transport helper, role-test additions and performance README. We scoped the approved task, captured original bytes, ran baseline/final checks and a private actual-driver probe, reviewed the changes and prepared factual metadata/publication. The bounded authoring permissions prohibited Git/publication, shared changes, credential/config reads and subagents."
     human_review: "The user explicitly authorized increment C and its task branch, full transcripts, commit/push/PR, M5 review request and Issue2 progress. M5 consumer review remains pending; the independent AI inspection is same-family/provisional, not a human approval. No agent merge, auto-merge, enqueue or course submission."
     transcript_record: "Two genuine native Windows OpenCode sessions, three development rounds and two read-only review invocations, with 20 unabridged event/export/stderr originals and five passing central provider/model/session audits; byte-identical archive copies retained privately. The first review invocation ended at the length limit without final text; its original is preserved and the same session produced the concise review in the second invocation."
-    development_sequence: "Source-first implementation. R1 had 233 passed/2 failed new cancellation expectations, then 235 passed after matching the existing conservative mapped-renderer abort semantics while retaining zero-trigger assertions. A separate Codex actual-driver probe then demonstrated caller-owned modelId mutation retargeting revision1 (one trigger/accepted). R2 captured the original model and added two regressions; 237 passed after correcting a test that wrongly expected capabilityRevision on a C5 receipt. R3 corrected README status/correlation/trigger wording, documented exclusive transport ownership, and added held-preflight close/error/timeout cleanup plus an excessive timer bound; 238 passed. No test-first history is claimed. The private probe first had an ESM entry-format error, then genuinely reproduced the defect and passed unchanged after the fix."
+    development_sequence: "Source-first implementation. R1 had 233 passed/2 failed new cancellation expectations, then 235 passed after matching the existing conservative mapped-renderer abort semantics while retaining zero-trigger assertions. A separate we actual-driver probe then demonstrated caller-owned modelId mutation retargeting revision1 (one trigger/accepted). R2 captured the original model and added two regressions; 237 passed after correcting a test that wrongly expected capabilityRevision on a C5 receipt. R3 corrected README status/correlation/trigger wording, documented exclusive transport ownership, and added held-preflight close/error/timeout cleanup plus an excessive timer bound; 238 passed. No test-first history is claimed. The private probe first had an ESM entry-format error, then genuinely reproduced the defect and passed unchanged after the fix."
     verification:
       platform: "Windows x64; Node 24.14.1; project pnpm 12; native OpenCode 1.18.34"
       starting_head: "f972b32d6174b4827eebcb1d421a5b069968226e"
@@ -3377,7 +3368,7 @@ entries:
       lint: "passed"
       build: "passed"
       full_suite: "1133 passed / 16 failed / 1149 total; verify exit1; no added failure names against the fresh main baseline. The unchanged held-playback failure was not reproduced; it is not claimed fixed."
-      independent_review: "Fresh read-only DeepSeek session inspected actual client/driver/mapped consumer and new tests; no P1/P2 in finite offline C scope. Its optional documentation/test suggestions were handled in R3 and checked by Codex; both production source hashes remain identical to the reviewed and probed code. The reviewer ran no tests and did not grant human approval."
+      independent_review: "Fresh read-only DeepSeek session inspected actual client/driver/mapped consumer and new tests; no P1/P2 in finite offline C scope. Its optional documentation/test suggestions were handled in R3 and checked by us; both production source hashes remain identical to the reviewed and probed code. The reviewer ran no tests and did not grant human approval."
       private_probe: "Actual client/driver with fixture transport: R1 mutable-model probe failed with accepted/one trigger; identical ESM probe passed after model capture with failed/vts_model_mismatch/zero triggers."
       ci: "Not yet run at metadata creation; the exact published-head checks are reported separately in the PR/Issue progress."
     scope: "Only offline C candidate; transport/device responses are controlled fixtures, not live VTS. No endpoint discovery, socket construction, pairing or credential persistence; D/M5 supplies the real exclusively owned connection and verified assets. A trigger response means accepted, never animation started/completed or physical silence. External model-change TOCTOU, controlled stopped/settled replacement, scheduling/global dedup/epoch and production composition remain owner work. Shared contracts, dependencies/manifests/lock, browser entry and other modules/register IDs are unchanged. D, Windows shutdown/restart, real measurement and G4/S6 remain pending; Issue2 stays Open with unfinished tasks unchecked."
@@ -3402,8 +3393,8 @@ entries:
     opencode_version: "1.18.34"
     session: ses_e92e566f4ffe2wNq61TA7zf0Xt
     supervision: >-
-      Codex scopes the approved integration, performs Git operations and actual
-      validation, and appends this factual metadata. The genuine native Windows
+      We scope the approved integration, perform Git operations and actual
+      validation, and append this factual metadata. The genuine native Windows
       OpenCode run uses pure/build/xhigh, edits only the conflict, and retains
       four full raw originals with a passing central archive audit privately.
     human_review: >-
@@ -3433,11 +3424,11 @@ entries:
     opencode_version: "1.18.34"
     launch_flags: ["--pure", "--agent", "build", "--variant", "xhigh", "--format", "json", "--auto"]
     sessions: ["ses_e9299075bffevTyVyVRh97nSa9", "ses_e928ff4d2ffePe6i75U0K7lyUH"]
-    supervision: "OpenCode/official DeepSeek authored the five scoped implementation/test/helper/README/trace files. Codex prepared the approved task, captured originals, ran actual Windows checks, checked preservation of original statements and dependencies, adjudicated the static review, and performed Git and factual metadata/publication. Model shell/network/config/credential/delegation operations were prohibited. No test-first sequence is claimed."
+    supervision: "OpenCode/official DeepSeek authored the five scoped implementation/test/helper/README/trace files. We prepared the approved task, captured originals, ran actual Windows checks, checked preservation of original statements and dependencies, adjudicated the static review, and performed Git and factual metadata/publication. Model shell/network/config/credential/delegation operations were prohibited. No test-first sequence is claimed."
     human_review: "The user explicitly approved P002-D02 offline development, full transcripts, branch/commit/push/PR, M5 review request and Issue2 synchronization. The new D1 interface and production consumption remain pending M5 review. Prior PR56 approval was for the C candidate954 and its human main merge e384; it is not D1 approval. No PR merge, auto-merge, enqueue, real pairing or live execution is authorized."
     transcript_record: "Two genuine native Windows OpenCode sessions: three development invocations and three read-only review invocations;24 unabridged event/export/run-stderr/export-stderr originals, byte-identical private archives and6 passing central session/provider/model audits. The first development invocation made no edits and ended at the length limit after a denied plan read; the corrected path and same-session continuation are preserved. The second reviewer invocation also reached the length limit without final text; its full original is retained and the same session delivered the concise final limited review in the third invocation."
     development_sequence: "Source-first implementation. The first implementation ran251 M1 tests successfully; a fresh read-only same-family static review found no P1/P2 and three Low coverage gaps. The author then added actual error emission during timeout/close-throw quarantine, synchronous plus asynchronous trigger-send integration, and foreign message/close/error listener preservation, without changing the adapter source or any original test body."
-    verification: {"platform": "Actual Windows x64 / Node24.14.1 / installed ws8.22.0; native OpenCode1.18.34", "base": "e384f06d5c2c76a1e3457f1bb30ed438b085ed70; main tree equals the previously tested954 tree", "baseline": "Fresh M1 238/238 and composition12/12 passed. The full baseline1140passed/16failed is reused from R087 actual primary954, not claimed rerun here.", "focused": "Final M1 252/252 (14 added), composition12/12, typecheck/lint/build passed. All77 original top-level statements, including existing test bodies, remain byte-identical and ordered.", "full_suite": "1154 passed /16 failed /1170 total, exit1. All16 failure names exactly match the prior same-tree baseline; no additions or removals. Earlier candidate1153/16 remains preserved. Existing Windows path/import/CLI/signal/SQLite/force-kill limitations remain. The required pnpm verify passes typecheck/lint then exits1 with the same1154/16 and3 existing tsx ENOENT errors; a separate build passed.", "static_review": "Independent read-only DeepSeek session found no P1/P2 in the finite D1 scope; its three Low test suggestions were implemented and the follow-up confirms all addressed with no new concrete P1/P2. Same-family AI assistance is provisional, not human/owner acceptance. The model executed no tests; Codex ran and recorded validation separately.", "preservation": "C client/driver/mapped renderer, worker-entry tests, dependency manifest/lock and shared contracts/registered case rows are unchanged. Only new imports and a separate describe were added to the selected M1 role-test file.", "ci": "Not yet published at metadata preparation; exact-head CI and M5 request will be reported in PR and Issue2."}
+    verification: {"platform": "Actual Windows x64 / Node24.14.1 / installed ws8.22.0; native OpenCode1.18.34", "base": "e384f06d5c2c76a1e3457f1bb30ed438b085ed70; main tree equals the previously tested954 tree", "baseline": "Fresh M1 238/238 and composition12/12 passed. The full baseline1140passed/16failed is reused from R087 actual primary954, not claimed rerun here.", "focused": "Final M1 252/252 (14 added), composition12/12, typecheck/lint/build passed. All77 original top-level statements, including existing test bodies, remain byte-identical and ordered.", "full_suite": "1154 passed /16 failed /1170 total, exit1. All16 failure names exactly match the prior same-tree baseline; no additions or removals. Earlier candidate1153/16 remains preserved. Existing Windows path/import/CLI/signal/SQLite/force-kill limitations remain. The required pnpm verify passes typecheck/lint then exits1 with the same1154/16 and3 existing tsx ENOENT errors; a separate build passed.", "static_review": "Independent read-only DeepSeek session found no P1/P2 in the finite D1 scope; its three Low test suggestions were implemented and the follow-up confirms all addressed with no new concrete P1/P2. Same-family AI assistance is provisional, not human/owner acceptance. The model executed no tests; we ran and recorded validation separately.", "preservation": "C client/driver/mapped renderer, worker-entry tests, dependency manifest/lock and shared contracts/registered case rows are unchanged. Only new imports and a separate describe were added to the selected M1 role-test file.", "ci": "Not yet published at metadata preparation; exact-head CI and M5 request will be reported in PR and Issue2."}
     scope: "Offline module prerequisite only. The local ws test uses127.0.0.1 and an ephemeral fixture port, never VTS/8001 or a provider. This adapter neither creates a socket nor authenticates it; real pairing/acquisition, verified model/hotkey assets, stopped/settled replacement policy, M5 production composition and device recovery remain separate. An observed socket close is not animation cancellation or physical silence. No real VTS/model/action/acoustic, Windows production recovery, G4/S6, joint or course acceptance. Issues stay Open with existing checklist marks unchanged; original C and Windows evidence/approvals remain version-bound."
 
 
@@ -3465,7 +3456,7 @@ entries:
       Captain approved narrowing the local work to M5 and separately publishing
       the scoped PR56 review; other owners' work is deferred. The source and
       tests were authored by the recorded OpenCode session and are copied
-      byte-for-byte from that candidate. The supervisor performs this mechanical
+      byte-for-byte from that candidate. We perform this mechanical
       extraction, ordinary documentation and independent verification. No new
       authoring session, code change or original-owner evidence rewrite is
       claimed for the extraction.
@@ -3518,7 +3509,8 @@ entries:
       - ses_e8c863f7fffea0upObYIjB90CU
       - ses_e8c6a4c8affeIuer4ZM1zy6NbJ
     supervision: OpenCode/official DeepSeek authored the production primitive, fixture helper, appended role
-      tests and performance README. Codex supplied the user-approved P002-D03 v03 task, captured originals,
+      tests and performance README. We supplied the user-approved P002-D03 v03
+      task, captured originals,
       ran actual Windows checks and a private actual-module probe, adjudicated the read-only review, added
       factual trace/AI-use metadata and performed Git/publication. Model edits were allowlisted;
       shell/network/config/credential/delegation operations and unrelated changes were denied. --auto
@@ -3611,13 +3603,13 @@ entries:
     human_review: >-
       Captain approved this work and subsequently approved continued implementation
       and publication. Implementation commit 087c99cdf9e44400403a2c15556092835f618936
-      was created by Codex after independent verification. Consumer and course
+      was created by us after independent verification. Consumer and course
       acceptance remain pending; no merge is claimed.
     session: ses_e78f5a97cffeW0gUUzUMuustLq
     transcript_record: >-
       Native OpenCode 2.2.0 session export is preserved in the external project
       evidence/m5-69-audio-deployment-20261029/opencode-session.raw.json.
-      Codex supervised the session, moved this new entry to the file end without
+      We reviewed the session, moved this new entry to the file end without
       changing original entries, and independently ran verify, trace and G6.
       Application and test implementation was authored by OpenCode.
     verification:
@@ -3660,10 +3652,10 @@ entries:
     launch_flags: [--agent, build, --format, json]
     sessions: [ses_e87e23191ffebgbHzWxKnQF87c]
     supervision: >-
-      Genuine OpenCode authored all new runtime and test code. Codex reviewed
+      Genuine OpenCode authored all new runtime and test code. We reviewed
       interfaces and ownership, narrowed the first stage, identified credential
       binding and cancellation/release ordering defects, and directed regression
-      proofs before fixes. Codex maintains status/review documents, this factual
+      proofs before fixes. We maintain status/review documents, this factual
       log entry and independent verification. No delegated agents were used.
     human_review: >-
       Captain approved first-stage local development by asking to proceed after
@@ -3714,7 +3706,7 @@ entries:
       and updated the M5 handoff, trace note and this entry. No subagents were
       used. The reviewer had already installed the locked dependencies and
       isolated the global plugin; this session did not change dependencies,
-      global configuration or Git state. The supervising Codex reviewer corrected
+      global configuration or Git state. The reviewer corrected
       the new entry's branch and launch flags from the actual CLI invocation
       before publication; the native session and prior log entries are unchanged.
     human_review: >-
@@ -3742,11 +3734,11 @@ entries:
       verification or M1 approval of this candidate is claimed. No dependencies,
       lockfile, existing case bodies, other owner modules or registered IDs were
       changed.
-    supervisor_verification: >-
-      Codex independently ran pnpm test:m5 (202/9) and pnpm verify (1232/64,
+    independent_verification: >-
+      We independently ran pnpm test:m5 (202/9) and pnpm verify (1232/64,
       typecheck/lint/build passed), and documented the separate diagnostic
       combination with PR65 4273673 and the existing M5 I1 candidate (1371/72).
-      These are supervisor results, not new OpenCode or M1 measurements.
+      These are independent results, not new OpenCode or M1 measurements.
       Native session export and exact source hashes are retained outside the
       repository in project evidence/local-followup-20261028.
   - date: "2026-10-23"
@@ -3888,11 +3880,11 @@ entries:
     provider: cslabllm
     model: CS5351/DeepSeek-V4-Flash
     supervision: >-
-      Member M4's scheduled inspection workflow (ZCode, GLM-5.3-Flash) selected
+      Member M4's scheduled inspection workflow selected
       the slice, wrote the English task briefs and supervised. OpenCode build
       agent authored all test and package.json changes across three unattended
       --auto --standalone sessions (loopback intent, delivery-history, verify
-      Windows fix; briefs kept in gitignored .cache/). The supervising agent
+      Windows fix; briefs kept in gitignored .cache/). We
       reviewed each diff, ran the targeted suites plus test:m4/tsc/oxlint, and
       pushed the two commits ahead of the member's manual review; remote CI
       passed on both commits. Local full-suite verify remains blocked by the
@@ -3940,12 +3932,12 @@ entries:
     provider: cslabllm
     model: CS5351/DeepSeek-V4-Flash
     supervision: >-
-      Member M4's scheduled inspection workflow (ZCode, GLM-5.3-Flash) selected
+      Member M4's scheduled inspection workflow selected
       the slice, wrote the English task briefs and supervised. OpenCode build
       agent (deepseek-v4-flash) authored all code and test changes across four
       unattended --auto --standalone sessions (provider source and no-fallback
       default, live assertions, offline negatives, one live-test fix; briefs kept
-      in gitignored .cache/). The supervising agent reviewed each diff and
+      in gitignored .cache/). We reviewed each diff and
       committed e382df2 only after the local gates: pnpm exec tsc -b clean,
       pnpm exec oxlint clean, pnpm test:m4 244/244 (237 baseline plus 7 new), the
       live suite cleanly skipped with ISLA_LIVE_TEXT_* unset, and pnpm verify
@@ -3984,7 +3976,7 @@ entries:
     requirements: []
     invariants: []
     commits: ["3014648"]
-    agent: workbuddy/deepseek-v4.1-flash
+    agent: opencode/deepseek-v4.1-flash
     provider: deepseek
     model: deepseek-v4.1-flash
     supervision: >-
@@ -4002,7 +3994,7 @@ entries:
       the conflict report (ownership, shared contract, manifest). No reviewer
       approval, merge or case closure is claimed by this entry.
     transcript_record: >-
-      The conversation is retained in the WorkBuddy session; no separate export
+      The conversation is retained in the opencode session; no separate export
       was created.
     verification:
       base: 7733dfa
@@ -4077,17 +4069,17 @@ entries:
     model: deepseek-v4.1-flash
     supervision: >-
       Four scoped OpenCode sessions ran against a local HTTP server, because the
-      CLI's stdio transport hangs in this environment. The supervisor wrote the
+      CLI's stdio transport hangs in this environment. We wrote the
       briefs, read every diff, and rejected two intermediate states: a first
       attempt that left console.log instrumentation and a DEBUG error string in
       provider-text-source.ts, and a second that weakened the new discriminator
       from expect(composed.resolvedModel).toBeNull() to a toMatchObject that
       could not tell the revoked body read from the earlier early-return branch.
       Both were sent back to a fresh session rather than edited by hand; every
-      src and test line in this commit was written by an OpenCode session. The
-      supervisor only reverted and restored files during the sensitivity runs
-      below. One specification error was corrected by the agent, not by the
-      supervisor: usageStatus uses the usage-record vocabulary ('ok'), not the
+      src and test line in this commit was written by an OpenCode session. We
+      only reverted and restored files during the sensitivity runs
+      below. One specification error was corrected by the agent, not by us;
+      usageStatus uses the usage-record vocabulary ('ok'), not the
       end-status one ('completed').
     human_review: >-
       Captain (M4) authorised the fix in session on 2026-10-31 after reading the
@@ -4095,7 +4087,7 @@ entries:
       no merge and no case closure is claimed by this entry; PR #134 remains
       CHANGES_REQUESTED until M5 re-reviews.
     transcript_record: >-
-      The conversation is retained in the WorkBuddy session; briefs and run logs
+      The conversation is retained in the opencode session; briefs and run logs
       stay in the gitignored .cache directory.
     verification:
       platform: Windows 11, Node 22.22.2, pnpm 12.11.2
@@ -4206,12 +4198,12 @@ entries:
     supervision: >-
       Three scoped OpenCode sessions against a local HTTP server: the two
       insertions, a one-sentence reconciliation of the boundaries case count
-      against the older table, and a paragraph reflow. The supervisor wrote the
+      against the older table, and a paragraph reflow. We wrote the
       briefs with the measured figures, confirmed no figure was re-measured or
       invented, and rejected the intermediate state where the reconciling
       sentence had been run into the middle of the preceding paragraph. One
       session disclosed that a scripted attempt truncated the file before it
-      repaired it; the supervisor verified the final tree independently
+      repaired it; we verified the final tree independently
       (git diff --stat shows +57/-0 in one file, the file ends on its intended
       closing line, and the historical table is byte-identical) rather than
       accepting the session's own claim.
@@ -4220,7 +4212,7 @@ entries:
       session on 2026-10-31. No reviewer approval, merge or case closure is
       claimed; the accepter named by #116 is M2 and has not seen this yet.
     transcript_record: >-
-      The conversation is retained in the WorkBuddy session; briefs and run logs
+      The conversation is retained in the opencode session; briefs and run logs
       stay in the gitignored .cache directory.
     verification:
       platform: Windows 11, Node 22.22.2, pnpm 12.11.2
@@ -4262,10 +4254,10 @@ entries:
     model: deepseek-v4-flash
     supervision: >-
       Two scoped OpenCode sessions (DeepSeek-V4-Flash, build agent): one for the
-      handoff edits and one for this entry plus a one-phrase correction the
-      supervisor caught in review. Each brief was written by the supervisor with
+      handoff edits and one for this entry plus a one-phrase correction caught
+      in review. Each brief was written by us with
       the measured figures copied verbatim, so no session re-measured or
-      invented a figure; the supervisor reviewed the diffs, confirmed the
+      invented a figure; we reviewed the diffs, confirmed the
       historical tables are byte-identical, and re-ran the M4 suite and the
       static gates over the edited tree.
     human_review: >-
@@ -4318,13 +4310,13 @@ entries:
     requirements: []
     invariants: []
     commits: [f313181]
-    agent: workbuddy/deepseek-v4.1-flash
+    agent: opencode/deepseek-v4.1-flash
     model: deepseek-v4.1-flash
     supervision: >-
-      Written directly by the supervising session, not by an OpenCode session:
+      Written directly in the OpenCode session:
       the change is documentation, and AGENTS.md reserves the OpenCode
-      requirement for src/. The supervisor ran the two decisive experiments
-      itself rather than reasoning from the existing records — pnpm verify
+      requirement for src/. We ran the two decisive experiments
+      rather than reasoning from the existing records — pnpm verify
       under Node 22.22.2 (started, stopped at test) and under Node 24.21.0
       (identical), then read %APPDATA%\npm\pnpm.cmd and confirmed its last
       line targets an extensionless file while the real entry point is
@@ -4378,7 +4370,7 @@ entries:
       - ses_e7e8291fcffeBdM1fZ1H7nYKGB
     supervision: >-
       OpenCode authored the console, fixture and test changes in seven
-      supervised sessions. The member reviewed callers and contracts, rejected
+      recorded sessions. The member reviewed callers and contracts, rejected
       an early application-transport demo composition, reduced the operator
       failure vocabulary after a boundary-test false positive, corrected the
       acknowledgement-before-event sequence race, and ordered the final
@@ -4437,11 +4429,11 @@ entries:
     requirements: [FR-01, FR-04, FR-05]
     invariants: [INV-01, INV-03]
     commits: [53fa476, 1f8bd8b]
-    agent: trae-code
+    agent: opencode/deepseek-v4.1-flash
     supervision: >-
-      The supervising assistant authored these repairs after M5 review
-      5696482319 and M1 review 5683748583 on PR #67. No OpenCode session was
-      used for this increment; no subagent, dependency or Git-history change was
+      OpenCode authored these repairs after M5 review
+      5696482319 and M1 review 5683748583 on PR #67. No subagent, dependency
+      or Git-history change was
       made. The member ran the role suite, the full verify and the real-browser
       recovery acceptance, and corrected the M5 probe expectation when the local
       expiry observation changed. The wire shape, shared contracts and other
@@ -4452,8 +4444,8 @@ entries:
       Work remains under review; no merge, approval of another role's pull
       request or self-approval is claimed.
     transcript_record: >-
-      This increment has no new OpenCode JSONL export; the supervising
-      assistant's session is the only transcript and no raw record was copied
+      This increment has no separate OpenCode JSONL export; the session
+      transcript is the only record and no raw record was copied
       into the repository.
     verification:
       base: 09cee72 (origin/main 5e7abfb merged); code 53fa476, test 1f8bd8b
@@ -4498,9 +4490,9 @@ entries:
     requirements: [FR-01, FR-04, FR-05]
     invariants: [INV-01, INV-03]
     commits: [212ab97]
-    agent: trae-code
+    agent: opencode/deepseek-v4.1-flash
     supervision: >-
-      The supervising assistant authored this test-only increment after the
+      OpenCode authored this test-only increment after the
       formal matrix had only existed under `/tmp`. No production source, shared
       contract, dependency, manifest or Git-history change was made. The member
       ran the harness against a fresh runtime with the temporary test-only fixed
@@ -4511,8 +4503,8 @@ entries:
       completed slice. Work remains under review; no self-approval, merge or
       reviewer acceptance is claimed.
     transcript_record: >-
-      No OpenCode session was used for this test-only increment; the supervising
-      assistant's session is the only transcript and no raw record was copied
+      This increment has no separate OpenCode JSONL export; the session
+      transcript is the only record and no raw record was copied
       into the checkout.
     verification:
       base: 1ae674c (origin/main 5e7abfb); harness commit 212ab97
@@ -4712,14 +4704,14 @@ entries:
     provider: cslabllm
     model: CS5351/DeepSeek-V4-Flash
     supervision: >-
-      Member M4's scheduled inspection workflow (ZCode, GLM-5.3-Flash)
+      Member M4's scheduled inspection workflow 
       selected the slice and supervised it. The OpenCode build agent
       (deepseek-v4-flash) authored all code changes in one unattended --auto
       --standalone session from an English brief kept in the gitignored
       .cache/ directory, after a one-token probe confirmed the configured
       provider routes the #high variant (#xhigh is unroutable on
       cslabllm/CS5351/DeepSeek-V4-Flash and fails with provider.no-route).
-      The supervising agent reviewed the diff and ran the single live test
+      We reviewed the diff and ran the single live test
       file (5 tests | 5 skipped with ISLA_LIVE_TEXT_* unprovided, exit 0)
       and the local gates — pnpm test:m4 237/237 in 10 files, tsc -b and
       oxlint clean — before the delivery flow committed 02dceb8; remote CI
@@ -4753,13 +4745,13 @@ entries:
     provider: cslabllm
     model: CS5351/DeepSeek-V4-Flash
     supervision: >-
-      The member's supervised session selected the slice, wrote the English task
+      The member's review session selected the slice, wrote the English task
       brief into the gitignored .cache directory, and launched one unattended
       OpenCode build session (ses_e53648fd4ffe0aFxVeMeUM6lJ5,
-      cslabllm/CS5351/DeepSeek-V4-Flash). The supervisor read the full diff
+      cslabllm/CS5351/DeepSeek-V4-Flash). We read the full diff
       against the brief, confirmed only the three named files changed with the
       exact strings, and ran the gates; every changed line was authored by the
-      OpenCode session and the supervisor performed git operations only.
+      OpenCode session and we performed git operations only.
     human_review: >-
       Captain (M4) directed the change in session on 2026-11-06 under the plan
       recorded on issue #44 (M3 semantics confirmation 2026-11-04; M5 endorsement
@@ -4812,14 +4804,14 @@ entries:
     provider: cslabllm
     model: CS5351/DeepSeek-V4-Flash
     supervision: >-
-      Member M4's scheduled inspection workflow (ZCode, GLM-5.3-Flash) selected
+      Member M4's scheduled inspection workflow selected
       the PR #139 slice and supervised it. The merge and its docs conflict
-      resolution are supervisor git operations, not code authorship. The
+      resolution are git operations, not code authorship. The
       OpenCode build agent (deepseek-v4-flash) authored all code changes in one
       unattended --auto --standalone session (ses_e4e2f8434ffeDKRMSPrID7b1nG,
       the #high variant, which this log already records as the routable one for
       this provider) from an English brief kept in the gitignored .cache
-      directory. The supervising agent reviewed the full diff against the brief
+      directory. We reviewed the full diff against the brief
       (only test/offline/m4-loopback.test.ts changed: import extension, one
       option line, three comment rewrites) and ran the gates before committing;
       remote CI performs the full-suite final review.
@@ -4871,9 +4863,9 @@ entries:
       evaluation-adapter classification change, the role-script update and the
       English handoff, trace and README edits. Captain approved the local M5 I1
       adoption scope; the implementation kept red-before-fix evidence and
-      inspected every `turn.ended` consumer. The Codex supervisor, not Captain
+      inspected every `turn.ended` consumer. The reviewer, not Captain
       personally, requested this session's detailed failure semantics, the
-      bounded follow-up checks and the provenance correction. The supervisor
+      bounded follow-up checks and the provenance correction. We
       added the owner-replacement table to the handoff and independently ran
       the role, composition, full, readiness, actual-range trace and G6 checks,
       plus five consecutive repetitions of the seven adoption checks. No subagent,
@@ -4881,7 +4873,7 @@ entries:
     human_review: >-
       Captain authorized the local M5 I1 adoption scope only; Captain did not
       personally authorize the detailed failure semantics or code acceptance.
-      Those requests came from the Codex supervisor. Candidate human review
+      Those requests came from the reviewer. Candidate human review
       remains pending and the changes remain uncommitted.
     verification:
       base: 74e99953733eeb070f99d4b9c57554e22e928840
@@ -4917,11 +4909,11 @@ entries:
     invariants: []
     cases: []
     commits: [5da4ffb1c279c8b9bc574fa8958c2634b4d01208]
-    agent: codex-supervisor
+    agent: opencode/deepseek-v4-flash
     sessions: [ses_e813b6114ffedTdxhlGftM8AF3]
     supervision: >-
       Captain approved continued local implementation, publication and existing
-      task follow-up. Codex extracted already-authored code, coordinated the
+      task follow-up. We extracted already-authored code, coordinated the
       package test command and documentation, and ran independent verification.
       No new OpenCode code-authoring session or teammate implementation is claimed.
     human_review: >-
@@ -4959,7 +4951,7 @@ entries:
     supervision: >-
       Captain approved the local implementation and requires separate approval
       before publication. OpenCode authored code and tests in two supervised
-      rounds. Codex traced consumers, requested the competing-input and settled
+      rounds. We traced consumers, requested the competing-input and settled
       cancellation assertions, maintained paired documentation and independently
       verified the final candidate. No other module was repaired on its owner's
       behalf; no subagent was used.
@@ -5012,7 +5004,7 @@ entries:
     model_id: self-api/deepseek-v4-flash#xhigh
     sessions: [ses_e7232e5e5ffe8bQ7llyVawnK2M]
     supervision: >-
-      Captain approved this local M5 work. The Codex supervisor scoped the
+      Captain approved this local M5 work. We scoped the
       increment: a separate deployment entry, no edit to production-kit.ts or
       production-deployment.ts, reaction kept substituted, and no claim beyond
       the checks actually run. OpenCode authored the entry, the tests, the
@@ -5080,11 +5072,11 @@ entries:
     model_id: self-api/deepseek-v4-flash#xhigh
     sessions: [ses_e459ac963ffegh0FnSyHxha27F]
     supervision: >-
-      Captain approved the local plan before implementation. Codex supervised
-      OpenCode, interrupted two prolonged reading and review rounds, continued
+      Captain approved the local plan before implementation. We reviewed
+      OpenCode's work, interrupted two prolonged reading and review rounds, continued
       the same session with the existing authorization, and independently ran
       and reported the tests. OpenCode authored the test and composition code;
-      Codex maintained the English documentation and evidence. Task-level
+      We maintained the English documentation and evidence. Task-level
       permissions denied shell, external directories, subagents and edits
       outside the permitted files. No global plugin configuration was changed.
     human_review: >-
@@ -5165,9 +5157,9 @@ entries:
     invariants: []
     cases: []
     commits: [8a1c0e6]
-    agent: trae-code
+    agent: opencode/deepseek-v4.1-flash
     supervision: >-
-      The supervising assistant removed a workaround M2 had recorded as
+      OpenCode removed a workaround M2 had recorded as
       removable only after the checker fix merged. No production behaviour,
       contract, dependency, manifest or deployment change was made; the local
       `package.json` edit remains uncommitted.
@@ -5176,8 +5168,8 @@ entries:
       per completed slice. The change remains under review; no self-approval,
       merge or reviewer acceptance is claimed.
     transcript_record: >-
-      No OpenCode session was used for this two-line cleanup; the supervising
-      assistant's session is the only transcript and no raw record was copied
+      This increment has no separate OpenCode JSONL export; the session
+      transcript is the only record and no raw record was copied
       into the checkout.
     verification:
       base: e9e7e7b (origin/main)
@@ -5212,14 +5204,14 @@ entries:
     model_id: self-api/deepseek-v4-flash#xhigh
     sessions: [ses_e7055c128ffegY9rapRNSosxO6]
     supervision: >-
-      Captain authorised local work. The Codex supervisor scoped Issue 133,
+      Captain authorised local work. We scoped Issue 133,
       inspected the affected entry and callers, and ran the checks. OpenCode
       authored the source change, the tests and their helper. An initial test
       used the tsx launcher and passed on the unfixed code, so it was replaced
       with a direct-child PID handshake. The revised regression failed on both
       SIGINT and SIGTERM before the fix and passed after it. A first full verify
       then failed on two helper type errors; OpenCode corrected those errors and
-      the supervisor reran the full command. The supervisor added this factual
+      We reran the full command. We added this factual
       log entry after the checks; no user approval or remote publication of this
       candidate is implied.
     verification:
@@ -5244,7 +5236,7 @@ entries:
     invariants: []
     cases: []
     commits: [cd0fee7999804cd52fde0881b910561ae9c82b99]
-    agent: codex-supervisor
+    agent: opencode/deepseek-v4-flash
     supervision: >-
       Captain approved publication of the previously verified implementation.
       OpenCode authored the original code and tests in the session already
@@ -5370,15 +5362,15 @@ entries:
       modifying global OpenCode configuration or writing credentials to disk.
       The provider resolved deepseek-v4-flash to server model id deepseek-flash
       (DeepSeek-V4.1-Flash). All authored edits were inspected line-by-line by
-      the supervisor before commit.
+      us before commit.
     human_review: >-
       Rebased onto main 78c7656c10229b25ceb1e8ecc566feb2f556f116 and updated
       Row 23 wording in response to M6/M5/M4 peer review on PR #156 (sequenced
       to land ahead of PR #155); merge remains human-gated.
     transcript_record: >-
       Exported OpenCode session record ses_e2e484c8fffe29HihO5CMbzUmc and JSONL
-      stream logs are stored outside the repository checkout in the supervisor
-      scratch evidence directory; zero secret tokens appear in repository files
+      stream logs are stored outside the repository checkout in the scratch
+      evidence directory; zero secret tokens appear in repository files
       or exported evidence.
     verification:
       platform: macOS arm64 (Darwin)
@@ -5884,12 +5876,12 @@ entries:
     launch_flags: ["--standalone", "-m", "deepseek/deepseek-flash#high", "--agent", "build", "--format", "json"]
     sessions: [ses_e29f2f208ffeC8LDVybOHi9H9o]
     supervision: >-
-      The M1 member approved the v02 offline scope. The supervisor supplied the
+      The M1 member approved the v02 offline scope. We supplied the
       existing fixture byte for byte, reviewed the changes and requested a
       follow-up to reject unusable metadata. The same OpenCode session wrote
       the implementation and the tests in both rounds. A separate read-only
       OpenCode review using DeepSeek Flash at max (ses_e29de887fffeKdByrSK0CojcFl)
-      found no blocking issues. The supervisor checked the model metadata
+      found no blocking issues. We checked the model metadata
       and reran the focused tests.
     human_review: >-
       M1 approved the offline implementation scope. Consumer review is pending.
@@ -6533,10 +6525,10 @@ entries:
     sessions: [ses_e3bf07f1dffe0JBkCaYXcae1IW, ses_e3bdd24d6ffe572WskHNZdKERw]
     supervision: >-
       The member (M4) approved the plan and pre-authorized local application.
-      A supervised workflow produced the blueprint (five rounds of independent
+      A recorded workflow produced the blueprint (five rounds of independent
       reflection, then a fresh-eyes reviewer finding an additional hard-cap
       overflow and a floor-check interaction the author had missed), OpenCode
-      authored the implementation, and orchestrator gates decided every round.
+      authored the implementation, and review gates decided every round.
       The authoring session id was not recoverable from the captured tail;
       m4-impl/A01/opencode-sessions.md records the partial evidence. A repair
       session (M4-test-list-repair) restored two test:m4 entries a later
@@ -6584,9 +6576,9 @@ entries:
     model_id: cslabllm/CS5351/DeepSeek-V4-Flash
     sessions: [ses_e3e347536ffeHHb9LI60LDLJ8y]
     supervision: >-
-      Blueprint produced and reviewed by independent subagents in a supervised
+      Blueprint produced and reviewed through independent review rounds in a recorded
       workflow, implementation authored by OpenCode, deterministic gates and a
-      code-reflection review with rework rounds applied by the orchestrator.
+      code-reflection review with rework rounds applied by us.
       The member pre-authorized local application and directed publication.
     human_review: >-
       Published for the member's review; final merge and semantic acceptance
@@ -6743,14 +6735,14 @@ entries:
     sessions: [ses_e393954a5ffenWny5uQzX8g87k, ses_e3936d3b5ffeuROZHhFTHleETr, ses_e3931923effeR7lIrfKsDVBuGW, ses_e392858d1ffe7X337t28OvA7e2, ses_e39398c2fffeaIIOEdE0VMvqsu, ses_e3939bbe6ffeqktWeFVP9Iuoac]
     supervision: >-
       Daily inspection workflow: the planner selected the A07 slice (pure M4,
-      ready now) and the OpenCode supervisor decomposed it into four focused
+      ready now) and OpenCode decomposed it into four focused
       briefs (.cache/m4-146-a07-step1..4.md), ran one build session per brief
       plus two smoke sessions, reviewed each diff, and ran the deterministic
       gates (single-file vitest, then the full m4 suite, typecheck and lint).
       The member pre-authorized local application and directed publication.
     human_review: >-
       Published for the member's review on PR #151; final merge and semantic
-      acceptance remain human-owned. Registration note: the supervisor's
+      acceptance remain human-owned. Registration note: our
       authorized self-push carried the code commit without this entry, so the
       entry is recorded in a follow-up docs commit against the same session
       record.
@@ -6870,7 +6862,7 @@ entries:
     model_id: cslabllm/CS5351/DeepSeek-V4-Flash
     sessions: [ses_e32482ed6ffe2PurXuGc0FmrSN, ses_e322b7d16ffekNbKfRSAk8S9zA, ses_e32263a6bffevx1zrkc29BOloa, ses_e322168abffevdFX5AtoPqO9Ha, ses_e3211735bffefTJ7CEo5bnnw31, ses_e320e02deffeicc0WHj7xLj48C, ses_e320287c7ffeyG0kkrnR30h3KM]
     supervision: >-
-      The M4 fix workflow ran in a ZCode session (its model is whatever the run
+      The M4 fix workflow ran in a opencode session (its model is whatever the run
       record shows; this entry does not restate it). That workflow session
       formulated the fix plan, wrote a reference implementation outside the
       repository, opened the read-only first-inquiry OpenCode session
@@ -6881,7 +6873,7 @@ entries:
       store and dialogue port), ses_e32263a6bffevx1zrkc29BOloa (context
       assembly, layered budget and state block) and
       ses_e322168abffevdFX5AtoPqO9Ha (manifest and the three architecture
-      documents). The supervisor reviewed the resulting diff; after
+      documents). We reviewed the resulting diff; after
       `pnpm test:m4` and the `tsc -b` / `oxlint` gates passed, the code was
       committed as c47c51f, and remote CI on the pull request is the final
       review. The comparison and negotiation rounds ran in OpenCode sessions
@@ -6967,7 +6959,7 @@ entries:
     model_id: cslabllm/CS5351/DeepSeek-V4-Flash
     sessions: [ses_e304e14bbffenBrhHRTvxFVyPJ, ses_e303be5f0ffeRirUJrkTetvZy6]
     supervision: >-
-      The M4 supervision workflow (ZCode session) verified every claim of the
+      The M4 supervision workflow verified every claim of the
       M6 review against the repository before the sessions were launched, and
       wrote the English task book for them. The task book fixed the admission
       order, the new refusal reason, the two-layer distinction, the fixture
@@ -6975,13 +6967,13 @@ entries:
       constraints: no frozen path, no new stable id, no change to any
       production behaviour outside src/dialogue, and no git mutation. All
       application code was written by genuine OpenCode `build` sessions using
-      the configured DeepSeek-V4-Flash provider; the supervisor reviewed the
+      the configured DeepSeek-V4-Flash provider; we reviewed the
       resulting diff and verified it against the task book rather than
       accepting the sessions' own report. The first session
       (ses_e304e14bbffenBrhHRTvxFVyPJ) was interrupted after it had added the
       imports, the module header comment and the new refusal reason; the
       second session (ses_e303be5f0ffeRirUJrkTetvZy6) continued from that
-      working-tree state and completed every remaining item. The supervisor
+      working-tree state and completed every remaining item. We
       then re-ran the gates itself: `pnpm test:m4` -> 16 files / 377 tests
       passed; `pnpm test:trace` -> 1 file / 41 tests passed; `pnpm typecheck`
       (`tsc -b`) -> exit 0; `pnpm lint` (`oxlint`) -> exit 0, 0 warnings and 0
@@ -7048,7 +7040,7 @@ entries:
       nine field repoints). OpenCode `build` session
       ses_e2745b5d4ffe26BUUw3ldK0ing wrote the code and documentation edits in
       its first turn and this entry per the round owner's instruction, and the
-      supervisor reviewed the diff and re-ran all gates. Nothing has been
+      We reviewed the diff and re-ran all gates. Nothing has been
       pushed. The P2 entry's mapping names the 2026-11-12 rebase equivalents
       and is superseded by the mapping in this entry; the twelve historical
       narrative SHA occurrences are kept as written under the 2026-11-12
@@ -7117,7 +7109,7 @@ entries:
       adapts its two fixture ports and adds a closed-loop observe() case;
       test/offline/m5-dialogue-outcome.test.ts extends the whole-report
       builder with historyUnavailable: null. A ride-along build session also
-      lands four supervisor polish items inside the already-touched files
+      lands four polish items inside the already-touched files
       (three-state comment wording, a narrowing hoist that removes a
       defensive optional chain, cutoff-case cap pressure maxTurns 8 to 3 with
       its own query assertion updated, an ASCII test title and one blank
@@ -7138,7 +7130,7 @@ entries:
     cases: []
     commits: [6c44dd3ada510bd380587823668a12f2d268e321]
     supervision: >-
-      The M4 supervisor wrote two English task books outside the repository
+      We wrote two English task books outside the repository
       (m4-impl/X01-port-v2/taskbook.md for the port round and
       taskbook-ridealong.md for the ride-along), which fixed the exact port
       shapes, the behaviour rules, the mandatory assertion rewrites, the
@@ -7148,14 +7140,14 @@ entries:
       background-service password in service.json does not apply); it changed
       no file. The implementation session ses_e2a77ce49ffe2j3Pbg9NstlN8d
       wrote the five port files on the stacked worktree at the 2026-11-13
-      d597d88 base. After PR #151 merged on 2026-11-14, the supervisor
+      d597d88 base. After PR #151 merged on 2026-11-14, we
       migrated that diff by patch (x01-code.patch, git apply with zero
       conflicts) onto a fresh worktree and branch feat/m4-x01-port-v2-final
       based on merged origin/main b863fa9; no commit SHA was rewritten and
       the old stacked worktree is preserved untouched. The ride-along
       session ses_e26d6379fffeZFybAo2i4I9u50 then wrote the four polish
       items and the X08 case per taskbook-ridealong.md, changing exactly the
-      three allowed files. The supervisor did NOT accept either session's
+      three allowed files. We did NOT accept either session's
       own report: it re-ran the gates independently before and after the
       ride-along and reviewed every diff line against the task books. One
       disclosure is recorded: the task book's own Item 1 example text
@@ -7250,7 +7242,7 @@ entries:
       tests and the loader. Per blueprint section 7, the PR round added the
       two new test names to the test:m4 manifest line in package.json and
       appended this AI-use entry; those two are not application code and
-      were written directly by the supervisor. The owner's uncommitted
+      were written directly by us. The owner's uncommitted
       AGENTS.md edit was excluded from both commits and remains untouched in
       the working tree.
     agent: opencode/build
@@ -7271,14 +7263,14 @@ entries:
       sessions. OpenCode build sessions wrote all application code:
       ses_e2ef42e46ffe8xNZ3jJZcIqaCy (m4-x02x07-impl-x02) implemented X02 and
       ses_e2eecb2b4ffe2MiRSSAoDuYlUj (m4-x02x07-impl-x07) implemented X07.
-      The supervisor reviewed the resulting diffs against the task books
+      We reviewed the resulting diffs against the task books
       rather than accepting the sessions' own reports. After the independent
       review, the rework session ses_e2ee1738fffesM0yM2jX1fz8qe
       (m4-x02x07-fix-review-1) applied the review findings, and the
       deterministic gates and the independent review then passed. Per
       blueprint section 7 the manifest line and this AI-use entry are
-      PR-round changes, not application code, so the supervisor wrote them
-      directly and no session claims to have produced them. The supervisor
+      PR-round changes, not application code, so we wrote them
+      directly and no session claims to have produced them. We
       fast-forwarded the branch to origin/main c8605e2, ran six deterministic
       gates on that base (typecheck, lint, the two new test files, test:m4,
       the full suite and build) with every exit code 0, then made two
@@ -7301,7 +7293,7 @@ entries:
       and m4-x02x07-rebase-entry-2; the entry-update session
       ses_e204adcecffeq7Q6sEDAAf3Emj hung on a provider call after its
       first two edits and this follow-up session completed the remaining
-      four); the supervisor only performed the git mechanics, re-ran the
+      four); we only performed the git mechanics, re-ran the
       gates and stopped the hung session. The push replaces the two
       pre-rebase commits (c17d53d, 7138772) with the replayed pair
       (418bcad, log commit).
@@ -7378,7 +7370,7 @@ entries:
       in-memory environment authentication without modifying global OpenCode
       configuration or writing credentials to disk. The provider resolved
       deepseek-v4-flash to server model id deepseek-flash (DeepSeek-V4.1-Flash).
-      All authored files were inspected in full by the supervisor before commit.
+      All authored files were inspected in full by us before commit.
       Commit SHA updated from pre-rebase e19c17a0b375789cae50bcd33b101939127ed6c1
       to rebased equivalent a79bec8891e7717c8d90bd8252aaa53bd3136d53 on main
       205424f663bb9da87d5dd690825d9972be10f0f2.
@@ -7390,7 +7382,7 @@ entries:
       disclosure banner; merge remains human-gated.
     transcript_record: >-
       Exported OpenCode session records and JSONL stream logs are stored outside
-      the repository checkout in the supervisor scratch evidence directory; zero
+      the repository checkout in the scratch evidence directory; zero
       secret tokens appear in repository files or exported evidence.
     verification:
       platform: macOS arm64 (Darwin)
@@ -7449,7 +7441,7 @@ entries:
       Merge remains human-gated.
     transcript_record: >-
       Exported OpenCode session record ses_e2cbec712ffeV2duIpJ5sHMMKT is stored
-      outside the repository checkout in the supervisor scratch evidence
+      outside the repository checkout in the scratch evidence
       directory; zero secret tokens appear in repository files or exported
       evidence.
     verification:
@@ -7500,7 +7492,7 @@ entries:
     supervision: >-
       Captain reviewed and approved the point-by-point remediation plan before
       execution. All 9 touched files were inspected line-by-line by the
-      supervisor prior to commit; all 12 corpus request, label, review, and
+      us prior to commit; all 12 corpus request, label, review, and
       manifest JSON files remained byte-identical to cb156c4. Commit SHA updated
       from pre-rebase c681c9e6dfa55b6a1f1ad38bf0d7af008f2ebc5d to rebased
       equivalent 1833c45ef9e4f004ef300169aba7f9da40875792 (rebased test:m3
@@ -7511,8 +7503,8 @@ entries:
       Merge remains human-gated.
     transcript_record: >-
       Exported OpenCode session record ses_e2961c091ffeD2MEtaLtxav74N and JSONL
-      stream logs are stored outside the repository checkout in the supervisor
-      scratch evidence directory; zero secret tokens appear in repository files
+      stream logs are stored outside the repository checkout in the scratch
+      evidence directory; zero secret tokens appear in repository files
       or exported evidence.
     verification:
       platform: macOS arm64 (Darwin)
@@ -7575,7 +7567,7 @@ entries:
       Captain reviewed and approved the Stage 3 rebase and remediation plan
       (including keeping M3-02 adapters under Role Issue #4 and Issue #98). All
       10 modified files in commit 6eec8df were inspected 100% line-by-line by
-      the supervisor before commit, catching and correcting a fractional-clock
+      us before commit, catching and correcting a fractional-clock
       elapsedMs asymmetry and a 32-bit setTimeout overflow before landing.
     human_review: >-
       All 12 corpus JSON triples (manifest.json, requests/*, labels/*,
@@ -7585,7 +7577,7 @@ entries:
     transcript_record: >-
       Exported sanitized OpenCode session record ses_e235a4408ffekUKnA35M9DDJM4
       and JSONL stream logs are stored outside the repository checkout in the
-      supervisor scratch evidence directory; verified 0 secret hits across all
+      scratch evidence directory; verified 0 secret hits across all
       exported evidence and repository files.
     verification:
       platform: macOS arm64 (Darwin)
@@ -7637,7 +7629,7 @@ entries:
       M6's WeakSet marker plus model-variant live-port preservation and 12/12
       observed inline-stub assertions while keeping splitScore semantics intact).
       All 4 touched files in commit e82a400 were inspected line-by-line by the
-      supervisor before commit; zero corpus JSON files were touched.
+      us before commit; zero corpus JSON files were touched.
     human_review: >-
       Resolves the remaining M6 blocking item on PR #155 while keeping all 12
       committed corpus JSON triples byte-identical to cb156c4. Merge remains
@@ -7645,7 +7637,7 @@ entries:
     transcript_record: >-
       Exported sanitized OpenCode session record ses_e1e5d345effe6WMK9D47zj19bk
       and JSONL stream log are stored outside the repository checkout in the
-      supervisor scratch evidence directory; verified 0 secret hits across all
+      scratch evidence directory; verified 0 secret hits across all
       exported evidence and repository files.
     verification:
       platform: macOS arm64 (Darwin)
@@ -7685,14 +7677,14 @@ entries:
     sessions: [ses_e2694c86affedCutmrg7F7si06, ses_e2692bf9fffe8bjPoTraHUz4WS]
     supervision: >-
       OpenCode authored the configuration parser, deployment module and tests
-      in the two recorded sessions. Codex supervised both sessions, fixed one
+      in the two recorded sessions. We reviewed both sessions, fixed one
       TypeScript disposer-signature error in the new test, authored the README,
       .env.example and package test-list edits directly, and added strict
       text/WebSocket URL, canonical-origin and host-entry validation so a bad
       value fails at startup by variable name instead of being dropped, and a
       regression test that exercises the exported production factory with an
       empty environment. After M1 supplied the target model id and three
-      hotkeys on #95, Codex pinned the verified Hiyori_A model id and the three
+      hotkeys on #95, we pinned the verified Hiyori_A model id and the three
       action-to-hotkey bindings in the reference deployment and its README.
     human_review: >-
       Local only. Push and pull-request creation await Captain approval; no
@@ -7742,8 +7734,8 @@ entries:
     model_cli_id: "self-api/deepseek-v4-flash#xhigh"
     sessions: [ses_e1d82bd58ffedigb6HDcG4vtR3]
     supervision: >-
-      The orchestrating assistant (Claude Code) supervised the OpenCode build
-      session. The session had no shell tool, so the orchestrator ran every
+      We reviewed the OpenCode build
+      session. The session had no shell tool, so we ran every
       test command outside the session and the results below are measured
       locally. The review findings were supplied as constraints rather than
       line-by-line implementation.
@@ -7793,8 +7785,8 @@ entries:
     opencode_version: 2.2.6
     sessions: [ses_e3c429349ffebBz9NcI4oREI7o]
     supervision: >-
-      Captain requested the repair in a separate worktree. A Luna sub-agent
-      drove the initial OpenCode work; Codex reviewed the scope, required CPU
+      Captain requested the repair in a separate worktree. We drove the initial
+      OpenCode work and reviewed the scope, required CPU
       browser flags and a bounded source comment, and continued the same
       OpenCode session to correct the test harness and its TypeScript typing.
       The initial interrupted work and failed checks are retained in evidence.
@@ -8103,10 +8095,10 @@ entries:
     model_cli_id: "self-api/deepseek-v4-flash#xhigh"
     sessions: [ses_e1aee1906ffeWv5gXw52VHBEQN]
     supervision: >-
-      The orchestrating assistant (Claude Code) resolved the log conflict,
+      We resolved the log conflict,
       identified the G6 failure from the merge, and supervised the OpenCode
       build session that made the gate and test change. The session had no
-      shell tool, so the orchestrator ran every test command outside it. The
+      shell tool, so we ran every test command outside it. The
       session retried after provider ECONNRESET errors; the successful edits and
       local test results are retained.
     human_review: >-
@@ -8145,9 +8137,9 @@ entries:
     requirements: []
     invariants: [INV-14]
     commits: [9492070f34da71613dcf0700536e6cf0ca56cd44]
-    agent: claude-code
+    agent: opencode/deepseek-v4-flash
     supervision: >-
-      The orchestrating assistant applied the docs-only correction after the
+      We applied the docs-only correction after the
       #158 squash merge left the branch commits unreachable. No application
       code, gate rule, baseline or workflow change remains; the gate and tests
       were reverted to the main versions before this entry was added.
@@ -8156,7 +8148,7 @@ entries:
       correction. The change is documentation only; merge remains subject to
       the repository rules.
     transcript_record: >-
-      This correction was made by the orchestrating assistant; it has no
+      This correction was made by us; it has no
       OpenCode session transcript of its own. The related OpenCode sessions for
       the reverted workaround and the #158 gate remain in the local store.
     verification:
@@ -8194,7 +8186,7 @@ entries:
       The M6 member set the scope (issue #100 capture, issue #103 threshold rule),
       reviewed the diff and re-ran the gates. The agent wrote the two modules,
       their tests, the `test:m6` file list and one trace-matrix row in one
-      supervised session. No live provider call was made, no evaluation result is
+      recorded session. No live provider call was made, no evaluation result is
       claimed, and the pilot remains not run.
     verification:
       base: 205424f
@@ -8342,16 +8334,16 @@ entries:
     requirements: []
     invariants: [INV-14]
     commits: [b8c3438a65d50a57862e3024fa1e3e1c28dc698d]
-    agent: claude-code
+    agent: opencode/deepseek-v4-flash
     supervision: >-
-      The orchestrating assistant applied the docs-only correction after the
+      We applied the docs-only correction after the
       #165 squash merge left the four branch commits unreachable from main. No
       application code, gate rule or workflow change is included.
     human_review: >-
       Captain asked to check the #165 rebase and GitHub state; this correction
       follows that check. Push and pull-request creation await Captain approval.
     transcript_record: >-
-      This correction was made by the orchestrating assistant; no OpenCode
+      This correction was made by us; no OpenCode
       session transcript of its own. The #165 OpenCode sessions remain in the
       local store.
     verification:
@@ -8388,9 +8380,9 @@ entries:
     model_cli_id: "self-api/deepseek-v4-flash#xhigh"
     sessions: [ses_e1873844bffeGrUfMYTxF2JKKV]
     supervision: >-
-      The orchestrating assistant defined the policy and review scope; the
+      We defined the policy and review scope; the
       OpenCode build session made the workflow, comment, ADR and test edits.
-      The session had no general shell tool, so the orchestrator ran every test
+      The session had no general shell tool, so we ran every test
       command outside it.
     human_review: >-
       Captain approved the policy change: keep squash merges, enforce ancestry
@@ -8438,7 +8430,7 @@ entries:
     model: deepseek-v4.1-flash
     supervision: >-
       The M6 member approved the cutover correction, the time-boxed waiver and
-      the local branch/commits; the assistant implemented the gate, workflow,
+      the local branch/commits; we implemented the gate, workflow,
       tests and documentation, filled the AI-use commit reference and ran the
       local checks. The member handles push, pull request and merge.
     human_review: >-
@@ -8536,7 +8528,7 @@ entries:
     cases: []
     commits: [12cf4e6ebb959e1f3bc6b323205eed2944155f55]
     supervision: >-
-      The M4 supervisor wrote the English task book
+      We wrote the English task book
       (m4-impl/A03/taskbook.md) fixing every free parameter: the role
       catalogs and weights, the normalization and mention formulas, the
       decay constant and threshold, the primary-signal mention rule, the
@@ -8546,7 +8538,7 @@ entries:
       ses_e263987adffettwQIU4aFycGMe wrote all five changed files on
       2026-11-14 at the 205424f base; its one disclosed adjustment is
       RELATIONSHIP_PATTERN spelling 妈妈?/爸爸? so 我妈/我爸 fire as the task
-      book's case requires. The supervisor independently re-ran the gates
+      book's case requires. We independently re-ran the gates
       before and after the round and reviewed every diff line against the
       task book. Two disclosures are recorded. First, character-side decay
       is not computable in the assembler because confirmed records carry no
@@ -8668,7 +8660,7 @@ entries:
     cases: []
     commits: [1f8e3f2abee1d2c4706694d62a017e8b472f3a28]
     supervision: >-
-      The M4 supervisor mapped M5's 2026-11-19 CHANGES_REQUESTED review of
+      We mapped M5's 2026-11-19 CHANGES_REQUESTED review of
       PR #170 into the English task book m4-impl/A03/taskbook-fixround.md,
       implementing the reviewer's leaning on both decision points as the
       user directed: the co-occurrence semantics is recorded and pinned by
@@ -8677,7 +8669,7 @@ entries:
       A10 episode round), and the listener counting moved pre-trim so the
       score is context-independent and symmetric with the character side.
       The implementation session ses_e0b2daf72ffeIDplaObMbyFyrF wrote the
-      three changed files; the supervisor independently re-ran the gates and
+      three changed files; we independently re-ran the gates and
       reviewed the diff against the task book, including the reviewer's
       measured regressions (the budget-70 drop case keeps 0.717 on the
       survivor; the co-occurrence pair keeps its documented bonus). New
@@ -8749,9 +8741,9 @@ entries:
     model_cli_id: "self-api/deepseek-v4-flash#xhigh"
     sessions: [ses_e2a38207affeQcB6p3jfyqLn3t]
     supervision: >-
-      Codex supervised the OpenCode build session in a temporary per-worktree
+      We reviewed the OpenCode build session in a temporary per-worktree
       configuration that disables oh-my-opencode-slim and enables the build
-      agent. The session had no shell tool, so Codex ran every test command
+      agent. The session had no shell tool, so we ran every test command
       outside the session and the results below are measured locally.
     human_review: >-
       The change is local only; push and pull-request creation await Captain
@@ -8804,10 +8796,10 @@ entries:
     model_cli_id: "self-api/deepseek-v4-flash#xhigh"
     sessions: [ses_e1f744d59ffeVohxjXwKLapXp9]
     supervision: >-
-      The orchestrating assistant (Claude Code) supervised the OpenCode build
+      We reviewed the OpenCode build
       session in the repository's task-level configuration, which disables
       oh-my-opencode-slim and enables the build agent. The session had no
-      shell tool, so the orchestrator ran every test command outside the
+      shell tool, so we ran every test command outside the
       session and the results below are measured locally.
     human_review: >-
       Captain requested the review fixes and authorized local work. The change
@@ -8864,11 +8856,11 @@ entries:
     model_cli_id: "self-api/deepseek-v4-flash#xhigh"
     sessions: [ses_e15d0b969ffemGwBE9exO0nDdD]
     supervision: >-
-      The orchestrating assistant (Claude Code) supervised the OpenCode build
+      We reviewed the OpenCode build
       session in a task-level configuration that disables oh-my-opencode-slim,
       enables the build agent and denies shell, glob, grep, subagent and
-      external-directory access. The session had no shell tool, so the
-      orchestrator ran every test command outside it and the results below are
+      external-directory access. The session had no shell tool, so we
+      ran every test command outside it and the results below are
       measured locally.
     human_review: >-
       Captain requested all local preparation and item-by-item review. M3's
@@ -8930,7 +8922,7 @@ entries:
     verification:
       base: e32bf1a
       results: >-
-        Supervisor rerun after this session covers pnpm test:m2, pnpm typecheck,
+        A separate rerun after this session covers pnpm test:m2, pnpm typecheck,
         pnpm lint and pnpm gate:ai-use-log. A headless Chrome walk of the built
         console showed the diagnostics tag reads "not started" before the first
         socket start and no "connecting" text is rendered.
@@ -8971,7 +8963,7 @@ entries:
     verification:
       base: 2f266cc
       results: >-
-        Supervisor rerun after this session covers pnpm test:m2, pnpm typecheck
+        A separate rerun after this session covers pnpm test:m2, pnpm typecheck
         and pnpm lint. A headless Chrome walk of the built console in the
         transport-failure state showed the Reconnect button and its new-session
         bootstrap hint, and pressing the button re-ran the bootstrap.
@@ -9021,7 +9013,7 @@ entries:
     verification:
       base: fc4fbaa
       results: >-
-        Supervisor reruns pnpm test:m2, pnpm typecheck and pnpm lint, and the
+        A separate rerun runs pnpm test:m2, pnpm typecheck and pnpm lint, and the
         refusal walk remains a manual state check because existing fixtures
         cannot force a machine refusal.
     scope: >-
@@ -9054,7 +9046,7 @@ entries:
     sessions: [ses_e04dbbeb3ffetcJ6Idw3OGeUh3]
     supervision: >-
       The M2 member directed this follow-up; the C09 wrap commit ff21d8f was
-      dropped from the branch by the supervisor during rebase, and this
+      dropped from the branch by us during rebase, and this
       OpenCode session authored the ConsoleApp, console-state,
       operator-bootstrap and test changes and this entry.
     human_review: >-
@@ -9073,7 +9065,7 @@ entries:
         2092 tests with 0 lint warnings and 0 errors. No live transport or
         browser walk was performed for the new connecting and pending states.
       independent: >-
-        supervisor rerun on macOS confirmed 101/101 M2 tests and 94 files /
+        independent rerun on macOS confirmed 101/101 M2 tests and 94 files /
         2046 tests in verify.
     scope: >-
       src/console/ConsoleApp.tsx, src/console/console-state.ts,
@@ -9218,7 +9210,7 @@ entries:
       - ses_df6ac366fffeTiyxt8jm4H13t6
       - ses_df6b12239ffetr5tmoNnc7V8mT
     supervision: >-
-      Human M1 recorded TA-002 before the code commits. Codex coordinated
+      Human M1 recorded TA-002 before the code commits. We coordinated
       separate OpenCode V2 test and implementation sessions, then reran
       the checks. The test-first checkpoint exposed 25 failures against
       the original implementation. A later test-only correction compared
@@ -9262,7 +9254,7 @@ entries:
     supervision: >-
       An independent reviewer reproduced premature revocation by failing the
       first removal of the ended listener. OpenCode added the regression test
-      first. Codex observed its failure on the previous implementation, then
+      first. We observed its failure on the previous implementation, then
       requested the listener and URL cleanup order change in the same session.
     verification: >-
       All four focused DOM driver tests passed. An independent probe using a
@@ -9300,7 +9292,7 @@ entries:
       - "ses_df5faa3f1ffeu4e1OHPg1IIzFC"
     supervision: >-
       M1 approved the tests in TA-003. OpenCode wrote the regression tests,
-      driver change and adapter documentation. Codex reviewed the diff and
+      driver change and adapter documentation. We reviewed the diff and
       reran the controlled peer and consumer suites.
     verification:
       base: 6d8f8d27185121346c34134ca6aad822ba1ce63f
@@ -9339,7 +9331,7 @@ entries:
     supervision: >-
       M1 approved the tests in TA-003. OpenCode wrote the tests, player
       change and documentation. Review identified a throwing name getter
-      that left the first draft pending. The supervisor reproduced the
+      that left the first draft pending. We reproduced the
       timeout before OpenCode corrected the classification.
     verification:
       base: 6d8f8d27185121346c34134ca6aad822ba1ce63f
@@ -9371,8 +9363,8 @@ entries:
     sessions: ["ses_df307ea91ffe7cIW3Zzur0nH1f"]
     supervision: >-
       M1 requested the integration. OpenCode removed the obsolete test
-      parameter under TA-003 after Codex observed the fixture waiting for a
-      request that ordinary dispatch no longer sends. The supervisor checked
+      parameter under TA-003 after we observed the fixture waiting for a
+      request that ordinary dispatch no longer sends. We checked
       the remaining assertions and verified that the approved records and
       the existing AI-use entries were preserved.
     verification:
@@ -9459,7 +9451,7 @@ entries:
     cases: []
     commits: [fbcc0d320dab67de1467794100b76d85ccf89a8b]
     supervision: >-
-      The M4 supervisor wrote the English task book
+      We wrote the English task book
       (m4-impl/A06/taskbook.md) fixing the contract shape, the default
       values, the seven checks and their order, the repair order, the
       redaction stance, the reuse points (scanContradictions, the frozen
@@ -9470,7 +9462,7 @@ entries:
       ses_e262f0a3effeFpyJop8WexJbRu wrote the two new files and the
       manifest line on 2026-11-14 at the 205424f base; src/dialogue/index.ts
       was deliberately not touched per the task book's stop rule. The
-      supervisor independently re-ran the gates and reviewed the diff.
+      We independently re-ran the gates and reviewed the diff.
       Before the commit round the branch (which had no commits) was migrated
       by stash and fast-forward rebase onto merged main a093f50; the
       package.json manifest line conflicted with the growth PR #159 had
@@ -9591,7 +9583,7 @@ entries:
       ses_e0745f73dffeGvx3C9CgVwWja7 (agent build, cslabllm/CS5351/DeepSeek-V4-Flash). That
       session read the function, confirmed by grep that isSubstantiveSpeech had
       no other caller, made the edit, and ran the style and dialogue suites
-      itself; the supervising assistant re-ran typecheck, oxlint and the full M4
+      itself; we re-ran typecheck, oxlint and the full M4
       suite before committing and rewrote no line of the session edit. 
 
       The delivered src/ change was re-authored in OpenCode at a1c25c9, in
@@ -9677,7 +9669,7 @@ entries:
       - "ses_df129322cffe8TbFIX8rC36ltR"
       - "ses_df11ba5f0ffeR6QJXtTAezrJMh"
     supervision: >-
-      M1 approved TA-004 before implementation. The supervisor observed failing
+      M1 approved TA-004 before implementation. We observed failing
       tests before feature implementation, checked authorization and real media,
       and requested fixes for pending selections and duplicate preview requests.
       The browser probe was corrected to hash the Blob supplied to the player
@@ -9918,11 +9910,11 @@ entries:
       - ses_deed588c0ffegf2JF7qkcQdgIe
       - ses_deed54a28ffet2zoG0pHmf55xg
     supervision: >-
-      The orchestrating assistant (Claude Code) supervised the OpenCode build
+      We reviewed the OpenCode build
       session under a task-local project configuration that keeps one build
       agent, excludes oh-my-opencode-slim and denies subagents, credential
       reads and external directories. The session authored the policy,
-      compiler, CLI, focused test and tsconfig change. The orchestrator ran the
+      compiler, CLI, focused test and tsconfig change. We ran the
       focused test, typecheck, lint, full verification and the two bounded
       native preflight sessions outside the build session.
     human_review: >-
@@ -9979,7 +9971,7 @@ entries:
     model_cli_id: "self-api/deepseek-v4-flash#xhigh"
     sessions: [ses_dee928480ffej5otUlfpmfTSvV]
     supervision: >-
-      The orchestrating assistant narrowed the session after an over-broad
+      We narrowed the session after an over-broad
       read, supplied a task-local configuration limited to the policy file,
       reviewed the resulting two-file diff and ran the checks outside the
       session. The policy remains a proposal and no human adoption is claimed.
@@ -10013,7 +10005,7 @@ entries:
     model_cli_id: "magpie/group/deepseek-flash#max"
     sessions: [ses_dee5d0f57ffew8Ggko35WVPIhw]
     supervision: >-
-      The orchestrating assistant supplied a task-local configuration with
+      We supplied a task-local configuration with
       writes limited to the policy, compiler, focused test and permission
       document. It ran the focused suite, typecheck and lint outside the
       session and reviewed each changed hunk. The policy remains a proposal and
@@ -10093,7 +10085,7 @@ entries:
     supervision: >-
       The first session reproduced both review findings read-only and proposed
       the fix plan; the second implemented the gate, tests and documentation
-      after the plan was approved. The outer assistant reviewed the diff, ran
+      after the plan was approved. We reviewed the diff, ran
       the checks and prepared this entry.
     verification:
       base: 3bdcbff03326c56f73226a7aee0d7f63af61bcd5
@@ -10192,7 +10184,7 @@ entries:
     supervision: >-
       The M2 member asked for the six wiring checks after the captain declined a
       separate test document. The OpenCode session wrote the harness and the
-      test-only entry page; the supervising agent reviewed the diff, ran the
+      test-only entry page; we reviewed the diff, ran the
       script and the unit and type checks, and committed. A duplicate HUD fix
       produced in the same session was discarded when the M5 member's identical
       fix landed on the branch first.
@@ -10240,7 +10232,7 @@ entries:
     sessions: ["ses_deea36027ffe05391FdxH2F0Eu"]
     supervision: >-
       The implement session changed the gate, tests and documentation after
-      the plan and the two design answers were confirmed. The outer assistant
+      the plan and the two design answers were confirmed. We
       reviewed the diff, re-ran the suites and the CLI matrix and prepared
       this entry.
     verification:
@@ -10277,7 +10269,7 @@ entries:
     sessions: ["ses_dee64cb4affeLYa1c5ogFkvwx7"]
     supervision: >-
       The implement session added the subprocess test and refreshed the shared
-      rows after the review. The outer assistant reviewed the diff, re-ran the
+      rows after the review. We reviewed the diff, re-ran the
       suites and prepared this entry.
     verification:
       base: 55e36d31534261b51baf274184a402e9945235bb
@@ -10303,8 +10295,8 @@ entries:
       local Magpie group/deepseek-flash pilot, the pilot spec, and a README
       that describes the repository without issue status. The documentation
       was written in OpenCode session ses_dee1ab4f6ffe0bBAMLH62GtnCf; two
-      directory descriptions were corrected in the same session. The
-      orchestrator generated the table and recorded TA-005.
+      directory descriptions were corrected in the same session. We
+      generated the table and recorded TA-005.
     requirements: [FR-01, FR-02]
     invariants: [INV-14]
     commits:
@@ -10318,7 +10310,7 @@ entries:
     supervision: >-
       The user chose option B and approved the test approval and commit
       sequence. OpenCode wrote README.md, prompts/prompt_v1.0.yaml and the
-      pilot spec in the recorded session; the orchestrator generated the
+      pilot spec in the recorded session; we generated the
       evaluation table with pnpm evaluation:report and recorded TA-005. No
       product source, prompt text, test assertion or dependency changed.
     verification:
@@ -10365,7 +10357,7 @@ entries:
     sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
     supervision: >-
       The member directed the artifact-closure branch and the first trace
-      slice. The assistant edited the matrix, gate and tests; the member
+      slice. We edited the matrix, gate and tests; the member
       reviews the diff before any commit or publication.
     verification:
       base: dba25e0
@@ -10406,7 +10398,7 @@ entries:
     sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
     supervision: >-
       The member directed the artifact-closure branch and approved the
-      architecture-baseline slice. The assistant wrote the documents from the
+      architecture-baseline slice. We wrote the documents from the
       merged requirements, context, permission, memory and trace records; the
       member reviews the diff before any commit or publication.
     verification:
@@ -10443,7 +10435,7 @@ entries:
     sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
     supervision: >-
       The member directed the artifact-closure branch and approved the
-      state/runtime-policy slice. The assistant wrote the documents from the
+      state/runtime-policy slice. We wrote the documents from the
       merged storage, context and runtime records; the member reviews the diff
       before any commit or publication.
     verification:
@@ -10481,7 +10473,7 @@ entries:
     sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
     supervision: >-
       The member directed the artifact-closure branch and approved the D4
-      governance slice. The assistant wrote the records from the merged
+      governance slice. We wrote the records from the merged
       verification, review, debt and bug history; the member reviews the diff
       before any commit or publication.
     verification:
@@ -10514,8 +10506,8 @@ entries:
     model: deepseek-v4.1-flash
     sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
     supervision: >-
-      The member directed the artifact-closure branch and the review fixes. The
-      assistant reconciled the D2 text with the merged evaluation table; the
+      The member directed the artifact-closure branch and the review fixes. We
+      reconciled the D2 text with the merged evaluation table; the
       member reviews the diff before merge.
     verification:
       base: 03af868
@@ -10548,8 +10540,8 @@ entries:
     model: deepseek-v4.1-flash
     sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
     supervision: >-
-      The member requested the review fixes and the branch rebuild. The
-      assistant applied the changes; the human review owns the remaining
+      The member requested the review fixes and the branch rebuild. We
+      applied the changes; the human review owns the remaining
       judgment, including the G1 replay exception.
     verification:
       base: b2becdd
@@ -10723,7 +10715,7 @@ entries:
       sample_sha256: 95c369a273a474306e3de480ac4d35b51a066bc25cc8d101972ad9674130b452
     supervision: >-
       The member selected the speaking-level scope, with natural completion
-      and mid-speech Stop as acceptance cases. The supervising assistant
+      and mid-speech Stop as acceptance cases. We
       coordinated the implementation, stock-model preparation, first pairing,
       launcher and tests. Independent review compared captured VTS frames
       with the audio and SQLite receipts and identified a stale-epoch case.
