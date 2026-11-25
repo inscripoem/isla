@@ -1,6 +1,8 @@
 # AI-use log (D1 / gate G6)
 # A pull request that changes code or prompts must update this file.
 # One entry per recorded change. English only.
+# Attribution corrections on 2026-11-25 reflect collaborator confirmation.
+# source_commits retains the original branch references beside the main commit.
 version: 1
 entries:
   - date: "2026-10-28"
@@ -18,10 +20,11 @@ entries:
       path and the retained genuine pair.
     requirements: [NFR-03]
     invariants: []
-    commits: ["4273673"]
-    agent: opencode/deepseek-v4-flash
+    commits: ["4e4f7cd7cab751486cec21efbf613364ca7dc07d"]
+    source_commits: ["4273673"]
+    agent: OpenCode + DeepSeek V4.1 Flash
     provider: opencode-go
-    model: deepseek-v4-flash
+    model: DeepSeek V4.1 Flash
     supervision: >-
       We reproduced the two reported false positives
       against the pre-fix source, implemented the scoped fix and the
@@ -72,9 +75,9 @@ entries:
     requirements: [NFR-03]
     invariants: []
     commits: []
-    agent: opencode/deepseek-v4-flash
+    agent: OpenCode + DeepSeek V4.1 Flash
     provider: opencode-go
-    model: deepseek-v4-flash
+    model: DeepSeek V4.1 Flash
     supervision: >-
       We supervised the table extensions, the test cases and
       the live skeleton in one recorded session. The member approved the
@@ -1063,7 +1066,8 @@ entries:
     invariants: [INV-15]
     cases: [C-49, C-50]
     commits: []
-    agent: opencode/deepseek-v4-flash
+    agent: OpenCode + DeepSeek V4.1 Flash
+    model: DeepSeek V4.1 Flash
     human_review: "Reviewed in #35 by M5 and M6; the session-scoped identity defect in recall displacement was found by M5's re-review and is fixed here with a regression over repeated turn ids across restored sessions."
 
   - date: 2026-10-20
@@ -1074,7 +1078,8 @@ entries:
     invariants: []
     cases: []
     commits: []
-    agent: opencode/deepseek-v4-flash
+    agent: OpenCode + DeepSeek V4.1 Flash
+    model: DeepSeek V4.1 Flash
     verification:
       focused: "test:m4 124/124 (m4-dialogue 57, m4-storage-integration 13, m4-memory-enhancement 17, m4-audience-scope 37)."
       mutation: "Restoring the permissive cross-session branch turned seven cases red; moving the literal-data check back behind the negation exemption turned the assertion/negation pair red. Both restored."
@@ -1684,9 +1689,9 @@ entries:
     invariants: [INV-01, INV-12]
     cases: []
     commits: []
-    agent: opencode/deepseek-v4.1-flash
+    agent: OpenCode + DeepSeek V4.1 Flash
     provider: deepseek
-    model: DeepSeek-V4.1-Flash
+    model: DeepSeek V4.1 Flash
     supervision: >-
       This M2-01 change was authored through OpenCode under a Captain-approved
       plan. The agent field names the authoring agent; no ses_ identifier is
@@ -1728,10 +1733,11 @@ entries:
     requirements: [FR-01, FR-04, FR-05]
     invariants: [INV-01, INV-12]
     cases: []
-    commits: [377d8535777f94f0ba832e41409e304893dd9a4b]
-    agent: opencode/deepseek-v4.1-flash
+    commits: ["4303325cd163b973c011792e48c92eea46040973"]
+    source_commits: [377d8535777f94f0ba832e41409e304893dd9a4b]
+    agent: OpenCode + DeepSeek V4.1 Flash
     provider: deepseek
-    model: DeepSeek-V4.1-Flash
+    model: DeepSeek V4.1 Flash
     supervision: >-
       This review-fix increment was authored through OpenCode under the
       Captain-approved plan; no ses_ identifier is asserted for this historical
@@ -1766,10 +1772,11 @@ entries:
     requirements: [FR-01, FR-04, FR-05]
     invariants: [INV-01, INV-12]
     cases: []
-    commits: [a63de25b17e6880d663072eeed040eff18917735]
-    agent: opencode/deepseek-v4.1-flash
+    commits: ["4303325cd163b973c011792e48c92eea46040973"]
+    source_commits: [a63de25b17e6880d663072eeed040eff18917735]
+    agent: OpenCode + DeepSeek V4.1 Flash
     provider: deepseek
-    model: DeepSeek-V4.1-Flash
+    model: DeepSeek V4.1 Flash
     supervision: >-
       This review-fix increment was authored through OpenCode under the
       Captain-approved plan; no ses_ identifier is asserted for this historical
@@ -1808,10 +1815,11 @@ entries:
     requirements: [FR-04, FR-05]
     invariants: [INV-01]
     cases: []
-    commits: [cdfc3a4]
-    agent: opencode/deepseek-v4.1-flash
+    commits: ["4303325cd163b973c011792e48c92eea46040973"]
+    source_commits: [cdfc3a4]
+    agent: OpenCode + DeepSeek V4.1 Flash
     provider: deepseek
-    model: DeepSeek-V4.1-Flash
+    model: DeepSeek V4.1 Flash
     supervision: >-
       This review-fix increment was authored through OpenCode under the
       Captain-approved plan; no ses_ identifier is asserted for this historical
@@ -1991,10 +1999,11 @@ entries:
     requirements: [FR-04, FR-05]
     invariants: [INV-01]
     cases: []
-    commits: [ad0400c]
-    agent: opencode/deepseek-v4.1-flash
+    commits: ["4303325cd163b973c011792e48c92eea46040973"]
+    source_commits: [ad0400c]
+    agent: OpenCode + DeepSeek V4.1 Flash
     provider: deepseek
-    model: DeepSeek-V4.1-Flash
+    model: DeepSeek V4.1 Flash
     supervision: >-
       This review-fix increment was authored through OpenCode under the
       Captain-approved plan; no ses_ identifier is asserted for this historical
@@ -3129,8 +3138,10 @@ entries:
     requirements: [FR-02, NFR-03]
     invariants: []
     cases: []
-    commits: [572c99c]
-    agent: opencode/deepseek-v4.1-flash
+    commits: ["4e4f7cd7cab751486cec21efbf613364ca7dc07d"]
+    source_commits: [572c99c]
+    agent: OpenCode + DeepSeek V4.1 Flash
+    model: DeepSeek V4.1 Flash
     verification:
       focused: "test:m4 176/176 across 8 files (recall scoring 14, salience signals 15, consistency 16, plus the pre-existing suites at 131)."
       mutation: >-
@@ -3875,12 +3886,14 @@ entries:
       full suite remains gated by remote CI.
     requirements: []
     invariants: []
-    commits: [bd972ec, b8669ce]
+    commits: ["3f66d00d91d9873ff3856219bda371f16b50bcad"]
+    source_commits: [bd972ec, b8669ce]
     agent: opencode/deepseek-v4-flash
     provider: cslabllm
     model: CS5351/DeepSeek-V4-Flash
     supervision: >-
-      Member M4's scheduled inspection workflow selected
+      Member M4's scheduled OpenCode workflow with DeepSeek V4.1 Flash
+      selected
       the slice, wrote the English task briefs and supervised. OpenCode build
       agent authored all test and package.json changes across three unattended
       --auto --standalone sessions (loopback intent, delivery-history, verify
@@ -3927,12 +3940,14 @@ entries:
       real provider wiring stays with the composition root (#44 §4).
     requirements: []
     invariants: []
-    commits: [e382df2]
+    commits: ["3f66d00d91d9873ff3856219bda371f16b50bcad"]
+    source_commits: [e382df2]
     agent: opencode/deepseek-v4-flash
     provider: cslabllm
     model: CS5351/DeepSeek-V4-Flash
     supervision: >-
-      Member M4's scheduled inspection workflow selected
+      Member M4's scheduled OpenCode workflow with DeepSeek V4.1 Flash
+      selected
       the slice, wrote the English task briefs and supervised. OpenCode build
       agent (deepseek-v4-flash) authored all code and test changes across four
       unattended --auto --standalone sessions (provider source and no-fallback
@@ -3975,10 +3990,11 @@ entries:
       no boundary rule needed widening.
     requirements: []
     invariants: []
-    commits: ["3014648"]
-    agent: opencode/deepseek-v4.1-flash
+    commits: ["3f66d00d91d9873ff3856219bda371f16b50bcad"]
+    source_commits: ["3014648"]
+    agent: OpenCode + DeepSeek V4.1 Flash
     provider: deepseek
-    model: deepseek-v4.1-flash
+    model: DeepSeek V4.1 Flash
     supervision: >-
       Member M4 reviewed the alignment report for origin/main 02276f6, chose the
       split option (withdraw the out-of-scope paths, retain the dialogue-owned
@@ -4309,9 +4325,10 @@ entries:
       17f42d8.
     requirements: []
     invariants: []
-    commits: [f313181]
-    agent: opencode/deepseek-v4.1-flash
-    model: deepseek-v4.1-flash
+    commits: ["7995f517b66110702895b8105471e4810c7e1d37"]
+    source_commits: [f313181]
+    agent: OpenCode + DeepSeek V4.1 Flash
+    model: DeepSeek V4.1 Flash
     supervision: >-
       Written directly in the OpenCode session:
       the change is documentation, and AGENTS.md reserves the OpenCode
@@ -4428,8 +4445,10 @@ entries:
       exists.
     requirements: [FR-01, FR-04, FR-05]
     invariants: [INV-01, INV-03]
-    commits: [53fa476, 1f8bd8b]
-    agent: opencode/deepseek-v4.1-flash
+    commits: ["58990bd4ed53d2878794df4ca035e3357205357c"]
+    source_commits: [53fa476, 1f8bd8b]
+    agent: OpenCode + DeepSeek V4.1 Flash
+    model: DeepSeek V4.1 Flash
     supervision: >-
       OpenCode authored these repairs after M5 review
       5696482319 and M1 review 5683748583 on PR #67. No subagent, dependency
@@ -4489,8 +4508,10 @@ entries:
       prerequisite, a fresh-database requirement and the evidence boundary.
     requirements: [FR-01, FR-04, FR-05]
     invariants: [INV-01, INV-03]
-    commits: [212ab97]
-    agent: opencode/deepseek-v4.1-flash
+    commits: ["58990bd4ed53d2878794df4ca035e3357205357c"]
+    source_commits: [212ab97]
+    agent: OpenCode + DeepSeek V4.1 Flash
+    model: DeepSeek V4.1 Flash
     supervision: >-
       OpenCode authored this test-only increment after the
       formal matrix had only existed under `/tmp`. No production source, shared
@@ -4699,12 +4720,13 @@ entries:
       rules are untouched.
     requirements: []
     invariants: []
-    commits: [02dceb8]
+    commits: ["78fe3f1685833496c02203235fdefeb0fd32b525"]
+    source_commits: [02dceb8]
     agent: opencode/deepseek-v4-flash
     provider: cslabllm
     model: CS5351/DeepSeek-V4-Flash
     supervision: >-
-      Member M4's scheduled inspection workflow 
+      Member M4's scheduled OpenCode workflow with DeepSeek V4.1 Flash
       selected the slice and supervised it. The OpenCode build agent
       (deepseek-v4-flash) authored all code changes in one unattended --auto
       --standalone session from an English brief kept in the gitignored
@@ -4799,12 +4821,14 @@ entries:
       production, contract or wire change.
     requirements: []
     invariants: []
-    commits: [9776a2f, 0b1ad01]
+    commits: ["78fe3f1685833496c02203235fdefeb0fd32b525"]
+    source_commits: [9776a2f, 0b1ad01]
     agent: opencode/deepseek-v4-flash
     provider: cslabllm
     model: CS5351/DeepSeek-V4-Flash
     supervision: >-
-      Member M4's scheduled inspection workflow selected
+      Member M4's scheduled OpenCode workflow with DeepSeek V4.1 Flash
+      selected
       the PR #139 slice and supervised it. The merge and its docs conflict
       resolution are git operations, not code authorship. The
       OpenCode build agent (deepseek-v4-flash) authored all code changes in one
@@ -5156,8 +5180,10 @@ entries:
     requirements: [FR-01]
     invariants: []
     cases: []
-    commits: [8a1c0e6]
-    agent: opencode/deepseek-v4.1-flash
+    commits: ["61158633877caeb73cfb5a399661a48a3cc37762"]
+    source_commits: [8a1c0e6]
+    agent: OpenCode + DeepSeek V4.1 Flash
+    model: DeepSeek V4.1 Flash
     supervision: >-
       OpenCode removed a workaround M2 had recorded as
       removable only after the checker fix merged. No production behaviour,
@@ -6853,7 +6879,8 @@ entries:
       absent-input paths stay byte-identical.
     requirements: [NFR-04]
     invariants: []
-    commits: [be9520a]
+    commits: ["11763df3383f296ebe2c11e22a9d6acf0256294a"]
+    source_commits: [be9520a]
     agent: opencode/build
     provider: cslabllm
     model: DeepSeek-V4-Flash
@@ -6862,8 +6889,7 @@ entries:
     model_id: cslabllm/CS5351/DeepSeek-V4-Flash
     sessions: [ses_e32482ed6ffe2PurXuGc0FmrSN, ses_e322b7d16ffekNbKfRSAk8S9zA, ses_e32263a6bffevx1zrkc29BOloa, ses_e322168abffevdFX5AtoPqO9Ha, ses_e3211735bffefTJ7CEo5bnnw31, ses_e320e02deffeicc0WHj7xLj48C, ses_e320287c7ffeyG0kkrnR30h3KM]
     supervision: >-
-      The M4 fix workflow ran in a opencode session (its model is whatever the run
-      record shows; this entry does not restate it). That workflow session
+      The M4 fix workflow used OpenCode with DeepSeek V4.1 Flash. That session
       formulated the fix plan, wrote a reference implementation outside the
       repository, opened the read-only first-inquiry OpenCode session
       ses_e32482ed6ffe2PurXuGc0FmrSN, compared the proposal with the reference
@@ -6881,10 +6907,9 @@ entries:
       ses_e320287c7ffeyG0kkrnR30h3KM. The local `AGENTS.md` edit in the working
       tree is the owner's uncommitted edit: this round did not modify, correct,
       revert or commit it, it is not in c47c51f, and it remains in the working
-      tree. This registration entry is written after the code commit by the
-      documentation step of the same workflow; it is not part of c47c51f, so
-      `commits` names the code commit this entry describes, not a commit that
-      contains the entry.
+      tree. The workflow recorded this entry after c47c51f. The source
+      citation preserves the branch reference and the commit citation points
+      to the integration on main.
     transcript_record: >-
       The seven sessions listed in `sessions` retain their conversations. Their
       per-session record (id, title, time and role) is written outside this
@@ -6950,7 +6975,8 @@ entries:
       absent.
     requirements: [FR-02]
     invariants: []
-    commits: [8a54960]
+    commits: ["11763df3383f296ebe2c11e22a9d6acf0256294a"]
+    source_commits: [8a54960]
     agent: opencode/build
     provider: cslabllm
     model: DeepSeek-V4-Flash
@@ -6959,9 +6985,9 @@ entries:
     model_id: cslabllm/CS5351/DeepSeek-V4-Flash
     sessions: [ses_e304e14bbffenBrhHRTvxFVyPJ, ses_e303be5f0ffeRirUJrkTetvZy6]
     supervision: >-
-      The M4 supervision workflow verified every claim of the
-      M6 review against the repository before the sessions were launched, and
-      wrote the English task book for them. The task book fixed the admission
+      The M4 supervision workflow used OpenCode with DeepSeek V4.1 Flash to
+      verify each M6 review claim against the repository before the sessions
+      began. The workflow wrote their English task book. The task book fixed the admission
       order, the new refusal reason, the two-layer distinction, the fixture
       requirements and the exact documentation edits, and stated the hard
       constraints: no frozen path, no new stable id, no change to any
