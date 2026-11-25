@@ -4,7 +4,7 @@ Status: **proposal (M5), under review.** This document is not adopted by the tea
 branch protection, and not evidence that a member accepted it. No human author or human adoption is
 claimed.
 
-Revision: 2026-11-25.2. Reconciled against `main` `191edb5`; also carried by the #192 candidate. The
+Revision: 2026-11-25.3. Reconciled against `main` `783215b`; also carried by the #192 candidate. The
 candidate head is the PR head. The earlier candidate was prepared against `main`
 `e32bf1a6b532112ae00d9f29345668016f0f3a3a`; its version-bound observations are kept separately in §10.
 
