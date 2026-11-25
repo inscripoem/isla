@@ -10024,3 +10024,57 @@ entries:
       src/console/ConsoleApp.tsx, src/console/pages/SessionPage.tsx,
       test/offline/m2-console.test.ts and docs/ai-use-log.yaml. No contract,
       transport, machine, storage, backend or workflow file changed.
+  - date: "2026-11-25"
+    task: M2-PR187-wiring-harness
+    branch: m2-wiring-harness
+    change: >-
+      Add a reproducible browser acceptance harness for console wiring that was
+      previously verified only once by hand. test/browser/console-wiring-acceptance.mjs
+      mounts the real ConsoleApp through a test-only entry page and a local
+      application WebSocket, then checks six behaviours: a rejected input
+      acknowledgement restores the composer without clobbering text typed after
+      submission; a duplicate acknowledgement does not clear the draft a second
+      time; Reconnect after a socket close bootstraps exactly once without
+      replay; performer disposal disables the performer actions; the diagnostics
+      socket renders not-started, open and closed; and a viewport below 1100px
+      does not float Local Receipts or occlude the Control Deck. No production
+      file changed: the pipeline HUD label and retiring-row tone were fixed
+      separately in commit 596f12d by the M5 member, and this harness verifies
+      that head instead of duplicating the fix.
+    requirements: [FR-04, FR-05, FR-06, NFR-04]
+    invariants: []
+    commits: [6a9e252a82f2febcdc38044fa3f90c6cb3e8f216]
+    agent: opencode/build
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    opencode_version: "1.19.4"
+    launch_flags: [--agent, build, --format, json, -m, "personal-deepseek/deepseek-v4-flash", --variant, xhigh]
+    sessions: [ses_dee7397b0ffeYhypVR88s31g0r]
+    supervision: >-
+      The M2 member asked for the six wiring checks after the captain declined a
+      separate test document. The OpenCode session wrote the harness and the
+      test-only entry page; the supervising agent reviewed the diff, ran the
+      script and the unit and type checks, and committed. A duplicate HUD fix
+      produced in the same session was discarded when the M5 member's identical
+      fix landed on the branch first.
+    human_review: >-
+      Not yet reviewed. Re-review by M1 and the merging human remain pending;
+      no agent merged anything.
+    transcript_record: >-
+      OpenCode session ses_dee7397b0ffeYhypVR88s31g0r is exported to
+      ~/Library/Caches/isla-opencode-exports/M2-PR187-pipeline-hud-20261125.json
+      outside the checkout.
+    verification:
+      base: 66b0621794b0c1b7dc0f27e93f0e9ba4c62b5f5f
+      results: >-
+        All six harness checks passed against the real console in local
+        Chromium. pnpm test:m2 exited 0, oxlint reported 0 warnings and 0 errors
+        over test/browser, and tsc -b exited 0.
+      independent: >-
+        None; one operator ran the checks on this machine. No live provider,
+        VTS or Windows observation was made, and the harness needs an external
+        Playwright module and Chromium path, so it is not part of pnpm test.
+    scope: >-
+      test/browser/console-wiring-acceptance.mjs, test/browser/console-wiring.tsx,
+      test/browser/console-wiring.html and docs/ai-use-log.yaml. No src/,
+      contract, package, lockfile or workflow change.
