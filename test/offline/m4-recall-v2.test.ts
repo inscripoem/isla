@@ -315,9 +315,15 @@ describe('M4 recall ranking v2 — paraphrase and pronoun recall', () => {
     expect(RECALL_PARAPHRASE_FLOOR).toBe(0.5)
     expect(results).toHaveLength(1)
     expect(results[0]?.scoreParts.similarity).toBe(RECALL_PARAPHRASE_FLOOR)
-    // The pair shares no word, so the alias value is the only lexical evidence:
-    // the similarity is not the literal term.
-    expect(results[0]?.scoreParts.lexicalFused).toBeLessThan(RECALL_PARAPHRASE_FLOOR)
+    /*
+     * `lexicalFused` is the fusion FACTOR (0..1), not a similarity, so it must
+     * not be compared with a similarity threshold. The pair shares no content
+     * word, so no fusion view ordered it: the factor is exactly 0 and
+     * `fusionViews` is 'none'. That is why the alias value is the only lexical
+     * evidence here and why the admitted similarity is the floor exactly.
+     */
+    expect(results[0]?.scoreParts.lexicalFused).toBe(0)
+    expect(results[0]?.scoreParts.fusionViews).toBe('none')
   })
 
   it('keeps every recalled score within 0 .. 1.1: the intent bonus is not normalised away', () => {
