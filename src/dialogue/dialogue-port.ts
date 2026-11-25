@@ -13,7 +13,10 @@ import type {
 import { assembleDialogueContext } from './context'
 import type { AssembledDialogueContext, AssembledTurn } from './context'
 import type { PersonaRecallPort } from './persona-recall'
-import type { DeliveryRecallPort } from './memory-recall'
+import { MAX_RECALLED_TURNS } from './memory-recall'
+import type { DeliveryRecallPort, RecalledMemoryEntry } from './memory-recall'
+import type { RecallCandidate, RecallPort } from './recall-ranking'
+import { recallItemKey } from './recall-ranking'
 import type { AudienceIdentity } from './audience'
 import { createFinalizedSegmentRegistry, deriveSegmentId } from './segment-id'
 import { isSubstantiveSpeech, normalizeFinalText } from './text'
@@ -164,6 +167,14 @@ export interface DialoguePortOptions {
    * model call; see ./memory-recall. Omitted means no delivery recall.
    */
   deliveryRecall?: DeliveryRecallPort
+  /**
+   * Multi-factor recall ranking (issue #146 A04, ./recall-ranking). When supplied
+   * it replaces `deliveryRecall` for this port: older confirmed turns AND the
+   * current session's audience turns are ranked together, and recalled audience
+   * lines are rendered with an `[audience]` label. Omitted means the delivery
+   * path above, or no recall at all, both unchanged.
+   */
+  recall?: RecallPort
   /** Validated M5 archive sessions authorized for cross-session recall. */
   explicitlySelectedSessionIds?: readonly string[]
   /**
@@ -215,6 +226,15 @@ export interface DialoguePortOptions {
    * added, so the character budget and the rendered block are unchanged.
    */
   markConflictingTurns?: boolean
+  /**
+   * Style anchors (issue #146 A11). When true, up to three lines the character
+   * actually said in the CURRENT persona version render under a
+   * "Voice reference (style only, not facts):" header right after the persona
+   * block. Omitted or false means no selection, no budget charge and no prompt
+   * line - the prompt is byte-identical to one assembled without this option.
+   * `STYLE_ANCHORS_ENABLED` (./style-anchors) is the default for the switch.
+   */
+  styleAnchors?: boolean
   /**
    * Inner state of the character for this call (./state), passed through to
    * context assembly. A future state worker's `read` result fills this; this
@@ -351,6 +371,36 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
   const source = options.textSource ?? createUnconfiguredTextSource()
   const registry = createFinalizedSegmentRegistry()
   const maxSegments = clampMaxSegments(options.maxSegments)
+  /*
+   * In-session prior-use counter for the v2 recall ranker (issue #146 A04),
+   * one map per session and owned by this port. It is passed to every assembly
+   * with a `recall` port and incremented afterwards by the items that assembly
+   * actually put in the prompt, so a memory recalled once is ranked as "used
+   * before" for the rest of the session. It is local state only (no I/O, no
+   * provider call, nothing persisted): a fresh port starts empty, and forcing
+   * a session's first deliverable segment increments once, whatever the number
+   * of retry attempts.
+   */
+  const recallUseCounts = new Map<string, Map<string, number>>()
+  /** The candidate identity of one recalled entry, in the ranker's own shape. */
+  const recallCandidateOf = (entry: RecalledMemoryEntry): RecallCandidate =>
+    entry.turn !== undefined && 'turnId' in entry.turn
+      ? { role: 'character', turn: entry.turn }
+      : { role: 'listener', turn: entry.turn }
+  const recallUseCountsFor = (sessionId: string): Readonly<Record<string, number>> =>
+    Object.fromEntries(recallUseCounts.get(sessionId) ?? [])
+  const countRecalledUse = (sessionId: string, items: readonly RecalledMemoryEntry[]): void => {
+    if (items.length === 0) return
+    let counts = recallUseCounts.get(sessionId)
+    if (counts === undefined) {
+      counts = new Map<string, number>()
+      recallUseCounts.set(sessionId, counts)
+    }
+    for (const entry of items) {
+      const key = recallItemKey(recallCandidateOf(entry))
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+  }
 
   /*
    * What a text source reported for THIS call. The fields stay undefined when the
@@ -529,9 +579,24 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
         const listenerHistory = options.listenerHistory
         if (listenerHistory === undefined) return null
         try {
+          /*
+           * Read one window PLUS the recall allowance: the transcript keeps only
+           * the newest `maxTurns` (the assembler caps it), but the rows just
+           * older than that are exactly the listener recall candidates of v2
+           * (issue #146 A04). Reading only `maxTurns` made those candidates
+           * unreachable - a conforming source never returned a row the window
+           * would drop - so listener recall could never fire.
+           *
+           * `maxTurns: 0` asks for nothing: with no window there is no recall
+           * allowance either (`min(MAX_RECALLED_TURNS, maxTurns)`), so the bare
+           * allowance must not be requested.
+           */
           return await listenerHistory.recent({
             sessionId: request.sessionId,
-            limit: request.contextLimits.maxTurns,
+            limit:
+              request.contextLimits.maxTurns > 0
+                ? request.contextLimits.maxTurns + MAX_RECALLED_TURNS
+                : 0,
             beforeEventId: request.selectedInput.eventId,
           })
         } catch {
@@ -580,6 +645,13 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
             ...(options.memory === undefined ? {} : { memory: options.memory }),
             ...(options.personaRecall === undefined ? {} : { personaRecall: options.personaRecall }),
             ...(options.deliveryRecall === undefined ? {} : { deliveryRecall: options.deliveryRecall }),
+            ...(options.recall === undefined
+              ? {}
+              : {
+                  recall: options.recall,
+                  clock,
+                  useCounts: recallUseCountsFor(request.sessionId),
+                }),
             ...(options.audience === undefined ? {} : { audience: options.audience }),
             ...(options.explicitlySelectedSessionIds === undefined
               ? {}
@@ -590,6 +662,9 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
             ...(options.markConflictingTurns === undefined
               ? {}
               : { markConflictingTurns: options.markConflictingTurns }),
+            ...(options.styleAnchors === undefined
+              ? {}
+              : { styleAnchors: options.styleAnchors }),
             ...(options.budgetPlan === undefined ? {} : { budgetPlan: options.budgetPlan }),
             ...(options.state === undefined ? {} : { state: options.state }),
             ...(options.stateBaseline === undefined
@@ -699,6 +774,15 @@ export function createDialoguePort(options: DialoguePortOptions): DialoguePort {
 
         const segmentId = deriveSegmentId(request, index)
         const finalizedText = registry.finalize(segmentId, text)
+        /*
+         * The recalled items counted as "used before" by the NEXT assembly of
+         * this session: exactly what this turn put in the prompt, counted once,
+         * at the first deliverable segment. Counting per attempt would inflate
+         * the counter on a provider retry that produced nothing usable.
+         */
+        if (index === 0 && view.recalledItems.length > 0) {
+          countRecalledUse(request.sessionId, view.recalledItems)
+        }
 
         const segment: DialogueSegment = dialogueSegmentSchema.parse({
           requestId: request.requestId,
