@@ -77,3 +77,24 @@ approvals:
       - test/offline/voice-settings.test.ts
       - test/offline/m5-reference-live.test.ts
       - test/browser/console-voice-selection.mjs
+  - id: TA-014
+    task: "M4 A04 - multi-factor recall ranking v2 (#146)"
+    approved_at: "2026-11-25T19:37:36+08:00"
+    approved_by: M4
+    scope:
+      - "src/dialogue/"
+    tests:
+      - test/offline/m4-recall-v2.test.ts
+      - test/offline/m4-recall-scoring.test.ts
+      - test/offline/m4-dialogue.test.ts
+  - id: TA-015
+    task: "M4 A11 - style anchors and fixed persona probe (#146)"
+    approved_at: "2026-11-25T19:37:36+08:00"
+    approved_by: M4
+    scope:
+      - "src/dialogue/"
+    tests:
+      - test/offline/m4-style-anchors.test.ts
+      - test/offline/m4-persona-probe.test.ts
+      - test/offline/m4-style.test.ts
+      - test/offline/m4-dialogue.test.ts
