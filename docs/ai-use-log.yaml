@@ -10691,3 +10691,102 @@ entries:
       limits: >-
         No push, pull request, merge, CI run or live product run. The mode is
         opt-in and no recorded run uses a provider-backed decision port.
+  - date: "2026-11-25"
+    task: m1-windows-speaking-mouth
+    change: >-
+      Add a Windows speaking-mouth demo for the normal operator console.
+      The companion combines accepted playback state with the render-session
+      level of the dedicated browser. The model preparer gives the local
+      Hiyori copy independent mouth inputs and removes competing mouth curves
+      from its animations while preserving their body movement. The launcher
+      starts the reference peers with a real renderer pinned to that copy.
+    requirements: [FR-03, FR-04, FR-05]
+    invariants: [INV-01, INV-02]
+    commits: ["88d3d57a7fc76a12e3d3f2971d1827286ed4c311", "2bf96702c24e0f8bd58465dd6ab9d38550f14d53"]
+    agent: OpenCode V2 build
+    provider: mistral
+    model: deepseek-v4-1-flash-1017
+    variant: max
+    sessions:
+      - "ses_dee2e6543ffeh2Qf9oAH36NPYA"
+      - "ses_dee285653ffe7RykEOZ1jBaksa"
+      - "ses_dee23c3d9ffe6bxk0ER9Hvwyym"
+      - "ses_dee1b51dfffeZ6fy1HbG82zP3M"
+      - "ses_dee1af33fffe9kVOKLTIKj6xsM"
+      - "ses_dee14e823ffeHyxEWsA9oubAJ7"
+      - "ses_dee19a8a4ffeNDB0ZlOgSnmhk5"
+    supervision: >-
+      The member selected the speaking-level scope, with natural completion
+      and mid-speech Stop as acceptance cases. The supervising assistant
+      coordinated the implementation, stock-model preparation, first pairing,
+      launcher and tests. Independent review compared captured VTS frames
+      with the audio and SQLite receipts and identified a stale-epoch case.
+      The implementation was revised after a Windows import failure, an
+      original animation that held the mouth closed, and a transient model
+      switch in which the API acknowledgement preceded the visible load.
+      The integration commits cited above carry the original author dates and
+      source commit references from PR #200. Verification on the original
+      implementation applies to the byte-identical feature and test files.
+    verification:
+      base: 2b83017736929863210498ed2383ab23e8cd186f
+      results: >-
+        The M1 role suite passed 353 tests, the focused release suite passed
+        four and the Python state suite passed 26. On Windows, the formal
+        console played actual Kokoro speech through its dedicated Chromium
+        process. The first segment completed and the second was cancelled.
+        All six browser receipts matched SQLite. On the release baseline,
+        the mouth was visibly open in 92 of 98 and 110 of 116 frames sampled
+        during audible speech. It was stably closed from about 84 ms after
+        Stop in that run. The stock model's 19 source files were unchanged.
+      limits: >-
+        The recorded inputs used the local text echo. The physical run used
+        one Windows machine and its default audio endpoint. The full Windows
+        verify run passed 2253 tests, skipped nine, and reproduced the
+        pre-existing missing-base G6 CLI test failure when Node loaded an
+        absolute Windows path. The base run failed the same test. The
+        Windows build and the feature-specific checks passed.
+  - date: "2026-11-25"
+    task: m1-synthesis-volume-envelope
+    change: >-
+      Compute one RMS level per 20 ms from the same Kokoro PCM used to encode
+      each WAV. Associate the optional curve with the normal audio lease. The
+      dedicated console sends the current media position to the local mouth
+      driver. Pause, completion and Stop close the speaking Hiyori model.
+    requirements: [FR-03, FR-04, FR-05]
+    invariants: [INV-01, INV-02]
+    commits: ["92bb66d65e580ca8adcde8892441b3e46c1d9137", "9bf1902ddf41659dc3dc321d6cba7331bf29dc45", "b9af89f911d8ff174308537259bc3b8a2b259563"]
+    agent: OpenCode V2 build
+    provider: mistral
+    model: deepseek-v4-1-flash-1017
+    variant: max
+    sessions:
+      - "ses_dedb1a007ffekCgPddl7mxVUuW"
+      - "ses_dedb26eacffeMW2k65ho0IWr28"
+      - "ses_dedb11274ffe9wgid2K0mMXoxb"
+      - "ses_dedb11281ffeNMeVYuJ52qaJJx"
+      - "ses_deda5c4ecffedIIrjXSrGwgWjp"
+    supervision: >-
+      M1 chose synthesis-time measurement and excluded device and player
+      volume settings. Independent review tested the WAV values, resource
+      lifetime and stale media events. Windows recordings exposed delayed
+      mouth writes. A CPU profile identified Vite file watching in the
+      launcher. The team disabled it for the demo and verified that the
+      selected model accepts mouth updates on its existing VTS connection.
+      The integration commits cited above carry the original author dates and
+      source commit references from PR #200. Verification on the original
+      implementation applies to the byte-identical feature and test files.
+    verification:
+      base: 14d3910e9e1c976a07aa5df55e049b8e84cc1ec7
+      results: >-
+        All 429 focused role and integration tests passed. Across three real
+        Kokoro clips, the same WAV bytes were published with the optional
+        curve enabled or disabled. In the final Windows run, all 462 RMS
+        windows matched the two actual WAVs and all six browser receipts
+        matched SQLite. Hiyori was visibly closed about 72 ms after pausing
+        and 123 ms after clicking Stop, and stayed closed until playback
+        resumed or the recording ended. The standalone build passed.
+      limits: >-
+        The physical run used one Windows machine, Hiyori and the local English
+        text echo. The full Windows suite passed 2325 tests and skipped nine.
+        It reproduced the baseline missing-base G6 CLI test failure on an
+        absolute Windows path.
