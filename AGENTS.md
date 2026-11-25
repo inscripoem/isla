@@ -1,10 +1,12 @@
 # Isla development instructions
 
-Revision: 2026-11-09.1. Repository documents, code comments and UI text are English. Chinese copies, raw evidence and historical drafts stay outside the checkout; see [docs/team/README.md](docs/team/README.md).
+Revision: 2026-11-25.2. Repository documents, code comments and UI text are English. Chinese copies, raw evidence and historical drafts stay outside the checkout; see [docs/team/README.md](docs/team/README.md).
 
 ## Start from a role
 
 When a member says "I am M3; start my first task" or names another M1–M6 role, locate the task below. A role declaration identifies ownership; a request to start triggers investigation and a plan. Use a supplied task ID from [PLAN](docs/team/PLAN.en.md). Otherwise inspect the first task's implementation and tests before proposing its next unfinished slice; do not recreate completed work. Ask for the role only when it is missing and cannot be inferred. Do not assume every member is M5 or the leader.
+
+**First action: locate the assigned issue or pull request and verify its current state.** Use the task ID, issue number or pull request number you were given; read the issue/PR record and the branch, not only this file. A task already recorded as merged or accepted is not reopened without a new instruction.
 
 | Role | First task | Owned directory | Baseline command |
 | --- | --- | --- | --- |
@@ -15,11 +17,19 @@ When a member says "I am M3; start my first task" or names another M1–M6 role,
 | M5 | M5-01 | `src/runtime/` | `pnpm test:m5` |
 | M6 | M6-01 | `src/storage/`, `src/evaluation/`, `.github/workflows/` | `pnpm test:m6` |
 
-1. Read the selected task in PLAN and its row and replacement instructions in [READINESS-KITS](docs/team/READINESS-KITS.en.md). Consult relevant sections of [INTERFACES](docs/team/INTERFACES.en.md), [REQUIREMENTS](docs/team/REQUIREMENTS.en.md) and [architecture-blueprint](architecture-blueprint.md); do not require reading every document first.
+1. Read the selected task in PLAN and its row and replacement instructions in [READINESS-KITS](docs/team/READINESS-KITS.en.md). Consult relevant sections of [INTERFACES](docs/team/INTERFACES.en.md), [REQUIREMENTS](docs/team/REQUIREMENTS.en.md) and [architecture-blueprint](architecture-blueprint.md); do not require reading every document first. PLAN and READINESS-KITS are the 2026-11-25 readiness records, not a live status board. The architecture blueprint is the 2026-10-15 design snapshot: its allocation table and runtime-authority section remain the design contract, while its status cells are historical.
 2. Inspect the branch/worktree without changing Git state, then relevant source, contracts and tests. Preserve existing edits. Run the role baseline; on a fresh checkout use `pnpm install --frozen-lockfile` first. Identify missing external prerequisites together and continue work that can use fixtures.
 3. Before writing code, present the behavior, files/ownership, interfaces/substitutes, acceptance tests, risks and rollback plan. Wait for explicit member confirmation unless that plan is already approved in the session. Routine fixes and checks within approved scope do not require repeated confirmation.
 4. Implement only the approved task slice. Use fixtures for unfinished dependencies, retain conformance assertions, and add tests against the actual implementation. Keep fixture controls and ContractRunner under `test/`; production code must not import them. M5 follows the test-only harness adaptation in READINESS-KITS.
 5. Run the role command and relevant failure/Stop cases, then `pnpm verify` before handoff. Run startup checks when runtime or console integration changes. Report actual results and gaps; passing unchanged fixture tests alone does not validate new code.
+
+## Permissions, architecture and launch prompt
+
+- Read and write rights are default-deny. The role/path matrix, approval classes and protected paths are in [permission-model](docs/architecture/permission-model.md); the machine-readable source is `.opencode/permissions.jsonc`, compiled per role and task by `tools/opencode/` (generate/check commands in §9 of that document).
+- `.opencode/rules.md` is human-only and `.agent/rules.md` is the project covenant. Both are proposals until a human reviewer adopts them; this file remains operative.
+- The qualitative architecture candidate comparison is [candidate-comparison](docs/architecture/candidate-comparison.md). Measured results belong in the G4 evaluation table, which is not created by this document.
+- [Prompt.md](Prompt.md) is the static launch instruction. It requires a traceable plan and an explicit human approval before code generation.
+- Tool permissions and shell allowlists are not an operating-system sandbox.
 
 ## Scope and shared changes
 

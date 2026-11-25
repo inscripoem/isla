@@ -94,7 +94,7 @@ ISLA_DEPLOYMENT_MODULE=/absolute/path/to/deployment.ts pnpm runtime:production
 | `ISLA_STORAGE_DB_PATH` | SQLite database path; default `.cache/isla/isla.db`, kept outside OneDrive. |
 | `ISLA_RUNTIME_HOST`, `ISLA_RUNTIME_PORT` | Loopback bind address; default `127.0.0.1:4317`. |
 
-The reference live deployment is `src/runtime/deployments/reference-live.ts`. It reads its configuration from the same injected environment, fails startup when any required value is missing or invalid (naming the variables only, never their values), and wires the live text provider, Kokoro synthesis, the VTube Studio renderer and the audio registry. Its product acceptance is still pending; the module is the reviewable candidate, not an accepted live run.
+The reference live deployment is `src/runtime/deployments/reference-live.ts`. It reads its configuration from the same injected environment, fails startup when any required value is missing or invalid (naming the variables only, never their values), and wires the live text provider, Kokoro synthesis, the VTube Studio renderer and the audio registry. CP04 recorded a **reduced acceptance** of this deployed-product path at `9577069` on 2026-11-20 ([#74](https://github.com/inscripoem/isla/issues/74#issuecomment-7033211812)); issue #74 remains open, and the named acceptance for #96 (M4/M6) and #97 (live pre-playback waiting and provider-failure observations, still open) is outstanding. The module is therefore an accepted-but-scoped live path, not a fully accepted product.
 
 ```sh
 ISLA_DEPLOYMENT_MODULE=src/runtime/deployments/reference-live.ts \
@@ -133,6 +133,8 @@ finishes in the voice it started with. The reference deployment stores the
 selection beside its SQLite database in `<database path>.voices.json` and
 loads it at startup. The initial voice is Heart.
 
+Voice preview and selection merged after CP04 as #190 (`2889136`), and the three-request VTS dispatch with the `play_not_allowed`/`play_failed` failure reasons merged as #189 (`3a54e6b`). Each carries its own scoped evidence and review on its issue/PR: neither is part of the `9577069` CP04 run. [Supported platform](docs/architecture/supported-platform.md) §2 now records both post-CP04 changes and explicitly retains §5's CP04 freeze at `9577069`; that record does not claim live or named acceptance for either merged change.
+
 ## Check the foundation
 
 ```sh
@@ -142,7 +144,7 @@ pnpm test
 pnpm build
 ```
 
-Tests run locally without model services and exercise HTTP/WebSocket success, rejection and lifecycle behavior. The build produces the browser bundle; the runtime runs through `tsx`. The [initial scaffold CI passed](https://github.com/inscripoem/isla/actions/runs/37954077638) at commit c717f77. Main requires a protected, approved PR; follow maintainer confirmation and the effective branch rules before merging.
+Tests run locally without model services and exercise HTTP/WebSocket success, rejection and lifecycle behavior. `pnpm test` collects only the offline suites in `test/offline/`; the live provider suites in `test/live/` are opt-in and outside CI, run with `pnpm exec vitest run --config test/live/vitest.config.ts`. The build produces the browser bundle; the runtime runs through `tsx`. The [initial scaffold CI passed](https://github.com/inscripoem/isla/actions/runs/37954077638) at commit c717f77. Main requires a protected, approved PR; follow maintainer confirmation and the effective branch rules before merging.
 
 ## Blocking gates (D7)
 
@@ -150,15 +152,15 @@ The CI pipeline implements six gate checks plus the traceability fitness functio
 
 | Gate | Enforced by |
 | --- | --- |
-| G1 — tests approved before implementation | the **`verify` job**: a PR created at or after the 2026-11-16T16:01:01Z cutover needs `docs/code-governance/test-approvals.yaml` to cover every changed code path and be committed before the first code commit; a PR created before it keeps the `tests-approved` label/advise rule; the M6 time-boxed waiver covers #170/#171/#175/#181 through 2026-11-27, with #181 G1-only and not a CP04/C09 acceptance |
-| G2 — static analysis + boundary | `pnpm typecheck && pnpm lint`; `pnpm test:readiness` (import/permission boundaries) |
-| G3 — requirements schema | `pnpm test:readiness` (registry validation) |
+| G1 — tests approved before implementation | the **`verify` job**: a PR created at or after the 2026-11-16T16:01:01Z cutover needs `docs/code-governance/test-approvals.yaml` to cover every changed code path and be committed before the first code commit; a PR created before it keeps the `tests-approved` label/advise rule; the M6 time-boxed waiver covers #170/#171/#175/#181 through 2026-11-27, with #181 G1-only and not a CP04/C09 acceptance. The path check covers changed files under `src/` or `prompts/` only (`CODE_OR_PROMPT_PREFIXES`); `tools/` is outside G1 and is covered by G2 and G5 |
+| G2 — static analysis + boundary | `pnpm typecheck && pnpm lint` |
+| G3 — requirements schema | `pnpm test:readiness` (contracts, requirements registry and import boundaries); the permission-policy test runs in G5 |
 | G4 — semantic evaluation | `pnpm gate:eval` — reports **not run** only when there is neither a table nor a claim; fails a table that omits the fixed conditions NFR-01 requires, a claim row with no value or conditions, and a measured prose claim with no evaluation table; reviewed exceptions expire in `gate-baseline.yaml` |
 | G5 — regression | `pnpm test` (all offline suites) |
 | G6 — AI-use log | `pnpm gate:ai-use-log` over the pull-request diff |
 | traceability | `pnpm test:trace` (INV-13: the chain is machine-checked; a changed frozen path passes only on a verified default-branch restoration for a feature-branch push) |
 
-The effective main rules require the GitHub Actions `verify` check, PR approval and linear history.
+The effective main rules require the GitHub Actions `verify` check, one approving review after the latest push, and linear history.
 Account-specific bypasses and the untested failed-check refusal are recorded in
 [verification constraints](docs/code-governance/verification-constraints.md). Live providers, browser
 audio and semantic quality thresholds are not proven by these checks.
@@ -176,7 +178,7 @@ Start with [the team development index](docs/team/README.md). The [work plan](do
 | M5 runtime — CHANG Xuben | `src/runtime/` | Application transport, reconstruction and controlled I1 composition are integrated; live product assembly remains open; [reconstruction](docs/team/HANDOFF-M5-RECONSTRUCTION.en.md) and [production](docs/team/HANDOFF-M5-PRODUCTION.en.md) handoffs |
 | M6 storage/evaluation/CI | `src/storage/`, `src/evaluation/`, `.github/workflows/` | SQLite and offline recording checks are available; product recovery, run provenance and live measurements remain open |
 
-Shared contracts use `src/contracts/` (application schemas and ports under `src/contracts/app/`); tests use `test/offline/` and, when implemented, `test/live/`. The [architecture blueprint](architecture-blueprint.md) defines editing boundaries. Planned directories are not empty substitute implementations. Each owner can begin against the shared contracts and explicit fixtures; see [readiness kits](docs/team/READINESS-KITS.en.md).
+Shared contracts use `src/contracts/` (application schemas and ports under `src/contracts/app/`); tests use `test/offline/` by default, and the opt-in live suites live in `test/live/` (not collected by `pnpm test`). The [architecture blueprint](architecture-blueprint.md) defines editing boundaries. Planned directories are not empty substitute implementations. Each owner can begin against the shared contracts and explicit fixtures; see [readiness kits](docs/team/READINESS-KITS.en.md).
 
 Each role has an independently runnable conformance command:
 
@@ -189,6 +191,8 @@ pnpm verify             # typecheck, lint, all tests, build
 ```
 
 M5 tests exercise the production coordinator and retain the independent fixture reference. Both implementations run the same composition and regression assertions. See the [M5-01 handoff](docs/team/HANDOFF-M5-01.en.md) for imports, configuration and I1-01 integration requests. The production application and process-restart tests additionally exercise real SQLite persistence and application transport. Controlled peer fixtures do not certify live providers or acoustic output.
+
+The proposed [coding permission model](docs/architecture/permission-model.md) compiles one task-local `build` configuration from an explicit role/path policy. The policy remains under review: it is not auto-loaded, does not activate a blocking gate, and leaves human adoption and branch protection as separate decisions. Provider, model and plugin choices are generation inputs, not committed policy values. The [qualitative architecture candidate comparison](docs/architecture/candidate-comparison.md) consolidates the alternatives already recorded in the ADRs; measured results remain reserved for the G4 evaluation table, which has not been created or run.
 
 Diagnostics use version `1`: send `{"v":1,"kind":"ping"}` or `{"v":1,"kind":"get_health"}` to `/diag`. Application actions such as `input.submit` are rejected. This diagnostic protocol is separate from application protocol `0.2` at `/app`.
 
