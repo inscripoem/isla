@@ -11209,3 +11209,44 @@ entries:
       limits: >-
         No live provider, product run or merge. The in-session use counter and
         the non-normalised score range are documented limits, not fixed here.
+  - date: "2026-11-26"
+    task: m4-a04-a11-m5-review-fix
+    change: >-
+      Address M5's CHANGES_REQUESTED review on PR #214. Subtract the unified v2
+      recall rows from the heard-prefix turn allowance so listener recall cannot
+      push the stream past maxTurns; forward the real AssembledTurn subject and
+      the wrapped port's crossSessionDrops through asRecallPort without changing
+      the v1 DeliveryRecallRequest signature; apply a stricter caller
+      minSimilarity to paraphrase admission; exclude style anchors that restate
+      a standing fact; and skip the recall port entirely at maxTurns: 0. The A04
+      test helper keeps the durable history source as its default and opts into
+      the memory-entry source only for the partial+receipt heard-prefix case.
+    requirements: []
+    invariants: []
+    commits: ["675f74c84d1b178c3a2d0bec09ad702e3c9715b6"]
+    agent: OpenCode V2 build
+    provider: deepseek
+    model: deepseek-v4-flash
+    sessions: ["ses_dec3b9f17ffezV3HxyDwEoYUOq"]
+    supervision: >-
+      M5's review found one Medium and three Low issues plus two notes. A first
+      OpenCode pass changed the shipped v1 owner callback signature instead of
+      adapting it; the supervisor stopped it, discarded the partial work and
+      restarted with an explicit compatibility guard. A second pass fixed the
+      adapter only and left DeliveryRecallRequest and mayRecallCandidate
+      untouched. A third, test-only pass narrowed the record-source helper after
+      the supervisor rejected switching every A04 test from the durable history
+      path to the memory-entry path.
+    verification:
+      base: 7d607d71684fb79cb52473d5d66ef0c985c4fac3
+      results: >-
+        pnpm test:m4 passed 23 files / 542 tests; pnpm typecheck clean; oxlint
+        0 warnings / 0 errors on 380 files; git diff --check clean. The merge of
+        main c99bfa9 renumbered the M4 G1 records from TA-014/TA-015 to
+        TA-016/TA-017 because main took TA-014 for PR #211; both records still
+        precede the code commit in the branch history. The new regression tests
+        were checked against the reverted fixes.
+      limits: >-
+        No live provider, product run or merge. The heard-prefix section yields
+        to recall when the cap is full, so it can be empty in a loaded recall
+        case; that is the documented trim order, not a new policy.
