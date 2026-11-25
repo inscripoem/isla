@@ -25,6 +25,7 @@ import {
   createGuardedTokenizer,
   type KokoroCallableTokenizer,
 } from './kokoro-guard'
+import { SUPPORTED_KOKORO_VOICE_IDS } from './voice-catalog'
 
 /**
  * The verified fixed-model token ceiling for the pinned 512-context Kokoro
@@ -46,6 +47,11 @@ const SUPPORTED_NODE_VOICE_PATTERN = /^[a-z]+_[a-z0-9_]+$/
 export function isSupportedNodeVoiceId(voiceId: unknown): voiceId is string {
   return typeof voiceId === 'string' && SUPPORTED_NODE_VOICE_PATTERN.test(voiceId)
 }
+
+// Which bundled English voices are supported comes from the shared
+// `voice-catalog` allowlist. The package also ships non-English `.bin` assets,
+// but the Node SDK does not accept those ids, so that allowlist — not the
+// installed file set — decides which bundled voices are supported.
 
 /** Documented `RawAudio` shape returned by the real SDK `generate`. */
 export interface KokoroRawAudioLike {
@@ -106,10 +112,10 @@ export function toKokoroRawAudio(raw: unknown): KokoroRawAudio {
 }
 
 /** The bundled Node voice path: `<kokoro-js dist>/../voices/<voiceId>.bin`. */
-function resolveKokoroVoicePath(voiceId: string): string {
+function resolveKokoroVoicesDirectory(): string {
   const require = createRequire(import.meta.url)
   const distEntry = require.resolve('kokoro-js')
-  return join(dirname(distEntry), '..', 'voices', `${voiceId}.bin`)
+  return join(dirname(distEntry), '..', 'voices')
 }
 
 /**
@@ -121,6 +127,10 @@ export function createRealKokoroSdkLoader(): KokoroSdkLoader {
   // The synchronous `KokoroTTS` constructor is resolved during the awaited
   // environment boundary so `createTts` needs no per-call dynamic lookup.
   let kokoroTtsCtor: (new (model: unknown, tokenizer: unknown) => unknown) | null = null
+  // Voice directory resolution and positive verification are per-loader caches;
+  // a missing file is never cached, so a later call can retry it.
+  let voicesDirectory: string | null = null
+  const verifiedVoiceIds = new Set<string>()
   return {
     async configureEnvironment(config) {
       const [{ env }, kokoro] = await Promise.all([
@@ -162,12 +172,15 @@ export function createRealKokoroSdkLoader(): KokoroSdkLoader {
       return new kokoroTtsCtor(model, tokenizer) as unknown as KokoroTtsLike
     },
     ensureVoice(voiceId) {
-      if (!isSupportedNodeVoiceId(voiceId)) {
+      if (!isSupportedNodeVoiceId(voiceId) || !SUPPORTED_KOKORO_VOICE_IDS.has(voiceId)) {
         throw new Error(`m1-kokoro-provider: unsupported Node voice: ${String(voiceId)}`)
       }
-      if (!existsSync(resolveKokoroVoicePath(voiceId))) {
+      if (verifiedVoiceIds.has(voiceId)) return
+      if (voicesDirectory === null) voicesDirectory = resolveKokoroVoicesDirectory()
+      if (!existsSync(join(voicesDirectory, `${voiceId}.bin`))) {
         throw new Error(`m1-kokoro-provider: unsupported Node voice: ${voiceId}`)
       }
+      verifiedVoiceIds.add(voiceId)
     },
   }
 }

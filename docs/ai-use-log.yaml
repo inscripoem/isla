@@ -8742,7 +8742,7 @@ entries:
       rather than being inferred from the runtime source channel.
     requirements: [NFR-01, NFR-03]
     invariants: []
-    commits: [f63fd45ce630c15686b6361c357ab64a58d003e2]
+    commits: [e32bf1a6b532112ae00d9f29345668016f0f3a3a]
     agent: build
     provider: self-api
     model: deepseek-v4-flash
@@ -8797,7 +8797,7 @@ entries:
       timing choice.
     requirements: [NFR-01, NFR-03]
     invariants: [INV-16]
-    commits: [ffa289da39f59a0ce828e518133ecbcf9767e8c7]
+    commits: [e32bf1a6b532112ae00d9f29345668016f0f3a3a]
     agent: build
     provider: self-api
     model: deepseek-v4-flash
@@ -8857,7 +8857,7 @@ entries:
       M6-owned; M6 confirmation is requested in the PR.
     requirements: [NFR-01, NFR-03]
     invariants: [INV-14, INV-16]
-    commits: [e2575f49835a28a4d584aa9aca1d5f90a50e96bc]
+    commits: [e32bf1a6b532112ae00d9f29345668016f0f3a3a]
     agent: build
     provider: self-api
     model: deepseek-v4-flash
@@ -9079,6 +9079,618 @@ entries:
       src/console/ConsoleApp.tsx, src/console/console-state.ts,
       src/console/operator-bootstrap.ts, src/console/console.css and
       docs/ai-use-log.yaml only.
+  - date: "2026-11-22"
+    task: M2-174-p1-g1-waiver
+    branch: fix/m2-174-p1-state
+    change: >-
+      Extend the time-boxed G1 waiver to pull request 181, the M2 state
+      completeness fix for the #174 P1 rows, so its pull-request event uses
+      the label/advise rule through the existing 2026-11-27 window. A waiver
+      is a recorded exception, not evidence; the G1 step still prints which
+      rule it used.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    supervision: >-
+      The M2 member chose this route after the G1 scope-miss was reported.
+      OpenCode made the edit and wrote this entry.
+    human_review: >-
+      The M2 member approved adding 181 to the waiver list. A human team
+      member performs the final merge and no agent merged anything.
+    transcript_record: >-
+      OpenCode session recorded locally; the branch commits carry the change.
+    verification:
+      base: e32bf1a
+      results: >-
+        pnpm gate:test-approval auto with GITHUB_EVENT_NAME=pull_request and
+        PR_NUMBER=181 prints the waiver rule and exits 0; pnpm test:m2 and
+        pnpm gate:ai-use-log pass.
+      independent: >-
+        None; a single operator ran the local checks on this machine.
+    scope: >-
+      src/evaluation/test-approval-gate.ts and docs/ai-use-log.yaml. No
+      console source changed.
+  - date: "2026-11-22"
+    task: M2-174-p1-draft-settlement
+    branch: fix/m2-174-p1-state
+    change: >-
+      Fix two P2 review findings from M1 on PR #181. A rejected input
+      acknowledgement no longer refills a composer the operator deliberately
+      cleared: settleDraftOnAck only clears on an accepted or duplicate ack
+      while the composer still holds the acknowledged text, and never writes
+      on rejection. The legacy transport branch now refuses an identical
+      submission that is still pending and records its draft, so two Enter
+      presses produce one request instead of two. The offline expectation for
+      settleDraftOnAck changes with the rule.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    supervision: >-
+      The M2 member asked for the review findings to be fixed and chose the
+      two-P2 scope. OpenCode made the edits and wrote this entry.
+    human_review: >-
+      The M2 member asked for this fix. M1 requested the changes and is asked
+      to re-review; a human team member performs the final merge and no agent
+      merged anything.
+    transcript_record: >-
+      OpenCode session recorded locally; the branch commits carry the change.
+    verification:
+      base: e32bf1a
+      results: >-
+        pnpm exec tsc -b passed; pnpm test:m2 passed 101 tests in 1 file;
+        pnpm gate:ai-use-log passed. No browser regression was added for the
+        legacy double-Enter case; the offline suite has no DOM harness.
+      independent: >-
+        None; a single operator ran the local checks on this machine.
+    scope: >-
+      src/console/console-state.ts, src/console/ConsoleApp.tsx,
+      test/offline/m2-console.test.ts and docs/ai-use-log.yaml.
+  - date: "2026-11-22"
+    task: M2-174-p1-recovery-ack
+    branch: fix/m2-174-p1-state
+    change: >-
+      The recovery acknowledgement in the console is offered for any connected
+      current session whose machine has not been disposed, so the fixture demo
+      can be acknowledged. Sending a recovery request still requires an
+      attached performer, operator authority, the acknowledgement and no
+      pending request.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: opencode/deepseek-v4-flash
+    provider: personal-deepseek
+    model: deepseek-v4-flash
+    supervision: >-
+      The M2 member reported the dead checkbox and asked for the acknowledgement
+      to work. OpenCode made the edits and wrote this entry.
+    human_review: >-
+      The M2 member asked for this change. M1 requested changes on this branch
+      and is asked to re-review; a human team member performs the final merge.
+    transcript_record: >-
+      OpenCode session recorded locally; the branch commits carry the change.
+    verification:
+      base: e32bf1a
+      results: >-
+        pnpm exec tsc -b passed; pnpm test:m2 passed; isolated check that the
+        fixture demo enables the acknowledgement checkbox.
+      independent: >-
+        None; a single operator ran the local checks on this machine.
+    scope: >-
+      src/console/recovery-control.ts, test/offline/m2-console.test.ts and
+      docs/ai-use-log.yaml.
+
+  - date: "2026-11-24"
+    task: M1-01 and M1-02 adapter boundary repairs
+    branch: fix/m1-audit-internal
+    change: >-
+      Validate bundled Kokoro voices and content-bearing phoneme tensors,
+      forward pending VTS transport errors across the pairing handoff, and
+      preserve Worker exit, playback receipt, and DOM cleanup boundaries.
+      Align fixed audio reference validation and improve WAV copying,
+      registry storage, Worker transfer ownership, and the optional offline
+      expression window. Document the reference deployment and module scope.
+    requirements: [FR-03, FR-04, FR-05, NFR-06]
+    invariants: [INV-01, INV-02]
+    cases: [C-01, C-04, C-06, C-10, C-11, C-73]
+    commits:
+      - "3a73cc097cfa99468211e9cb278ac70577bf7b87"
+      - "cb456272313aaac5a76afdd64d64fce6bb7aed71"
+      - "46d3bcb62a0d721db12830be8a7679f2c99b50df"
+      - "9d4578549f58367f15cc6704bd2f0a9758be653f"
+    agent: OpenCode V2 build
+    provider: deepseek
+    model: deepseek-flash
+    variant: max
+    model_cli_id: "deepseek/deepseek-flash#max"
+    sessions:
+      - ses_df6c10256ffeUU4k7uEZiaIa48
+      - ses_df6c1026cffeGbySjSLqsXezNk
+      - ses_df6b3b0d0ffeJGJh9rlWjv5WUP
+      - ses_df6b3a4a1ffe2SCVNJas38Jb8H
+      - ses_df6b3b0e0ffeOATLHuNJ8Dt6Vs
+      - ses_df6b3b0edffeMZq50J1bIVNg2A
+      - ses_df6ac366fffeTiyxt8jm4H13t6
+      - ses_df6b12239ffetr5tmoNnc7V8mT
+    supervision: >-
+      Human M1 recorded TA-002 before the code commits. Codex coordinated
+      separate OpenCode V2 test and implementation sessions, then reran
+      the checks. The test-first checkpoint exposed 25 failures against
+      the original implementation. A later test-only correction compared
+      transferred buffer identities without inspecting a detached view.
+    transcript_record: >-
+      Original event streams and session exports were retained outside the
+      checkout. Assistant metadata was verified as deepseek, deepseek-flash,
+      max, and build across all sessions.
+    verification:
+      base: 48e13c2715d8e06bc935c44696fde409085fbb01
+      source_candidate: 9d4578549f58367f15cc6704bd2f0a9758be653f
+      browser_candidate: 46d3bcb62a0d721db12830be8a7679f2c99b50df
+      results: >-
+        Windows Node 24.14.1 and pnpm 11.25.0: M1 345 passed, composition
+        12 passed, readiness 47 passed, seven consumer suites 259 passed
+        and four skipped, test-project typecheck passed, and pnpm verify
+        passed with 2119 tests passed and nine skipped across 95 files.
+        The root browser probe observed cancellation of the second output
+        and preserved the first completed delivery in SQLite.
+      limits: >-
+        The browser probe used fixed audio and controlled dialogue and
+        renderer dependencies. Acoustic timings remain unmeasured. The
+        local candidate is ready for independent review.
+
+  - date: "2026-11-24"
+    task: M1-01 browser media cleanup after a listener removal failure
+    branch: fix/m1-audit-internal
+    change: >-
+      Keep the owned audio URL until DOM listener cleanup succeeds. A failed
+      detach can retry with the same URL. A successful retry revokes it once.
+    requirements: [FR-04, FR-05]
+    invariants: [INV-01]
+    cases: [C-04]
+    commits: ["4a6288aa02c5ff38568f80760b203c57c152952c"]
+    agent: OpenCode V2 build
+    provider: deepseek
+    model: deepseek-flash
+    variant: max
+    model_cli_id: "deepseek/deepseek-flash#max"
+    sessions: [ses_df68ffeeeffewsI89e0LSWArY7]
+    supervision: >-
+      An independent reviewer reproduced premature revocation by failing the
+      first removal of the ended listener. OpenCode added the regression test
+      first. Codex observed its failure on the previous implementation, then
+      requested the listener and URL cleanup order change in the same session.
+    verification: >-
+      All four focused DOM driver tests passed. An independent probe using a
+      native Blob URL verified readability after the failed detach, one
+      revocation on successful retry and no late events after cleanup.
+    related_case_evidence: >-
+      C-73 in the preceding adapter entry refers to the existing production
+      CLI consumer tests in test/offline/production-cli.test.ts. On Windows
+      that suite passed 11 tests, including pending and failed owned release
+      over IPC, and skipped four signal tests. The M1 Worker double-post
+      failure is exercised separately in test/offline/m1-kokoro-worker-entry.test.ts.
+
+  - date: "2026-11-24"
+    task: M1 validate the VTS model from each hotkey inventory
+    branch: fix/m1-vts-preflight-play-errors
+    change: >-
+      Each successful dispatch checks the API state, validates the current
+      model and configured hotkey in a fresh inventory, and triggers once.
+      The standalone currentModel query remains available to direct callers.
+    requirements: [FR-03]
+    invariants: [INV-02]
+    cases: [C-06]
+    commits:
+      - "7078af1f22074bf99b45d24b3fd3c9cea3c24153"
+      - "23ace4bbcbeed7c88a37a97df350d1d337fa9044"
+      - "20bf16d79e0ca977e186d97b01afa92ebb651cc6"
+    agent: OpenCode V2 build
+    provider: deepseek
+    model: deepseek-flash
+    variant: max
+    model_cli_id: "deepseek/deepseek-flash#max"
+    sessions:
+      - "ses_df60599a8ffemjdTjcltliBSz5"
+      - "ses_df5fb99e6ffeqPCURU318H4YEm"
+      - "ses_df5faa3f1ffeu4e1OHPg1IIzFC"
+    supervision: >-
+      M1 approved the tests in TA-003. OpenCode wrote the regression tests,
+      driver change and adapter documentation. Codex reviewed the diff and
+      reran the controlled peer and consumer suites.
+    verification:
+      base: 6d8f8d27185121346c34134ca6aad822ba1ce63f
+      source_candidate: 20bf16d79e0ca977e186d97b01afa92ebb651cc6
+      results: >-
+        Six VTS assertions failed against the original driver. The updated
+        driver passed all six, including the three-request sequence, refusals,
+        per-dispatch model changes and stale replies during both preflight
+        requests. The peer counted requests. Device latency was unmeasured.
+
+  - date: "2026-11-24"
+    task: M1 classify playback permission refusals
+    branch: fix/m1-vts-preflight-play-errors
+    change: >-
+      A synchronous throw or a rejected play promise with the exact error
+      name NotAllowedError produces failed/play_not_allowed. Other values
+      produce play_failed. A prior Stop retains its cancelled receipt, and
+      cleanup_failed takes precedence when detachment fails.
+    requirements: [FR-04, FR-05]
+    invariants: [INV-01]
+    cases: [C-04]
+    commits:
+      - "84ab90ca5b0b209312d4d304ec868b650e286056"
+      - "8a6dd58f6fc8262a58dcebdfaa545f4ea7b158e8"
+      - "abe0a38b63dde68bbf9b435e0831a3318a6f1dca"
+      - "20bf16d79e0ca977e186d97b01afa92ebb651cc6"
+    agent: OpenCode V2 build
+    provider: deepseek
+    model: deepseek-flash
+    variant: max
+    model_cli_id: "deepseek/deepseek-flash#max"
+    sessions:
+      - "ses_df60599a8ffemjdTjcltliBSz5"
+      - "ses_df5fb99d0ffe16cGoeA7ltrGSt"
+      - "ses_df5faa3f1ffeu4e1OHPg1IIzFC"
+    supervision: >-
+      M1 approved the tests in TA-003. OpenCode wrote the tests, player
+      change and documentation. Review identified a throwing name getter
+      that left the first draft pending. The supervisor reproduced the
+      timeout before OpenCode corrected the classification.
+    verification:
+      base: 6d8f8d27185121346c34134ca6aad822ba1ce63f
+      source_candidate: 20bf16d79e0ca977e186d97b01afa92ebb651cc6
+      results: >-
+        Both permission cases failed on the original player and passed on
+        the candidate. Controlled media also verified cleanup retry and a
+        Stop followed by a late rejection. On Windows the combined changes
+        passed all 313 M1 tests, 108 consumer tests, 12 composition tests
+        and 47 readiness tests. The test project typechecked. Full verify
+        passed with 2096 tests passing and nine skipped across 95 files.
+
+  - date: "2026-11-24"
+    task: M1 synchronize hotkey preflight cancellation coverage
+    branch: fix/m1-vts-preflight-play-errors
+    change: >-
+      Keep the cancellation matrix aligned with the API state and hotkey
+      inventory requests used by each mapped VTS dispatch. The standalone
+      current-model query retains its own client coverage.
+    requirements: [FR-03]
+    invariants: [INV-02]
+    cases: [C-06]
+    commits: ["91e4ea1bda1868d41f00162844210b4f4d726b76"]
+    agent: OpenCode V2 build
+    provider: deepseek
+    model: deepseek-flash
+    variant: max
+    model_cli_id: "deepseek/deepseek-flash#max"
+    sessions: ["ses_df307ea91ffe7cIW3Zzur0nH1f"]
+    supervision: >-
+      M1 requested the integration. OpenCode removed the obsolete test
+      parameter under TA-003 after Codex observed the fixture waiting for a
+      request that ordinary dispatch no longer sends. The supervisor checked
+      the remaining assertions and verified that the approved records and
+      the existing AI-use entries were preserved.
+    verification:
+      base: 2ee86f4da93709c13e15819cb4f44071ce00293c
+      tested_commit: 91e4ea1bda1868d41f00162844210b4f4d726b76
+      results: >-
+        The merged adapter passed 353 M1 tests, 108 consumer tests, 12
+        composition tests and 47 readiness tests. The test project typechecked.
+        Full verify passed with 2136 tests passing and nine skipped across
+        95 files. G1 evidence and G6 passed on the committed difference
+        against main.
+  - date: "2026-11-17"
+    task: M4-A06-style-contract
+    branch: feat/m4-a06-style-contract
+    change: >-
+      Add the deterministic output-side style contract as a standalone pure
+      module (issue #146 A06; its A05 dependency landed in PR #151). New
+      src/dialogue/style-contract.ts defines StyleContract with code-owned
+      defaults aligned to the authored character in
+      src/dialogue/persona-content.ts and a code comment mapping each default
+      to the authored boundary or style note it executes: the verbal tic
+      hmph/nya with a two-line minimum gap (styleNotes[1] says sparingly,
+      never in every sentence), audience-shaming address violations
+      (boundaries[2]), medical-promise and real-supernatural or
+      guaranteed-protection boundary patterns in CJK and English
+      (boundaries[0] and [4]), self and audience reference sets matching the
+      authored templates, and forbiddenPatterns empty by default per the
+      proposal's risk note that a contract only covers patterns the author
+      explicitly rejects. deriveStyleContract(profile, overrides?) returns
+      the defaults with the profile id for provenance and a shallow merge of
+      overrides; prose styleNotes and boundaries are deliberately NOT parsed
+      into patterns (that would not be deterministic), and the limitation is
+      recorded in code. validateStyle(lines, contract, options?) runs seven
+      ordered deterministic checks: self-reference, audience-address,
+      tic-frequency (a window over the last minGapTurns recent turns plus the
+      candidate lines, reported at the later candidate line only, skipped
+      when the contract has no tic), sentence-length (report only; splitting
+      meaning-bearing sentences deterministically is not possible), forbidden,
+      boundary, and fact-contradiction, the last reusing the existing
+      scanContradictions from src/dialogue/consistency.ts with the actual
+      statement interfaces, respecting the module's work bounds and reporting
+      only findings actually returned, never claiming completeness.
+      Violation rules carry rule identity and indexes, never statement or
+      line text, the same redaction stance as the consistency audit.
+      repairStyledLines(lines, contract, options?) applies the deterministic
+      repair order - forbidden spans removed with whitespace collapse, tic
+      surplus occurrences removed keeping the first in each violating window,
+      a boundary-hit line replaced by the first intent template that itself
+      passes validateStyle for the given replyIntent, the original line kept
+      and reported when no template qualifies or no intent is given -
+      self-reference, audience-address, sentence-length and
+      fact-contradiction are report-only in v0 because no deterministic
+      repair exists without inventing content. The repair never adds a
+      provider call (NFR-04), never changes the line count (lines map
+      one-to-one to dialogue segments, so the MAX_DIALOGUE_SEGMENTS cap is
+      respected by construction), keeps an emptied line as an empty slot, and
+      DialogueStyleReport carries the pre-repair violations plus repaired and
+      fallbackUsed flags. This lands the standalone pure module only: the
+      one-line wiring call in DialoguePort.generate (after the text source
+      returns lines, before the sink write) is a named follow-up now that
+      PR #163 has merged, and this change claims no end-to-end effect. Tests:
+      new test/offline/m4-style.test.ts with eleven cases covering zero false
+      kills over every authored intent-template line under the default
+      contract, out-of-character self-reference, audience shaming, tic
+      frequency (consecutive lines, recentTurns extension, gap respected,
+      disabled), sentence length, a forbidden-pattern override removed with
+      the line count unchanged, boundary fallback replacement plus the
+      absent-intent and all-templates-violate paths, a standing-fact
+      contradiction reported without repair, the line-count and emptied-slot
+      invariant, contract derivation with overrides and profile id, and
+      purity (same inputs, deep-equal outputs). The scripts.test:m4 manifest
+      line in package.json grows by one file (test/offline/m4-style.test.ts);
+      M5 owns manifests per AGENTS.md and the growth is disclosed here and in
+      the PR body; src/dialogue/index.ts is deliberately not edited (the
+      module is importable by path). No change to src/contracts/app beyond
+      reading the already-exported MAX_DIALOGUE_SEGMENTS and ReplyIntent, no
+      new dependency, no I/O, no clock read, and no second provider call.
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    sessions: [ses_e262f0a3effeFpyJop8WexJbRu]
+    requirements: [NFR-03, NFR-04]
+    invariants: []
+    cases: []
+    commits: [fbcc0d320dab67de1467794100b76d85ccf89a8b]
+    supervision: >-
+      The M4 supervisor wrote the English task book
+      (m4-impl/A06/taskbook.md) fixing the contract shape, the default
+      values, the seven checks and their order, the repair order, the
+      redaction stance, the reuse points (scanContradictions, the frozen
+      contracts exports, isSubstantiveSpeech), the three allowed files, and
+      the test plan, including the scope decision that the dialogue-port
+      wiring is a named follow-up because PR #163 owned that file in flight
+      at implementation time. The implementation session
+      ses_e262f0a3effeFpyJop8WexJbRu wrote the two new files and the
+      manifest line on 2026-11-14 at the 205424f base; src/dialogue/index.ts
+      was deliberately not touched per the task book's stop rule. The
+      supervisor independently re-ran the gates and reviewed the diff.
+      Before the commit round the branch (which had no commits) was migrated
+      by stash and fast-forward rebase onto merged main a093f50; the
+      package.json manifest line conflicted with the growth PR #159 had
+      already merged and was resolved as main's eighteen-file line plus
+      m4-style.test.ts (nineteen files), with main's test:m5 line taken
+      verbatim; after PRs #165, #172, #173 and #164 merged while this PR was
+      open, the pushed commits were rebuilt onto main b58a5ad by patch
+      migration with the old branch SHAs kept as backup refs and a
+      force-with-lease push, the two new files re-applied and the manifest
+      line appended to main's unchanged eighteen-file test:m4 line; the
+      gates were re-run on each new base before committing.
+      One disclosure is recorded: the sentence splitter contains the literal
+      ellipsis character inside its character class because the task book's
+      own regex specified it; the CJK members of that class are written as
+      unicode escapes while the ellipsis is a functional literal, and it was
+      kept after disclosure (it can be normalized in the follow-up wiring
+      session). This AI-use entry is written by a separate genuine OpenCode
+      session per the 2026-11-15 tightened rule that repository code and all
+      ai-use-log content are session-written; that session's id and raw
+      stream are recorded outside the repository in
+      m4-impl/A06/opencode-sessions.md. The PR round makes two consecutive
+      JSONL stream (393,065 bytes, empty stderr) are kept outside the
+      repository at D:/isla-m4-05/m4-impl/A06/opencode-sessions.md and
+      D:/isla-m4-05/m4-impl/A06/impl-session-raw.json. The session writing
+      this entry also retains its conversation there. No export is stored in
+      the repository and no credential appears in repository files.
+        (feat/m4-a06-style-contract on b58a5ad). pnpm typecheck -> exit 0;
+        pnpm lint -> 0 warnings and 0 errors on 323 files; pnpm test:m4 ->
+        430 passed in 19 files (clean b58a5ad baseline 419 in 18 files, +11
+        style cases); pnpm test -> 2039 passed, 9 skipped and 1 failed in
+        the full suite, the single failure being the pre-existing
+        Windows-host baseline m6-02-provenance-command symlink case
+        (reproduced on clean main in earlier rounds and untouched by this
+        branch); pnpm build -> exit 0; the pnpm verify composite cannot run
+        its nested pnpm invocation on this host, so its four components were
+        verified individually and the remote verify run is the final
+      The standalone style-contract pure module, its deterministic
+      validation and repair, the new style test file, the one-line manifest
+      growth, and this AI-use entry. No wiring in DialoguePort.generate
+      (named follow-up after PR #163, which has since merged); no shared
+      contract or wire field change beyond reading already-exported frozen
+      constants; no storage, SQL, runtime, prompt or AGENTS.md change; no
+      new dependency; no quality, latency, cost, live-provider or
+      physical-output claim; no merge, approval, dismissal or checkpoint
+      acceptance is claimed. DialogueStyleReport is M4-owned; any M2 display
+      would be a separate diagnostic protocol proposal coordinated by M5.
+
+  - date: "2026-11-20"
+    task: M4-A06-style-contract-repair-soundness
+    branch: feat/m4-a06-style-contract
+    change: >-
+      Fix M5's blocking review at 81d1c55 and the two Medium findings that a
+      read-only cross-review of the first fix returned. The v0 repair accepted
+      a candidate boundary replacement by validating only the replaced line,
+      but tic-frequency is decided across a sliding window of the recent turns
+      plus the candidate lines, so a replacement could create a violation on
+      the adjacent line and the repaired output then failed validateStyle while
+      the report said the repair succeeded. Round 1 (ffbae03) compares the whole
+      output stream against a whole-stream baseline, freezes the replacement
+      candidates into the contract as boundaryFallbacks so repair no longer
+      calls resolveCharacterProfile, adds the report field
+      unrepairedBoundaryLines, and hand-authors tic-free boundary fallbacks in
+      src/dialogue/persona-content.ts as intentFallbackTemplates, kept out of
+      intentTemplates so spoken lines are unchanged. Round 1 is not presented
+      as correct: the cross-review session ses_e07bf27a9ffeCqh8XSq4oGHrH2
+      (OpenCode, cslabllm/CS5351/DeepSeek-V4-Flash, read-only review of ffbae03, verdict
+      sound with notes) found two Medium defects. First, fact-contradiction
+      violations carry their array position as rule, so replacing a line
+      renumbers them and a renumbered pre-existing contradiction looked newly
+      introduced, refusing a valid repair. Second, the target-line check
+      rejected any violation on the replaced line, including report-only kinds
+      (sentence-length, fact-contradiction), contradicting the stated intent.
+      It also noted a document/behaviour mismatch for unrepairedBoundaryLines
+      when no replyIntent is given, a defensive-only identical-candidate guard,
+      and that the zero-false-kills invariant did not cover the new fallbacks.
+      Round 2 (3dff0b8) adds stableViolationKey(), which drops the ordinal for
+      fact-contradiction, scopes the target-line check to the resolvable kinds
+      (boundary, tic-frequency, forbidden), corrects the document and adds four
+      tests, each verified to fail against the pre-review logic before it was
+      committed. The main merge (9351317) conflicted only in the log tail, and
+      resolving it by concatenation dropped one " - " date separator, collapsing
+      two mappings; yaml@2.9.1 refused the file with eight 'Map keys must be
+      unique' errors. The first entry-authoring session
+      (ses_e07b09de6ffey4eSJe2jzOF5LG) found the defect, stopped and asked
+      instead of writing into a broken file, and be06988 restores the
+      separator; the delta against main is exactly one added entry.
+
+      Rebase note (2026-11-25). This branch was rebuilt on main 3a54e6b after
+      the #189 merge: the fourteen commits recorded above and below were squashed
+      into one code commit (fbcc0d3) plus this log commit, because every log-touch commit
+      re-conflicted identically in docs/ai-use-log.yaml. The round, merge and
+      re-authoring SHAs quoted in the prose (ffbae03, 9351317, 3dff0b8, be06988,
+      a7c1942, a1c25c9, 8765b8c) describe what happened and are no longer objects
+      in this repository; the equivalence checks and session IDs they refer to
+      are unchanged.
+    requirements: [NFR-03]
+    invariants: [INV-14]
+    commits: [fbcc0d320dab67de1467794100b76d85ccf89a8b]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    model_cli_id: "cslabllm/CS5351/DeepSeek-V4-Flash"
+    sessions: [ses_e07bf27a9ffeCqh8XSq4oGHrH2, ses_e07b09de6ffey4eSJe2jzOF5LG, ses_e07a928d0ffe4eSpzXlagEEm2e, ses_e0745f73dffeGvx3C9CgVwWja7, ses_e06ba3aa0ffe7evb6VIit7Ikgj]
+    supervision: >-
+      M5's review at 81d1c55 supplied the blocking finding and named the
+      accepting-only-the-replaced-line weakness; the rounds recorded here
+      address it. The cross-review in ses_e07bf27a9ffeCqh8XSq4oGHrH2 was a
+      separate read-only OpenCode session (cslabllm/CS5351/DeepSeek-V4-Flash): it read
+      ffbae03, reported the two Medium defects recorded above and made no edit.
+
+      Disclosure of how each part was authored, because the split matters
+      for G6. The round 1 and round 2 changes to style-contract.ts, persona.ts
+      and persona-content.ts were written inside an OpenCode session.
+      M5 reviewed that technical result at e5c3dac and accepted it, then
+      requested changes on the authoring evidence alone. The final src/ change
+      on this branch - commit a7c1942, removing the dead markEmptied branches
+      and the import that only fed them - WAS authored in OpenCode session
+      ses_e0745f73dffeGvx3C9CgVwWja7 (agent build, cslabllm/CS5351/DeepSeek-V4-Flash). That
+      session read the function, confirmed by grep that isSubstantiveSpeech had
+      no other caller, made the edit, and ran the style and dialogue suites
+      itself; the supervising assistant re-ran typecheck, oxlint and the full M4
+      suite before committing and rewrote no line of the session edit. 
+
+      The delivered src/ change was re-authored in OpenCode at a1c25c9, in
+      session ses_e06e1a493ffesriorAB1Kkyknl (agent build,
+      cslabllm/CS5351/DeepSeek-V4-Flash), which replaced
+      src/dialogue/style-contract.ts with its own implementation; only that file
+      changed, so the 18 acceptance tests are unchanged and still decide.
+      Equivalence beyond the tests was checked by restoring the previous
+      implementation, capturing 400 deterministic pseudo-random cases (35
+      exercised a boundary fallback, 6 left a boundary unrepaired, 38 carried a
+      fact-contradiction), restoring this implementation, and comparing every
+      field of validateStyle plus lines, violations, repaired, fallbackUsed and
+      unrepairedBoundaryLines: 400/400 identical. Two deliberate behaviour
+      changes were flagged by the session in its own review: the repair baseline
+      comparison became a multiset rather than a set, so a second contradiction
+      on one line cannot hide behind a shared key; and the baseline is scoped to
+      the lines a replacement can reach, because replacing a line renumbers
+      later findings. The second makes the cross-line contradiction check weaker
+      by construction - a candidate cannot be rejected for a contradiction
+      outside the window - and the session marked it High in its self review;
+      only fact-contradiction is unbounded and it is report-only at this stage,
+      so no repaired or scored output changes. Verified: m4-style 18/18;
+      test:m4 19 files / 455 tests; tsc -b exit 0; oxlint 0 warnings 0 errors
+      on 323 files.
+
+      This entry was written by ses_e07a928d0ffe4eSpzXlagEEm2e and updated in
+      place for this round. ses_e07b09de6ffey4eSJe2jzOF5LG is cited because it
+      found the lost separator that broke this log; it refused to write into the
+      broken file and produced no entry of its own.
+    human_review: >-
+      M5 requested changes at 81d1c55; these two rounds and the merge repair
+      remain under review and this entry claims no approval, dismissal or merge.
+      A human team member performs the final merge; no agent merges, enables
+      auto-merge, enqueues a merge or triggers one through a CLI, API, browser
+      or automation.
+    transcript_record: >-
+      The cross-review conversation ses_e07bf27a9ffeCqh8XSq4oGHrH2 and the
+      entry-authoring conversation ses_e07b09de6ffey4eSJe2jzOF5LG are retained
+      in the local OpenCode store; no raw export was copied outside the checkout
+      for this entry, and no credential appears in repository files.
+    verification:
+      base: 3a54e6b96f580f220fdfc8559ecfe38e1ab0d917
+      results: >-
+        Windows 11, Node 24.21.0, pnpm 12.11.2: the m4-style suite passed 18/18;
+        pnpm test:m4 passed 19 files / 455 tests; pnpm typecheck exited 0; pnpm
+        lint (oxlint) reported 0 warnings and 0 errors on 323 files. Cost on
+        this host: repair cost rose from 5.65 to 10.87 microseconds per call
+        because the whole-stream baseline is rechecked, while
+        deriveStyleContract costs 0.53 microseconds once per contract. The G6
+        ai-use-log gate passed with the changed-file list supplied and main's
+        log as the base.
+      limits: >-
+        No live provider, browser or CI run was performed for this slice, and no
+        acoustic, latency, cost or user-visible effect is claimed.
+        repairStyledLines still has no production caller, so the evidence is
+        test-level only.
+    scope: >-
+      src/dialogue/style-contract.ts, src/dialogue/persona.ts,
+      src/dialogue/persona-content.ts, test/offline/m4-style.test.ts and this
+      log entry. No frozen contract, storage schema, provider or deployment
+      change.
+
+  - date: "2026-11-25"
+    task: console-kokoro-voice-selection
+    change: >-
+      List installed English Kokoro voices, audition a fixed phrase, and persist an
+      explicit operator selection. Capture the selected voice at the start of each
+      conversation turn. Add console, runtime and browser coverage for playback,
+      refusal, persistence, retry and stop behavior.
+    requirements: [FR-04, FR-05, NFR-05, NFR-06]
+    invariants: [INV-01, INV-03]
+    commits: ["2889136a69f545a6aea4f63d192dc5f979586877"]
+    agent: OpenCode V2 build
+    provider: deepseek
+    model: deepseek-flash
+    variant: max
+    model_cli_id: "deepseek/deepseek-flash#max"
+    sessions:
+      - "ses_df12def18ffez9ATMFPkyaD7Hv"
+      - "ses_df12c68e5ffeMRwJW18pGHlz5v"
+      - "ses_df12def2bffejYvdtF4204PN7r"
+      - "ses_df127a5b1ffeYC9B0BlMs4jwQf"
+      - "ses_df129322cffe8TbFIX8rC36ltR"
+      - "ses_df11ba5f0ffeR6QJXtTAezrJMh"
+    supervision: >-
+      M1 approved TA-004 before implementation. The supervisor observed failing
+      tests before feature implementation, checked authorization and real media,
+      and requested fixes for pending selections and duplicate preview requests.
+      The browser probe was corrected to hash the Blob supplied to the player
+      and to follow the actual offer and grant messages.
+    verification:
+      base: 3a54e6b96f580f220fdfc8559ecfe38e1ab0d917
+      source_candidate: 2e22bd435639f4724a9702d4eaba5536f2addb53
+      results: >-
+        On Windows the full check passed with 2155 tests passing and 9 skipped.
+        All 28 served audition WAVs matched independently rendered audio. The two
+        browser phases passed 31 and 16 checks. Heart and Emma speech matched
+        their expected WAVs and a new runtime process retained Emma. Playback
+        and SQLite were real, with controlled dialogue text and avatar peers.
 
   - date: "2026-11-22"
     task: M2-console-nightloom-v2-visual-rebuild

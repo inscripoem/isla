@@ -1,3 +1,6 @@
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type {
   CapabilitySnapshot,
@@ -214,6 +217,27 @@ describe('reference live deployment', () => {
     expect(disposed.filter((name) => name === 'synthesis')).toHaveLength(1)
     expect(disposed.filter((name) => name === 'registry')).toHaveLength(1)
     gate.dispose()
+  })
+
+  it('keeps custom-synthesis factory builds voice-free even with a database path', async () => {
+    const config = parseReferenceLiveConfig(validEnv())
+    const directory = mkdtempSync(join(tmpdir(), 'isla-reference-voice-'))
+    const databasePath = join(directory, 'isla.db')
+    try {
+      const deployment = await buildReferenceDeployment(
+        config,
+        fakeFactories([]),
+        fixedClock(),
+        databasePath,
+      )
+
+      expect(deployment.peers.voice).toBeUndefined()
+      expect(existsSync(`${databasePath}.voices.json`)).toBe(false)
+      expect(existsSync(databasePath)).toBe(false)
+      await deployment.release?.()
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
   })
 
   it('fails loudly when a hand-built configuration has an empty hotkey map', async () => {

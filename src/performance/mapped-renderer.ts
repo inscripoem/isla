@@ -8,6 +8,7 @@ import {
   NO_OP_ACTION,
   capabilitySnapshotSchema,
   performanceCommandSchema,
+  performanceReceiptSchema,
 } from '../contracts/app'
 import type { DeadlineGate, ReceiptTools } from './browser/types'
 
@@ -33,6 +34,46 @@ const VALID_STAGES: ReadonlySet<string> = new Set([
 const OBSERVABILITY_LABELS: ReadonlySet<string> = new Set(['observable', 'acceptance-only'])
 
 export const MAPPED_RENDERER_SOURCE = 'm1-mapped-renderer'
+
+/** Monotonic suffix for exceptional identifiers within this module realm. */
+let fallbackReceiptSequence = 0
+let fallbackRealmId: string | null = null
+
+/**
+ * Lazily allocate a realm-discriminating token for exceptional receipt ids.
+ * A module-local counter alone restarts in a fresh realm, so the token keeps
+ * exceptional identities distinct across page reloads and separate realms.
+ */
+function fallbackRealmDiscriminator(): string {
+  if (fallbackRealmId !== null) return fallbackRealmId
+  const cryptoLike = (
+    globalThis as {
+      crypto?: {
+        randomUUID?: () => string
+        getRandomValues?: (array: Uint8Array) => Uint8Array
+      }
+    }
+  ).crypto
+  try {
+    if (typeof cryptoLike?.randomUUID === 'function') {
+      const uuid = cryptoLike.randomUUID()
+      if (typeof uuid === 'string' && uuid.trim().length > 0) {
+        fallbackRealmId = uuid
+        return fallbackRealmId
+      }
+    }
+    if (typeof cryptoLike?.getRandomValues === 'function') {
+      const bytes = new Uint8Array(16)
+      cryptoLike.getRandomValues(bytes)
+      fallbackRealmId = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+      return fallbackRealmId
+    }
+  } catch {
+    // Fall through to the time/random discriminator below.
+  }
+  fallbackRealmId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+  return fallbackRealmId
+}
 
 /** What the low-level driver observed, expressed only as an execution stage. */
 export interface RendererObservation {
@@ -131,28 +172,58 @@ export function createMappedRenderer(deps: MappedRendererDeps): RendererPort {
   const bindings = buildBindings(capabilities, deps.bindings)
   const actionById = new Map(capabilities.actions.map((action) => [action.actionId, action]))
 
+  /** Read an honest local observation time, or null when the injected clock is unusable. */
+  const safeLocalNowMs = (): number | null => {
+    try {
+      const localTimeMs = deps.receipts.localNowMs()
+      return typeof localTimeMs === 'number' && Number.isFinite(localTimeMs) && localTimeMs >= 0
+        ? localTimeMs
+        : null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Keep a usable injected receipt identifier and fall back to a locally unique
+   * browser-safe one when the supplied factory throws or yields a blank value.
+   */
+  const nextReceiptId = (): string => {
+    try {
+      const supplied = deps.receipts.newReceiptId()
+      if (typeof supplied === 'string' && supplied.trim().length > 0) return supplied
+    } catch {
+      // Fall through to the local identifier.
+    }
+    fallbackReceiptSequence += 1
+    return `m1-mapped-receipt-${fallbackRealmDiscriminator()}-${fallbackReceiptSequence}`
+  }
+
   const receipt = (
     command: PerformanceCommand,
     stage: RendererStage,
     reasonCode: string | null,
     localTimeMs: number | null,
-  ): PerformanceReceipt => ({
-    receiptId: deps.receipts.newReceiptId(),
-    outputId: command.outputId,
-    sessionId: command.sessionId,
-    epoch: command.epoch,
-    turnId: command.turnId,
-    segmentId: command.segmentId,
-    modality: 'avatar',
-    stage,
-    localTimeMs,
-    chunkIds: null,
-    reasonCode,
-    source: MAPPED_RENDERER_SOURCE,
-  })
+  ): PerformanceReceipt => {
+    const built = performanceReceiptSchema.parse({
+      receiptId: nextReceiptId(),
+      outputId: command.outputId,
+      sessionId: command.sessionId,
+      epoch: command.epoch,
+      turnId: command.turnId,
+      segmentId: command.segmentId,
+      modality: 'avatar',
+      stage,
+      localTimeMs,
+      chunkIds: null,
+      reasonCode,
+      source: MAPPED_RENDERER_SOURCE,
+    })
+    return Object.freeze(built) as PerformanceReceipt
+  }
 
   const defensiveFailure = (command: PerformanceCommand, reasonCode: string): PerformanceReceipt =>
-    receipt(command, 'failed', reasonCode, deps.receipts.localNowMs())
+    receipt(command, 'failed', reasonCode, safeLocalNowMs())
 
   /**
    * Validate the complete driver observation and produce a schema-valid receipt.
@@ -216,7 +287,7 @@ export function createMappedRenderer(deps: MappedRendererDeps): RendererPort {
       }
       const onAbort = (): void => {
         if (!observed) {
-          finish(receipt(command, 'unknown', 'aborted_without_outcome', deps.receipts.localNowMs()))
+          finish(receipt(command, 'unknown', 'aborted_without_outcome', safeLocalNowMs()))
         }
       }
       try {
@@ -229,13 +300,13 @@ export function createMappedRenderer(deps: MappedRendererDeps): RendererPort {
           () => {
             if (observed || done) return
             observed = true
-            finish(receipt(command, 'failed', 'driver_error', deps.receipts.localNowMs()))
+            finish(receipt(command, 'failed', 'driver_error', safeLocalNowMs()))
           },
         )
       } catch {
         if (!observed && !done) {
           observed = true
-          finish(receipt(command, 'failed', 'driver_error', deps.receipts.localNowMs()))
+          finish(receipt(command, 'failed', 'driver_error', safeLocalNowMs()))
         }
       }
       if (signal.aborted) onAbort()
@@ -264,13 +335,13 @@ export function createMappedRenderer(deps: MappedRendererDeps): RendererPort {
       const binding = deps.deadlineGate.bind(context)
       try {
         if (binding.signal.aborted) {
-          return receipt(commandSnapshot, 'cancelled', null, deps.receipts.localNowMs())
+          return receipt(commandSnapshot, 'cancelled', null, safeLocalNowMs())
         }
         let dispatched: Promise<RendererObservation>
         try {
           dispatched = deps.driver.dispatch(driverAction, binding.signal)
         } catch {
-          return receipt(commandSnapshot, 'failed', 'driver_error', deps.receipts.localNowMs())
+          return receipt(commandSnapshot, 'failed', 'driver_error', safeLocalNowMs())
         }
         return await settleDispatch(commandSnapshot, dispatched, binding.signal)
       } finally {

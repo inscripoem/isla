@@ -26,6 +26,46 @@ import { PlayerDispatchError } from './types'
 /** Receipt source label for the single-output browser player. */
 export const M1_PLAYER_SOURCE = 'm1-player'
 
+/** Monotonic suffix for exceptional identifiers within this module realm. */
+let fallbackReceiptSequence = 0
+let fallbackRealmId: string | null = null
+
+/**
+ * Lazily allocate a realm-discriminating token for exceptional receipt ids.
+ * A module-local counter alone restarts in a fresh realm, so the token keeps
+ * exceptional identities distinct across page reloads and separate realms.
+ */
+function fallbackRealmDiscriminator(): string {
+  if (fallbackRealmId !== null) return fallbackRealmId
+  const cryptoLike = (
+    globalThis as {
+      crypto?: {
+        randomUUID?: () => string
+        getRandomValues?: (array: Uint8Array) => Uint8Array
+      }
+    }
+  ).crypto
+  try {
+    if (typeof cryptoLike?.randomUUID === 'function') {
+      const uuid = cryptoLike.randomUUID()
+      if (typeof uuid === 'string' && uuid.trim().length > 0) {
+        fallbackRealmId = uuid
+        return fallbackRealmId
+      }
+    }
+    if (typeof cryptoLike?.getRandomValues === 'function') {
+      const bytes = new Uint8Array(16)
+      cryptoLike.getRandomValues(bytes)
+      fallbackRealmId = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+      return fallbackRealmId
+    }
+  } catch {
+    // Fall through to the time/random discriminator below.
+  }
+  fallbackRealmId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+  return fallbackRealmId
+}
+
 /**
  * Bootstrap configuration schema. A trusted session must be a nonempty string
  * and the initial epoch a finite nonnegative integer; invalid values are
@@ -74,6 +114,18 @@ function sameCommand(left: PerformanceCommand, right: PerformanceCommand): boole
   )
 }
 
+// play() can reject with any value, including one whose name cannot be read.
+function playFailureReason(error: unknown): 'play_not_allowed' | 'play_failed' {
+  if (typeof error !== 'object' || error === null) return 'play_failed'
+  try {
+    return (error as { name?: unknown }).name === 'NotAllowedError'
+      ? 'play_not_allowed'
+      : 'play_failed'
+  } catch {
+    return 'play_failed'
+  }
+}
+
 /**
  * A single-output browser playback controller.
  *
@@ -109,6 +161,33 @@ export function createPlaybackController(deps: PlaybackDeps): PlaybackController
   const observerQueue: PerformanceReceipt[] = []
   let observerFlushing = false
 
+  /** Read an honest local observation time, or null when the injected clock is unusable. */
+  const safeLocalNowMs = (): number | null => {
+    try {
+      const localTimeMs = deps.receipts.localNowMs()
+      return typeof localTimeMs === 'number' && Number.isFinite(localTimeMs) && localTimeMs >= 0
+        ? localTimeMs
+        : null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Keep a usable injected receipt identifier and fall back to a locally unique
+   * browser-safe one when the supplied factory throws or yields a blank value.
+   */
+  const nextReceiptId = (): string => {
+    try {
+      const supplied = deps.receipts.newReceiptId()
+      if (typeof supplied === 'string' && supplied.trim().length > 0) return supplied
+    } catch {
+      // Fall through to the local identifier.
+    }
+    fallbackReceiptSequence += 1
+    return `m1-player-receipt-${fallbackRealmDiscriminator()}-${fallbackReceiptSequence}`
+  }
+
   const reportFault = (error: unknown): void => {
     try {
       deps.reportFault(error)
@@ -141,10 +220,11 @@ export function createPlaybackController(deps: PlaybackDeps): PlaybackController
     command: PerformanceCommand,
     stage: PerformanceReceipt['stage'],
     reasonCode: string | null,
-    localTimeMs: number | null,
   ): PerformanceReceipt => {
+    // Read the observation time before allocating an id, preserving the original order.
+    const localTimeMs = safeLocalNowMs()
     const receipt = performanceReceiptSchema.parse({
-      receiptId: deps.receipts.newReceiptId(),
+      receiptId: nextReceiptId(),
       outputId: command.outputId,
       sessionId: command.sessionId,
       epoch: command.epoch,
@@ -226,7 +306,7 @@ export function createPlaybackController(deps: PlaybackDeps): PlaybackController
       finalStage = 'failed'
       finalReason = 'cleanup_failed'
     }
-    const receipt = buildReceipt(operation.command, finalStage, finalReason, deps.receipts.localNowMs())
+    const receipt = buildReceipt(operation.command, finalStage, finalReason)
     operation.terminalReceipt = receipt
     lastStage = finalStage
 
@@ -295,7 +375,7 @@ export function createPlaybackController(deps: PlaybackDeps): PlaybackController
       if (operation.started) return
       operation.started = true
       lastStage = 'started'
-      emit(buildReceipt(operation.command, 'started', null, deps.receipts.localNowMs()))
+      emit(buildReceipt(operation.command, 'started', null))
       return
     }
     if (event.type === 'ended') {
@@ -374,14 +454,16 @@ export function createPlaybackController(deps: PlaybackDeps): PlaybackController
     let playPromise: Promise<void>
     try {
       playPromise = withinSyncBoundary(() => handle.play())
-    } catch {
+    } catch (error) {
       commitPendingTerminal(operation)
-      if (!operation.terminalChosen) settleTerminal(operation, 'failed', 'play_failed')
+      if (!operation.terminalChosen) {
+        settleTerminal(operation, 'failed', playFailureReason(error))
+      }
       return
     }
-    Promise.resolve(playPromise).catch(() => {
+    Promise.resolve(playPromise).catch((error) => {
       if (operation.invalidated) return
-      settleTerminal(operation, 'failed', 'play_failed')
+      settleTerminal(operation, 'failed', playFailureReason(error))
     })
     // `play()` may synchronously deliver a terminal event or abort the owner.
     commitPendingTerminal(operation)
@@ -435,7 +517,7 @@ export function createPlaybackController(deps: PlaybackDeps): PlaybackController
       operation.removeAbortListener = () => context.signal.removeEventListener('abort', onAbort)
     }
 
-    emit(buildReceipt(command, 'accepted', null, deps.receipts.localNowMs()))
+    emit(buildReceipt(command, 'accepted', null))
 
     if (context.signal.aborted) {
       settleTerminal(operation, 'cancelled', null)

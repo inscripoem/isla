@@ -13,6 +13,57 @@
 @import './design/components.css';
 @import './design/layout.css';
 
+.console__voice-current {
+  margin: 0 0 var(--isla-space-sm);
+  font-size: var(--isla-fs-sm);
+  color: var(--isla-ink-soft);
+}
+
+.console__voice-current strong {
+  color: var(--isla-ink);
+}
+
+.console__voice-field {
+  max-width: 100%;
+}
+
+.console__voice-select {
+  width: 100%;
+  min-height: 2.5rem;
+  padding: var(--isla-space-xs) var(--isla-space-sm);
+  border: var(--isla-border-hairline) solid var(--isla-line);
+  border-radius: var(--isla-radius-md);
+  background: var(--isla-surface-dim);
+  color: var(--isla-ink);
+  font-family: var(--isla-font);
+  font-size: var(--isla-fs-md);
+  color-scheme: dark;
+}
+
+.console__voice-select option {
+  background: var(--isla-surface-soft);
+  color: var(--isla-ink);
+}
+
+.console__voice-select:disabled {
+  color: var(--isla-muted);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.console__voice-select:focus-visible {
+  outline: 2px solid var(--isla-pink);
+  outline-offset: 2px;
+}
+
+.console__voice-actions {
+  margin-top: var(--isla-space-sm);
+}
+
+.console__voice-status {
+  margin-top: var(--isla-space-sm);
+}
+
 .console__actions {
   display: flex;
   align-items: center;

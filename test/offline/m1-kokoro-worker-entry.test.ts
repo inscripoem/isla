@@ -4,20 +4,26 @@
  * These tests import the **actual** TypeScript worker entry
  * (`src/performance/kokoro-worker.ts`) with `vi.doMock`, a controlled provider
  * factory and a fake `model.dispose`, and a real Node `MessageChannel` as the
- * `parentPort`. They exercise the entry's real admission, disposal and transfer
- * paths; they are not a real-model or real-worker-thread proof. The real
- * bootstrap, a genuine subprocess and real CPU timing remain the explicit live
- * entrypoints' job. No SDK is imported and no model is downloaded.
+ * `parentPort`. They exercise the entry's real admission, disposal, transfer and
+ * narrow transport-fault paths; they are not a real-model or real-worker-thread
+ * proof. The real bootstrap, a genuine subprocess and real CPU timing remain the
+ * explicit live entrypoints' job. No SDK is imported and no model is downloaded.
  */
 import { MessageChannel } from 'node:worker_threads'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { KokoroProviderConfig } from '../../src/performance/kokoro-provider'
 import type { KokoroRawAudio } from '../../src/performance/kokoro-types'
 
+const TRANSPORT_FAULT_PREFIX = 'm1 entry test transport fault'
+
 function tick(): Promise<void> {
   return new Promise<void>((resolve) => {
     setImmediate(resolve)
   })
+}
+
+function transportFault(stage: string): Error {
+  return new Error(`${TRANSPORT_FAULT_PREFIX}: ${stage}`)
 }
 
 const TEST_CONFIG: KokoroProviderConfig = {
@@ -34,6 +40,12 @@ interface CapturedPost {
   readonly transfer?: readonly ArrayBuffer[]
 }
 
+interface PostAttempt {
+  readonly jobId: number | null
+  readonly ok: boolean | null
+  readonly delivered: boolean
+}
+
 interface Harness {
   send(message: unknown): void
   next(): Promise<unknown>
@@ -44,6 +56,9 @@ interface Harness {
   disposeCalls(): number
   exitCalls(): readonly number[]
   generateCalls(): number
+  failResultPosts(jobId: number, mode: 'success' | 'all'): void
+  postAttempts(): readonly PostAttempt[]
+  providerOwnedSamples(): Float32Array | null
   resolveGeneration(audio: KokoroRawAudio): void
   rejectGeneration(error: unknown): void
   capturedPosts(): readonly CapturedPost[]
@@ -57,16 +72,19 @@ describe('M1-02 worker entry lifecycle (B02, actual entry)', () => {
   let activeHarness: Harness | null = null
 
   afterEach(async () => {
-    if (activeHarness !== null) {
-      const harness = activeHarness
-      activeHarness = null
-      await harness.settle()
+    try {
+      if (activeHarness !== null) {
+        const harness = activeHarness
+        activeHarness = null
+        await harness.settle()
+      }
+    } finally {
+      delete (globalThis as { __islaKokoroWorker?: unknown }).__islaKokoroWorker
+      vi.doUnmock('node:worker_threads')
+      vi.doUnmock('../../src/performance/kokoro-provider')
+      vi.restoreAllMocks()
+      vi.resetModules()
     }
-    delete (globalThis as { __islaKokoroWorker?: unknown }).__islaKokoroWorker
-    vi.doUnmock('node:worker_threads')
-    vi.doUnmock('../../src/performance/kokoro-provider')
-    vi.restoreAllMocks()
-    vi.resetModules()
   })
 
   async function startEntry(): Promise<Harness> {
@@ -85,6 +103,8 @@ describe('M1-02 worker entry lifecycle (B02, actual entry)', () => {
         resolve(audio: KokoroRawAudio): void
         reject(error: unknown): void
       } | null,
+      providerOwnedSamples: null as Float32Array | null,
+      resultPostFailure: null as { jobId: number; mode: 'success' | 'all' } | null,
       exitCodes: [] as number[],
     }
     let resolveExited: () => void = () => {}
@@ -109,18 +129,15 @@ describe('M1-02 worker entry lifecycle (B02, actual entry)', () => {
       }),
       ensureVoice: () => {},
     }
-    const provider = {
-      generate: (_input: unknown): Promise<KokoroRawAudio> =>
-        new Promise<KokoroRawAudio>((resolve, reject) => {
-          state.providerGenerateCalls += 1
-          state.pending = { resolve, reject }
-        }),
-    }
     // The controlled provider factory exercises the entry's real
     // `createDisposingLoader` by loading through the supplied loader wrapper.
+    // Its `generate` mirrors the real provider's ownership boundary through the
+    // actual `toKokoroRawAudio`, so the worker receives a dedicated copy rather
+    // than the SDK's own sample buffer.
     const createProvider = async (
       config: unknown,
       loader: { loadModel(config: unknown): Promise<unknown> },
+      toRawAudio: (raw: unknown) => KokoroRawAudio,
     ): Promise<unknown> => {
       state.initStarted = true
       await loader.loadModel(config)
@@ -129,15 +146,45 @@ describe('M1-02 worker entry lifecycle (B02, actual entry)', () => {
       // A deliberate rejection only takes effect once the model was loaded, so
       // the failure path still exercises the loaded-model disposal.
       if (state.rejectInit !== null) throw state.rejectInit.error
-      return provider
+      return {
+        async generate(): Promise<KokoroRawAudio> {
+          state.providerGenerateCalls += 1
+          const raw = await new Promise<KokoroRawAudio>((resolve, reject) => {
+            state.pending = { resolve, reject }
+          })
+          const owned = toRawAudio({
+            audio: raw.samples,
+            sampling_rate: raw.sampleRate,
+          })
+          state.providerOwnedSamples = owned.samples
+          return owned
+        },
+      }
     }
 
     const posts: CapturedPost[] = []
+    const attempts: PostAttempt[] = []
     const originalPostMessage = workerPort.postMessage.bind(workerPort) as (
       message: unknown,
       transferList?: readonly ArrayBuffer[],
     ) => void
     workerPort.postMessage = ((message: unknown, transferList?: readonly ArrayBuffer[]) => {
+      const record = (
+        message !== null && typeof message === 'object' ? message : {}
+      ) as { kind?: unknown; jobId?: unknown; ok?: unknown }
+      const isResult = record.kind === 'result'
+      const jobId = typeof record.jobId === 'number' ? record.jobId : null
+      const ok = isResult && typeof record.ok === 'boolean' ? record.ok : null
+      const fault = state.resultPostFailure
+      const fails =
+        isResult &&
+        fault !== null &&
+        jobId === fault.jobId &&
+        (fault.mode === 'all' || ok === true)
+      attempts.push({ jobId, ok, delivered: !fails })
+      if (fails) {
+        throw transportFault(ok === true ? 'success result' : 'failure result')
+      }
       posts.push(transferList === undefined ? { message } : { message, transfer: transferList })
       originalPostMessage(message, transferList)
     }) as unknown as typeof workerPort.postMessage
@@ -159,10 +206,16 @@ describe('M1-02 worker entry lifecycle (B02, actual entry)', () => {
         workerData: TEST_CONFIG,
       }
     })
-    vi.doMock('../../src/performance/kokoro-provider', () => ({
-      createRealKokoroSdkLoader: () => realLoader,
-      createKokoroProvider: createProvider,
-    }))
+    vi.doMock('../../src/performance/kokoro-provider', async (importOriginal) => {
+      const actual =
+        await importOriginal<typeof import('../../src/performance/kokoro-provider')>()
+      return {
+        ...actual,
+        createRealKokoroSdkLoader: () => realLoader,
+        createKokoroProvider: (config: unknown, loader: { loadModel(config: unknown): Promise<unknown> }) =>
+          createProvider(config, loader, actual.toKokoroRawAudio),
+      }
+    })
 
     ;(globalThis as { __islaKokoroWorker?: unknown }).__islaKokoroWorker = true
     vi.spyOn(process, 'exit').mockImplementation((code?: string | number | null): never => {
@@ -190,35 +243,43 @@ describe('M1-02 worker entry lifecycle (B02, actual entry)', () => {
 
     let cleanupPromise: Promise<void> | null = null
     let portsClosed = false
-    // Sequence teardown without ever racing a timeout against exit: release and
+    const closePorts = (): void => {
+      if (portsClosed) return
+      portsClosed = true
+      workerPort.close()
+      testPort.close()
+    }
+    // Sequence teardown without racing a timeout against exit: release and
     // observe held initialization, keep driving native queued messages and
     // admission until they become observable, close admission and drain every
     // controlled pending generation on each pass, then await the actual
-    // controlled exit before closing ports. Idempotent across repeated calls. A
-    // genuine failure surfaces as an ordinary test/hook timeout, never as a
-    // falsely observed exit.
+    // controlled exit. Idempotent across repeated calls. The bounded drive is
+    // only a safety limit; exhausting it is an explicit failure, never a silent
+    // success, and the fixture ports still close in `finally`.
     const settle = (): Promise<void> => {
       if (cleanupPromise !== null) return cleanupPromise
       cleanupPromise = (async (): Promise<void> => {
-        state.resolveInitGate?.()
-        while (state.exitCodes.length === 0) {
-          await tick()
-          try {
-            testPort.postMessage({ kind: 'dispose' })
-          } catch {
-            // The port may already be closed; the drain below still runs.
+        try {
+          state.resolveInitGate?.()
+          for (let attempt = 0; state.exitCodes.length === 0 && attempt < 500; attempt += 1) {
+            await tick()
+            try {
+              testPort.postMessage({ kind: 'dispose' })
+            } catch {
+              // The port may already be closed; the drain below still runs.
+            }
+            if (state.pending !== null) {
+              const pending = state.pending
+              state.pending = null
+              pending.resolve({ samples: sdkSamples, sampleRate: 24000 })
+            }
           }
-          if (state.pending !== null) {
-            const pending = state.pending
-            state.pending = null
-            pending.resolve({ samples: sdkSamples, sampleRate: 24000 })
+          if (state.exitCodes.length === 0) {
+            throw new Error('m1-kokoro-worker-entry: cleanup did not observe worker exit')
           }
-        }
-        await exited
-        if (!portsClosed) {
-          portsClosed = true
-          workerPort.close()
-          testPort.close()
+          await exited
+        } finally {
+          closePorts()
         }
       })()
       return cleanupPromise
@@ -241,6 +302,11 @@ describe('M1-02 worker entry lifecycle (B02, actual entry)', () => {
       disposeCalls: () => state.modelDisposeCalls,
       exitCalls: () => state.exitCodes.slice(),
       generateCalls: () => state.providerGenerateCalls,
+      failResultPosts: (jobId, mode) => {
+        state.resultPostFailure = { jobId, mode }
+      },
+      postAttempts: () => attempts.slice(),
+      providerOwnedSamples: () => state.providerOwnedSamples,
       resolveGeneration: (audio) => {
         const pending = state.pending
         state.pending = null
@@ -389,6 +455,16 @@ describe('M1-02 worker entry lifecycle (B02, actual entry)', () => {
     expect(transferred).toHaveLength(1)
     const transfer = transferred[0]!.transfer!
     expect(transfer).toHaveLength(1)
+    // The real provider already returned its own copy through
+    // `toKokoroRawAudio`; the worker must transfer that buffer directly rather
+    // than making a second copy of it.
+    const providerOwned = harness.providerOwnedSamples()
+    expect(providerOwned).not.toBeNull()
+    // Compare identities explicitly: Vitest may try to inspect the detached
+    // provider-owned TypedArray when producing a structural diff.
+    expect(providerOwned === sdkSamples).toBe(false)
+    expect(providerOwned!.byteLength).toBe(0)
+    expect(providerOwned!.buffer === transfer[0]).toBe(true)
     // The dedicated owned copy's buffer is detached in the sender.
     const ownedMessage = transferred[0]!.message as { samples: Float32Array }
     expect(ownedMessage.samples.buffer).toBe(transfer[0])
@@ -402,6 +478,118 @@ describe('M1-02 worker entry lifecycle (B02, actual entry)', () => {
     harness.send({ kind: 'dispose' })
     await harness.awaitExit()
     expect(harness.disposeCalls()).toBe(1)
+  })
+
+  it('publishes one correlated failure when the success result cannot be posted', async () => {
+    const harness = await startEntry()
+    harness.releaseInit()
+    expect(await harness.next()).toMatchObject({ kind: 'ready' })
+
+    harness.send({
+      kind: 'generate',
+      jobId: 9,
+      input: { text: 'broken success', voiceId: 'af_heart', speed: 1 },
+    })
+    await harness.until(() => harness.generateCalls() === 1)
+    harness.failResultPosts(9, 'success')
+    harness.resolveGeneration({ samples: harness.sdkSamples(), sampleRate: 24000 })
+
+    // The unpostable success is replaced by exactly one correlated failure.
+    expect(await harness.next()).toMatchObject({
+      kind: 'result',
+      jobId: 9,
+      ok: false,
+      error: `${TRANSPORT_FAULT_PREFIX}: success result`,
+    })
+    const results = harness.capturedPosts().filter((post) => {
+      const message = post.message as { kind?: unknown }
+      return message.kind === 'result'
+    })
+    expect(results).toHaveLength(1)
+    expect(results[0]!.message).toMatchObject({
+      kind: 'result',
+      jobId: 9,
+      ok: false,
+      error: `${TRANSPORT_FAULT_PREFIX}: success result`,
+    })
+    expect(results[0]!.transfer).toBeUndefined()
+
+    // The recoverable transport fault is a result, not a shutdown.
+    await tick()
+    expect(harness.disposeCalls()).toBe(0)
+    expect(harness.exitCalls()).toEqual([])
+
+    // The recoverable transport fault does not block a normal dispose.
+    harness.send({ kind: 'dispose' })
+    await harness.awaitExit()
+    expect(harness.disposeCalls()).toBe(1)
+    expect(harness.exitCalls()).toEqual([0])
+  })
+
+  it('exits once with failure when neither result can be posted while dispose is pending', async () => {
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason)
+    }
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const harness = await startEntry()
+      harness.releaseInit()
+      expect(await harness.next()).toMatchObject({ kind: 'ready' })
+
+      const originalJobId = 11
+      harness.send({
+        kind: 'generate',
+        jobId: originalJobId,
+        input: { text: 'lost result', voiceId: 'af_heart', speed: 1 },
+      })
+      await harness.until(() => harness.generateCalls() === 1)
+
+      // Break only the original job's result path after the drain has started:
+      // dispose closes admission, and the native channel proves it by refusing
+      // the second job while the original generation is still held.
+      harness.failResultPosts(originalJobId, 'all')
+      harness.send({ kind: 'dispose' })
+      harness.send({
+        kind: 'generate',
+        jobId: 12,
+        input: { text: 'refused', voiceId: 'af_heart', speed: 1 },
+      })
+      expect(await harness.next()).toMatchObject({
+        kind: 'result',
+        jobId: 12,
+        ok: false,
+        error: 'worker is not accepting generation',
+      })
+      expect(harness.disposeCalls()).toBe(0)
+      expect(harness.exitCalls()).toEqual([])
+
+      // Both the success and correlated failure sends for the original job now
+      // fail. The entry must lock the transport fault before releasing the
+      // drain wait, dispose once, and exit once with failure.
+      harness.resolveGeneration({ samples: harness.sdkSamples(), sampleRate: 24000 })
+      await harness.awaitExit()
+      await tick()
+
+      // No production rejection may escape the double-failure path.
+      expect(unhandled).toEqual([])
+      expect(harness.disposeCalls()).toBe(1)
+      expect(harness.exitCalls()).toEqual([1])
+      const originalAttempts = harness
+        .postAttempts()
+        .filter((attempt) => attempt.jobId === originalJobId)
+      expect(originalAttempts).toEqual([
+        { jobId: originalJobId, ok: true, delivered: false },
+        { jobId: originalJobId, ok: false, delivered: false },
+      ])
+      const deliveredOriginalResults = harness.capturedPosts().filter((post) => {
+        const message = post.message as { kind?: unknown; jobId?: unknown }
+        return message.kind === 'result' && message.jobId === originalJobId
+      })
+      expect(deliveredOriginalResults).toHaveLength(0)
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
   })
 
   it('refuses a second generation while the first is physically pending without a second provider call or overlap', async () => {

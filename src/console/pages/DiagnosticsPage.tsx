@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { DIAGNOSTICS_PROTOCOL_VERSION, type DiagnosticReply } from '../../contracts'
-import { Alert, Card, Empty, FactChip, Facts, Glyph, StateIcon } from '../design/ui'
+import { Alert, Card, Empty, FactChip, Facts, Glyph, StateIcon, Tag } from '../design/ui'
 import { SourceBars } from '../design/charts'
+import {
+  diagnosticsSocketLabel,
+  reduceDiagnosticsSocket,
+  type DiagnosticsSocketState,
+} from '../console-state'
 
 const HEALTH_PATH = '/health'
 const DIAGNOSTICS_PATH = '/diag'
@@ -25,8 +30,6 @@ interface HealthView {
   capabilities: string[]
   uptimeSec: number
 }
-
-type SocketState = 'connecting' | 'open' | 'closed' | 'error'
 
 interface Metric {
   key: string
@@ -94,7 +97,8 @@ export function DiagnosticsPage() {
   const [health, setHealth] = useState<HealthView | null>(null)
   const [healthError, setHealthError] = useState<string | null>(null)
   const [healthLoading, setHealthLoading] = useState(true)
-  const [socketState, setSocketState] = useState<SocketState>('connecting')
+  const [socketState, setSocketState] = useState<DiagnosticsSocketState>('closed')
+  const [socketStarted, setSocketStarted] = useState(false)
   const [socketError, setSocketError] = useState<string | null>(null)
   const [lastReply, setLastReply] = useState<string | null>(null)
   const [latencyMs, setLatencyMs] = useState<number | null>(null)
@@ -136,12 +140,14 @@ export function DiagnosticsPage() {
     const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
     const socket = new WebSocket(`${scheme}://${window.location.host}${DIAGNOSTICS_PATH}`)
     socketRef.current = socket
+    setSocketState((state) => reduceDiagnosticsSocket(state, 'start'))
+    setSocketStarted(true)
     socket.onopen = () => {
-      setSocketState('open')
+      setSocketState((state) => reduceDiagnosticsSocket(state, 'open'))
       setSocketError(null)
     }
     socket.onclose = (event) => {
-      setSocketState('closed')
+      setSocketState((state) => reduceDiagnosticsSocket(state, 'close'))
       socketRef.current = null
       healthAbortRef.current?.abort()
       setHealth(null)
@@ -152,7 +158,7 @@ export function DiagnosticsPage() {
       }
     }
     socket.onerror = () => {
-      setSocketState('error')
+      setSocketState((state) => reduceDiagnosticsSocket(state, 'error'))
       setSocketError('diagnostics socket error')
       healthAbortRef.current?.abort()
       setHealth(null)
@@ -214,6 +220,11 @@ export function DiagnosticsPage() {
     socket.send(JSON.stringify({ v: DIAGNOSTICS_PROTOCOL_VERSION, id: `console-${Date.now()}`, kind }))
   }, [])
 
+  // Before the operator starts a socket, the honest label is 'not started':
+  // 'closed' would claim a connection that has already ended.
+  const socketLabel = diagnosticsSocketLabel(socketStarted, socketState)
+  const socketTone = socketStarted ? socketState : 'neutral'
+
   const healthRows: readonly (readonly [string, ReactNode])[] =
     health === null
       ? []
@@ -264,6 +275,7 @@ export function DiagnosticsPage() {
         icon="dish"
         tone="purple"
         className="isla-rise"
+        badge={<Tag tone={socketTone}>{socketLabel}</Tag>}
         collapsible
         defaultOpen={false}
       >

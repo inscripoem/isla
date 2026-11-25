@@ -150,8 +150,10 @@ as agreement.
 Merging PR #158 activates the evidence mode for every pull request **created at or after** the cutover.
 The first approval record is `docs/code-governance/test-approvals.yaml`; a change that touches `src/` or
 `prompts/` must add or cite one. PRs created before the cutover keep the label/advise rule. M6 also
-records a time-boxed waiver for #170/#171/#175 through 2026-11-27 23:59 +08; it is debt, not evidence,
-and does not create or backdate a record.
+records a time-boxed waiver for #170/#171/#175/#181 through 2026-11-27 23:59 +08; it is debt, not
+evidence, and does not create or backdate a record. #181 is the CP04 M2 console UI-defect slice, is
+G1-only, and merged in `6d8f8d2`; this waiver does not accept CP04 or any console scope. Any additional
+PR must be requested explicitly to M5 (PM) and M6 (gate owner).
 
 ### Correction — 2026-11-19
 

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import type {
@@ -59,8 +59,9 @@ import {
   sha256Hex,
 } from '../support/m1-kit'
 import type { RendererDriver, RendererObservation } from '../../src/performance/mapped-renderer'
-import type { DeadlineGate } from '../../src/performance/browser/types'
+import type { DeadlineGate, MediaEvent } from '../../src/performance/browser/types'
 import { PlayerDispatchError } from '../../src/performance/browser/types'
+import { createDomMediaDriver } from '../../src/performance/browser/dom-driver'
 import { createFixedSynthesis, type FixedAudioEntry } from '../../src/performance/fixed-synthesis'
 import {
   createExpressionPolicy,
@@ -140,6 +141,7 @@ import {
   createM1VtsRendererKit,
   fixtureVtsApiError,
   fixtureVtsResponse,
+  fixtureVtsResponseFor,
 } from '../support/m1-vts-kit'
 import { createVtsConnectionHandle } from '../../src/performance/vts-connection'
 import { pairVtsConnection } from '../../src/performance/vts-pairing'
@@ -386,6 +388,43 @@ describe('M1 fixed-synthesis adapter', () => {
       setInterval: 0,
       clearInterval: 0,
     })
+  })
+})
+
+describe('M1 fixed-synthesis canonical controlled references', () => {
+  it('rejects noncanonical controlled audio references in a fixed catalog', () => {
+    const base = createM1FixtureEntries()[0]
+    const invalidRefs = [
+      'AUDIO://fixed/segment-0',
+      'audio://',
+      ' audio://fixed/segment-0',
+      'audio://fixed/segment-0 ',
+      'audio://fixed\\segment-0',
+      'audio://fixed/segment 0',
+    ]
+    for (const audioRef of invalidRefs) {
+      const entries: FixedAudioEntry[] = [{ ...base, audioRef }]
+      expect(() => createFixedSynthesis({ entries, clock: createVirtualClock() })).toThrow(
+        /controlled audio|audio:\/\//i,
+      )
+    }
+  })
+
+  it('preserves the exact fixed audio reference in a prepared response', async () => {
+    const base = createM1FixtureEntries()[0]
+    const audioRef = 'audio://fixed/segment-0'
+    const synthesis = createFixedSynthesis({
+      entries: [{ ...base, audioRef, text: 'A fixed phrase.' }],
+      clock: createVirtualClock(),
+    })
+
+    const prepared = await synthesis.prepare(
+      fixturePreparePerformance({ text: 'A fixed phrase.' }),
+      createCallContext(),
+    )
+    expect(prepared).toMatchObject({ ok: true, audioRef })
+    if (!prepared.ok) return
+    expect(prepared.audioRef).toBe(audioRef)
   })
 })
 
@@ -840,6 +879,187 @@ describe('M1 mapped-renderer complete observation validation', () => {
   })
 })
 
+describe('M1 mapped-renderer receipt safety', () => {
+  it('returns frozen schema-valid receipts with unavailable local time', async () => {
+    const clockFaults: Array<{
+      readonly name: string
+      readonly apply: (tools: ReturnType<typeof createTestReceiptTools>) => void
+    }> = [
+      { name: 'NaN', apply: (tools) => tools.setNow(Number.NaN) },
+      { name: 'infinity', apply: (tools) => tools.setNow(Number.POSITIVE_INFINITY) },
+      { name: 'negative', apply: (tools) => tools.setNow(-1) },
+      {
+        name: 'throwing',
+        apply: (tools) => {
+          tools.localNowMs = () => {
+            throw new Error('fixture renderer clock failure')
+          }
+        },
+      },
+    ]
+    for (const fault of clockFaults) {
+      const receipts = createTestReceiptTools('renderer-clock')
+      fault.apply(receipts)
+      const kit = createM1FixtureMappedRenderer({ receipts })
+
+      const receipt = await kit.renderer.execute(
+        fixturePerformanceCommand({ actionId: 'unsupported' }),
+        createCallContext(),
+      )
+      expect(receipt).toMatchObject({
+        stage: 'failed',
+        reasonCode: 'unsupported_action',
+        localTimeMs: null,
+      })
+      expect(() => performanceReceiptSchema.parse(receipt)).not.toThrow()
+      expect(Object.isFrozen(receipt)).toBe(true)
+    }
+
+    const receipts = createTestReceiptTools('renderer-success')
+    const kit = createM1FixtureMappedRenderer({ receipts })
+    kit.driver.setAuto({ stage: 'started', reasonCode: null, localTimeMs: 5 })
+    const success = await kit.renderer.execute(fixturePerformanceCommand(), createCallContext())
+    expect(success).toMatchObject({ stage: 'started', localTimeMs: 5 })
+    expect(() => performanceReceiptSchema.parse(success)).not.toThrow()
+    expect(Object.isFrozen(success)).toBe(true)
+
+    const abortReceipts = createTestReceiptTools('renderer-abort-clock')
+    abortReceipts.setNow(Number.NaN)
+    const abortKit = createM1FixtureMappedRenderer({ receipts: abortReceipts })
+    const abortContext = createCallContext()
+    abortContext.abort()
+    const aborted = await abortKit.renderer.execute(fixturePerformanceCommand(), abortContext)
+    expect(aborted).toMatchObject({ stage: 'cancelled', localTimeMs: null })
+    expect(() => performanceReceiptSchema.parse(aborted)).not.toThrow()
+    expect(Object.isFrozen(aborted)).toBe(true)
+  })
+
+  it('keeps existing malformed observation diagnostics with unavailable local time', async () => {
+    const observations: Array<{ observation: unknown; reasonCode: string }> = [
+      { observation: { stage: 'observable', reasonCode: null, localTimeMs: null }, reasonCode: 'invalid_stage' },
+      { observation: { stage: 'started', reasonCode: '', localTimeMs: null }, reasonCode: 'invalid_reason_code' },
+      { observation: { stage: 'started', reasonCode: null, localTimeMs: -1 }, reasonCode: 'invalid_local_time' },
+    ]
+    for (const entry of observations) {
+      const receipts = createTestReceiptTools('renderer-observation')
+      receipts.setNow(Number.NaN)
+      const kit = createM1FixtureMappedRenderer({ receipts })
+      kit.driver.setAuto(entry.observation as RendererObservation)
+      const receipt = await kit.renderer.execute(fixturePerformanceCommand(), createCallContext())
+      expect(receipt).toMatchObject({
+        stage: 'unknown',
+        reasonCode: entry.reasonCode,
+        localTimeMs: null,
+      })
+      expect(() => performanceReceiptSchema.parse(receipt)).not.toThrow()
+      expect(Object.isFrozen(receipt)).toBe(true)
+    }
+  })
+
+  it('settles a renderer receipt allocation failure and releases the deadline binding', async () => {
+    const receipts = createTestReceiptTools('renderer-id-failure')
+    receipts.newReceiptId = () => {
+      throw new Error('fixture renderer receipt id failure')
+    }
+    const kit = createM1FixtureMappedRenderer({ receipts })
+    const context = createCallContext()
+    context.abort()
+
+    const outcome = await kit.renderer
+      .execute(fixturePerformanceCommand(), context)
+      .then((receipt) => ({ kind: 'receipt' as const, receipt }))
+      .catch((error: unknown) => ({ kind: 'rejected' as const, error }))
+    expect(outcome.kind).toBe('receipt')
+    if (outcome.kind !== 'receipt') return
+    expect(outcome.receipt).toMatchObject({ stage: 'cancelled', localTimeMs: 1000 })
+    expect(outcome.receipt.receiptId.trim().length).toBeGreaterThan(0)
+    expect(() => performanceReceiptSchema.parse(outcome.receipt)).not.toThrow()
+    expect(Object.isFrozen(outcome.receipt)).toBe(true)
+    expect(kit.gate.bindCount()).toBe(1)
+    expect(kit.gate.releaseCount()).toBe(1)
+    expect(kit.driver.calls()).toHaveLength(0)
+  })
+
+  it('settles a post-dispatch receipt allocation failure and releases the deadline binding once', async () => {
+    const receipts = createTestReceiptTools('renderer-late-id')
+    let idAttempts = 0
+    receipts.newReceiptId = () => {
+      idAttempts += 1
+      throw new Error('fixture renderer receipt id failure')
+    }
+    const kit = createM1FixtureMappedRenderer({ receipts })
+    const internalRejections: unknown[] = []
+    type ThenLike = (
+      onFulfilled?: ((value: RendererObservation) => unknown) | null,
+      onRejected?: ((reason: unknown) => unknown) | null,
+    ) => Promise<unknown>
+    const originalDispatch = kit.driver.dispatch.bind(kit.driver)
+    kit.driver.dispatch = (action, signal) => {
+      const dispatched = originalDispatch(action, signal)
+      const originalThen = dispatched.then.bind(dispatched) as ThenLike
+      ;(dispatched as unknown as { then: ThenLike }).then = (onFulfilled, onRejected) => {
+        const chained = originalThen(onFulfilled, onRejected)
+        // The adapter discards this internal chain. Record its rejection so a
+        // baseline allocation fault remains a test failure, not an unhandled
+        // test-run error.
+        void chained.catch((error: unknown) => {
+          internalRejections.push(error)
+        })
+        return chained
+      }
+      return dispatched
+    }
+
+    const result: { value: PerformanceReceipt | null } = { value: null }
+    let rejected: unknown = null
+    void kit.renderer.execute(fixturePerformanceCommand(), createCallContext()).then(
+      (receipt) => {
+        result.value = receipt
+      },
+      (error: unknown) => {
+        rejected = error
+      },
+    )
+    await microtasks()
+    expect(kit.driver.pendingCount()).toBe(1)
+
+    kit.driver.resolveCurrent({ stage: 'started', reasonCode: null, localTimeMs: 5 })
+    await microtasks(12)
+    expect(internalRejections).toEqual([])
+    expect(rejected).toBeNull()
+    expect(result.value).not.toBeNull()
+    const observed = result.value
+    if (observed === null) return
+    expect(observed).toMatchObject({ stage: 'started', localTimeMs: 5 })
+    expect(observed.receiptId.trim().length).toBeGreaterThan(0)
+    expect(() => performanceReceiptSchema.parse(observed)).not.toThrow()
+    expect(Object.isFrozen(observed)).toBe(true)
+    expect(kit.gate.releaseCount()).toBe(1)
+    const attemptsAfterFirst = idAttempts
+    await microtasks()
+    expect(idAttempts).toBe(attemptsAfterFirst)
+  })
+
+  it('does not emit a second result when a late driver resolution follows an abort', async () => {
+    const kit = createM1FixtureMappedRenderer()
+    const context = createCallContext()
+    const execution = kit.renderer.execute(fixturePerformanceCommand(), context)
+    await microtasks()
+    expect(kit.driver.pendingCount()).toBe(1)
+
+    context.abort()
+    const first = await execution
+    expect(first).toMatchObject({ stage: 'unknown', reasonCode: 'aborted_without_outcome' })
+    const issuedAfterAbort = kit.receipts.issued().length
+
+    kit.driver.resolveCurrent({ stage: 'started', reasonCode: null, localTimeMs: 5 })
+    await microtasks()
+    expect(kit.receipts.issued()).toHaveLength(issuedAfterAbort)
+    expect(await execution).toBe(first)
+    expect(kit.gate.releaseCount()).toBe(1)
+  })
+})
+
 describe('M1 mapped-renderer full capability schema validation', () => {
   it('rejects malformed capability schema fields at construction', () => {
     const driver = createRecordingRendererDriver()
@@ -1177,6 +1397,40 @@ describe('M1 actual player bootstrap configuration validation (T03)', () => {
 })
 
 describe('M1 actual player failure paths (T04)', () => {
+  type PlayFailureDelivery = 'throw' | 'reject'
+  type NamedPlayMedia = ReturnType<typeof createControlledMediaDriver> & {
+    playAttempts(): number
+  }
+
+  /**
+   * Wraps the controlled media driver so play() fails with one chosen error
+   * either synchronously or through its returned promise. The real controller
+   * still owns subscription, load, detach and lease release.
+   */
+  function createNamedPlayMedia(
+    delivery: PlayFailureDelivery,
+    error: unknown,
+  ): NamedPlayMedia {
+    const media = createControlledMediaDriver()
+    const createControlled = media.create.bind(media)
+    let attempts = 0
+    return {
+      ...media,
+      playAttempts: () => attempts,
+      create() {
+        const handle = createControlled()
+        return {
+          ...handle,
+          play() {
+            attempts += 1
+            if (delivery === 'throw') throw error
+            return Promise.reject(error)
+          },
+        }
+      },
+    }
+  }
+
   it('fails when the resolver rejects and never creates media', async () => {
     const resolver = createControlledResolver()
     resolver.setAutoReject(new Error('missing resource'))
@@ -1207,6 +1461,127 @@ describe('M1 actual player failure paths (T04)', () => {
     kit.resolver.resolveNext()
     await microtasks()
     await expect(execution).resolves.toMatchObject({ stage: 'failed', reasonCode: 'play_failed' })
+  })
+
+  it.each([
+    { mode: 'throw', label: 'synchronously throws' },
+    { mode: 'reject', label: 'rejects' },
+  ] as const)(
+    'classifies a named NotAllowedError that play() $label as play_not_allowed',
+    async ({ mode: delivery }) => {
+      const media = createNamedPlayMedia(
+        delivery,
+        new DOMException('fixture detail', 'NotAllowedError'),
+      )
+      const kit = createActualPlayerKit({ media })
+      const command = fixturePerformanceCommand({
+        outputId: `play-not-allowed-${delivery}`,
+        epoch: 1,
+      })
+      const execution = kit.controller.execute(command, { signal: createCallContext().signal })
+      kit.resolver.resolveNext()
+      await microtasks()
+      const handle = kit.media.current()
+      expect(media.playAttempts()).toBe(1)
+
+      const receipt = await execution
+      await microtasks()
+      expect(receipt).toMatchObject({
+        stage: 'failed',
+        reasonCode: 'play_not_allowed',
+        outputId: command.outputId,
+        epoch: command.epoch,
+      })
+      expect(kit.observed.map((r) => r.stage)).toEqual(['accepted', 'failed'])
+      const terminals = terminalFacts(kit.observed)
+      expect(terminals).toHaveLength(1)
+      expect(terminals[0]?.reasonCode).toBe('play_not_allowed')
+      expect(JSON.stringify(receipt)).not.toContain('fixture detail')
+      expect(handle?.unsubscribeCount()).toBe(1)
+      expect(handle?.detachCount()).toBe(1)
+      expect(kit.resolver.leases()[0]?.releaseCount()).toBe(1)
+      expect(kit.controller.status().idle).toBe(true)
+    },
+  )
+
+  it('keeps play_failed for ordinary errors, unreadable names, message-only NotAllowedError text and a differently named DOMException', async () => {
+    const cases = [
+      { name: 'ordinary Error', error: new Error('fixture detail') },
+      {
+        name: 'unreadable name getter',
+        error: Object.defineProperty({}, 'name', {
+          get() {
+            throw new Error('unreadable name')
+          },
+        }),
+      },
+      { name: 'message-only mention', error: new Error('NotAllowedError: fixture message') },
+      {
+        name: 'different DOMException name',
+        error: new DOMException('fixture detail', 'NotSupportedError'),
+      },
+    ]
+    for (const delivery of ['throw', 'reject'] as const) {
+      for (const testCase of cases) {
+        const media = createNamedPlayMedia(delivery, testCase.error)
+        const kit = createActualPlayerKit({ media })
+        const execution = kit.controller.execute(
+          fixturePerformanceCommand({ outputId: `play-negative-${delivery}` }),
+          { signal: createCallContext().signal },
+        )
+        kit.resolver.resolveNext()
+        await microtasks()
+
+        const receipt = await execution
+        await microtasks()
+        expect(receipt, `${testCase.name}/${delivery}`).toMatchObject({
+          stage: 'failed',
+          reasonCode: 'play_failed',
+        })
+        expect(terminalFacts(kit.observed), `${testCase.name}/${delivery}`).toHaveLength(1)
+        expect(kit.controller.status().idle, `${testCase.name}/${delivery}`).toBe(true)
+      }
+    }
+  })
+
+  it('reports cleanup_failed for a named play error when detach fails, then releases once on dispose retry', async () => {
+    const resolver = createControlledResolver()
+    const media = createControlledMediaDriver({ holdPlay: true, detachResult: false })
+    const kit = createActualPlayerKit({ resolver, media })
+    const command = fixturePerformanceCommand({ outputId: 'play-cleanup', epoch: 1 })
+    const execution = kit.controller.execute(command, { signal: createCallContext().signal })
+    kit.resolver.resolveNext()
+    await microtasks()
+    const handle = kit.media.current()
+    expect(handle?.playCount()).toBe(1)
+
+    handle?.rejectPlay(new DOMException('fixture detail', 'NotAllowedError'))
+    const receipt = await execution
+    await microtasks()
+    expect(receipt).toMatchObject({
+      stage: 'failed',
+      reasonCode: 'cleanup_failed',
+      outputId: command.outputId,
+      epoch: command.epoch,
+    })
+    const terminals = terminalFacts(kit.observed)
+    expect(terminals).toHaveLength(1)
+    expect(terminals[0]).toMatchObject({ stage: 'failed', reasonCode: 'cleanup_failed' })
+    expect(kit.controller.status().idle).toBe(false)
+    const lease = kit.resolver.leases()[0]
+    expect(lease?.releaseCount()).toBe(0)
+    expect(handle?.detachCount()).toBe(1)
+
+    kit.media.setDetachResult(true)
+    kit.controller.dispose()
+    expect(kit.controller.status().idle).toBe(true)
+    expect(lease?.releaseCount()).toBe(1)
+    expect(handle?.detachCount()).toBe(2)
+    await expect(execution).resolves.toBe(receipt)
+    expect(terminalFacts(kit.observed)).toHaveLength(1)
+
+    kit.controller.dispose()
+    expect(lease?.releaseCount()).toBe(1)
   })
 
   it('fails on a media error event', async () => {
@@ -1322,6 +1697,450 @@ describe('M1 actual player quarantine dispose retry (T04, T05)', () => {
         signal: createCallContext().signal,
       }),
     ).rejects.toMatchObject({ code: 'unavailable' })
+  })
+})
+
+describe('M1 actual player receipt safety', () => {
+  const receiptFaults: Array<{
+    readonly name: string
+    readonly apply: (tools: ReturnType<typeof createTestReceiptTools>) => void
+    readonly expectedLocalTimeMs: number | null
+  }> = [
+    {
+      name: 'the local clock returns NaN',
+      apply: (tools) => {
+        tools.localNowMs = () => Number.NaN
+      },
+      expectedLocalTimeMs: null,
+    },
+    {
+      name: 'the local clock returns infinity',
+      apply: (tools) => {
+        tools.localNowMs = () => Number.POSITIVE_INFINITY
+      },
+      expectedLocalTimeMs: null,
+    },
+    {
+      name: 'the local clock returns a negative time',
+      apply: (tools) => {
+        tools.localNowMs = () => -1
+      },
+      expectedLocalTimeMs: null,
+    },
+    {
+      name: 'the local clock throws',
+      apply: (tools) => {
+        tools.localNowMs = () => {
+          throw new Error('fixture local clock failure')
+        }
+      },
+      expectedLocalTimeMs: null,
+    },
+    {
+      name: 'the receipt ID factory returns an empty string',
+      apply: (tools) => {
+        tools.newReceiptId = () => ''
+      },
+      expectedLocalTimeMs: 1000,
+    },
+    {
+      name: 'the receipt ID factory returns whitespace',
+      apply: (tools) => {
+        tools.newReceiptId = () => '   '
+      },
+      expectedLocalTimeMs: 1000,
+    },
+    {
+      name: 'the receipt ID factory throws',
+      apply: (tools) => {
+        tools.newReceiptId = () => {
+          throw new Error('fixture receipt ID failure')
+        }
+      },
+      expectedLocalTimeMs: 1000,
+    },
+  ]
+
+  for (const fault of receiptFaults) {
+    it(`keeps accepted, started and terminal facts when ${fault.name}`, async () => {
+      const receipts = createTestReceiptTools('player-receipt-fault')
+      fault.apply(receipts)
+      const resolver = createControlledResolver()
+      resolver.setAutoResolve()
+      const media = createControlledMediaDriver()
+      media.setAutoEvents(true)
+      const kit = createActualPlayerKit({ resolver, media, receipts })
+      const command = fixturePerformanceCommand()
+
+      const receipt = await kit.player.execute(command, createCallContext())
+      await microtasks(12)
+      const observed = kit.observed
+      expect(observed.map((entry) => entry.stage)).toEqual(['accepted', 'started', 'completed'])
+      expect(receipt).toBe(observed[2])
+      for (const entry of observed) {
+        expect(entry).toMatchObject({
+          outputId: command.outputId,
+          sessionId: command.sessionId,
+          epoch: command.epoch,
+          turnId: command.turnId,
+          segmentId: command.segmentId,
+          modality: 'audio',
+          source: 'm1-player',
+          chunkIds: null,
+          localTimeMs: fault.expectedLocalTimeMs,
+        })
+        expect(entry.receiptId.trim().length).toBeGreaterThan(0)
+        expect(() => performanceReceiptSchema.parse(entry)).not.toThrow()
+        expect(Object.isFrozen(entry)).toBe(true)
+      }
+      expect(new Set(observed.map((entry) => entry.receiptId)).size).toBe(3)
+      expect(kit.controller.status().idle).toBe(true)
+      expect(kit.media.createCount()).toBe(1)
+      expect(kit.media.current()?.detachCount()).toBe(1)
+      expect(kit.media.current()?.unsubscribeCount()).toBe(1)
+      expect(kit.resolver.leases()[0]?.releaseCount()).toBe(1)
+    })
+  }
+
+  it('deduplicates the active promise and terminal receipt when receipt ID allocation fails', async () => {
+    const receipts = createTestReceiptTools('player-receipt-dedup')
+    receipts.newReceiptId = () => {
+      throw new Error('fixture receipt ID failure')
+    }
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const media = createControlledMediaDriver()
+    media.setAutoEvents(true)
+    const kit = createActualPlayerKit({ resolver, media, receipts })
+    const command = fixturePerformanceCommand()
+
+    const firstCore = kit.player.execute(command, createCallContext())
+    const duplicateCore = kit.player.execute(command, createCallContext())
+    const first = firstCore.then(
+      (receipt) => ({ ok: true as const, receipt }),
+      (error: unknown) => ({ ok: false as const, error }),
+    )
+    const duplicate = duplicateCore.then(
+      (receipt) => ({ ok: true as const, receipt }),
+      (error: unknown) => ({ ok: false as const, error }),
+    )
+    expect(duplicateCore).toBe(firstCore)
+    const firstOutcome = await first
+    expect(firstOutcome.ok).toBe(true)
+    if (!firstOutcome.ok) return
+    const receipt = firstOutcome.receipt
+    expect((await duplicate).ok).toBe(true)
+    await microtasks(12)
+    expect(kit.observed.map((entry) => entry.stage)).toEqual(['accepted', 'started', 'completed'])
+
+    const terminalDuplicate = await kit.player.execute(command, createCallContext())
+    expect(terminalDuplicate).toBe(receipt)
+    expect(kit.observed.map((entry) => entry.stage)).toEqual(['accepted', 'started', 'completed'])
+    expect(resolver.calls()).toHaveLength(1)
+    expect(media.createCount()).toBe(1)
+    expect(media.current()?.playCount()).toBe(1)
+    expect(media.current()?.detachCount()).toBe(1)
+    expect(media.current()?.unsubscribeCount()).toBe(1)
+    expect(resolver.leases()[0]?.releaseCount()).toBe(1)
+  })
+
+  it('retains quarantined media on a cleanup_failed cancel and disposes once on retry', async () => {
+    const resolver = createControlledResolver()
+    resolver.setAutoResolve()
+    const media = createControlledMediaDriver({ detachResult: false })
+    const kit = createActualPlayerKit({ resolver, media })
+    const command = fixturePerformanceCommand({ outputId: 'quarantine-receipt' })
+    let receiptIdCalls = 0
+    kit.receipts.newReceiptId = () => {
+      receiptIdCalls += 1
+      if (receiptIdCalls > 1) throw new Error('fixture terminal receipt ID failure')
+      return 'admission-receipt-id'
+    }
+    const execution = kit.player.execute(command, createCallContext())
+    for (let attempt = 0; attempt < 12 && media.current()?.playCount() !== 1; attempt += 1) {
+      await microtasks(1)
+    }
+    expect(media.current()?.playCount()).toBe(1)
+    expect(kit.observed.map((receipt) => receipt.stage)).toEqual(['accepted'])
+    expect(kit.observed[0]?.receiptId).toBe('admission-receipt-id')
+    const lease = resolver.leases()[0]
+
+    const cancelled = await kit.player.cancel(
+      {
+        requestId: 'cancel-quarantine-receipt',
+        revokedEpoch: 1,
+        newEpoch: 2,
+      },
+      createCallContext(),
+    )
+    expect(cancelled).not.toBeNull()
+    if (cancelled === null) return
+    expect(cancelled).toMatchObject({
+      stage: 'failed',
+      reasonCode: 'cleanup_failed',
+      outputId: command.outputId,
+      sessionId: command.sessionId,
+      epoch: command.epoch,
+      turnId: command.turnId,
+      segmentId: command.segmentId,
+      modality: 'audio',
+      localTimeMs: 1000,
+    })
+    expect(receiptIdCalls).toBe(2)
+    expect(cancelled.receiptId.trim().length).toBeGreaterThan(0)
+    expect(cancelled.receiptId).not.toBe('admission-receipt-id')
+    expect(() => performanceReceiptSchema.parse(cancelled)).not.toThrow()
+    expect(Object.isFrozen(cancelled)).toBe(true)
+    await expect(execution).resolves.toBe(cancelled)
+    expect(lease?.releaseCount()).toBe(0)
+    expect(kit.controller.status().idle).toBe(false)
+
+    media.setDetachResult(true)
+    kit.controller.dispose()
+    expect(media.current()?.detachCount()).toBe(2)
+    expect(lease?.releaseCount()).toBe(1)
+    expect(kit.controller.status().idle).toBe(true)
+  })
+})
+
+describe('M1 browser DOM media driver', () => {
+  class FakeAudioElement extends EventTarget {
+    preload = ''
+    src = ''
+    error: { readonly code?: number } | null = null
+    readonly added = new Map<string, Set<EventListener | EventListenerObject>>()
+    readonly removed = new Map<string, Set<EventListener | EventListenerObject>>()
+    loadCount = 0
+    pauseCount = 0
+    playCount = 0
+    removedAttributeCount = 0
+    private pauseThrows = false
+    private removeThrowsFor: string | null = null
+
+    setPauseThrows(value: boolean): void {
+      this.pauseThrows = value
+    }
+
+    failNextRemove(type: string): void {
+      this.removeThrowsFor = type
+    }
+
+    override addEventListener(
+      type: string,
+      listener: EventListener | EventListenerObject,
+      options?: AddEventListenerOptions | boolean,
+    ): void {
+      const listeners = this.added.get(type) ?? new Set<EventListener | EventListenerObject>()
+      listeners.add(listener)
+      this.added.set(type, listeners)
+      super.addEventListener(type, listener, options)
+    }
+
+    override removeEventListener(
+      type: string,
+      listener: EventListener | EventListenerObject,
+      options?: EventListenerOptions | boolean,
+    ): void {
+      if (this.removeThrowsFor === type) {
+        this.removeThrowsFor = null
+        throw new Error(`fixture ${type} listener removal failure`)
+      }
+      const listeners = this.removed.get(type) ?? new Set<EventListener | EventListenerObject>()
+      listeners.add(listener)
+      this.removed.set(type, listeners)
+      super.removeEventListener(type, listener, options)
+    }
+
+    load(): void {
+      this.loadCount += 1
+    }
+
+    play(): Promise<void> {
+      this.playCount += 1
+      return Promise.resolve()
+    }
+
+    pause(): void {
+      this.pauseCount += 1
+      if (this.pauseThrows) {
+        this.pauseThrows = false
+        throw new Error('fixture audio pause failure')
+      }
+    }
+
+    removeAttribute(qualifiedName: string): void {
+      if (qualifiedName === 'src') {
+        this.removedAttributeCount += 1
+        this.src = ''
+      }
+    }
+  }
+
+  function installDomFakes() {
+    const elements: FakeAudioElement[] = []
+    const created: Blob[] = []
+    const revoked: string[] = []
+    let urlSequence = 0
+    vi.stubGlobal('document', {
+      createElement(tagName: string) {
+        expect(tagName).toBe('audio')
+        const element = new FakeAudioElement()
+        elements.push(element)
+        return element as unknown as HTMLAudioElement
+      },
+    })
+    vi.stubGlobal('URL', {
+      createObjectURL(blob: Blob) {
+        created.push(blob)
+        urlSequence += 1
+        return `blob:fixture-${urlSequence}`
+      },
+      revokeObjectURL(url: string) {
+        revoked.push(url)
+      },
+    })
+    return {
+      elements,
+      created,
+      revoked,
+      restore: () => vi.unstubAllGlobals(),
+    }
+  }
+
+  it('maps actual element events and does not treat a fulfilled play as playing', async () => {
+    const dom = installDomFakes()
+    try {
+      const handle = createDomMediaDriver().create()
+      const events: MediaEvent[] = []
+      handle.subscribe((event) => events.push(event))
+      const element = dom.elements[0]
+      expect(element).toBeDefined()
+      if (element === undefined) return
+
+      handle.load(new Blob([new Uint8Array([1])], { type: 'audio/wav' }))
+      expect(dom.created).toHaveLength(1)
+      expect(element.src).toBe('blob:fixture-1')
+      expect(element.loadCount).toBe(1)
+
+      element.dispatchEvent(new Event('playing'))
+      element.dispatchEvent(new Event('ended'))
+      element.error = null
+      element.dispatchEvent(new Event('error'))
+      element.error = { code: 4 }
+      element.dispatchEvent(new Event('error'))
+      expect(events).toEqual([
+        { type: 'playing' },
+        { type: 'ended' },
+        { type: 'error', reasonCode: 'media_error' },
+        { type: 'error', reasonCode: 'media_error_4' },
+      ])
+
+      const observed = events.length
+      await expect(handle.play()).resolves.toBeUndefined()
+      expect(events).toHaveLength(observed)
+      expect(handle.detach()).toBe(true)
+    } finally {
+      dom.restore()
+    }
+  })
+
+  it('clears owned DOM listeners and subscriptions, revokes once and ignores late events', () => {
+    const dom = installDomFakes()
+    try {
+      const handle = createDomMediaDriver().create()
+      const events: MediaEvent[] = []
+      handle.subscribe((event) => events.push(event))
+      const element = dom.elements[0]
+      expect(element).toBeDefined()
+      if (element === undefined) return
+
+      handle.load(new Blob([new Uint8Array([1])]))
+      handle.load(new Blob([new Uint8Array([2])]))
+      expect(dom.created).toHaveLength(2)
+      expect(dom.revoked).toEqual(['blob:fixture-1'])
+      expect(element.loadCount).toBe(2)
+
+      expect(handle.detach()).toBe(true)
+      expect(dom.revoked).toEqual(['blob:fixture-1', 'blob:fixture-2'])
+      expect(element.pauseCount).toBe(1)
+      expect(element.removedAttributeCount).toBe(1)
+      expect(element.loadCount).toBe(3)
+      for (const [type, listeners] of element.added) {
+        for (const listener of listeners) {
+          expect(element.removed.get(type)?.has(listener)).toBe(true)
+        }
+      }
+
+      const observed = events.length
+      element.dispatchEvent(new Event('playing'))
+      element.dispatchEvent(new Event('ended'))
+      element.dispatchEvent(new Event('error'))
+      expect(events).toHaveLength(observed)
+
+      expect(handle.detach()).toBe(true)
+      expect(dom.revoked).toHaveLength(2)
+      expect(element.pauseCount).toBe(1)
+    } finally {
+      dom.restore()
+    }
+  })
+
+  it('retains the owned object URL after a failed detach and revokes it on retry', () => {
+    const dom = installDomFakes()
+    try {
+      const handle = createDomMediaDriver().create()
+      const element = dom.elements[0]
+      expect(element).toBeDefined()
+      if (element === undefined) return
+      handle.load(new Blob([new Uint8Array([3])]))
+      element.error = { code: 2 }
+
+      element.setPauseThrows(true)
+      expect(handle.detach()).toBe(false)
+      expect(dom.revoked).toEqual([])
+      expect(element.src).toBe('blob:fixture-1')
+
+      expect(handle.detach()).toBe(true)
+      expect(dom.revoked).toEqual(['blob:fixture-1'])
+      expect(handle.detach()).toBe(true)
+      expect(dom.revoked).toHaveLength(1)
+    } finally {
+      dom.restore()
+    }
+  })
+
+  it('retains the object URL when ended listener removal fails once and revokes it once on retry', () => {
+    const dom = installDomFakes()
+    try {
+      const handle = createDomMediaDriver().create()
+      const events: MediaEvent[] = []
+      handle.subscribe((event) => events.push(event))
+      const element = dom.elements[0]
+      expect(element).toBeDefined()
+      if (element === undefined) return
+
+      handle.load(new Blob([new Uint8Array([4])]))
+      expect(element.src).toBe('blob:fixture-1')
+
+      element.failNextRemove('ended')
+      expect(handle.detach()).toBe(false)
+      expect(dom.revoked).toEqual([])
+
+      expect(handle.detach()).toBe(true)
+      expect(dom.revoked).toEqual(['blob:fixture-1'])
+
+      const observed = events.length
+      element.dispatchEvent(new Event('playing'))
+      element.dispatchEvent(new Event('ended'))
+      element.dispatchEvent(new Event('error'))
+      expect(events).toHaveLength(observed)
+
+      expect(handle.detach()).toBe(true)
+      expect(dom.revoked).toHaveLength(1)
+      expect(element.pauseCount).toBe(2)
+    } finally {
+      dom.restore()
+    }
   })
 })
 
@@ -1489,6 +2308,40 @@ describe('M1 actual player terminal races and observer isolation (T06)', () => {
     await microtasks()
     await expect(execution).resolves.toBe(cancelled)
     expect(kit.observed.map((r) => r.stage)).toEqual(['accepted', 'cancelled'])
+    expect(kit.faults).toEqual([])
+  })
+
+  it('keeps the cancelled terminal when a pending play promise later rejects with a named NotAllowedError', async () => {
+    const resolver = createControlledResolver()
+    const media = createControlledMediaDriver({ holdPlay: true })
+    const kit = createActualPlayerKit({ resolver, media })
+    const execution = kit.controller.execute(fixturePerformanceCommand(), {
+      signal: createCallContext().signal,
+    })
+    kit.resolver.resolveNext()
+    await microtasks()
+    const handle = kit.media.current()
+    expect(handle?.playCount()).toBe(1)
+    expect(handle?.playSettled()).toBe(false)
+
+    const cancelled = await kit.controller.cancel({
+      requestId: 'c-hold-named-reject',
+      revokedEpoch: 1,
+      newEpoch: 2,
+    })
+    expect(cancelled).toMatchObject({ stage: 'cancelled' })
+    await expect(execution).resolves.toBe(cancelled)
+
+    handle?.rejectPlay(new DOMException('fixture detail', 'NotAllowedError'))
+    expect(handle?.playSettled()).toBe(true)
+    await microtasks()
+    await expect(execution).resolves.toBe(cancelled)
+    expect(kit.observed.map((r) => r.stage)).toEqual(['accepted', 'cancelled'])
+    expect(terminalFacts(kit.observed)).toHaveLength(1)
+    expect(handle?.unsubscribeCount()).toBe(1)
+    expect(handle?.detachCount()).toBe(1)
+    expect(kit.resolver.leases()[0]?.releaseCount()).toBe(1)
+    expect(kit.controller.status().idle).toBe(true)
     expect(kit.faults).toEqual([])
   })
 
@@ -2317,6 +3170,61 @@ describe('M1-02 Kokoro synthesis adapter (K01)', () => {
       requestId: 'prepare-req-1',
     })
     expect(kit.registry.snapshot().activeCount).toBe(0)
+  })
+})
+
+describe('M1 WAV encoder exact offset-view bytes', () => {
+  function writeAscii(bytes: Uint8Array, offset: number, text: string): void {
+    for (let index = 0; index < text.length; index += 1) {
+      bytes[offset + index] = text.charCodeAt(index)
+    }
+  }
+
+  it('encodes an offset view byte-for-byte with IEEE-float tag 3 and independent data words', () => {
+    const backing = new Float32Array([
+      123.5,
+      -0,
+      2 ** -149,
+      3.4028234663852886e38,
+      -3.4028234663852886e38,
+      -777.25,
+    ])
+    const view = backing.subarray(1, 5)
+    const bytes = encodeMonoFloat32Wav(view, 24000)
+    expect(bytes.byteLength).toBe(44 + 16)
+
+    const expected = new Uint8Array(44 + 16)
+    const header = new DataView(expected.buffer)
+    writeAscii(expected, 0, 'RIFF')
+    header.setUint32(4, 52, true)
+    writeAscii(expected, 8, 'WAVE')
+    writeAscii(expected, 12, 'fmt ')
+    header.setUint32(16, 16, true)
+    header.setUint16(20, 3, true)
+    header.setUint16(22, 1, true)
+    header.setUint32(24, 24000, true)
+    header.setUint32(28, 96000, true)
+    header.setUint16(32, 4, true)
+    header.setUint16(34, 32, true)
+    writeAscii(expected, 36, 'data')
+    header.setUint32(40, 16, true)
+    expected.set(
+      [
+        0x00, 0x00, 0x00, 0x80,
+        0x01, 0x00, 0x00, 0x00,
+        0xff, 0xff, 0x7f, 0x7f,
+        0xff, 0xff, 0x7f, 0xff,
+      ],
+      44,
+    )
+
+    expect(Array.from(bytes)).toEqual(Array.from(expected))
+    const encoded = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    expect(encoded.getUint16(20, true)).toBe(3)
+    expect(encoded.getUint32(44, true)).toBe(0x80000000)
+    expect(encoded.getUint32(48, true)).toBe(0x00000001)
+    expect(encoded.getUint32(52, true)).toBe(0x7f7fffff)
+    expect(encoded.getUint32(56, true)).toBe(0xff7fffff)
   })
 })
 
@@ -3935,6 +4843,204 @@ describe('M1-02 increment B independent-review regressions (B01)', () => {
   })
 })
 
+describe('M1-02 installed Kokoro voice support', () => {
+  const voiceRoot = fileURLToPath(new URL('../../node_modules/kokoro-js/voices', import.meta.url))
+  const pinnedPackagePath = fileURLToPath(
+    new URL('../../node_modules/kokoro-js/package.json', import.meta.url),
+  )
+  // The English voice keys bundled by kokoro-js 1.2.1. This is pinned SDK
+  // metadata, not a discovery result, so a newly installed file cannot silently
+  // expand what the SDK is allowed to use.
+  const PINNED_SDK_VOICE_IDS = [
+    'af_alloy',
+    'af_aoede',
+    'af_bella',
+    'af_heart',
+    'af_jessica',
+    'af_kore',
+    'af_nicole',
+    'af_nova',
+    'af_river',
+    'af_sarah',
+    'af_sky',
+    'am_adam',
+    'am_echo',
+    'am_eric',
+    'am_fenrir',
+    'am_liam',
+    'am_michael',
+    'am_onyx',
+    'am_puck',
+    'am_santa',
+    'bf_alice',
+    'bf_emma',
+    'bf_isabella',
+    'bf_lily',
+    'bm_daniel',
+    'bm_fable',
+    'bm_george',
+    'bm_lewis',
+  ] as const
+
+  function installedVoiceIds(): string[] {
+    return readdirSync(voiceRoot)
+      .filter((name) => name.endsWith('.bin'))
+      .map((name) => name.slice(0, -4))
+      .sort()
+  }
+
+  it('rejects every installed voice excluded by the pinned Node SDK', () => {
+    const pinned = JSON.parse(readFileSync(pinnedPackagePath, 'utf8')) as { version: string }
+    expect(pinned.version).toBe('1.2.1')
+
+    const installed = installedVoiceIds()
+    expect(installed).toHaveLength(54)
+    const supported = new Set<string>(PINNED_SDK_VOICE_IDS)
+    const unsupported = installed.filter((voiceId) => !supported.has(voiceId))
+    expect(unsupported).toHaveLength(26)
+    expect(unsupported).toEqual(expect.arrayContaining(['zf_xiaoxiao', 'jf_alpha']))
+
+    const loader = createRealKokoroSdkLoader()
+    for (const voiceId of unsupported) {
+      expect(() => loader.ensureVoice(voiceId)).toThrow(/unsupported Node voice/)
+    }
+    for (const voiceId of ['af_heart', 'bf_emma']) {
+      expect(() => loader.ensureVoice(voiceId)).not.toThrow()
+    }
+  })
+
+  it('checks a verified bundled voice once and never caches a missing supported file', async () => {
+    const existsCalls: string[] = []
+    let missingSuffix: string | null = null
+    vi.resetModules()
+    vi.doMock('node:fs', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('node:fs')>()
+      return {
+        ...actual,
+        existsSync(path: Parameters<typeof actual.existsSync>[0]) {
+          const text = String(path)
+          existsCalls.push(text)
+          if (missingSuffix !== null && text.endsWith(missingSuffix)) return false
+          return actual.existsSync(path)
+        },
+      }
+    })
+    try {
+      const fresh = await import('../../src/performance/kokoro-provider')
+      const loader = fresh.createRealKokoroSdkLoader()
+      const checksFor = (voiceId: string): number =>
+        existsCalls.filter((path) => path.endsWith(`${voiceId}.bin`)).length
+
+      loader.ensureVoice('af_heart')
+      const firstChecks = checksFor('af_heart')
+      loader.ensureVoice('af_heart')
+      expect(checksFor('af_heart')).toBe(firstChecks)
+
+      missingSuffix = 'am_adam.bin'
+      expect(() => loader.ensureVoice('am_adam')).toThrow(/unsupported Node voice/)
+      const missingChecks = checksFor('am_adam')
+      expect(missingChecks).toBeGreaterThan(0)
+
+      missingSuffix = null
+      expect(() => loader.ensureVoice('am_adam')).not.toThrow()
+      expect(checksFor('am_adam')).toBeGreaterThan(missingChecks)
+    } finally {
+      missingSuffix = null
+      vi.doUnmock('node:fs')
+      vi.resetModules()
+    }
+  })
+
+  it('keeps syntax-only checks and the injected loader call contract', async () => {
+    expect(isSupportedNodeVoiceId('zf_xiaoxiao')).toBe(true)
+    expect(isSupportedNodeVoiceId('jf_alpha')).toBe(true)
+    for (const invalid of ['../evil', 'af/heart', 'af\\heart', 'AF_HEART', 'af_heart.bin', '']) {
+      expect(isSupportedNodeVoiceId(invalid)).toBe(false)
+    }
+
+    const sdk = createControlledSdk()
+    const ensureCalls: string[] = []
+    const originalEnsureVoice = sdk.ensureVoice.bind(sdk)
+    sdk.ensureVoice = (voiceId: string) => {
+      ensureCalls.push(voiceId)
+      originalEnsureVoice(voiceId)
+    }
+    const provider = await createKokoroProvider(kokoroSdkTestConfig(), sdk)
+    await provider.generate({ text: 'hello', voiceId: 'af_heart', speed: 1 })
+    expect(ensureCalls).toEqual(['af_heart', 'af_heart'])
+    expect(sdk.configureCalls()).toBe(1)
+    expect(sdk.modelCalls()).toBe(1)
+  })
+})
+
+describe('M1-02 Kokoro phoneme guard boundaries', () => {
+  it('rejects blank phonemes before tokenizing', () => {
+    for (const phonemes of ['', ' ', '   ', '\n\t ']) {
+      const tokenizer = createControlledTokenizer(4)
+      const guarded = createGuardedTokenizer(tokenizer, 512)
+      expect(() => guarded(phonemes)).toThrow(/blank|empty|whitespace|phoneme/i)
+      expect(tokenizer.calls()).toHaveLength(0)
+    }
+  })
+
+  it('rejects a contentless [1, 2] tensor before model inference', async () => {
+    const sdk = createControlledSdk()
+    const provider = await createKokoroProvider(kokoroSdkTestConfig(), sdk)
+    const encodings: Array<{ readonly name: string; readonly data: Int32Array | BigInt64Array }> =
+      [
+        { name: 'int32', data: new Int32Array(2) },
+        { name: 'int64', data: new BigInt64Array(2) },
+      ]
+    for (const encoding of encodings) {
+      sdk.tokenizer.setEncoding({ input_ids: { data: encoding.data, dims: [1, 2] } })
+      const outcome = await provider
+        .generate({ text: 'hello', voiceId: 'af_heart', speed: 1 })
+        .then(
+          () => ({ ok: true as const }),
+          (error: unknown) => ({ ok: false as const, error }),
+        )
+      expect(outcome.ok).toBe(false)
+      if (outcome.ok) continue
+      expect(outcome.error).toBeInstanceOf(Error)
+      expect((outcome.error as Error).message).toMatch(/content|phoneme|empty|boundary/i)
+      expect(sdk.modelCalls()).toBe(0)
+    }
+  })
+
+  it('forwards a nonempty actual encoding with a content token unchanged', () => {
+    const encoding: KokoroTokenizerEncoding = {
+      input_ids: { data: new Int32Array([0, 7, 0]), dims: [1, 3] },
+    }
+    const guarded = createGuardedTokenizer(() => encoding, 512)
+    const result = guarded('hello')
+    expect(result).toBe(encoding)
+    expect(result.input_ids.data).toBe(encoding.input_ids.data)
+    expect(Array.from(result.input_ids.data)).toEqual([0, 7, 0])
+  })
+
+  it('keeps truncation disabled and the exact 512/513 boundary', () => {
+    const tokenizer = createControlledTokenizer(4)
+    const options = { truncation: true, padding: true }
+    const guarded = createGuardedTokenizer(tokenizer, 512)
+    guarded('hello', options)
+    expect(tokenizer.calls()[0]?.options).toEqual({ truncation: false, padding: true })
+    expect(options).toEqual({ truncation: true, padding: true })
+
+    const accepted = createTokenizerEncoding(512)
+    expect(createGuardedTokenizer(() => accepted, 512)('boundary')).toBe(accepted)
+
+    const refused = createGuardedTokenizer(() => createTokenizerEncoding(513), 512)
+    let caught: unknown = null
+    try {
+      refused('boundary')
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(KokoroProviderError)
+    expect((caught as KokoroProviderError).code).toBe('input_too_long')
+  })
+})
+
 /* ------------------------------------------------------------------------- *
  * M1-02 increment B worker isolation: the persistent single-worker host. The
  * worker transport is a controlled scripted dependency (no subprocess, no SDK
@@ -4453,6 +5559,41 @@ describe('M1-02 increment B worker provider host (B02, controlled transport)', (
       handle.provider.generate({ text: 'b', voiceId: 'af_heart', speed: 1 }),
     ).rejects.toThrow(/closed/)
   })
+
+  it('requests worker termination once when posting dispose throws and waits for exit', async () => {
+    const { kit, handle } = await startWorkerProvider()
+    const originalPostMessage = kit.transport.postMessage.bind(kit.transport)
+    let disposeAttempts = 0
+    kit.transport.postMessage = (message: unknown, transfer?: readonly ArrayBuffer[]) => {
+      const kind =
+        message !== null && typeof message === 'object'
+          ? (message as { kind?: unknown }).kind
+          : undefined
+      if (kind === 'dispose') {
+        disposeAttempts += 1
+        throw new Error('fixture dispose post failure')
+      }
+      originalPostMessage(message, transfer)
+    }
+
+    const closing = handle.close()
+    const repeated = handle.close()
+    expect(repeated).toBe(closing)
+    let closeSettled = false
+    void closing.then(() => {
+      closeSettled = true
+    })
+    await microtasks()
+    try {
+      expect(disposeAttempts).toBe(1)
+      expect(kit.transport.terminateCount()).toBe(1)
+      expect(closeSettled).toBe(false)
+    } finally {
+      kit.transport.emitExit(0)
+      await closing
+    }
+    expect(closeSettled).toBe(true)
+  })
 })
 
 /* ------------------------------------------------------------------------- *
@@ -4719,11 +5860,16 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
     const requests = kit.peer.transport.requests()
     expect(requests.map((request) => request.messageType)).toEqual([
       'APIStateRequest',
-      'CurrentModelRequest',
       'HotkeysInCurrentModelRequest',
       'HotkeyTriggerRequest',
     ])
-    expect(requests.at(-1)?.data).toEqual({ hotkeyID: M1_VTS_FIXTURE_HOTKEY_SMILE })
+    const inventoryRequest = requests.find(
+      (request) => request.messageType === 'HotkeysInCurrentModelRequest',
+    )
+    expect(inventoryRequest?.data).toEqual({})
+    const triggers = requests.filter((request) => request.messageType === 'HotkeyTriggerRequest')
+    expect(triggers).toHaveLength(1)
+    expect(triggers[0]?.data).toEqual({ hotkeyID: M1_VTS_FIXTURE_HOTKEY_SMILE })
     const requestIds = requests.map((request) => request.requestID)
     expect(new Set(requestIds).size).toBe(requestIds.length)
     for (const requestId of requestIds) {
@@ -4753,7 +5899,8 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
       name: string
       mutate: (state: ReturnType<typeof createFixtureVtsPeer>['state']) => void
       reasonCode: string
-      requestCount: number
+      requestTypes: string[]
+      hotkeyListed: boolean
     }> = [
       {
         name: 'inactive API',
@@ -4761,7 +5908,8 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
           state.active = false
         },
         reasonCode: 'vts_api_inactive',
-        requestCount: 1,
+        requestTypes: ['APIStateRequest'],
+        hotkeyListed: true,
       },
       {
         name: 'unauthenticated session',
@@ -4769,55 +5917,53 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
           state.currentSessionAuthenticated = false
         },
         reasonCode: 'vts_session_unauthorized',
-        requestCount: 1,
+        requestTypes: ['APIStateRequest'],
+        hotkeyListed: true,
       },
       {
-        name: 'no current model',
-        mutate: (state) => {
-          state.currentModelLoaded = false
-        },
-        reasonCode: 'vts_model_unavailable',
-        requestCount: 2,
-      },
-      {
-        name: 'different current model',
-        mutate: (state) => {
-          state.currentModelID = 'fixture-other-model'
-        },
-        reasonCode: 'vts_model_mismatch',
-        requestCount: 2,
-      },
-      {
-        name: 'no hotkey model',
+        name: 'unloaded inventory model with no available hotkeys',
         mutate: (state) => {
           state.hotkeysModelLoaded = false
+          state.hotkeysModelID = ''
+          state.availableHotkeys = []
         },
         reasonCode: 'vts_model_unavailable',
-        requestCount: 3,
+        requestTypes: ['APIStateRequest', 'HotkeysInCurrentModelRequest'],
+        hotkeyListed: false,
       },
       {
-        name: 'different hotkey model',
+        name: 'mismatched inventory model that still lists the configured hotkey',
         mutate: (state) => {
           state.hotkeysModelID = 'fixture-other-model'
         },
         reasonCode: 'vts_model_mismatch',
-        requestCount: 3,
+        requestTypes: ['APIStateRequest', 'HotkeysInCurrentModelRequest'],
+        hotkeyListed: true,
       },
       {
-        name: 'missing configured hotkey',
+        name: 'matching model with only the configured hotkey removed',
         mutate: (state) => {
+          state.hotkeysModelLoaded = true
+          state.hotkeysModelID = M1_VTS_FIXTURE_MODEL_ID
           state.availableHotkeys = state.availableHotkeys.filter(
             (hotkey) => hotkey.hotkeyID !== M1_VTS_FIXTURE_HOTKEY_SMILE,
           )
         },
         reasonCode: 'vts_hotkey_missing',
-        requestCount: 3,
+        requestTypes: ['APIStateRequest', 'HotkeysInCurrentModelRequest'],
+        hotkeyListed: false,
       },
     ]
 
     for (const scenario of scenarios) {
       const peer = createFixtureVtsPeer()
       scenario.mutate(peer.state)
+      expect(
+        peer.state.availableHotkeys.some(
+          (hotkey) => hotkey.hotkeyID === M1_VTS_FIXTURE_HOTKEY_SMILE,
+        ),
+        scenario.name,
+      ).toBe(scenario.hotkeyListed)
       const kit = createM1VtsRendererKit({ peer })
       const receipt = await kit.renderer.renderer.execute(
         fixturePerformanceCommand({ actionId: 'smile' }),
@@ -4826,8 +5972,7 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
       expect(receipt, scenario.name).toMatchObject({ stage: 'failed', reasonCode: scenario.reasonCode })
       expect(performanceReceiptSchema.safeParse(receipt).success).toBe(true)
       const types = peer.transport.requests().map((request) => request.messageType)
-      expect(types, scenario.name).toHaveLength(scenario.requestCount)
-      expect(types, scenario.name).not.toContain('HotkeyTriggerRequest')
+      expect(types, scenario.name).toEqual(scenario.requestTypes)
     }
   })
 
@@ -4838,8 +5983,13 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
       createCallContext(),
     )
     expect(first).toMatchObject({ stage: 'accepted' })
+    expect(
+      kit.peer.state.availableHotkeys.some(
+        (hotkey) => hotkey.hotkeyID === M1_VTS_FIXTURE_HOTKEY_SMILE,
+      ),
+    ).toBe(true)
 
-    kit.peer.state.currentModelID = 'fixture-other-model'
+    kit.peer.state.hotkeysModelID = 'fixture-other-model'
     const second = await kit.renderer.renderer.execute(
       fixturePerformanceCommand({ actionId: 'smile' }),
       createCallContext(),
@@ -4847,12 +5997,16 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
     expect(second).toMatchObject({ stage: 'failed', reasonCode: 'vts_model_mismatch' })
     expect(kit.peer.transport.requests().map((request) => request.messageType)).toEqual([
       'APIStateRequest',
-      'CurrentModelRequest',
       'HotkeysInCurrentModelRequest',
       'HotkeyTriggerRequest',
       'APIStateRequest',
-      'CurrentModelRequest',
+      'HotkeysInCurrentModelRequest',
     ])
+    expect(
+      kit.peer.transport
+        .requests()
+        .filter((request) => request.messageType === 'HotkeyTriggerRequest'),
+    ).toHaveLength(1)
   })
 
   it('treats a correlated wrong type, malformed data or malformed APIError as protocol failure', async () => {
@@ -4892,6 +6046,69 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
         'HotkeyTriggerRequest',
       )
     }
+  })
+
+  it('fails a correlated malformed inventory reply as a protocol error while ignoring a foreign request ID', async () => {
+    const peer = createFixtureVtsPeer()
+    peer.transport.setHoldTypes(['HotkeysInCurrentModelRequest'])
+    const kit = createM1VtsRendererKit({ peer })
+    const execution = kit.renderer.renderer.execute(
+      fixturePerformanceCommand({ actionId: 'smile' }),
+      createCallContext(),
+    )
+    await microtasks()
+    expect(peer.transport.requests().map((request) => request.messageType)).toEqual([
+      'APIStateRequest',
+      'HotkeysInCurrentModelRequest',
+    ])
+    const inventoryRequest = peer.transport.pendingRequests()[0]
+    expect(inventoryRequest?.messageType).toBe('HotkeysInCurrentModelRequest')
+
+    let settled = false
+    void execution.then(() => {
+      settled = true
+    })
+    const sendsBeforeForeignReply = peer.transport.sendCount()
+    expect(peer.transport.hasListener()).toBe(true)
+    expect(
+      peer.transport.emit(
+        fixtureVtsResponse(
+          inventoryRequest!,
+          'HotkeysInCurrentModelResponse',
+          { availableHotkeys: 'still-not-a-list' },
+          { requestID: 'vts-unrelated' },
+        ),
+      ),
+    ).toBe(true)
+    await microtasks()
+    expect(settled).toBe(false)
+    expect(peer.transport.sendCount()).toBe(sendsBeforeForeignReply)
+    expect(
+      peer.transport
+        .requests()
+        .filter((request) => request.messageType === 'HotkeyTriggerRequest'),
+    ).toHaveLength(0)
+
+    peer.transport.respondTo(
+      inventoryRequest!,
+      fixtureVtsResponse(inventoryRequest!, 'HotkeysInCurrentModelResponse', {
+        modelLoaded: true,
+        modelID: M1_VTS_FIXTURE_MODEL_ID,
+        availableHotkeys: 'not-a-list',
+      }),
+    )
+    const receipt = await execution
+    expect(receipt).toMatchObject({ stage: 'failed', reasonCode: 'vts_protocol_error' })
+    expect(peer.transport.requests().map((request) => request.messageType)).toEqual([
+      'APIStateRequest',
+      'HotkeysInCurrentModelRequest',
+    ])
+    expect(peer.transport.sendCount()).toBe(2)
+    expect(
+      peer.transport
+        .requests()
+        .filter((request) => request.messageType === 'HotkeyTriggerRequest'),
+    ).toHaveLength(0)
   })
 
   it('ignores malformed envelopes and wrong request IDs instead of settling or rejecting', async () => {
@@ -5003,6 +6220,107 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
     expect(peer.transport.sendCount()).toBe(1)
     kit.renderer.dispose()
   })
+
+  it.each([
+    ['APIStateRequest', 1],
+    ['HotkeysInCurrentModelRequest', 2],
+  ] as const)(
+    'ignores a late %s preflight reply from an aborted dispatch',
+    async (messageType, requestCount) => {
+      const peer = createFixtureVtsPeer()
+      peer.transport.setHoldTypes([messageType])
+      const kit = createM1VtsRendererKit({ peer })
+
+      const firstContext = createCallContext()
+      const first = kit.renderer.driver.dispatch(
+        M1_VTS_FIXTURE_HOTKEY_SMILE,
+        firstContext.signal,
+      )
+      await microtasks()
+      const firstRequests = peer.transport.requests()
+      expect(firstRequests).toHaveLength(requestCount)
+      expect(firstRequests.map((request) => request.messageType)).toEqual(
+        messageType === 'APIStateRequest'
+          ? ['APIStateRequest']
+          : ['APIStateRequest', 'HotkeysInCurrentModelRequest'],
+      )
+      const oldRequest = firstRequests.at(-1)!
+      expect(oldRequest.messageType).toBe(messageType)
+      expect(
+        peer.transport
+          .pendingRequests()
+          .some((request) => request.requestID === oldRequest.requestID),
+      ).toBe(true)
+
+      firstContext.abort()
+      await expect(first).resolves.toMatchObject({
+        stage: 'cancelled',
+        reasonCode: 'aborted_before_trigger',
+      })
+      expect(peer.transport.requests()).toHaveLength(requestCount)
+      expect(
+        peer.transport
+          .requests()
+          .filter((request) => request.messageType === 'HotkeyTriggerRequest'),
+      ).toHaveLength(0)
+
+      const freshContext = createCallContext()
+      const fresh = kit.renderer.driver.dispatch(
+        M1_VTS_FIXTURE_HOTKEY_SMILE,
+        freshContext.signal,
+      )
+      await microtasks()
+      const pendingOfType = peer.transport
+        .pendingRequests()
+        .filter((request) => request.messageType === messageType)
+      expect(pendingOfType).toHaveLength(2)
+      expect(pendingOfType[0]?.requestID).toBe(oldRequest.requestID)
+      const freshRequest = pendingOfType[1]!
+      expect(freshRequest.requestID).not.toBe(oldRequest.requestID)
+
+      let freshSettled = false
+      void fresh.then(() => {
+        freshSettled = true
+      })
+      const sendsBeforeLateReply = peer.transport.sendCount()
+      expect(
+        peer.transport.respondTo(oldRequest, fixtureVtsResponseFor(oldRequest, peer.state)),
+      ).toBe(true)
+      await microtasks()
+      expect(freshSettled).toBe(false)
+      expect(peer.transport.sendCount()).toBe(sendsBeforeLateReply)
+      expect(
+        peer.transport
+          .requests()
+          .filter((request) => request.messageType === 'HotkeyTriggerRequest'),
+      ).toHaveLength(0)
+
+      expect(
+        peer.transport.respondTo(freshRequest, fixtureVtsResponseFor(freshRequest, peer.state)),
+      ).toBe(true)
+      await expect(fresh).resolves.toMatchObject({
+        stage: 'accepted',
+        reasonCode: null,
+      })
+      const freshSequence = peer.transport
+        .requests()
+        .slice(requestCount)
+        .map((request) => request.messageType)
+      expect(freshSequence).toEqual([
+        'APIStateRequest',
+        'HotkeysInCurrentModelRequest',
+        'HotkeyTriggerRequest',
+      ])
+      const triggers = peer.transport
+        .requests()
+        .filter((request) => request.messageType === 'HotkeyTriggerRequest')
+      expect(triggers).toHaveLength(1)
+      expect(triggers[0]?.data).toEqual({
+        hotkeyID: M1_VTS_FIXTURE_HOTKEY_SMILE,
+      })
+      kit.renderer.dispose()
+    },
+  )
 
   it('holds post-trigger abort, close and error as unknown without retry or replay', async () => {
     for (const mode of ['abort', 'close', 'error'] as const) {
@@ -5470,9 +6788,8 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
     ])
 
     // Mutate the caller-owned dependency object while its read-only APIState
-    // query is held, and make the peer report a different loaded model.
+    // query is held, and make the inventory report a different loaded model.
     ;(deps as { modelId: string }).modelId = 'fixture-other-model'
-    peer.state.currentModelID = 'fixture-other-model'
     peer.state.hotkeysModelID = 'fixture-other-model'
     peer.transport.setAutoRespond(true)
     expect(peer.transport.releaseNext()?.messageType).toBe('APIStateRequest')
@@ -5526,6 +6843,82 @@ describe('M1-02 increment C VTS client and hotkey driver (V01, controlled peer)'
       capabilityRevision: 1,
     })
     adapter.dispose()
+  })
+})
+
+describe('M1 VTS direct driver preflight cancellation', () => {
+  async function waitForRequest(
+    kit: ReturnType<typeof createM1VtsRendererKit>,
+    messageType: string,
+  ): Promise<void> {
+    for (let attempt = 0; attempt < 128; attempt += 1) {
+      if (kit.peer.transport.pendingRequests().some((request) => request.messageType === messageType)) {
+        return
+      }
+      await microtasks(1)
+    }
+    throw new Error(`fixture request did not arrive: ${messageType}`)
+  }
+
+  for (const heldType of [
+    'APIStateRequest',
+    'HotkeysInCurrentModelRequest',
+  ]) {
+    it(`cancels before triggering while ${heldType} is pending`, async () => {
+      const kit = createM1VtsRendererKit()
+      kit.peer.transport.setHoldTypes([heldType])
+      const controller = new AbortController()
+      const pending = kit.renderer.driver.dispatch(
+        M1_VTS_FIXTURE_HOTKEY_SMILE,
+        controller.signal,
+      )
+      await waitForRequest(kit, heldType)
+      expect(
+        kit.peer.transport.requests().some((request) => request.messageType === 'HotkeyTriggerRequest'),
+      ).toBe(false)
+
+      controller.abort()
+      const first = await pending
+      expect(first).toMatchObject({ stage: 'cancelled', reasonCode: 'aborted_before_trigger' })
+
+      kit.peer.transport.releaseNext()
+      await microtasks()
+      expect(await pending).toBe(first)
+      expect(
+        kit.peer.transport.requests().filter(
+          (request) => request.messageType === 'HotkeyTriggerRequest',
+        ),
+      ).toHaveLength(0)
+      expect(kit.renderer.driver.isInvalidated()).toBe(false)
+      kit.renderer.dispose()
+      expect(kit.renderer.driver.isDisposed()).toBe(true)
+    })
+  }
+
+  it('keeps a sent trigger unknown after abort and never replays it', async () => {
+    const kit = createM1VtsRendererKit()
+    kit.peer.transport.setHoldTypes(['HotkeyTriggerRequest'])
+    const controller = new AbortController()
+    const pending = kit.renderer.driver.dispatch(M1_VTS_FIXTURE_HOTKEY_SMILE, controller.signal)
+    await waitForRequest(kit, 'HotkeyTriggerRequest')
+    const triggersBeforeAbort = kit.peer.transport
+      .requests()
+      .filter((request) => request.messageType === 'HotkeyTriggerRequest')
+    expect(triggersBeforeAbort).toHaveLength(1)
+
+    controller.abort()
+    const first = await pending
+    expect(first).toMatchObject({ stage: 'unknown', reasonCode: 'vts_trigger_unknown' })
+
+    kit.peer.transport.releaseNext()
+    await microtasks()
+    expect(await pending).toBe(first)
+    expect(
+      kit.peer.transport.requests().filter(
+        (request) => request.messageType === 'HotkeyTriggerRequest',
+      ),
+    ).toHaveLength(1)
+    kit.renderer.dispose()
   })
 })
 
@@ -5840,6 +7233,44 @@ describe('M1 VTS connection handle', () => {
     socket.emitClose()
     await expect(handle.closed).resolves.toEqual({ kind: 'closed' })
     expect(events).toEqual([{ type: 'error' }, { type: 'close' }])
+  })
+
+  it('replays one safe error to a successor and keeps the socket open', async () => {
+    const socket = createFixtureVtsSocket()
+    const handle = createVtsConnectionHandle({
+      socket,
+      closeTimeoutMs: M1_VTS_CONNECTION_DEFAULT_CLOSE_TIMEOUT_MS,
+    })
+
+    socket.emitError(new Error(`${M1_VTS_CONNECTION_RAW_TEXT} unobserved socket error`))
+    expect(socket.closeCount()).toBe(0)
+    let completed: unknown = null
+    void handle.closed.then((result) => {
+      completed = result
+    })
+    await microtasks()
+    expect(completed).toBeNull()
+
+    const events: VtsTransportEvent[] = []
+    handle.transport.subscribe((event) => {
+      events.push(event)
+    })
+    expect(events).toEqual([{ type: 'error' }])
+    expect(JSON.stringify(events)).not.toContain(M1_VTS_CONNECTION_RAW_TEXT)
+    expect(socket.closeCount()).toBe(0)
+    expect(socket.terminateCount()).toBe(0)
+
+    socket.emitError(new Error(`${M1_VTS_CONNECTION_RAW_TEXT} later socket error`))
+    expect(events).toEqual([{ type: 'error' }])
+    expect(completed).toBeNull()
+
+    socket.emitClose()
+    await expect(handle.closed).resolves.toEqual({ kind: 'closed' })
+    expect(events).toEqual([{ type: 'error' }, { type: 'close' }])
+    expect(socket.listenerCount('message')).toBe(0)
+    expect(socket.listenerCount('close')).toBe(0)
+    expect(socket.listenerCount('error')).toBe(0)
+    expect(socket.closeCount()).toBe(0)
   })
 
   it('clears the close timer when the socket emits close synchronously', async () => {
@@ -6781,6 +8212,39 @@ describe('M1-02 increment D2 same-handle handoff (A08, A16)', () => {
     client.dispose()
     await expect(kit.handle.closed).resolves.toEqual({ kind: 'closed' })
     expect(kit.socket.closeCount()).toBe(1)
+  })
+})
+
+describe('M1-02 increment D2 handoff error ownership', () => {
+  it('fails the successor first API state request without sending after a pairing handoff error', async () => {
+    const kit = createM1VtsPairingKit()
+    const result = await kit.pair()
+    expect(result.kind).toBe('authenticated')
+    if (result.kind !== 'authenticated') return
+    expect(result.handle).toBe(kit.handle)
+
+    kit.peer.setApiStateAuto(true)
+    const sendsAfterPairing = kit.socket.sendCount()
+    kit.socket.emitError(new Error('fixture error in the pairing handoff gap'))
+    expect(kit.socket.closeCount()).toBe(0)
+    expect(kit.socket.listenerCount('message')).toBe(1)
+
+    const client = createVtsClient({
+      transport: kit.handle.transport,
+      timeoutMs: 1000,
+      maxPending: 2,
+    })
+    const state = await client.apiState(new AbortController().signal)
+    expect(state).toEqual({ kind: 'failed', code: 'transport_error', attempted: false })
+    expect(kit.socket.sendCount()).toBe(sendsAfterPairing)
+    expect(kit.socket.closeCount()).toBe(0)
+
+    client.dispose()
+    await expect(kit.handle.closed).resolves.toEqual({ kind: 'closed' })
+    expect(kit.socket.closeCount()).toBe(1)
+    expect(kit.socket.listenerCount('message')).toBe(0)
+    expect(kit.socket.listenerCount('close')).toBe(0)
+    expect(kit.socket.listenerCount('error')).toBe(0)
   })
 })
 
@@ -7815,5 +9279,82 @@ describe('M1 expression policy metadata validation (X06)', () => {
     policy.recordAccepted('blank-request', 2000)
     policy.recordAccepted('blank-request', 2100)
     expect(policy.pick('blank-request', 5000)).toBe('blank-request')
+  })
+})
+
+describe('M1 expression policy time validation and window eviction (X06)', () => {
+  const advertisedActionIds = ['smile', 'smile-soft']
+  const catalogue: ExpressionMetadata[] = [
+    { actionId: 'smile', affectTag: 'joy', intensity: 3, extreme: false },
+    { actionId: 'smile-soft', affectTag: 'joy', intensity: 1, extreme: false },
+  ]
+  const options: ExpressionPolicyOptions = {
+    cooldownMs: 1000,
+    windowSize: 4,
+    maxSameInWindow: 3,
+    allowExtremeBypass: false,
+  }
+
+  function createPolicy(overrides: Partial<ExpressionPolicyOptions> = {}): ExpressionPolicy {
+    return createExpressionPolicy({
+      enabled: true,
+      advertisedActionIds,
+      catalogue,
+      options: { ...options, ...overrides },
+    })
+  }
+
+  it('rejects nonfinite and backdated accepted times without corrupting history', () => {
+    const policy = createPolicy()
+    for (const invalidTime of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(() => policy.pick('smile', invalidTime)).toThrow(/finite|timestamp|time/i)
+      expect(() => policy.recordAccepted('smile', invalidTime)).toThrow(/finite|timestamp|time/i)
+    }
+
+    policy.recordAccepted('smile', 2000)
+    expect(() => policy.recordAccepted('smile', 0)).toThrow(
+      /nondecreasing|monotonic|backdated|decreas|timestamp|time/i,
+    )
+    expect(policy.pick('smile', 2100)).toBe('smile-soft')
+  })
+
+  it('accepts the same timestamp and keeps pick free of a time watermark', () => {
+    const policy = createPolicy()
+    policy.recordAccepted('smile', 2000)
+    expect(() => policy.recordAccepted('smile', 2000)).not.toThrow()
+    expect(policy.pick('smile', 2500)).toBe('smile-soft')
+
+    const noWatermark = createPolicy()
+    expect(noWatermark.pick('smile', 100_000)).toBe('smile')
+    expect(() => noWatermark.recordAccepted('smile', 2000)).not.toThrow()
+  })
+
+  it('keeps exact choices through repeated window evictions', () => {
+    const policy = createPolicy({ cooldownMs: 0 })
+    policy.recordAccepted('smile', 0)
+    policy.recordAccepted('smile', 1)
+    policy.recordAccepted('smile', 2)
+    expect(policy.pick('smile', 10)).toBe('smile-soft')
+
+    policy.recordAccepted('smile-soft', 11)
+    expect(policy.pick('smile', 12)).toBe('smile-soft')
+
+    policy.recordAccepted('smile-soft', 13)
+    expect(policy.pick('smile', 14)).toBe('smile')
+
+    policy.recordAccepted('smile-soft', 15)
+    expect(policy.pick('smile', 16)).toBe('smile')
+
+    policy.recordAccepted('smile', 17)
+    policy.recordAccepted('smile', 18)
+    policy.recordAccepted('smile', 19)
+    expect(policy.pick('smile', 20)).toBe('smile-soft')
+  })
+
+  it('keeps disabled pass-through with invalid timestamps', () => {
+    const disabled = createExpressionPolicy({ advertisedActionIds, catalogue })
+    expect(disabled.pick('smile', Number.NaN)).toBe('smile')
+    expect(() => disabled.recordAccepted('smile', Number.NaN)).not.toThrow()
+    expect(disabled.pick('smile', Number.POSITIVE_INFINITY)).toBe('smile')
   })
 })

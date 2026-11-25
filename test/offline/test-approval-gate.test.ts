@@ -208,6 +208,10 @@ describe('G1 time-boxed waiver through 2026-11-27 (Tier 1, #176)', () => {
     }
   })
 
+  it('waives #181 as the CP04 console UI-defect slice', () => {
+    expect(isTimeWaived({ prNumber: 181, now: beforeExpiry })).toBe(true)
+  })
+
   it('accepts a Date clock', () => {
     expect(isTimeWaived({ prNumber: 170, now: new Date(beforeExpiry) })).toBe(true)
   })

@@ -56,6 +56,7 @@ export interface ControlDeckProps {
   readonly onControl: (action: 'stop' | 'resume') => void
   readonly onAttach: () => void
   readonly onBootstrapOperator: () => void
+  readonly onReconnect: () => void
   readonly operatorPending: boolean
   readonly operatorError: string | null
   readonly operatorButtonVisible: boolean
@@ -113,15 +114,26 @@ export function ControlDeck(props: ControlDeckProps) {
           <section className="control-deck__section" aria-label="Authority">
             <h3 className="control-deck__head">Authority</h3>
             <div className="console__actions">
-              <ChunkButton size="sm" variant="lime" disabled={!props.machinePath} onClick={props.onAttach}>
+              <ChunkButton size="sm" variant="lime" disabled={!props.allowDispatch || machine === null || machine.disposed} onClick={props.onAttach}>
                 Attach performer
               </ChunkButton>
               {props.operatorButtonVisible && (
-                <ChunkButton size="sm" variant="primary" busy={props.operatorPending} onClick={props.onBootstrapOperator}>
+                <ChunkButton
+                  size="sm"
+                  variant="primary"
+                  busy={props.operatorPending}
+                  disabled={!props.allowDispatch || machine === null || machine.disposed}
+                  onClick={props.onBootstrapOperator}
+                >
                   Bootstrap operator
                 </ChunkButton>
               )}
-              {machine !== null && machine.operator && <Tag tone="applied" dot>operator</Tag>}
+              {state.connection !== 'open' && (
+                <ChunkButton size="sm" variant="ghost" onClick={props.onReconnect}>
+                  Reconnect
+                </ChunkButton>
+              )}
+              {machine !== null && !machine.disposed && machine.operator && <Tag tone="applied" dot>operator</Tag>}
             </div>
             {props.operatorError !== null && <Hint>{props.operatorError}</Hint>}
             {machine?.error !== undefined && machine.error !== null && <Hint>{machine.error}</Hint>}

@@ -27,13 +27,15 @@ export interface FixedSynthesisDeps {
   readonly clock: ClockPort
 }
 
-/** Audio references are opaque, server-controlled `audio://` identifiers. */
-const CONTROLLED_REF_PATTERN = /^([a-z][a-z0-9+.-]*):\/\//i
+/**
+ * Audio references are opaque, server-controlled `audio://` identifiers in the
+ * same canonical lowercase form the dynamic registry accepts: a nonempty
+ * suffix without whitespace or backslashes.
+ */
+const CONTROLLED_REF_PATTERN = /^audio:\/\/[^\s\\]+$/
 
 function isControlledAudioRef(ref: string): boolean {
-  const match = CONTROLLED_REF_PATTERN.exec(ref)
-  if (match === null) return false
-  return match[1].toLowerCase() === 'audio'
+  return CONTROLLED_REF_PATTERN.test(ref)
 }
 
 function isFiniteNonNegative(value: number): boolean {

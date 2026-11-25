@@ -50,6 +50,13 @@ class DomMediaHandle implements MediaHandle {
     }
   }
 
+  private removeOwnedListeners(): void {
+    this.element.removeEventListener('playing', this.handlePlaying)
+    this.element.removeEventListener('ended', this.handleEnded)
+    this.element.removeEventListener('error', this.handleError)
+    this.listeners.clear()
+  }
+
   subscribe(listener: (event: MediaEvent) => void): () => void {
     this.listeners.add(listener)
     return () => {
@@ -74,6 +81,7 @@ class DomMediaHandle implements MediaHandle {
       this.element.pause()
       this.element.removeAttribute('src')
       this.element.load()
+      this.removeOwnedListeners()
       this.revokeObjectUrl()
       this.detached = true
       return true

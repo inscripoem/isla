@@ -3155,22 +3155,25 @@ describe('console recovery eligibility', () => {
       available: false,
       requestable: false,
     })
+  })
+
+  it('offers the acknowledgement without a machine or performer/operator authority', () => {
     expect(recoveryControlView({ ...connected, machine: null })).toEqual({
-      available: false,
+      available: true,
+      requestable: false,
+    })
+    expect(recoveryControlView({ ...connected, machine: { ...connectedMachine, performer: false } })).toEqual({
+      available: true,
+      requestable: false,
+    })
+    expect(recoveryControlView({ ...connected, machine: { ...connectedMachine, operator: false } })).toEqual({
+      available: true,
       requestable: false,
     })
   })
 
-  it('withdraws both controls after disposal or without performer/operator authority', () => {
+  it('withdraws both controls after disposal', () => {
     expect(recoveryControlView({ ...connected, machine: { ...connectedMachine, disposed: true } })).toEqual({
-      available: false,
-      requestable: false,
-    })
-    expect(recoveryControlView({ ...connected, machine: { ...connectedMachine, performer: false } })).toEqual({
-      available: false,
-      requestable: false,
-    })
-    expect(recoveryControlView({ ...connected, machine: { ...connectedMachine, operator: false } })).toEqual({
       available: false,
       requestable: false,
     })
@@ -3285,7 +3288,8 @@ describe('M2 #181 review follow-up (FR-05, NFR-04)', () => {
     expect(settleDraftOnAck('hello', pending, { ...accepted, requestMessageId: 'msg-2' })).toBe('hello')
     expect(settleDraftOnAck('hello', pending, accepted)).toBe('')
     expect(settleDraftOnAck('hello!', pending, accepted)).toBe('hello!')
-    expect(settleDraftOnAck('', pending, rejected)).toBe('hello')
+    // an empty composer is a deliberate clear and a rejection must not refill it
+    expect(settleDraftOnAck('', pending, rejected)).toBe('')
     expect(settleDraftOnAck('hello!', pending, rejected)).toBe('hello!')
     expect(settleDraftOnAck('hello', pending, duplicate)).toBe('')
     expect(settleDraftOnAck('hello!', pending, duplicate)).toBe('hello!')

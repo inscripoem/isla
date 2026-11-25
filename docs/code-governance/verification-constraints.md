@@ -172,8 +172,11 @@ created before 2026-11-16T16:01:01Z selects the label/advise rule (the `tests-ap
 cannot fail. A PR created at or after the cutover selects `evidence` mode, and a failing G1 step makes
 the required `verify` check red. Missing or invalid timestamps fail closed to `evidence`. The values
 live in `src/evaluation/test-approval-gate.ts` and are passed by the `G1` step in
-`.github/workflows/ci.yml`. M6 records a time-boxed waiver for #170/#171/#175 through 2026-11-27 23:59
-+08; it is a recorded exception, not a G1 pass, and it expires by the clock.
+`.github/workflows/ci.yml`. M6 records a time-boxed waiver for #170/#171/#175/#181 through 2026-11-27
+23:59 +08; it is a recorded exception, not a G1 pass, and it expires by the clock. #181 is the CP04 M2
+console UI-defect slice, is G1-only, and merged in `6d8f8d2`; this waiver does not accept CP04 or any
+console scope. The waiver is PR-scoped: any additional PR must be requested explicitly to M5 (PM) and
+M6 (gate owner).
 
 **What this does not establish.**
 

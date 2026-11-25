@@ -5,17 +5,27 @@ for Isla. Application version 0.2. The M1 member owns this directory; the
 browser-safe public interface lives under [`browser/`](browser/) so M2 may
 import that subtree while its transitive imports stay browser-safe.
 
-Revision state: increments A and B, plus the M1-02 increment A offline
-Kokoro adapter and the increment B guarded Node provider, pinned tokenizer
-facade, persistent single-worker host and live setup/smoke entrypoints. This
-checkout implements fixed-audio preparation, the mapped renderer, the
-single-output browser playback controller, its `PlayerPort` adapter, the
+Revision state: increments A and B, plus the M1-02 increment A offline Kokoro
+adapter, the increment B guarded Node provider, pinned tokenizer facade,
+persistent single-worker host and live setup/smoke entrypoints, the offline D1
+connection handle and D2 pairing primitive, and the standalone X06 expression
+policy. This checkout implements fixed-audio preparation, the mapped renderer,
+the single-output browser playback controller, its `PlayerPort` adapter, the
 `HTMLAudioElement` media driver, a real injected-provider `SynthesisPort`
 adapter, a controlled audio-resource registry, a synchronous no-truncation
-tokenizer guard over the real SDK boundary and an optional Node worker
-offload for the blocking CPU inference, plus the offline D1 connection handle
-and D2 pairing primitive (token grant/authentication only). Live VTS, the network
-receipt transport and product history integration remain later work.
+tokenizer guard over the real SDK boundary and an optional Node worker offload
+for the blocking CPU inference.
+
+The M5 reference live deployment
+([`../runtime/deployments/reference-live.ts`](../runtime/deployments/reference-live.ts))
+composes the **in-process** guarded Kokoro provider, the VTube Studio hotkey
+renderer and the audio-resource registry. The retained worker-backed
+provider/adapter path remains available, but the reference deployment does not
+use it. The M5 runtime serves
+admitted resources over `POST /audio`, and the M2 console posts that route and
+sends observed playback receipts over the application transport. Those
+integrations exist in this checkout; live-product and acoustic acceptance
+remain pending.
 
 ## Public adapters
 
@@ -23,9 +33,18 @@ receipt transport and product history integration remain later work.
 | --- | --- | --- |
 | [`fixed-synthesis.ts`](fixed-synthesis.ts) | `SynthesisPort` | An exact, unambiguous lookup over a fixed audio catalog. |
 | [`kokoro-synthesis.ts`](kokoro-synthesis.ts) | `SynthesisPort` + private `whenIdle()` | Injected raw-audio provider adapter registering generated WAV resources. |
+| [`kokoro-provider.ts`](kokoro-provider.ts) | `KokoroProvider` | Node-only provider over the pinned real SDK, tokenizer guard and local-only model cache. |
+| [`kokoro-worker-provider.ts`](kokoro-worker-provider.ts) | `KokoroProvider` + `close()` | Persistent single-worker host for the same provider seam. |
+| [`kokoro-guard.ts`](kokoro-guard.ts) | — | Apply-only callable-tokenizer guard: no truncation, full-length check, blank/boundary-only phoneme refusal and `input_too_long`. |
+| [`wav.ts`](wav.ts) | — | Deterministic mono 32-bit IEEE-float WAV encoder. |
 | [`audio-resources.ts`](audio-resources.ts) | `AudioResolver` | Controlled opaque `audio://` registry with leases, retirement and a byte budget. |
 | [`mapped-renderer.ts`](mapped-renderer.ts) | `RendererPort` | Maps verified capability actions to low-level driver commands. |
-| [`browser/index.ts`](browser/index.ts) | — | Browser-safe public entry for M2 (types + player + DOM driver). |
+| [`vts-client.ts`](vts-client.ts) | — | Correlated VTS requests over one injected transport. |
+| [`vts-driver.ts`](vts-driver.ts) | `RendererPort` | Preflighted hotkey dispatch and mapped-renderer composition. |
+| [`vts-connection.ts`](vts-connection.ts) | `VtsTransport` | One injected OPEN Node `ws` socket with explicit close completion. |
+| [`vts-pairing.ts`](vts-pairing.ts) | — | Offline pairing primitive over one exclusive D1 handle. |
+| [`expression-policy.ts`](expression-policy.ts) | — | Standalone, default-off X06 selection policy; not wired into production. |
+| [`browser/index.ts`](browser/index.ts) | — | Browser-safe public entry for M2 (types + player + player port + DOM driver). |
 | [`browser/player.ts`](browser/player.ts) | `PlaybackController` | Single-output playback controller with admission, dedup and cleanup. |
 | [`browser/player-port.ts`](browser/player-port.ts) | `PlayerPort` | Adapts the same controller to the shared same-process port. |
 | [`browser/dom-driver.ts`](browser/dom-driver.ts) | `MediaDriver` | `HTMLAudioElement` handle with object-URL cleanup. |
@@ -97,10 +116,15 @@ provider contract requires complete audio for the exact text, or an explicit
 - Never plays, resolves bytes for playback or labels provider synthesis
   completion as a playback start or completion.
 
-Tokenizer-length and SDK truncation guards are **not** implemented or validated
-by this adapter; the injected provider must refuse an over-long input with
-`input_too_long` before inference. Concrete `kokoro-js` loading, dependency/model
-installation and a real-SDK smoke test are increment B work.
+The synthesis adapter itself does not count tokens or reconstruct a prefix. The
+concrete Node provider wraps the real callable tokenizer with
+[`createGuardedTokenizer`](kokoro-guard.ts): it forces `truncation:false`,
+validates the complete single-batch `[1, tokens]` tensor, refuses blank or
+boundary-only phoneme material as invalid input, and refuses an over-limit
+encoding with `input_too_long` before the SDK dispatches the model. An injected
+provider must still honor the same provider contract. [`kokoro-provider.ts`](kokoro-provider.ts)
+implements the pinned real-SDK loading and local-only cache path; the worker host
+runs that same guarded provider inside its worker.
 
 #### Composition and provider ownership
 
@@ -146,7 +170,10 @@ substitute for the registry/playback cleanup the owner performs separately.
 
 ```ts
 // One provider and one retained adapter for the whole composition lifetime.
-const provider: KokoroProvider = /* concrete kokoro-js facade, increment B */
+// This is the in-process path used by the reference deployment.
+const provider: KokoroProvider = await createKokoroProvider(config)
+// The worker host exposes the same provider seam when that offload is chosen:
+// const { provider, close } = await createKokoroWorkerProvider(config)
 const synthesis: KokoroSynthesis = createKokoroSynthesis({
   provider,
   profiles,
@@ -162,10 +189,11 @@ await synthesis.whenIdle()
 // replacement (or retry) under the owner's own exclusion policy.
 ```
 
-No production composition exists in this checkout yet; installing it and
-accepting its ownership is M5 work. The offline tests in this module exercise the
-real adapter over a controlled provider and verify the caller's compliant
-sequence — they are not evidence that a production root is integrated.
+The reference deployment in this checkout uses exactly this retained-adapter
+shape around the in-process provider; M5 owns that composition and its release.
+The offline tests in this module exercise the real adapter over a controlled
+provider and verify the caller's compliant sequence — they are not evidence that
+a live model, production deployment or acoustic output has been accepted.
 
 ### Worker-isolated provider host (M1-02 increment B)
 
@@ -183,20 +211,26 @@ idempotent and owner-only.
 - At most one physical generation is pending. A second `generate` fails `busy`
   rather than queueing; there is no scheduler, pool, per-call worker, retry or
   global lock.
-- Request scalars are validated before `postMessage`, so a malformed request
-  posts nothing. Each accepted job keeps a unique, non-reused id; only a matching
-  `result` settles it. Unknown, duplicate or old replies cannot settle another
-  job or clear its slot.
+- Request scalars are validated and frozen into an owned copy before
+  `postMessage`, so a malformed request posts nothing and a later caller mutation
+  cannot change the job. Each accepted job keeps a unique, non-reused id; only a
+  matching `result` settles it. Unknown, duplicate or old replies cannot settle
+  another job or clear its slot. A successful result transfers the
+  provider-owned sample copy created at the `toKokoroRawAudio` boundary; it makes
+  no second copy and never transfers an SDK-owned view.
 - A logical caller abort belongs to the retained `SynthesisPort` adapter and never
   settles the physical Promise or frees occupancy. Worker `error` (an uncaught
-  exception) and `exit` are distinct: an error closes admission but keeps the
-  pending slot until the real exit, when the original Promise is rejected. There
-  is no automatic respawn.
+  exception), `messageerror`, `init_error` and an observed `exit` are distinct
+  facts: a fatal event closes admission and requests native termination once but
+  keeps the pending slot until the real exit, when the original Promise is
+  rejected. There is no automatic respawn.
 - `close()` synchronously rejects new generation, drains the current physical job,
   posts one `dispose` request that releases the loaded model through its public
-  `dispose()`, and resolves only after the actual worker exit. It is not Stop or
-  playback cancellation, and it never terminates a still-generating worker to
-  make Stop look prompt. The owner must `await close()` before replacing the host.
+  `dispose()`, and resolves only after the actual worker exit. Within `close()`,
+  only a failed dispose post requests the existing one-shot termination; `close`
+  still waits for the observed exit. It is not Stop or playback cancellation, and
+  it does not report a still-generating worker as stopped. The owner must
+  `await close()` before replacing the host.
 
 The default transport is a real Node `Worker` created from a module-relative file
 URL to [`kokoro-worker-bootstrap.mjs`](kokoro-worker-bootstrap.mjs) with an
@@ -227,10 +261,12 @@ resource ownership or grants replacement permission.
 ### Audio resource registry (M1-02 increment A)
 
 `createAudioResourceRegistry({ clock, byteBudget, retentionMs, newRef? })` is a
-real controlled registry exposed as an `AudioResolver`. It stores owned immutable
-bytes and a `Blob` snapshot per registered opaque `audio://` reference, retains
-the original request (`requestId`)/session/epoch/turn/segment and public voice
-id/version privately, and never treats a reference as a path, URL or `src`.
+real controlled registry exposed as an `AudioResolver`. It snapshots incoming
+bytes before invoking any injected clock or reference-factory callback and keeps
+the resulting immutable `Blob` and byte length for the reference; it does not
+retain both a long-lived `Uint8Array` and a `Blob`. It also retains the original
+request (`requestId`)/session/epoch/turn/segment and public voice id/version
+privately, and never treats a reference as a path, URL or `src`.
 
 - `register(request)` validates and privately snapshots the request identity and
   owned bytes before invoking any injected clock or reference factory, so a
@@ -278,9 +314,14 @@ id/version privately, and never treats a reference as a path, URL or `src`.
   null-prototype record so a legal session id such as `__proto__` is retained as
   an own key rather than lost to the prototype.
 
-These are local registry seams, not new C5 fields, not transport fields and not
-M5 dispatch authority. A registry method never receives authority from browser
-input; M5 will invoke trusted invalidation and composition later.
+These remain local registry seams, not new C5 fields, not transport fields and
+not M5 dispatch authority. A registry method never receives authority from
+browser input. In this checkout M5's reference deployment constructs the registry
+and passes it to the production composition, which calls `retireBefore` on Stop
+and `retireSession` on disposal. The runtime serves admitted references over the
+same-origin [`POST /audio`](../runtime/audio-resource-route.ts) route, and M2's
+browser resolver posts that route; the registry itself still never serves HTTP or
+decides dispatch.
 
 ### Fixed synthesis
 
@@ -294,10 +335,11 @@ its metadata are copied and validated at construction:
 - Nonempty `format`; `durationMs` is null or a finite nonnegative number.
 - `timing` is null or has finite nonnegative bounds with `endMs >= startMs`.
 - `audioRef` is an opaque, server-controlled `audio://<id>` identifier and is
-  never treated as a filename, URL or `src` value. Only the `audio` scheme is
-  accepted; filesystem paths and any other scheme (`file:`, `http:`, `https:`,
-  `data:`, `blob:`, `ftp:`, arbitrary schemes) are rejected as control
-  references.
+  never treated as a filename, URL or `src` value. The accepted form is the
+  canonical lowercase `audio://` scheme with a nonempty suffix containing no
+  whitespace or backslash; uppercase schemes, an empty suffix, surrounding
+  whitespace and any other scheme (`file:`, `http:`, `https:`, `data:`,
+  `blob:`, `ftp:`, arbitrary schemes) are rejected as control references.
 - Duplicate text/voice tuples and duplicate audio references are rejected.
 
 `prepare(request, context)` validates the request against the current prepare
@@ -344,6 +386,38 @@ into a completed claim; a contradictory driver observation yields `unknown` with
 a diagnostic reason. A late driver resolve or reject produces no second result
 and no unhandled rejection. The binding is always released exactly once.
 
+### Expression policy (X06, standalone)
+
+[`expression-policy.ts`](expression-policy.ts) is an optional per-session action
+selector for FR-03 / INV-02. It is standalone: no production composition or
+reference deployment imports or enables it, and the default is off. Omitted or
+false `enabled` returns the requested action unchanged and ignores recording.
+Enabling requires explicit `cooldownMs`, `windowSize`, `maxSameInWindow` and
+`allowExtremeBypass` options; thresholds are caller inputs, not production
+defaults, and no hard configuration cap is added.
+
+`pick(requestedActionId, nowMs)` only selects. It never records, never advances
+history and never establishes a time watermark, so a future pick cannot block a
+later recording of an earlier but still nondecreasing accepted dispatch. For an
+enabled policy it rejects a nonfinite `nowMs`. `recordAccepted` ignores an action
+outside the advertised set, rejects a nonfinite accepted time, and rejects an
+accepted time earlier than the most recently accepted advertised dispatch; equal
+timestamps remain valid.
+
+The enabled policy applies a strict cooldown and a per-action cap over the most
+recent `windowSize` accepted dispatches. At the cap it chooses the first safe
+same-affect-tag, strictly lower-intensity advertised alternative in catalogue
+order, including when the request is also cooling down; with only a cooldown it
+chooses the first safe same-affect-tag alternative. An alternative must satisfy
+its own cooldown and cap, and a valid extreme request bypasses both checks for
+that request only. Without metadata or a safe alternative, the requested action
+is returned. The window keeps incremental per-action counts in a ring that grows
+lazily to the configured bound, and each action's last-accepted cooldown time is
+retained independently after eviction. The reviewed fixture in
+[`test/offline/m1-performance.test.ts`](../../test/offline/m1-performance.test.ts)
+covers the selection and recording behaviour; it does not prove product wiring or
+telemetry.
+
 ### Browser playback controller
 
 `createPlaybackController(deps)` serves one trusted session with an initial
@@ -375,15 +449,20 @@ are rejected before any effect instead of being coerced.
 The controller never invokes a renderer. Actual playback is evidenced only by a
 current handle's `playing` event; a fulfilled `play()` promise is not a start.
 `ended` after an observed start settles `completed`; `ended` without a start
-settles `failed`/`start_unobserved`; resolver rejection, load throw, play
-rejection and media error settle `failed`. A single terminal-selection guard
-arbitrates ended/error/abort/cancel races.
+settles `failed`/`start_unobserved`; resolver rejection, load throw and media
+error settle `failed`. A synchronous `play()` throw or rejected `play()` Promise
+settles `failed`/`play_not_allowed` when that value's `name` is exactly
+`NotAllowedError`. Other play errors settle `failed`/`play_failed`. The first
+selected terminal is retained, so a later play rejection cannot replace an
+earlier terminal. A single terminal-selection guard arbitrates
+ended/error/abort/cancel races.
 
 Cleanup invalidates callbacks before unsubscribing, detaching and releasing the
 lease. A successful detach clears the active slot and reports idle. A failed
 detach quarantines the handle and lease, reports a fault, refuses new work and
-keeps `idle` false; a cancel then settles `failed`/`cleanup_failed`, while an
-already-observed natural completion is preserved as the delivery fact.
+keeps `idle` false. On a failed detach, `cleanup_failed` takes precedence over
+the earlier terminal reason, while an already-observed natural completion is
+preserved as the delivery fact.
 `dispose()` prevents future admission, settles the active operation and may
 retry quarantined cleanup; a successful retry releases the retained lease once,
 while a failing retry keeps `idle` false and admission disabled.
@@ -431,12 +510,20 @@ as `false`.
 ## Browser-safe boundary
 
 Only `browser/` and the browser-safe contracts may enter the browser graph.
-Backend adapters may import the browser-safe type declarations but never a
+The public entry [`browser/index.ts`](browser/index.ts) exports the browser-safe
+types, playback controller, `PlayerPort` adapter and DOM media driver; the Node
+provider, worker, registry, VTS and expression-policy modules are not exported
+there. Backend adapters may import the browser-safe type declarations but never a
 sibling backend module into the browser subtree. `Blob` belongs to the local
-resolver/driver contracts and never crosses a JSON wire boundary. The player,
-the mapped renderer and the console transport each keep their own sending mode:
-M2 is the sole browser wire sender and does not resend execute/cancel return
-values; the same-process `PlayerPort` returns terminal evidence to its caller.
+resolver/driver contracts and never crosses a JSON wire boundary.
+
+The player, the mapped renderer and the console transport keep their own sending
+modes. M2 is the sole browser wire sender: its performer machine sends observed
+`performance.receipt` frames over the
+[application transport](../console/app-transport.ts), but does not echo
+execute/cancel return values, and those receipts describe local browser
+observations rather than runtime-confirmed delivery. The same-process
+`PlayerPort` returns terminal evidence to its caller.
 
 ## Failure, cancellation and Stop
 
@@ -604,11 +691,18 @@ The browser harness is served from the committed config
 
 [`vts-client.ts`](vts-client.ts) implements the deterministic VTS protocol
 client and [`vts-driver.ts`](vts-driver.ts) implements the hotkey driver plus its
-composition with the existing mapped renderer. This increment is the offline,
+composition with the existing mapped renderer. This module is the offline,
 injected-transport adapter: it contains no endpoint discovery, pairing,
 authentication token, credential reader, socket constructor, reconnect, retry or
-replay. A later D/M5 composition supplies an already connected transport and
-owns the live connection decision.
+replay. The caller supplies an already connected transport.
+
+The current runtime has separate integration modules: [`vts-connection.ts`](vts-connection.ts)
+adapts one injected OPEN Node `ws` socket, [`vts-pairing.ts`](vts-pairing.ts)
+performs the bounded D2 token grant/authentication handshake, and M5's
+[`vts-acquisition.ts`](../runtime/vts-acquisition.ts) runs one bounded acquisition
+over those primitives with a deployment credential store. The reference live
+deployment uses that acquisition at startup; the M1 client/driver still own no
+endpoint discovery or credential decision.
 
 ```ts
 const adapter = createVtsRenderer({
@@ -671,12 +765,15 @@ once, and abort listeners and timers are removed on every outcome. A correlated
 protocol `APIError` is a refusal; raw error messages and transport exception text
 never enter observations or logs.
 
-Each dispatch rechecks, in order, `APIStateResponse` `active` and
-`currentSessionAuthenticated` (never a caller-supplied trust boolean),
-`CurrentModelResponse` `modelLoaded`/`modelID`, and
-`HotkeysInCurrentModelResponse` `modelLoaded`/`modelID` plus the exact configured
-`hotkeyID` for that currently loaded model. Only then is one
-`HotkeyTriggerRequest` with that exact id sent. A missing/unavailable mapping,
+Each successful dispatch sends three requests in order, an `APIStateRequest`, a
+`HotkeysInCurrentModelRequest` with `{}` data, and one `HotkeyTriggerRequest`.
+The trigger is sent only after the dispatch validates `APIStateResponse` `active`
+and `currentSessionAuthenticated` (never a caller-supplied trust boolean) and
+then checks the inventory's `modelLoaded`/`modelID` against the configured model
+and the exact configured `hotkeyID` on every dispatch. The inventory reply is
+the fresh current-model check, so ordinary dispatch sends no separate
+`CurrentModelRequest`, while the standalone protocol client still exposes
+`currentModel()` for direct callers. A missing/unavailable mapping,
 model mismatch, unauthenticated or inactive API, disappeared hotkey or invalidated
 instance means zero trigger calls. One dispatch is admitted per driver instance;
 a concurrent dispatch fails `vts_busy` with no queue and no extra request.
@@ -686,7 +783,7 @@ reported only as `accepted`. It never becomes `started` or `completed`; the
 mapped renderer additionally refuses an acceptance-only completion claim. A
 known `APIError` refusal settles `failed`. An already-aborted dispatch guarantees
 zero protocol sends and settles `cancelled`. An abort or expiry during preflight
-may already have sent read-only API/model/hotkey queries, but it guarantees zero
+may already have sent read-only API and inventory queries, but it guarantees zero
 trigger requests. The low-level driver can report `cancelled` before trigger; the
 existing generic mapped-renderer abort race can conservatively report `unknown`
 before the driver resolves, so the mapped wrapper does not always return
@@ -742,7 +839,11 @@ frames to a UTF-8 string; malformed UTF-8 and unexpected binary frames are
 ignored. `close` and `error` are forwarded once without the raw close reason or
 error object. One application subscriber is allowed at a time; its unsubscribe
 is idempotent, and subscriber exceptions are contained. Only listeners added by
-this adapter are removed.
+this adapter are removed. If one safe error arrives between subscribers, it is
+held and delivered synchronously exactly once to the next subscriber. A real
+successor can therefore fail its first request immediately before any send; the
+pending error does not itself initiate close or terminate the socket, and the
+existing physical close/timeout/ownership behavior remains unchanged.
 
 Closing has three distinct facts:
 
@@ -763,14 +864,15 @@ Closing has three distinct facts:
 
 `closeTimeoutMs` is an independent cleanup budget, not a renderer or request
 timeout, and this module invents no production default. The Node-only module is
-not exported from `browser/index.ts` and is not composed into a production
-entrypoint in this checkout. The offline tests in
+not exported from `browser/index.ts`; the reference deployment reaches it through
+M5's acquisition lifecycle rather than importing it into the browser graph. The
+offline tests in
 [`test/offline/m1-performance.test.ts`](../../test/offline/m1-performance.test.ts)
 use [`test/support/m1-vts-connection-kit.ts`](../../test/support/m1-vts-connection-kit.ts)
 for controlled sockets and one local `127.0.0.1` ephemeral fixture server; they
-do not contact VTS, port 8001, a provider or credentials. Real pairing,
-authentication, model/hotkey verification and device actions remain
-unimplemented in increment D and require separate acceptance.
+do not contact VTS, port 8001, a provider or credentials. D2 pairing and M5
+acquisition are implemented separately; live model/hotkey/device acceptance
+remains pending.
 
 ### Pairing primitive (M1-02 increment D2 offline)
 
@@ -829,18 +931,20 @@ VTS timestamps are never used as a local clock. `requestTimeoutMs` bounds the
 ordinary `AuthenticationRequest` response only, and `humanApprovalTimeoutMs`
 separately bounds the initial permission response. There are no hidden defaults.
 
-**M5 ownership.** M5 must bind the credential provider to the intended plugin
-identity and deployment target, serialize same-record saves, provide persistent
-storage, and arm one finite overall acquisition deadline **before** credential
-load. That signal spans load, permission, authentication and save; M5 retains
-whether cancellation or deadline won and clears its own deadline timer on
-handoff. The primitive adds no production overall-timer API and no credential
-storage lock. Cancellation stops protocol progress and starts bounded D1 cleanup
-without awaiting an unresolved provider; late provider fulfillment/rejection is
-contained, admits no new send or save and cannot produce a successful handle.
-An already admitted save is not rolled back. A coordinated M5-supplied initial
-close policy of 5000 ms is a caller policy, not a D1/D2 hidden default or a
-measured cleanup guarantee.
+**M5 ownership.** M5's [`vts-acquisition.ts`](../runtime/vts-acquisition.ts)
+binds the credential provider to the intended plugin identity and deployment
+target, serializes same-record operations through one coordinator per store, and
+arms one finite overall acquisition deadline **before** credential load. That
+signal spans load, permission, authentication and save; M5 retains whether
+cancellation or deadline won and clears its own deadline timer on handoff. The
+reference deployment supplies a token-file store at an explicitly configured
+path, not a hidden default. The primitive still adds no production
+overall-timer API and no credential storage lock. Cancellation stops protocol
+progress and starts bounded D1 cleanup without awaiting an unresolved provider;
+late provider fulfillment/rejection is contained, admits no new send or save and
+cannot produce a successful handle. An already admitted save is not rolled back.
+The coordinated 5000 ms close policy is a caller policy, not a D1/D2 hidden
+default or a measured cleanup guarantee.
 
 On failure the primitive releases its pairing subscription, clears its own
 timers and abort listener, calls the same D1 `close()` and reports the actual
@@ -854,21 +958,30 @@ C client later performs its own `APIStateResponse` authentication/active check.
 
 This Node/private module is not exported from [`browser/index.ts`](browser/index.ts).
 The offline tests exercise the real pairing primitive and D1 handle over
-controlled sockets and private provider fixtures. They are not evidence of live
-VTS pairing, a real credential store, production composition or a physical
-device session.
+controlled sockets and private provider fixtures. They are not evidence of a live
+VTube Studio device session, a production credential store, model/hotkey output
+or physical animation/completion.
 
-## Not yet implemented
+## Current integration and pending acceptance
 
-- Live VTube Studio attachment, real credential storage, a production connection
-  owner and device-facing integration remain unimplemented. The offline C client,
-  hotkey driver, D1 connection handle and D2 pairing primitive above target
-  injected or locally fabricated sockets and a private injected credential
-  provider only; no live pairing/authentication, real credential store,
-  animation start/completion or physical device proof is claimed.
-- The authoritative `DeadlineGate` (M5) and the browser receipt transport (M2).
-  The registry above is composed and invalidated by M5 later; it grants no
-  dispatch authority.
-- Real-start/history classification, network timing and durable recovery.
-- A product HTTP audio-resource endpoint and root composition (an M2/M5
-  integration decision). No HTTP resource serving is added by this module.
+- The M5 reference live deployment and production composition exist in this
+  checkout and wire the live text source, the in-process guarded Kokoro provider,
+  the audio registry and the VTube Studio renderer through the acquisition
+  lifecycle. The deployment is a reviewable candidate, not an accepted live run:
+  live-provider behaviour, product recovery and end-to-end acceptance remain
+  pending.
+- The runtime serves admitted dynamic audio over the same-origin `POST /audio`
+  route, and the M2 console posts that route through `AudioResolver` and sends
+  observed `performance.receipt` frames over its application transport. This M1
+  directory itself adds no HTTP serving, browser transport or root composition;
+  M5/M2 own those integrations.
+- VTS D1 close handling, D2 pairing and M5 acquisition are implemented and
+  exercised offline. A live VTube Studio device session, a production credential
+  store beyond the configured token file, verified model/hotkey output and
+  physical animation start/completion still require separate acceptance.
+- Real-start/history classification, network timing, acoustic output and
+  physical-silence proof remain pending. Local `status`, playback API events,
+  prepared resources and worker/receipt observations are not acoustic or
+  product-proof evidence.
+- The standalone X06 expression policy is implemented and tested offline but is
+  not activated by the reference deployment or any production composition.

@@ -300,10 +300,10 @@ export interface PendingDraft {
 
 /**
  * The honesty rule for draft settlement: one acknowledgement settles only its
- * own submission, and a newer edit is never overwritten. A mismatched ack
- * leaves the composer untouched; an accepted or duplicate ack clears the draft
- * only while it still holds the acknowledged text; a rejected ack restores that
- * text only into an empty composer.
+ * own submission; a newer edit is never overwritten; an accepted or duplicate
+ * ack clears the draft only while it still holds the acknowledged text; a
+ * rejected ack leaves the composer exactly as the operator left it, so a
+ * deliberate clear stays cleared.
  */
 export function settleDraftOnAck(
   composer: string,
@@ -314,7 +314,6 @@ export function settleDraftOnAck(
   if (ack.status === 'accepted' || ack.status === 'duplicate') {
     return composer === pending.text ? '' : composer
   }
-  if (ack.status === 'rejected') return composer === '' ? pending.text : composer
   return composer
 }
 
@@ -863,9 +862,9 @@ export function reduceServerMessage(state: ConsoleState, message: ServerMessage)
 /**
  * Apply one inbound application (protocol 0.2) message. Base messages are
  * delegated unchanged to {@link reduceServerMessage}; only the explicit
- * retirement state is handled here. Attach, operator, offer, grant and recovery
- * acknowledgement messages leave the view unchanged, and retirement is never
- * inferred from lifecycle.
+ * retirement state is handled here. Attach, operator, offer, grant, recovery and
+ * voice messages leave the view unchanged, and retirement is never inferred
+ * from lifecycle.
  */
 export function reduceApplicationMessage(
   state: ConsoleState,
@@ -885,6 +884,8 @@ export function reduceApplicationMessage(
     case 'performance.offer':
     case 'performance.grant':
     case 'session.recovery.ack':
+    case 'voice.state':
+    case 'voice.sample':
       return state
     default:
       return reduceServerMessage(state, message)
