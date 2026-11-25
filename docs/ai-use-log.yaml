@@ -9761,6 +9761,38 @@ entries:
       docs/architecture/candidate-comparison.md, docs/code-governance/README.md,
       docs/code-governance/structural-constraints.md and this log entry.
   - date: "2026-11-25"
+    task: course-governance-merged-test-roles
+    change: >-
+      Assign the merged #190 console, voice-settings and root-entry browser
+      tests to M2, M5 and M1 in the default-deny policy. Add a focused
+      regression that proves each path is editable by its owning role and
+      denied to M6.
+    requirements: []
+    invariants: []
+    commits: ["5c5625b7ddef185339a2e60f15f90a8bbee225fb"]
+    agent: OpenCode V2 build
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    sessions: [ses_dee928480ffej5otUlfpmfTSvV]
+    supervision: >-
+      The orchestrating assistant narrowed the session after an over-broad
+      read, supplied a task-local configuration limited to the policy file,
+      reviewed the resulting two-file diff and ran the checks outside the
+      session. The policy remains a proposal and no human adoption is claimed.
+    verification:
+      base: c67e31ebe371387dde54d1577411f3a68b20ba39
+      results: >-
+        Focused policy suite 34/34; pnpm typecheck exited 0; rtk proxy
+        pnpm lint exited 0; git diff --check reported no whitespace errors.
+      limits: >-
+        No native role reload, remote CI, human adoption or G4 result is
+        claimed for this follow-up.
+    scope: >-
+      .opencode/permissions.jsonc, test/offline/opencode-policy.test.ts and
+      this log entry. No runtime, source, schema, CI or frozen-path change.
+  - date: "2026-11-25"
     task: g6-historical-identity
     change: >-
       Classify a G6 AI-use entry as historical by its content, not by its array
