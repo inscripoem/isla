@@ -1,0 +1,243 @@
+{
+  "version": 1,
+  "status": "under-review",
+  "description": "Role/path policy for task-local OpenCode build configurations. This file is a policy source; it is not an automatically loaded OpenCode config and contains no provider, model or credential value.",
+  "defaultEffect": "deny",
+  "read": [
+    "src/**",
+    "test/**",
+    "tools/**",
+    "docs/**",
+    "prompts/**",
+    "public/**",
+    ".github/**",
+    ".opencode/**",
+    ".agent/**",
+    ".cache/opencode/**",
+    "package.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "tsconfig.json",
+    "tsconfig.app.json",
+    "tsconfig.node.json",
+    "tsconfig.test.json",
+    "vite.config.ts",
+    "vitest.config.ts",
+    ".oxlintrc.json",
+    ".gitignore",
+    "index.html",
+    "README.md",
+    "AGENTS.md",
+    "Prompt.md",
+    "architecture-blueprint.md"
+  ],
+  "roles": {
+    "M1": {
+      "source": ["src/performance/**"],
+      "tests": [
+        "test/offline/m1-performance.test.ts",
+        "test/offline/m1-kokoro-worker-entry.test.ts",
+        "test/conformance/performance.conformance.ts",
+        "test/support/m1-kit.ts",
+        "test/support/m1-kokoro-kit.ts",
+        "test/support/m1-kokoro-sdk-kit.ts",
+        "test/support/m1-kokoro-timing.ts",
+        "test/support/m1-kokoro-worker-kit.ts",
+        "test/support/m1-real-worker-kit.ts",
+        "test/support/m1-controlled-worker-entry.mjs",
+        "test/support/m1-vts-kit.ts",
+        "test/support/m1-vts-pairing-kit.ts",
+        "test/support/m1-vts-connection-kit.ts",
+        "test/live/kokoro-smoke.ts",
+        "test/live/kokoro-setup.ts",
+        "test/live/kokoro-live-config.ts",
+        "test/live/kokoro-browser.ts",
+        "test/live/kokoro-browser.html",
+        "test/live/kokoro-browser.config.ts",
+        "test/live/kokoro-browser-README.md"
+      ],
+      "handoffs": [],
+      "shell": ["pnpm test:m1"]
+    },
+    "M2": {
+      "source": ["src/console/**"],
+      "tests": [
+        "test/offline/m2-console.test.ts",
+        "test/conformance/console.conformance.ts",
+        "test/browser/console.tsx",
+        "test/browser/console.html"
+      ],
+      "handoffs": [],
+      "shell": ["pnpm test:m2"]
+    },
+    "M3": {
+      "source": ["src/decision/**"],
+      "tests": [
+        "test/offline/m3-decision.test.ts",
+        "test/conformance/decision.conformance.ts",
+        "test/support/decision-corpus.ts",
+        "test/support/decision-runner.ts",
+        "test/support/decision-synthetic-review.ts",
+        "test/fixtures/decision/**"
+      ],
+      "handoffs": [],
+      "shell": ["pnpm test:m3"]
+    },
+    "M4": {
+      "source": ["src/dialogue/**", "prompts/dialogue/**"],
+      "tests": [
+        "test/offline/m4-*.test.ts",
+        "test/conformance/dialogue.conformance.ts",
+        "test/support/m4-kit.ts"
+      ],
+      "handoffs": ["docs/team/HANDOFF-M4-01.en.md"],
+      "shell": ["pnpm test:m4"]
+    },
+    "M5": {
+      "source": ["src/runtime/**"],
+      "tests": [
+        "test/offline/m5-*.test.ts",
+        "test/offline/production-cli.test.ts",
+        "test/conformance/runtime.conformance.ts",
+        "test/support/coordinator-runner.ts",
+        "test/support/m5-*",
+        "test/support/production-*",
+        "test/support/i1-*"
+      ],
+      "handoffs": [
+        "docs/team/HANDOFF-M5-*.md",
+        "docs/team/HANDOFF-I1-APPLICATION.en.md"
+      ],
+      "shell": ["pnpm test:m5", "pnpm test:composition"]
+    },
+    "M6": {
+      "source": ["src/storage/**", "src/evaluation/**", ".github/workflows/**"],
+      "tests": [
+        "test/offline/m6-*.test.ts",
+        "test/offline/trace-fitness.test.ts",
+        "test/offline/requirements.test.ts",
+        "test/offline/boundaries.test.ts",
+        "test/offline/contracts.test.ts",
+        "test/offline/ai-use-log-gate.test.ts",
+        "test/offline/change-range.test.ts",
+        "test/offline/eval-gate.test.ts",
+        "test/offline/test-approval-gate.test.ts",
+        "test/conformance/storage.conformance.ts",
+        "test/support/m6-*",
+        "test/support/gated-store.ts",
+        "test/support/gated-ports.ts"
+      ],
+      "handoffs": [],
+      "shell": ["pnpm test:m6"]
+    }
+  },
+  "approvals": {
+    "shared_contracts": ["src/contracts/**"],
+    "manifests": [
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "tsconfig.json",
+      "tsconfig.app.json",
+      "tsconfig.node.json",
+      "tsconfig.test.json",
+      "vite.config.ts",
+      "vitest.config.ts",
+      ".oxlintrc.json"
+    ],
+    "frozen": [
+      "architecture-blueprint.md",
+      "src/contracts/app/ports.ts",
+      "src/contracts/app/storage.ts"
+    ],
+    "governance": [
+      "AGENTS.md",
+      "Prompt.md",
+      ".opencode/**",
+      ".agent/**",
+      "docs/code-governance/**",
+      "docs/architecture/**",
+      "docs/req/**",
+      ".github/PULL_REQUEST_TEMPLATE.md"
+    ],
+    "other_modules": [
+      "src/**",
+      "test/**",
+      "prompts/**",
+      "docs/team/HANDOFF-*.md"
+    ]
+  },
+  "protectedPaths": [
+    "opencode.json",
+    "docs/architecture/frozen.yaml",
+    ".opencode/permissions.jsonc",
+    ".opencode/rules.md",
+    ".agent/rules.md",
+    "tools/opencode/**",
+    ".cache/opencode/**"
+  ],
+  "hardDeny": {
+    "credentials": [
+      ".env",
+      ".env.*",
+      "**/.env",
+      "**/.env.*",
+      "**/*.env",
+      "**/*secret*",
+      "**/*token*",
+      "**/*password*",
+      "**/*credential*",
+      "**/*auth.*",
+      "**/.auth*",
+      "**/auth/**",
+      "id_*",
+      "**/id_*",
+      "**/*.pem",
+      "**/*.p12",
+      "**/*.key",
+      "**/.ssh/**",
+      "**/.aws/**",
+      "**/.gnupg/**"
+    ],
+    "actions": ["task"],
+    "shell": [
+      "git commit*",
+      "git push*",
+      "git merge*",
+      "git rebase*",
+      "git reset*",
+      "git checkout*",
+      "git switch*",
+      "git branch -D*",
+      "git tag -d*",
+      "git stash drop*",
+      "git clean*",
+      "git add*",
+      "gh *",
+      "pnpm publish*",
+      "npm publish*",
+      "pnpm install*",
+      "npx *",
+      "pnpm dlx *",
+      "rm -rf*"
+    ]
+  },
+  "shell": {
+    "common": [
+      "git status --short",
+      "rtk git status --short",
+      "git diff --stat",
+      "rtk git diff --stat",
+      "git diff",
+      "rtk git diff",
+      "pnpm typecheck",
+      "pnpm lint",
+      "rtk lint",
+      "pnpm test",
+      "pnpm build",
+      "pnpm verify",
+      "pnpm test:readiness",
+      "pnpm test:composition"
+    ]
+  }
+}

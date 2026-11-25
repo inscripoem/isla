@@ -159,6 +159,7 @@ that does not exist.
 | Frozen paths require an ADR and human review (§7) | `docs/architecture/frozen.yaml` + the `frozen-modified` check, run against the **change set CI supplies** | 🧩 code on R3 (#27), **not blocking** |
 | Every change updates the AI-use log (G6) | `ai-use-log-gate.ts` + the G6 gate | 🧩 code on R3 (#27), **not blocking** |
 | One task = one commit; no agent merges; PR checklist | `.github/PULL_REQUEST_TEMPLATE.md` (+ `AGENTS.md`) | ⏳ **R3 (#27)** / ✅ `AGENTS.md` |
+| Agent writes are role-scoped and default-deny (permission model) | `tools/opencode/` compiler + `test/offline/opencode-policy.test.ts` | 🧩 local candidate, **not blocking**; native checks are version-bound and re-observed per candidate |
 | A new id's prefix matches its `Owner` (§3.2) | `invariant-owner-mismatch` / `trace-case-owner-mismatch` in `trace-fitness.ts` | ✅ **R3 (#27)** |
 | The case recogniser accepts prefixed ids (§3.1) | `CASE_ID` in `trace-fitness.ts` matches both `C-12` and `C-M6-1` | ✅ **R3 (#27)** |
 

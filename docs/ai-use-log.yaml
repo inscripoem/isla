@@ -9691,3 +9691,73 @@ entries:
         browser phases passed 31 and 16 checks. Heart and Emma speech matched
         their expected WAVs and a new runtime process retained Emma. Playback
         and SQLite were real, with controlled dialogue text and avatar peers.
+
+  - date: "2026-11-25"
+    task: course-governance-d2-d3-d9-candidate
+    change: >-
+      Prepare the local D2/D3/D9 course-governance candidate on main e2166cd.
+      Add the machine-readable role/path policy, the human-only rules draft, the
+      project covenant, the permission-model document and the task-local policy
+      compiler and CLI, with focused tests. The compiler emits the observed V2
+      plugin-exclusion form ("-<name>") and keeps the caller's names in the
+      sidecar. Add a qualitative architecture candidate comparison consolidated
+      from the existing ADRs, a static Prompt.md with the plan-and-approval
+      gate, and short AGENTS/README index changes. No runtime, contract,
+      dependency or frozen path changes.
+    requirements: []
+    invariants: []
+    commits: []
+    agent: OpenCode V2 build
+    provider: self-api
+    model: deepseek-v4-flash
+    variant: xhigh
+    model_cli_id: "self-api/deepseek-v4-flash#xhigh"
+    sessions:
+      - ses_deeda366dffeRO9QWu0PLEsRH7
+      - ses_deed588c0ffegf2JF7qkcQdgIe
+      - ses_deed54a28ffet2zoG0pHmf55xg
+    supervision: >-
+      The orchestrating assistant (Claude Code) supervised the OpenCode build
+      session under a task-local project configuration that keeps one build
+      agent, excludes oh-my-opencode-slim and denies subagents, credential
+      reads and external directories. The session authored the policy,
+      compiler, CLI, focused test and tsconfig change. The orchestrator ran the
+      focused test, typecheck, lint, full verification and the two bounded
+      native preflight sessions outside the build session.
+    human_review: >-
+      Captain authorized local preparation only. No push, pull request,
+      comment, review, merge or upload was performed. The policy, rule files
+      and covenant remain proposals; no human adoption is claimed. G1 does not
+      apply to this change because it touches no src/ or prompts/ file; the
+      PR-time label and branch-protection state remain separate.
+    transcript_record: >-
+      The genuine sessions are exported to the external evidence directory
+      evidence/20261125-course-governance/ after a local secret scan, together
+      with the build run's JSON events and the native preflight records. Raw
+      values are not displayed in the repository.
+    verification:
+      base: e2166cd047537042bd58a3c9999515fa9caf96e1
+      results: >-
+        Linux, Node 22.23.4, pnpm 12.9.0, OpenCode 2.4.1. Focused policy test
+        33/33; pnpm typecheck exited 0; rtk proxy pnpm lint exited 0; pnpm
+        verify passed 99 files / 2216 tests, typecheck, lint and build;
+        pnpm test:readiness 47/47; pnpm test:trace 49/49; pnpm gate:eval
+        reported not run. Native preflight in a disposable directory loaded
+        the generated config (317 ordered rules, model and plugin exclusion)
+        and matched read allow/deny and write allow/deny for harmless synthetic
+        paths.
+      limits: >-
+        No remote CI, branch protection, human review, team adoption or G4
+        result is claimed. The native preflight was observed in a disposable
+        directory, not in this worktree and not through the committed
+        opencode.json. G1 approval is not recorded. Fixture-level rule
+        evaluation is not native enforcement evidence, and the native canaries
+        do not prove that the shell matcher or every path rule behaves
+        identically in another environment.
+    scope: >-
+      .opencode/permissions.jsonc, .opencode/rules.md, .agent/rules.md,
+      tools/opencode/policy.ts, tools/opencode/cli.ts,
+      test/offline/opencode-policy.test.ts, tsconfig.node.json, AGENTS.md,
+      Prompt.md, README.md, docs/architecture/permission-model.md,
+      docs/architecture/candidate-comparison.md, docs/code-governance/README.md,
+      docs/code-governance/structural-constraints.md and this log entry.

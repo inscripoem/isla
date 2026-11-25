@@ -11,6 +11,8 @@ This folder holds the rules that bound the coding agent (D3) and the way its wor
 | File | Deliverable | Normative for | Status |
 | --- | --- | --- | --- |
 | [`structural-constraints.md`](structural-constraints.md) | D3 | module organization, authority boundaries, stable identifiers, artifact authority, register ownership, and the enforcement state of every rule | PR #32 |
+| [`../architecture/permission-model.md`](../architecture/permission-model.md) | D2.6 / D3 | role/path read-write matrix, default-deny policy, approvals, protected paths and enforcement state | local proposal |
+| [`../architecture/candidate-comparison.md`](../architecture/candidate-comparison.md) | D2 | qualitative comparison of the alternatives already recorded in the ADRs | local proposal |
 | [`verification-constraints.md`](verification-constraints.md) | D4 | structural / regression / behavioral verification tiers and the evidence each requires | on `main` |
 | [`mcp-tool-manifest.md`](mcp-tool-manifest.md) | D3 | the agent's external tool/context surface and the policy for extending it | this PR |
 
@@ -20,6 +22,20 @@ The instruction every coding agent reads on start is **[`AGENTS.md`](../../AGENT
 root — role selection, workflow, and tool/authority boundaries. It is the **operative** copy; this folder
 is the **normative reference** it points to. Where the two could disagree, `AGENTS.md` states the rule and
 this folder states the detail — the rule is not duplicated in both.
+
+## Agent permissions
+
+The proposed role/path permission model is
+[`docs/architecture/permission-model.md`](../architecture/permission-model.md). Its machine-readable source is
+[`.opencode/permissions.jsonc`](../../.opencode/permissions.jsonc), compiled per role and task by
+[`tools/opencode/`](../../tools/opencode/) into ordinary JSON under `.cache/opencode/`. The model is a
+local, under-review candidate: it is not auto-loaded, does not activate a blocking gate, and has not
+established native enforcement beyond the version-bound observations recorded in the model document.
+
+The always-on rule files are `.opencode/rules.md` (human-only) and `.agent/rules.md` (project covenant).
+A human reviewer must adopt them; an agent-prepared draft is not adoption. The qualitative D2 candidate
+comparison is [`../architecture/candidate-comparison.md`](../architecture/candidate-comparison.md);
+numerical results remain reserved for the G4 evaluation table.
 
 ## Enforcement
 
