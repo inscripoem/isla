@@ -1548,8 +1548,16 @@ export async function assembleDialogueContext(
    */
   const validNowMs: number | undefined =
     recallNowMs !== undefined && Number.isFinite(recallNowMs) ? recallNowMs : undefined
+  /*
+   * `maxTurns: 0` means this stream has no allowance at all, so the port must
+   * not run: every result would be discarded immediately (`recalledMemories`
+   * below already yields `[]` for that cap). Calling it anyway would charge a
+   * caller-supplied port - a real scorer or an M6 search - for work whose answer
+   * cannot reach the prompt, and would break the promise that `maxTurns: 0` is
+   * a no-op for recall. The guard is on the call, not only on its result.
+   */
   const recallAllConfirmed: readonly RecalledMemoryEntry[] =
-    recallPath !== 'recall' || input.recall === undefined
+    maxTurns === 0 || recallPath !== 'recall' || input.recall === undefined
       ? []
       : (() => {
           /*
@@ -2116,6 +2124,9 @@ export async function assembleDialogueContext(
       personaVersionKey(profile.profileId, profile.version),
       MAX_STYLE_ANCHORS,
       deriveStyleContract(profile),
+      // A11: a line that repeats (or is contained in) a standing fact is not
+      // a voice sample - it is the fact again, in her voice.
+      profile.standingFacts ?? [],
     )
     styleAnchorExclusions.push(...selection.exclusions)
     const budgetForAnchors = Math.max(
@@ -2188,9 +2199,19 @@ export async function assembleDialogueContext(
       listenerCharacters -
       styleAnchorCharacters,
   )
+  /*
+   * The heard-prefix turns share the same stream `maxTurns` bounds, so every
+   * row already in it is subtracted: the kept window, the v1 recalled turns and
+   * the unified v2 admission list. `recallAdmitted` is the v2 list and is EMPTY
+   * on the v1 path (where `recalledTurns` already counts); subtracting
+   * `recallTurns` alone counted the character recalls but not the recalled
+   * LISTENER rows, while the displacement loop above counts both - so with
+   * listener recall present the allowance was too large and the prompt could
+   * carry more rows than `maxTurns` allows.
+   */
   const heardPrefixAllowance = Math.max(
     0,
-    maxTurns - kept.turns.length - recalledTurns.length - recallTurns.length,
+    maxTurns - kept.turns.length - recalledTurns.length - recallAdmitted.length,
   )
   const rankedHeardPrefix = heardPrefixCandidates
     .map((turn, order) => ({

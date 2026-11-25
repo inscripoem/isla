@@ -306,6 +306,61 @@ describe('M4 style anchors — selection filters', () => {
     // With no markers every candidate scores 0, so input order decides.
     expect(idsOf(selection.anchors)).toEqual(['a'])
   })
+
+  it('excludes a line that restates a standing fact, and keeps a line that does not', () => {
+    /*
+     * A11: the anchor section is a voice reference, not a second place to state
+     * what the persona block already states. An anchor whose normalized,
+     * lower-cased text is a substring of a standing fact (or vice versa) is
+     * excluded with its own reason, AFTER the length checks and BEFORE the
+     * duplicate filter.
+     */
+    const fact =
+      'She was born on June 3rd in the northern harbour town and still keeps a map of it'
+    // 20..80 characters, and a substring of the fact above.
+    const repeated = turn('repeated', 'born on June 3rd in the northern harbour town')
+    expect(normalizeAnchorText(repeated.text).length).toBeGreaterThanOrEqual(STYLE_ANCHOR_MIN_CHARS)
+    expect(normalizeAnchorText(repeated.text).length).toBeLessThanOrEqual(STYLE_ANCHOR_MAX_CHARS)
+    expect(fact.toLowerCase()).toContain(normalizeAnchorText(repeated.text).toLowerCase())
+
+    const unique = turn('unique', TIC_LINE)
+    const selection = selectStyleAnchors(
+      [repeated, unique],
+      VERSION_KEY,
+      MAX_STYLE_ANCHORS,
+      CONTRACT,
+      [fact],
+    )
+    expect(idsOf(selection.anchors)).toEqual(['unique'])
+    expect(selection.exclusions).toEqual([
+      expect.objectContaining({ turnId: 'repeated', reason: 'standing-fact' }),
+    ])
+
+    // The negative control: without the fact the same line IS an anchor, so the
+    // exclusion above is the fact filter and not another reason.
+    const withoutFacts = selectStyleAnchors([repeated, unique], VERSION_KEY, MAX_STYLE_ANCHORS, CONTRACT)
+    expect(idsOf(withoutFacts.anchors)).toContain('repeated')
+
+    // Case and spacing do not matter, and a fact SHORTER than the anchor (the
+    // anchor contains the fact) is excluded too.
+    const containing = turn('containing', 'Hmph, the harbour town map is on the shelf, human.')
+    const shortFact = selectStyleAnchors(
+      [containing],
+      VERSION_KEY,
+      MAX_STYLE_ANCHORS,
+      CONTRACT,
+      ['  The Harbour   Town map  '],
+    )
+    expect(idsOf(shortFact.anchors)).toEqual([])
+    expect(shortFact.exclusions).toEqual([
+      expect.objectContaining({ turnId: 'containing', reason: 'standing-fact' }),
+    ])
+
+    // An empty fact is skipped: it is a substring of every line, so treating it
+    // as a needle would exclude the whole section.
+    const blankFact = selectStyleAnchors([unique], VERSION_KEY, MAX_STYLE_ANCHORS, CONTRACT, ['   '])
+    expect(idsOf(blankFact.anchors)).toEqual(['unique'])
+  })
 })
 
 /* -------------------------------------------------------------------------- */

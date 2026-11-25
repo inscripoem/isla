@@ -415,7 +415,8 @@ export type RecalledMemoryEntry = RecalledTurn | RecalledListenerTurn
  *     second admission rule rather than an adapter. The count is reported on
  *     the adapter (`listenerCandidatesPassedOver`), not on the wrapped port;
  *   - the character results keep the v1 score, order and `crossSessionDrops`
- *     (they are read from the port object, so the counter is live);
+ *     (they are read from the port object, so the counter is live - the adapter
+ *     forwards the wrapped port's count rather than reporting 0);
  *   - ranking dimensions the v1 scorer does not have are reported as 0 with
  *     `ageUnknown: true`, never as made-up estimates, and the weighted
  *     `scoreParts` reconstruct to the v1 score when read against
@@ -450,6 +451,15 @@ export function asRecallPort(port: DeliveryRecallPort): KeywordRecallPort {
     get listenerCandidatesPassedOver(): number {
       return passedOver
     },
+    /*
+     * The wrapped port's own refusals are forwarded live, not copied at
+     * adaptation time: the counter describes the v1 port's most recent call,
+     * which is exactly what `RecallPort.crossSessionDrops` promises. A port
+     * that does not filter silently reports 0.
+     */
+    get crossSessionDrops(): number {
+      return port.crossSessionDrops ?? 0
+    },
     recall(request: RecallRequest): readonly RecalledItem[] {
       let listenerCandidates = 0
       const characterTurns: AssembledTurn[] = []
@@ -471,10 +481,19 @@ export function asRecallPort(port: DeliveryRecallPort): KeywordRecallPort {
         ...(request.ownerAudienceIdOf === undefined
           ? {}
           : {
-              // Only a character turn reaches the v1 scorer, and a character
-              // subject carries its own turn (see `recallSubjectOf`).
+              // Only a character turn reaches the v1 scorer, and the v2
+              // callback reads a `RecallSubjectShape`. The v1 signature passes
+              // the BARE turn (it must stay `(turn: AssembledTurn) => ...`), so
+              // the full subject is built here - a `{ ...turn, role }` spread is
+              // not a subject and would leave `subject.turn` undefined, giving
+              // every caller an owner of `null`.
               ownerAudienceIdOf: (turn: AssembledTurn) =>
-                request.ownerAudienceIdOf?.({ ...turn, role: 'character' }) ?? null,
+                request.ownerAudienceIdOf?.({
+                  sessionId: turn.sessionId,
+                  scope: turn.scope,
+                  role: 'character',
+                  turn,
+                }) ?? null,
             }),
       })
       return recalled.map((entry): RecalledItem => ({

@@ -48,6 +48,7 @@ export type StyleAnchorExclusionReason =
   | 'too-long'
   | 'interrupted'
   | 'conflicting'
+  | 'standing-fact'
   | 'empty'
   | 'duplicate'
   | 'limit'
@@ -178,11 +179,16 @@ const DEFAULT_ANCHOR_CONTRACT: StyleContract = {
  *   - `interrupted` and `conflicting` turns are excluded: a fragment teaches an
  *     unfinished voice, and a contradicted line would anchor the identity of a
  *     claim the character does not stand behind;
+ *   - a line that merely restates a STANDING FACT is excluded (`standingFacts`):
+ *     the anchor section is a voice reference, not a second place to say what
+ *     the persona block already says;
  *   - normalized duplicates are kept once.
  *
  * `contract` defaults to `DEFAULT_ANCHOR_CONTRACT` (the shipped defaults), so
  * omitting it is well defined: tics and address forms are still preferred. Pass
  * `deriveStyleContract(profile)` to rank against a specific authored character.
+ * `standingFacts` defaults to none, so an omitting caller gets the previous
+ * selection exactly.
  *
  * Survivors are ordered by `anchorScore` (descending), ties keeping the input
  * order - which is the history's own order - and the first `limit` are kept. The
@@ -193,11 +199,28 @@ export function selectStyleAnchors(
   profileVersion: string,
   limit: number = MAX_STYLE_ANCHORS,
   contract: StyleContract = DEFAULT_ANCHOR_CONTRACT,
+  standingFacts: readonly string[] = [],
 ): StyleAnchorSelection {
   const style = contract
   const exclusions: StyleAnchorExclusion[] = []
   const seen = new Set<string>()
   const scored: { turn: AssembledTurn; score: number; order: number }[] = []
+  /*
+   * Normalized, lower-cased standing facts. Both sides go through
+   * `normalizeAnchorText`, so the comparison ignores spacing and case - the same
+   * notion of "the same line" the duplicate filter uses. A fact that normalizes
+   * to nothing is skipped: an empty needle is a substring of every line, which
+   * would exclude every anchor.
+   */
+  const facts = standingFacts
+    .map((fact) => normalizeAnchorText(fact).toLowerCase())
+    .filter((fact) => fact.length > 0)
+  const restatesStandingFact = (text: string): boolean => {
+    const normalised = text.toLowerCase()
+    return facts.some(
+      (fact) => normalised.includes(fact) || fact.includes(normalised),
+    )
+  }
 
   for (let order = 0; order < turns.length; order += 1) {
     const turn = turns[order]
@@ -228,6 +251,10 @@ export function selectStyleAnchors(
     }
     if (text.length > STYLE_ANCHOR_MAX_CHARS) {
       refuse('too-long')
+      continue
+    }
+    if (restatesStandingFact(text)) {
+      refuse('standing-fact')
       continue
     }
     if (seen.has(text)) {

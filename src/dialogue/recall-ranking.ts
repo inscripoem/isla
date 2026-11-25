@@ -968,11 +968,14 @@ export function createMultiFactorRecall(): RecallPort {
         if (!paraphrase && resolved < floor) return
         /*
          * A paraphrase shares no word with the message, so the floor above
-         * measures nothing it has; `RECALL_PARAPHRASE_FLOOR` is its bar, and it
-         * is a FLOOR, so a caller asking for stricter evidence is still obeyed.
+         * measures nothing it has; its own bar is `RECALL_PARAPHRASE_FLOOR`.
+         * That bar is a FLOOR, not a replacement for a stricter caller value:
+         * `floor` is `max(MIN_SIMILARITY, minSimilarity)`, so `Math.max` with
+         * the paraphrase floor keeps both - the flagship paraphrase (0.5) is
+         * still admitted at the default floor, while a caller asking for
+         * `minSimilarity: 0.9` still rejects it.
          */
-        if (paraphrase && resolved < RECALL_PARAPHRASE_FLOOR)
-          return
+        if (paraphrase && resolved < Math.max(floor, RECALL_PARAPHRASE_FLOOR)) return
         /*
          * A caller-declared irrelevance removes an item BEFORE ranking - it
          * never adds one - so an M3 "not relevant" verdict can suppress a
