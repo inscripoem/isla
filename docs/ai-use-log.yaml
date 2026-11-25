@@ -10334,3 +10334,74 @@ entries:
         local Magpie gateway with one selection case; all stage latencies are
         unobserved and usage is unknown, so the table is not a p95 or a
         threshold baseline. No Windows run.
+  - date: "2026-11-25"
+    task: M2-202-avatar-viewport
+    branch: m2-wiring-harness
+    change: >-
+      Add a transparent avatar viewport to the console and a local avatar relay
+      for issue #202. The console gains a browser-safe frame client, a pure
+      viewport reducer and an alpha canvas layer that stays unavailable when no
+      relay is configured, reports stale or error instead of a fabricated
+      avatar, and requires an explicit reconnect. The relay is a local Node
+      process that serves avatar.status text and avatar.frame binary WebP
+      messages on /avatar, reports source presence and last-frame time, and
+      never creates a frame when the source is absent. The synthetic source is
+      a fixed 96x96 transparent WebP used only for offline observation; NDI
+      capture is not implemented and is marked untested.
+    requirements: [FR-04, NFR-02, NFR-06]
+    invariants: []
+    commits:
+      - 949ad8d0561417fb96e9bcba7e866711d9f0d10e
+      - 00a73f7b3bd6a4a2a01c45019e7b72291312cb64
+    agent: opencode/build
+    provider: personal-deepseek / custom-foundry
+    model: deepseek-v4-flash / CS5351/DeepSeek-V4-Flash
+    opencode_version: "1.19.4"
+    launch_flags:
+      - "--agent build --format json -m personal-deepseek/deepseek-v4-flash --variant xhigh (viewport initial authoring)"
+      - "--agent build --format json -m custom-foundry/CS5351/DeepSeek-V4-Flash (viewport follow-up fixes and relay slice)"
+    sessions: [ses_ded957836ffeTuI4nVAcCIaExl, ses_ded8cb09fffeXFP3X0j0tXbRjy]
+    supervision: >-
+      The M2 member approved the plan and both decisions: WebP over WebSocket,
+      and a placeholder viewport labelled unavailable when no source exists.
+      The supervising agent prepared the prompts, reviewed every diff and ran
+      all checks; OpenCode sessions wrote the application code and tests and
+      were not allowed to run shell commands or git. The personal-deepseek
+      balance ran out after the initial viewport authoring, so two small
+      follow-up fixes and the entire relay slice ran on the foundry model. The
+      relay was exercised live with a Node WebSocket client and the viewport
+      was observed in local Chromium against the synthetic source.
+    human_review: >-
+      Not yet reviewed. M5 review of the wire contract and the merging human
+      remain pending; no agent pushed main or merged anything.
+    transcript_record: >-
+      OpenCode sessions ses_ded957836ffeTuI4nVAcCIaExl and
+      ses_ded8cb09fffeXFP3X0j0tXbRjy are exported to
+      ~/Library/Caches/isla-opencode-exports/M2-202-avatar-viewport-20261125.json
+      and M2-202-avatar-relay-20261125.json outside the checkout.
+    verification:
+      base: dba25e030e6cc826308292a863dca96f580dca28
+      results: >-
+        pnpm verify exited 0 on the task branch based on origin/main dba25e0: tsc -b, oxlint with 0
+        warnings and 0 errors, the full suite at 2280 tests in 101 files
+        including 119 existing console tests plus 13 new viewport tests and 8
+        new relay tests, and the Vite production build. The import-graph
+        boundary suite passed, keeping Node and ws out of the console graph and
+        the relay out of the bundle. A Node WebSocket client received one
+        status and 15 binary frames from the synthetic relay in 1.5 s, and
+        local Chromium on the fixture console page showed the badge
+        "Avatar - synthetic - 10 fps - live" with no WebSocket or decode error.
+      independent: >-
+        None; a single operator ran the checks. No live VTS, NDI, Windows or
+        remote CI check was performed. The browser observation used the
+        synthetic source, not VTube Studio, and is local evidence only.
+    scope: >-
+      src/console/avatar-viewport.ts, src/console/avatar-frame-client.ts,
+      src/console/AvatarViewport.tsx, src/console/ConsoleApp.tsx,
+      src/console/console.css, src/App.tsx, tools/avatar-relay/index.ts,
+      tools/avatar-relay/relay.ts, tools/avatar-relay/source.ts,
+      test/offline/m2-avatar-viewport.test.ts,
+      test/offline/m2-avatar-relay.test.ts, test/browser/console.tsx,
+      package.json, tsconfig.node.json and docs/ai-use-log.yaml. No shared
+      contract, RendererPort, receipt, storage, runtime or workflow file
+      changed.
