@@ -10729,8 +10729,10 @@ entries:
       relay was exercised live with a Node WebSocket client and the viewport
       was observed in local Chromium against the synthetic source.
     human_review: >-
-      Not yet reviewed. M5 review of the wire contract and the merging human
-      remain pending; no agent pushed main or merged anything.
+      M5 reviewed head fdcf855 and requested changes on items 1-4 plus
+      should-fix 5-9. The follow-up fixes are recorded in the
+      M2-202-avatar-viewport-review-fixes entry; no agent pushed main or
+      merged the pull request.
     transcript_record: >-
       OpenCode sessions ses_ded957836ffeTuI4nVAcCIaExl and
       ses_ded8cb09fffeXFP3X0j0tXbRjy are exported to
@@ -10747,7 +10749,7 @@ entries:
         the relay out of the bundle. A Node WebSocket client received one
         status and 15 binary frames from the synthetic relay in 1.5 s, and
         local Chromium on the fixture console page showed the badge
-        "Avatar - synthetic - 10 fps - live" with no WebSocket or decode error.
+        "Avatar · synthetic · 10 fps · live" with no WebSocket or decode error.
       independent: >-
         None; a single operator ran the checks. No live VTS, NDI, Windows or
         remote CI check was performed. The browser observation used the
@@ -10762,3 +10764,74 @@ entries:
       package.json and docs/ai-use-log.yaml. The existing tsconfig.node.json
       already included tools. No shared contract, RendererPort, receipt,
       storage, runtime or workflow file changed.
+  - date: "2026-11-25"
+    task: M2-202-avatar-viewport-review-fixes
+    branch: m2-202-avatar-viewport
+    change: >-
+      Address the M5 review of PR #211. The relay now binds 127.0.0.1, rejects
+      a non-local Origin and a path other than /avatar, caps clients at four,
+      drops frames when a client stops draining, ignores a source callback
+      after stop, defaults --source to none, reports the actual bound address,
+      and closes asynchronously on SIGINT/SIGTERM. The console normalizes an
+      optional relay URL (blank means unavailable, a scheme-less host gains
+      ws:// and /avatar, http(s) map to ws(s), and an invalid value becomes an
+      error badge instead of a render fault), times out a socket that never
+      opens, ignores a frame after close or with an older receive time, drops
+      a stale async decode, and rejects a WebP frame whose VP8X alpha flag is
+      explicitly clear. The badge moves to the bottom-left, the import
+      boundary blocks tools/ from the browser graph, and the permission
+      policy records the M2 relay and avatar-test paths.
+    requirements: [FR-04, NFR-02, NFR-06]
+    invariants: []
+    commits:
+      - bf243b0fd18355891a898180dbd0c4756e530cb9
+    agent: opencode/build
+    provider: custom-foundry
+    model: CS5351/DeepSeek-V4-Flash
+    opencode_version: "1.19.4"
+    launch_flags:
+      - "--agent build --format json -m custom-foundry/CS5351/DeepSeek-V4-Flash (viewport/client review fixes)"
+      - "--agent build --format json -m custom-foundry/CS5351/DeepSeek-V4-Flash (relay review fixes)"
+    sessions: [ses_ded49d0caffe4J7DdFNiLr5xye, ses_ded49d0c8ffeaYrTWnogiPgch6]
+    supervision: >-
+      The M2 member approved fixing the four blocking items and should-fix
+      items 5-9. The supervising agent wrote both prompts, reviewed every diff
+      and ran all checks; the OpenCode sessions wrote the application code and
+      tests and were not allowed to run shell commands, tests or git. The
+      supervisor returned two type errors and one SIGTERM race to the relay
+      session, which corrected them.
+    human_review: >-
+      M5 requested changes on fdcf855. The fixes are committed on the task
+      branch for re-review; no agent merged the pull request or pushed main.
+    transcript_record: >-
+      OpenCode sessions ses_ded49d0caffe4J7DdFNiLr5xye and
+      ses_ded49d0c8ffeaYrTWnogiPgch6 are exported to
+      ~/Library/Caches/isla-opencode-exports/M2-202-review-viewport-20261125.json
+      and M2-202-review-relay-20261125.json outside the checkout.
+    verification:
+      base: fdcf8551262a2ae59aa707c1e60c4bff0f0119b4
+      results: >-
+        pnpm verify exited 0 on the fix commit: tsc -b, oxlint with 0 warnings
+        and 0 errors, 2371 tests in 101 files, and the Vite production build.
+        The M2 suite passed 171 tests (119 console, 32 viewport/client and 20
+        relay). The relay suite starts a real WebSocket server on port 0,
+        asserts the 127.0.0.1 host, accepts localhost and absent Origins,
+        rejects a foreign Origin with 403 and a wrong path with 404, and checks
+        the --source ndi exit code 2 and SIGTERM exit code 0 subprocess paths.
+        The boundary suite now rejects a console import of tools/avatar-relay.
+      independent: >-
+        None; a single operator ran the checks. No live VTS or NDI capture,
+        Windows, Safari, remote CI or 1920-wide frame was verified. The
+        component effect has no DOM test because the repository test
+        environment is node-only; the reducer, frame client, real relay server
+        and earlier browser observation cover it indirectly.
+    scope: >-
+      src/App.tsx, src/console/avatar-viewport.ts,
+      src/console/avatar-frame-client.ts, src/console/AvatarViewport.tsx,
+      src/console/console.css, tools/avatar-relay/index.ts,
+      tools/avatar-relay/relay.ts, tools/avatar-relay/README.md,
+      test/offline/m2-avatar-viewport.test.ts,
+      test/offline/m2-avatar-relay.test.ts, test/offline/boundaries.test.ts,
+      docs/architecture/permission-model.md, .opencode/permissions.jsonc,
+      docs/architecture/supported-platform.md, .env.example and
+      docs/ai-use-log.yaml.
