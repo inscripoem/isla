@@ -121,6 +121,45 @@ export function collectAiUseLogEntryViolations(
   ]
 }
 
+/**
+ * A log entry's identity is its content, not its position. Key order inside a
+ * mapping is irrelevant, so a merge that reformats an entry still matches; any
+ * changed value (a repointed commit, a reworded change) produces a new identity
+ * and stays strict. Array order is significant, as it is in the storage
+ * contract.
+ */
+function entryIdentity(entry: unknown): string {
+  return JSON.stringify(entry, (_key, value) => {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return value
+    const record = value as Record<string, unknown>
+    return Object.fromEntries(Object.keys(record).sort().map((key) => [key, record[key]]))
+  })
+}
+
+/**
+ * How many times each entry identity occurs in a log text, or the YAML error that
+ * prevents reading it. Counts rather than a set: a head that repeats a base entry
+ * twice contains one historical entry and one new one.
+ */
+function countIdentities(text: string): { counts: Map<string, number> } | { error: string } {
+  if (text.trim().length === 0) return { counts: new Map() }
+  let parsed: unknown
+  try {
+    parsed = parseYaml(text)
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) }
+  }
+  const entries = (parsed as { entries?: unknown } | null)?.entries
+  if (entries === undefined || entries === null) return { counts: new Map() }
+  if (!Array.isArray(entries)) return { error: 'entries is not a list' }
+  const counts = new Map<string, number>()
+  for (const entry of entries) {
+    const identity = entryIdentity(entry)
+    counts.set(identity, (counts.get(identity) ?? 0) + 1)
+  }
+  return { counts }
+}
+
 /** The number of entries in a log text, or the YAML error that prevents counting. */
 function countEntries(text: string): { count: number } | { error: string } {
   if (text.trim().length === 0) return { count: 0 }
@@ -143,7 +182,7 @@ function countEntries(text: string): { count: number } | { error: string } {
  * A null result is the push-integration scope: the run has no base copy, so the
  * caller treats every entry as historical and checks only entry shape and the
  * log-update rule. A pull request supplies the base and remains strict for the
- * entries it adds; see `historicalBefore`.
+ * entries it adds; see `baseLogText`.
  */
 function readLogBase(env: NodeJS.ProcessEnv = process.env): string | null {
   const path = env[AI_USE_LOG_BASE_ENV]
@@ -182,20 +221,23 @@ export interface AiUseReferenceDeps {
   /** Called for facts that are reported but do not fail the gate. */
   readonly onAdvisory?: (message: string) => void
   /**
-   * Entries with an index below this are historical: their commit values are
-   * checked only as advice (unresolved or non-string values do not fail),
-   * because a fresh clone does not carry the orphaned commits of squash-merged
-   * work. Entries at or after it are new and must cite string commits
-   * reachable from HEAD. Defaults to 0 (every entry is new) so a caller cannot
-   * accidentally weaken the rule by omitting it.
+   * The log at the base revision, used to classify entries by identity.
    *
-   * The scope is set by the base copy. A pull request supplies the base, so the
-   * entries the change adds stay strict: that run is where commit reachability is
-   * enforced. A push to main is an integration event whose squash orphans the
-   * branch commits, so CI supplies no base there; an absent or empty base marks
-   * every entry historical and main re-adjudicates no ancestry.
+   * An entry is historical when an identical entry is present in this text,
+   * wherever a merge placed it: its commit values are checked only as advice,
+   * because a fresh clone does not carry the orphaned commits of squash-merged
+   * work. A new or edited entry is strict and must cite string commits reachable
+   * from HEAD; moving an accepted entry past a fixed index must not change that.
+   *
+   * - a string with base entries: matching entries are historical, the rest are
+   *   new or edited;
+   * - `null`: no base copy was offered. A push to main is an integration event
+   *   whose squash orphans the branch commits, so every entry is historical and
+   *   main re-adjudicates no ancestry;
+   * - omitted: no classification is available, so every entry is new. The
+   *   default keeps a caller from weakening the rule accidentally.
    */
-  readonly historicalBefore?: number
+  readonly baseLogText?: string | null
   readonly caseIds: ReadonlySet<string> | null
   readonly invariantIds: ReadonlySet<string> | null
   readonly baseline: readonly AiUseBaselineItem[]
@@ -261,13 +303,38 @@ export function collectAiUseLogReferenceFindings(
   const entries = (parsed as { entries?: unknown } | null)?.entries
   if (!Array.isArray(entries)) return []
 
+  let historicalCounts: Map<string, number> | null = null
+  let everyEntryHistorical = false
+  if (deps.baseLogText === null) {
+    everyEntryHistorical = true
+  } else if (deps.baseLogText !== undefined) {
+    const base = countIdentities(deps.baseLogText)
+    if ('error' in base) {
+      return [
+        {
+          policy: 'POL-G6-03',
+          trigger: 'register-unreadable',
+          message: `${AI_USE_LOG_PATH} at the base is not valid YAML, so G6 cannot classify entries: ${base.error}`,
+          evidence: { register: 'base-log' },
+        },
+      ]
+    }
+    historicalCounts = base.counts
+  }
+  // Consuming a base match per head entry makes a duplicated historical entry
+  // count once as historical; its copy is new and stays strict.
+  const remaining = historicalCounts === null ? null : new Map(historicalCounts)
+
   const findings: GateFinding[] = []
   entries.forEach((entry, index) => {
     if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return
     const record = entry as Record<string, unknown>
     const label = typeof record.task === 'string' ? record.task : `entry ${index}`
 
-    const historical = index < (deps.historicalBefore ?? 0)
+    const identity = entryIdentity(record)
+    const matches = remaining?.get(identity) ?? 0
+    const historical = everyEntryHistorical || matches > 0
+    if (remaining !== null && matches > 0) remaining.set(identity, matches - 1)
     const commits = Array.isArray(record.commits) ? record.commits : []
     for (const raw of commits) {
       if (typeof raw !== 'string') {
@@ -357,7 +424,7 @@ export function collectAiUseLogReferenceFindings(
         findings.push({
           policy: 'POL-G6-02',
           trigger: 'commit-unreachable',
-          message: `${label} (entry ${index}) is a new entry citing ${sha}, which is not reachable from HEAD`,
+          message: `${label} (entry ${index}) is new or edited and cites ${sha}, which is not reachable from HEAD`,
           evidence: { entry: label, field: 'commits', value: sha },
         })
       }
@@ -459,7 +526,7 @@ function collectAiUseLogFindings(changedFiles: readonly string[]): GateFinding[]
 function buildReferenceDeps(
   text: string,
   onAdvisory?: (message: string) => void,
-  historicalBefore = 0,
+  baseLogText?: string | null,
 ): AiUseReferenceDeps {
   const readRegister = (path: string): string | null =>
     existsSync(path) ? readFileSync(path, 'utf8') : null
@@ -493,7 +560,7 @@ function buildReferenceDeps(
     baseline,
     today: new Date().toISOString().slice(0, 10),
     onAdvisory,
-    historicalBefore,
+    baseLogText,
   }
 }
 
@@ -510,15 +577,12 @@ function runCli(changedFiles: readonly string[]): number {
   if (headText !== null) {
     let unreachable = 0
     const baseText = readLogBase()
-    const counted = baseText === null ? null : countEntries(baseText)
-    const historicalBefore =
-      counted === null || 'error' in counted ? Number.MAX_SAFE_INTEGER : counted.count
     const deps = buildReferenceDeps(
       headText,
       () => {
         unreachable += 1
       },
-      historicalBefore,
+      baseText,
     )
     violations.push(...collectAiUseLogReferenceViolations(headText, deps))
     if (unreachable > 0) {
