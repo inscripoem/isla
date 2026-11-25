@@ -10598,3 +10598,34 @@ entries:
         No push, pull request, merge, CI run or product-wiring run. The live
         result depends on the local magpie gateway and the configured Jev
         access and is not a remote-host claim.
+  - date: "2026-11-25"
+    task: m5-memory-inspect-wiring
+    change: >-
+      Connect the existing memory-inspection builder to the read-only
+      diagnostics endpoint. A successful dialogue assembly now exposes a
+      redacted memory-inspection payload through onAssembledContext and a
+      read-only MemoryInspectSource; the diagnostic protocol accepts
+      get_memory_inspect and returns an explicit unavailable result when no
+      observation exists. Existing ping/get_health behaviour and the
+      application protocol are unchanged.
+    requirements: []
+    invariants: []
+    commits: ["ea17ba078678ad50184450406d808e33f71a8117"]
+    agent: OpenCode V2 build
+    provider: self-api
+    model: deepseek-v4-flash
+    sessions: ["ses_dee007402ffeEiHs7qnsSgPs2p"]
+    supervision: >-
+      Implemented in the OpenCode V2 build session from the task brief; the
+      change was reviewed and verified locally.
+    verification:
+      base: 71c45b61a99ad7dd46e3966d7cf82401050c5198
+      results: >-
+        pnpm test:m5 passed 296 tests; pnpm test:m2 passed 119 tests;
+        pnpm test:readiness passed 50 tests; pnpm test:trace passed 55 tests;
+        pnpm verify passed 99 files / 2298 tests with a clean typecheck, lint
+        and build.
+      limits: >-
+        No push, pull request, merge, CI run or live browser click. The
+        end-to-end check uses a real SQLite store and the real runtime
+        composition over /diag, not a live provider or product acceptance.
