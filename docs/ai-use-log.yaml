@@ -9772,3 +9772,80 @@ entries:
         observed. The entry rule's existing message still says "at both the
         base and the head" when the counts differ; that wording predates this
         change and was left alone.
+  - date: "2026-11-25"
+    task: m4-a04-recall-ranking-v2
+    change: >-
+      Add an opt-in multi-factor recall ranker for non-window confirmed turns
+      and current-session audience turns. It scores Latin token Jaccard, CJK
+      3-gram cosine and RRF fusion as similarity, plus A03 importance, recency,
+      topic overlap and an in-session prior-use counter; replyIntent only
+      reorders already-admitted items. Character and listener recalls share
+      MAX_RECALLED_TURNS and the maxTurns stream bound. The v1 delivery-recall
+      path, the prompt when the new port is absent, and all shared contracts,
+      runtime and storage are unchanged. Listener recall stays session-only;
+      cross-session recall waits for X03.
+    requirements: []
+    invariants: []
+    commits: ["db86b8390bc904bf61bf02ce19b93f65e75e3112"]
+    agent: OpenCode V2 build
+    provider: deepseek
+    model: deepseek-v4-flash
+    sessions: ["ses_ded801693ffewtDrW1nbQdGBvG"]
+    supervision: >-
+      M4 supervised the same OpenCode session over three review rounds. The
+      supervisor reproduced the listener dead path under a conforming
+      ListenerHistoryPort, the unreachable v2 character recall and the
+      paraphrase rejected by the assembly floor, and sent each back with a
+      failing test. The final code preserves the ranker order, the shared
+      recall allowance and the off-path bytes.
+    verification:
+      base: 55e36d31534261b51baf274184a402e9945235bb
+      results: >-
+        pnpm test:m4 passed 23 files / 523 tests; pnpm typecheck clean; oxlint
+        0 warnings / 0 errors on 342 files; pnpm build passed; git diff --check
+        clean. pnpm test (full) passed 2258 with 9 skipped and 1 failed: the
+        pre-existing m6-02-provenance-command symlink EPERM on Windows, in an
+        M6 file this change does not touch. recall@3 on the frozen fixtures is
+        3/14 tuning and 0/7 held-out; it is a regression fixture, not a quality
+        claim.
+      limits: >-
+        No live provider, product run or merge. Listener recall is session-only
+        and production composition does not inject the port yet.
+  - date: "2026-11-25"
+    task: m4-a11-style-anchors-persona-probe
+    change: >-
+      Add default-off style anchors selected from turns already in the
+      assembled history (current persona version, 20-80 characters, not
+      interrupted/conflicting/duplicate, tic/address/emotion preferred) and
+      render them under "Voice reference (style only, not facts):" with the
+      entry lines charged to the history section. Add a 30-probe fixed persona
+      fixture with normal and OOC responses and deterministic style-contract
+      checks; no provider call. Disabled means no selection, no charge and
+      byte-identical prompt and budget numbers.
+    requirements: []
+    invariants: []
+    commits: ["db86b8390bc904bf61bf02ce19b93f65e75e3112"]
+    agent: OpenCode V2 build
+    provider: deepseek
+    model: deepseek-v4-flash
+    sessions: ["ses_ded801693ffewtDrW1nbQdGBvG"]
+    supervision: >-
+      M4 supervised the same OpenCode session. The supervisor found that the
+      anchor capacity ignored the listener transcript's share of the history
+      row and sent back a failing listener-plus-anchor budget test. The final
+      code bounds anchors by the history section's real remainder and keeps the
+      heard-prefix order unchanged.
+    verification:
+      base: 55e36d31534261b51baf274184a402e9945235bb
+      results: >-
+        pnpm test:m4 passed 23 files / 523 tests; pnpm typecheck clean; oxlint
+        0 warnings / 0 errors on 342 files; pnpm build passed; git diff --check
+        clean. pnpm test (full) passed 2258 with 9 skipped and 1 failed: the
+        pre-existing m6-02-provenance-command symlink EPERM on Windows, in an
+        M6 file this change does not touch. The 30-probe fixture covers name,
+        appearance, preference, boundary, tsundere and address; every normal
+        fixture has zero violations and every OOC fixture hits its named
+        violation.
+      limits: >-
+        No live LLM judge, product run or merge. Style anchors are off by
+        default and production composition does not enable them yet.
