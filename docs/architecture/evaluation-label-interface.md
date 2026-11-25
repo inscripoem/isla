@@ -14,7 +14,7 @@ observations in M3's rubric draft are separate follow-up work; they are not conv
 
 This revision records the positions M4 and M5 gave on 2026-11-09 and M3's agreement on 2026-11-10. They
 remain **proposed positions, not interface approval**: the rubric (#99), corpus (#98) and export (#101)
-remain open.
+tracks are closed, but no approval of this interface is recorded here.
 
 ## Why
 
@@ -34,12 +34,12 @@ outcome; quality stays `unscored` for every attempt.
 
 ## Corpus manifest
 
-M3 owns and maintains the manifest with the versioned corpus and held-out split (#98). M6 consumes and
-validates it; M6 does not create corpus data or a second authority. The v1 example manifest records the
-corpus version, hash and per-case held-out marking; its two cases are development examples, not a formal
-held-out set. The v1 hash covers canonical corpus content (requests, labels, review records and manifest
-semantics), **not the raw manifest bytes**, so an adapter must preserve that identity rather than re-hash
-the file as stored.
+M3 owns and maintains the manifest with the versioned corpus and held-out split (#98, closed
+2026-11-22). M6 consumes and validates it; M6 does not create corpus data or a second authority. The
+selected corpus in the tree is `test/fixtures/decision/v1/manifest.json`: `m3-selection-v1.1`, 12 cases,
+8 marked held-out, `casesSha256` `c7c1b19d…` (read 2026-11-25). The hash covers canonical corpus content
+(requests, labels, review records and manifest semantics), **not the raw manifest bytes**, so an adapter
+must preserve that identity rather than re-hash the file as stored.
 
 ## Input identity and acknowledgements
 
@@ -130,9 +130,10 @@ case is refused before rendering.
 A missing label file or a `draft` label leaves the attempt unscored. `provenance-eligible` (#143) means
 rules 1–4 passed; it does **not** mean the attempt is label-reviewed. The reason `no-label-record` is
 proposed, not implemented, and would add one reason to the eligibility module. A failed or cancelled attempt
-may carry a label as a human observation, but that does not make it scoreable; eligibility excludes it
-now that M4's completed-only decision is recorded
-(`docs/decision/m4-completed-only-eligibility-v1.md`). A `notRun` entry is never scored.
+may carry a label as a human observation, but that does not make it scoreable. M4's completed-only
+decision is recorded (`docs/decision/m4-completed-only-eligibility-v1.md`), but its named reason is not
+yet in `UNSCORED_REASONS` (`src/evaluation/eligibility.ts`), so failed/cancelled attempts are not yet
+excluded in code. A `notRun` entry is never scored.
 
 ## What this does not do
 
@@ -160,8 +161,10 @@ now that M4's completed-only decision is recorded
 4. **Scale.** The validator keeps "finite number" for now; the example is illustrative. Once #99 records a
    rubric version, its range is enforced in the rubric layer, not in the file shape.
 5. **Failed/cancelled.** The interface may allow a label as a human observation, but it does not make the
-   attempt scoreable. Eligibility excludes failed/cancelled now that the completed-only decision is recorded
-   (`docs/decision/m4-completed-only-eligibility-v1.md`); a `notRun` entry is never scored.
+   attempt scoreable. The completed-only decision is recorded
+   (`docs/decision/m4-completed-only-eligibility-v1.md`), but its named reason is not yet in
+   `UNSCORED_REASONS`, so failed/cancelled attempts are not yet excluded in code; a `notRun` entry is
+   never scored.
 
 ## Verification of this document
 

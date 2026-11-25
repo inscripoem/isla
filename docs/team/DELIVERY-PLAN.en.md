@@ -53,7 +53,7 @@ Status against remote main `55e36d3` (2026-11-25). Original targets and the acce
 - CP04 (#74) was accepted on 2026-11-20 for the reduced deployed-product scope at `9577069` ([comment 7033211812](https://github.com/inscripoem/isla/issues/74#issuecomment-7033211812)): real text generation, Kokoro over `/audio`, console playback and VTS `Hiyori_A`. #74 itself, #96 and #97 remain open; no full-product acceptance is claimed.
 - CP05 (#75) was accepted on 2026-11-20 as option A with every threshold explicitly pending ([comment 7038421545](https://github.com/inscripoem/isla/issues/75#issuecomment-7038421545)); #75 remains open and #98 closed on 2026-11-22.
 - Windows follow-up #135 merged on 2026-11-12; console proxy follow-up #153 merged on 2026-11-16.
-- D5, D6 and the demo video have no repository artifact; see the [D1–D9 status](README.md#course-deliverables-d1-d9). PR #192 is still a draft.
+- D5, D6 and the demo video have no repository artifact; see the [D1–D9 status](README.md#course-deliverables-d1-d9). PR #192 remains open for review and is not adopted.
 
 ## Deliveries and acceptance
 
