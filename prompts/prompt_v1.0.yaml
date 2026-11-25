@@ -1,0 +1,18 @@
+version: "1.0"
+status: current
+course_artifact: "D9 - versioned runtime prompts"
+sources:
+  - path: prompts/decision/response-plan-v1.md
+    version: "1"
+    role: "M3 response-plan and segment-reaction prompt specification"
+    sha256: "71b781b2d2ee469cee9d1d354a88bfb1ea725d2e4274e9f3dce722c34e5d1a2a"
+  - path: prompts/dialogue/character.md
+    version: "1"
+    role: "M4 character bible and persona source"
+    sha256: "d14cde263c52ef188913ba8e54600f50296377896680a7d5af5947b7a4a42e1c"
+renderers:
+  - path: src/decision/openai-compatible-core.ts
+    role: "renders the M3 selection and reaction system prompts"
+  - path: src/dialogue/persona-content.ts
+    role: "supplies standing facts and style notes to the dialogue prompt"
+notes: The executable prompt text is rendered from the listed Markdown sources and TypeScript renderers. This manifest records the versioned set and exact source hashes; it does not duplicate the source text. No v1.1 runtime prompt has been released.
