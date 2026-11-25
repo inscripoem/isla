@@ -23,7 +23,7 @@ Diagnostic protocol `1` at `/diag` is separate from application protocol `0.2` a
 | `src/decision/` | Response-plan selection and segment-reaction decisions, with rule and OpenAI-compatible provider adapters. |
 | `src/dialogue/` | Dialogue context, persona content and memory. |
 | `src/storage/` | SQLite persistence, history views and session recovery stores. |
-| `src/evaluation/` | Evaluation adapters, run provenance capture and recording. |
+| `src/evaluation/` | Evaluation runner, report writer, provenance records and gates. |
 | `test/offline/` | Default suite collected by `pnpm test`; no model services required. |
 | `test/live/` | Opt-in live provider suites with a standalone Vitest configuration; not collected by `pnpm test`. |
 | `test/browser/` | Playwright browser acceptance, root-entry routing and audio fetch checks. |
@@ -33,7 +33,7 @@ Diagnostic protocol `1` at `/diag` is separate from application protocol `0.2` a
 | `docs/code-governance/` | Gate tooling, test approvals, structural constraints, verification constraints and the tool manifest. |
 | `docs/team/` | Role entry points, plans, readiness kits, interfaces, requirements and handoffs. |
 | `prompts/` | Versioned prompt specifications, the character bible and the prompt version manifest. |
-| `.opencode/` | Permission policy source (`permissions.jsonc`) and the per-role compiled agent configuration. |
+| `.opencode/` | Permission policy source (`permissions.jsonc`) and the always-on rules (`rules.md`). |
 | `.agent/` | Project covenant (`rules.md`). |
 | `.github/workflows/` | Continuous integration: verification, the D7 gates and the traceability check. |
 
