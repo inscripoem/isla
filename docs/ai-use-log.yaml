@@ -10715,6 +10715,12 @@ entries:
       - "ses_dee1af33fffe9kVOKLTIKj6xsM"
       - "ses_dee14e823ffeHyxEWsA9oubAJ7"
       - "ses_dee19a8a4ffeNDB0ZlOgSnmhk5"
+    export:
+      model: {providerID: mistral, id: deepseek-v4-1-flash-1017, variant: max}
+      source: "info.model and the model object on every assistant message in all seven listed sessions"
+      variant_choice: "M1 selected the maximum reasoning effort for Isla implementation and review."
+      sample_session: ses_dee1af33fffe9kVOKLTIKj6xsM
+      sample_sha256: 95c369a273a474306e3de480ac4d35b51a066bc25cc8d101972ad9674130b452
     supervision: >-
       The member selected the speaking-level scope, with natural completion
       and mid-speech Stop as acceptance cases. The supervising assistant
@@ -10725,10 +10731,12 @@ entries:
       original animation that held the mouth closed, and a transient model
       switch in which the API acknowledgement preceded the visible load.
       The integration commits cited above carry the original author dates and
-      source commit references from PR #200. Verification on the original
-      implementation applies to the byte-identical feature and test files.
+      source commit references from PR #200. At PR revision 2d1a00c the
+      feature and test files matched that implementation byte for byte.
     verification:
       base: 2b83017736929863210498ed2383ab23e8cd186f
+      author_retained_report: release-01/terminal-optics.json
+      report_sha256: 1311382958ee9c6ed5e6e1af8522207e2731f85eb2ed6c1be6f4ca30cfb91efa
       results: >-
         The M1 role suite passed 353 tests, the focused release suite passed
         four and the Python state suite passed 26. On Windows, the formal
@@ -10740,8 +10748,11 @@ entries:
         Stop in that run. The stock model's 19 source files were unchanged.
       limits: >-
         The recorded inputs used the local text echo. The physical run used
-        one Windows machine and its default audio endpoint. The full Windows
-        verify run passed 2253 tests, skipped nine, and reproduced the
+        one Windows machine and its default audio endpoint. M1 retains the
+        original exports, captured frames, audio and SQLite receipts outside
+        the shared repository. The frame counts and Stop timing come from
+        that device run. The full Windows verify run passed 2253 tests,
+        skipped nine, and reproduced the
         pre-existing missing-base G6 CLI test failure when Node loaded an
         absolute Windows path. The base run failed the same test. The
         Windows build and the feature-specific checks passed.
@@ -10765,6 +10776,12 @@ entries:
       - "ses_dedb11274ffe9wgid2K0mMXoxb"
       - "ses_dedb11281ffeNMeVYuJ52qaJJx"
       - "ses_deda5c4ecffedIIrjXSrGwgWjp"
+    export:
+      model: {providerID: mistral, id: deepseek-v4-1-flash-1017, variant: max}
+      source: "info.model and the model object on every assistant message in all five listed sessions at 2d1a00c"
+      variant_choice: "M1 retained its maximum reasoning effort setting when it selected the Mistral-hosted model."
+      sample_session: ses_dedb1a007ffekCgPddl7mxVUuW
+      sample_sha256: af122581f2d4ecf2e0f2a3333964cbc64b17fc4ade9a9c786d9064cfab86d52d
     supervision: >-
       M1 chose synthesis-time measurement and excluded device and player
       volume settings. Independent review tested the WAV values, resource
@@ -10773,10 +10790,12 @@ entries:
       launcher. The team disabled it for the demo and verified that the
       selected model accepts mouth updates on its existing VTS connection.
       The integration commits cited above carry the original author dates and
-      source commit references from PR #200. Verification on the original
-      implementation applies to the byte-identical feature and test files.
+      source commit references from PR #200. At PR revision 2d1a00c the
+      feature and test files matched that implementation byte for byte.
     verification:
       base: 14d3910e9e1c976a07aa5df55e049b8e84cc1ec7
+      author_retained_report: device-08/verification.json
+      report_sha256: cb430b426147c55da515d8a253fae90c486710d77a7ae7f7bbe88e78937829a5
       results: >-
         All 429 focused role and integration tests passed. Across three real
         Kokoro clips, the same WAV bytes were published with the optional
@@ -10787,6 +10806,42 @@ entries:
         resumed or the recording ended. The standalone build passed.
       limits: >-
         The physical run used one Windows machine, Hiyori and the local English
-        text echo. The full Windows suite passed 2325 tests and skipped nine.
+        text echo. M1 retains the original exports, WAVs, recording, frame
+        measurements and SQLite receipts outside the shared repository. The
+        462 windows, six receipts and visible closure times come from that
+        device run. The full Windows suite passed 2325 tests and skipped nine.
         It reproduced the baseline missing-base G6 CLI test failure on an
         absolute Windows path.
+  - date: "2026-11-25"
+    task: m1-mouth-clock-reconnect
+    change: >-
+      Let the next media handle connect while the disconnected handle's
+      final mouth-close write is pending. An idle replacement allows the
+      previous zero to finish. The replacement's first write supersedes it.
+    requirements: [FR-04, FR-05]
+    invariants: [INV-01]
+    commits: ["4e84868800fedd53abbda89c68e3461af9357c6f"]
+    agent: OpenCode V2 build
+    provider: mistral
+    model: deepseek-v4-1-flash-1017
+    variant: max
+    sessions: ["ses_dedb11274ffe9wgid2K0mMXoxb"]
+    supervision: >-
+      M1 resumed the bridge author's session with the reviewer's case from
+      PR #213. A separate loopback test reproduced the lost segment and
+      caught an early cancellation of the final zero when the replacement
+      stayed idle. Both follow-up exports carry the same model identifiers
+      and reasoning setting as the original bridge session.
+    verification:
+      base: 2d1a00ce783bba4adaa40d098c0417811b1517b0
+      results: >-
+        All 431 focused M1 tests, 130 console and voice-selection tests and
+        26 Python speaking-mouth tests passed. A Node-based test exercised
+        the browser observer and a real loopback WebSocket with playing,
+        idle and stopped replacements. The test project typecheck and build
+        passed.
+      limits: >-
+        The handoff tests use a controlled mouth writer. The physical
+        Windows measurements above predate this change. The local full
+        Windows run reproduced the existing missing-base G6 CLI test failure
+        when Node loaded an absolute Windows path.
