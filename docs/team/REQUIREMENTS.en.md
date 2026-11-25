@@ -4,7 +4,7 @@ Revision: 2026-11-25.1 · Status: under review
 
 Team requirements under review; English engineering requirements may be promoted to formal D1 after acceptance. This Markdown table does not replace the required YAML/schema. These are proposed acceptance obligations, not implemented capabilities or an approved D1 registry. Stable IDs are retained from the archived candidate draft; FR-01 now explicitly includes reply intent, FR-02 includes dialogue generation, and NFR-06 covers the selected adapter boundaries.
 
-This revision adds INV-17 and records the existing MoSCoW tradeoffs explicitly. It does not change an FR/NFR statement, priority, owner or numeric target.
+This revision records the 2026-11-25 taxonomy correction and the split of NFR-04, NFR-05 and INV-17 into the authoritative registry (`docs/req/requirements.yaml` v0.3). The tables below are the pre-split historical snapshot; `COST-01`, `SEC-01` and `GOV-01` are in the registry.
 
 **Taxonomy correction (2026-11-25).** The authoritative categories and subtypes are in
 `docs/req/requirements.yaml` v0.3. Only `INV-01..03` and `INV-12` are system invariants. The other

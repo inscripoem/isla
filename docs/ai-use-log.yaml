@@ -10337,7 +10337,7 @@ entries:
   - date: "2026-11-25"
     task: m6-artifact-closure-trace-coverage
     change: >-
-      Make the canonical trace matrix cover all 29 registered requirements,
+      Make the canonical trace matrix cover all 32 registered requirements,
       move the previously orphaned table rows into the canonical table, replace
       every bare runtime-monitor cell with a recorded reason, and teach the
       trace fitness function to reject a missing requirement, an empty monitor
@@ -10354,10 +10354,11 @@ entries:
       NFR-05 is now security/access-control, with new SEC-01 for consent-bound
       audience memory; INV-17 is now quality/data-integrity, with new GOV-01 for
       audience-scoped retention and deletion. The new IDs are type-prefixed
-      entries; #25 confirmation is pending.
+      entries reserved in #25 (comment 7159011745); the reservation does not
+      approve the taxonomy.
     requirements: [NFR-04, COST-01, NFR-05, SEC-01, GOV-01, INV-17]
     invariants: []
-    commits: []
+    commits: ["8a9cd13"]
     agent: OpenCode V2 build
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -10367,7 +10368,7 @@ entries:
       slice. The assistant edited the matrix, gate and tests; the member
       reviews the diff before any commit or publication.
     verification:
-      base: 2b83017736929863210498ed2383ab23e8cd186f
+      base: dba25e0
       results: >-
         pnpm test:trace passed 52 tests; pnpm test:readiness passed 50 tests;
         pnpm test:gates passed 6 files / 196 tests; pnpm test:m6 passed 23
@@ -10380,8 +10381,8 @@ entries:
       limits: >-
         No commit, push, pull request, merge, live provider or Windows run.
         The trace matrix owner review for M1/M2/M3/M4/M5 rows is pending. The
-        new IDs COST-01, SEC-01 and GOV-01 are proposed allocations; #25
-        confirmation is pending before they are treated as effective globally.
+        new IDs COST-01, SEC-01 and GOV-01 are reserved in #25
+        (comment 7159011745); the reservation does not approve the taxonomy.
         INV-17 now carries only the pending C-75 rebuild-equality evidence.
   - date: "2026-11-25"
     task: d2-architecture-baseline
@@ -10398,7 +10399,7 @@ entries:
       as the frozen historical snapshot.
     requirements: []
     invariants: []
-    commits: []
+    commits: ["50bb859"]
     agent: OpenCode V2 build
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -10409,7 +10410,7 @@ entries:
       merged requirements, context, permission, memory and trace records; the
       member reviews the diff before any commit or publication.
     verification:
-      base: a58e8f0d0afe51a15e4d834c240e8e2aae7f1db1
+      base: 8a9cd13
       results: >-
         pnpm test:trace passed 52 tests; pnpm test:readiness passed 50 tests;
         pnpm test:gates passed 6 files / 196 tests; pnpm verify passed 99 files
@@ -10417,11 +10418,11 @@ entries:
         reported no whitespace errors; a local relative-link check over the new
         and changed documents found no missing targets.
       limits: >-
-        The master ADR is proposed, its number is pending #25, and no human has
-        accepted it. The 4,096-token cap, 70% compaction trigger and 90% hard
+        The master ADR is ADR-010, reserved in #25 (comment 7159011745);
+        it is proposed and no human has accepted it. The 4,096-token cap, 70% compaction trigger and 90% hard
         stop are design proposals, not shipped behavior or a measured baseline.
         No live provider, G4 semantic result, acoustic output or Windows run is
-        claimed.
+        claimed. The branch is PR #199; the review-fix commit is the current head.
   - date: "2026-11-25"
     task: d2-state-runtime-policy-closure
     change: >-
@@ -10435,7 +10436,7 @@ entries:
       claiming coverage, and update the D2 artifact index.
     requirements: [FR-06, NFR-05, SEC-01, GOV-01, INV-17]
     invariants: [INV-12]
-    commits: []
+    commits: ["b50a511"]
     agent: OpenCode V2 build
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -10446,7 +10447,7 @@ entries:
       merged storage, context and runtime records; the member reviews the diff
       before any commit or publication.
     verification:
-      base: 57ef721b9c5118fcfc5f2a87e79df3a9090f8747
+      base: 50bb859
       results: >-
         pnpm test:trace passed 52 tests; pnpm test:readiness passed 50 tests;
         pnpm test:gates passed 6 files / 196 tests; pnpm verify passed 99 files
@@ -10454,7 +10455,7 @@ entries:
         reported no whitespace errors.
       limits: >-
         No live provider, acoustic output, G4 semantic result or Windows run is
-        claimed. The token-overflow row is proposed, not implemented. The
+        claimed. The branch is PR #199; the review-fix commit is the current head. The token-overflow row is proposed, not implemented. The
         provider-authentication and database-corruption rows name their evidence
         gaps; they are not coverage claims.
   - date: "2026-11-25"
@@ -10473,7 +10474,7 @@ entries:
       diary, including BUG-004..007.
     requirements: []
     invariants: []
-    commits: []
+    commits: ["03af868"]
     agent: OpenCode V2 build
     provider: opencode-go
     model: deepseek-v4.1-flash
@@ -10484,7 +10485,7 @@ entries:
       verification, review, debt and bug history; the member reviews the diff
       before any commit or publication.
     verification:
-      base: 1161c2f30262bb5c628ad6ea65c62d35fc17b4dc
+      base: b50a511
       results: >-
         pnpm test:trace passed 52 tests; pnpm test:readiness passed 50 tests;
         pnpm test:gates passed 6 files / 196 tests; pnpm verify passed 99 files
@@ -10494,6 +10495,36 @@ entries:
         found all six fields in all 18 entries.
       limits: >-
         No live provider, G4 semantic result, acoustic output or Windows run is
-        claimed. The review memo records missing entries for the merged
+        claimed. The branch is PR #199; the review-fix commit is the current head. The review memo records missing entries for the merged
         #192-#196 batch rather than backfilling them. The self-review is
         advisory and not a human approval.
+  - date: "2026-11-25"
+    task: d2-evaluation-table-reconciliation
+    change: >-
+      Reconcile the D2 artifact index, blueprint, candidate comparison, gate
+      inventory and verification constraints with the pilot evaluation table
+      that landed on main. The table records one attempt with declared
+      conditions; it passes G4's condition scan but is not a semantic or
+      threshold baseline.
+    requirements: []
+    invariants: []
+    commits: ["b2becdd"]
+    agent: OpenCode V2 build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    sessions: ["ses_dee9bf092ffeFetMUbQ209TzOY"]
+    supervision: >-
+      The member directed the artifact-closure branch and the review fixes. The
+      assistant reconciled the D2 text with the merged evaluation table; the
+      member reviews the diff before merge.
+    verification:
+      base: 03af868
+      results: >-
+        pnpm gate:eval passed with the pilot table; pnpm test:trace passed 52
+        tests; pnpm test:readiness passed 50 tests; pnpm test:gates passed 6
+        files / 196 tests; pnpm verify passed 99 files / 2265 tests with a clean
+        typecheck, lint and build; git diff --check reported no whitespace
+        errors.
+      limits: >-
+        The pilot is one attempt, not a p95 or quality baseline. No live
+        provider, acoustic output or Windows run is claimed.

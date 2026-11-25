@@ -1,7 +1,7 @@
 # Architecture candidate comparison (qualitative)
 
 Status: **proposal, under review.** Owner: M5 coordination. Revision 2026-11-25.4. Base:
-`main` `a58e8f0`. The qualitative comparison covers the storage, governance, evaluation and memory
+`main` `dba25e0`. The qualitative comparison covers the storage, governance, evaluation and memory
 sub-decisions already recorded in the ADRs, plus the system-level and AI-context candidates added for
 D2.2.
 

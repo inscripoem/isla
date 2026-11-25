@@ -1,9 +1,10 @@
 # Isla architecture blueprint
 
 Status: **under review — D2.1 master constraint document. Not an accepted architecture baseline.**
-Owner: M5 coordination with M6. Date: 2026-11-25. Head: `a58e8f0`.
-Supersedes: the root [`architecture-blueprint.md`](../../architecture-blueprint.md), which is the
-frozen 2026-10-15 design snapshot and is retained only for the required repository tree and history.
+Owner: M5 coordination with M6. Date: 2026-11-25. Head: PR #199 review-fix head. The 32-requirement count was measured at `8a9cd13`; the 2268-test result is at the review-fix head.
+Proposed successor to the root [`architecture-blueprint.md`](../../architecture-blueprint.md), which is the
+frozen 2026-10-15 design snapshot. The root remains the operative pointer until this document is accepted;
+the docs file is the current D2.1 proposal.
 
 This is the document the Plan agent reads before proposing work. It states what the system is, which
 parts may decide or act, how the coding agent is bounded, how work is verified, and what evidence is
@@ -35,7 +36,7 @@ The current release scope is the offline/controlled runtime:
 Out of scope for this baseline: streaming-platform connectors, model training, a multi-character
 scheduler, an adapter marketplace, cloud management, and production multi-device deployment.
 
-**Current state.** At `a58e8f0`, the repository has 32 requirements (6 functional, 4 invariants,
+**Current state.** At `8a9cd13`, the repository has 32 requirements (6 functional, 4 invariants,
 22 non-functional), 69 registered cases (64 implemented, 5 pending), the M1–M6 source, the offline and
 conformance test suites, and the CI gates. Live providers, acoustic output, Windows recovery and a
 measured quality baseline remain separate, unclaimed evidence.
@@ -178,7 +179,7 @@ Verification is **three-tiered and fail-closed**.
 | Tier | What it checks | Evidence |
 | --- | --- | --- |
 | **1 — Structural** | imports/module boundaries, permissions, schemas, trace chain, frozen paths | `pnpm test:readiness`, `pnpm test:trace`, `pnpm typecheck`, `pnpm lint` |
-| **2 — Regression** | all prior offline suites, zero regressions | `pnpm test` (currently 99 files / 2265 tests at `a58e8f0`) |
+| **2 — Regression** | all prior offline suites, zero regressions | `pnpm test` (currently 99 files / 2268 tests at the PR #199 review-fix head) |
 | **3 — Behavioural** | quality thresholds, faithfulness/relevance, zero safety escapes | Evaluation protocol/rubric; **pending / not run** until a fixed set and provider evidence exist |
 
 **Gates.** G1 test approval, G2 static analysis, G3 schema + boundaries, trace fitness, G5 regression,
@@ -278,7 +279,7 @@ isla/
 1. `AGENTS.md`
 2. `Prompt.md`
 3. this blueprint
-4. `docs/architecture/adr/pending-architecture-baseline.md` (proposed; not accepted)
+4. `docs/architecture/adr/010-local-first-modular-runtime.md` (proposed; not accepted)
 5. `docs/req/requirements.yaml` + `docs/req/case-registry.yaml`
 6. `docs/architecture/invariants.md` + `trace-matrix.md`
 7. `docs/architecture/permission-model.md` + `.opencode/permissions.jsonc`

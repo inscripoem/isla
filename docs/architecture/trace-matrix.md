@@ -1,12 +1,12 @@
 # Trace matrix
 
-Status: under review. The canonical table contains one or more rows for all 29 registered
+Status: under review. The canonical table contains one or more rows for all 32 registered
 requirements; M1/M2/M3/M4/M5 owners still review their rows. Shared document — Step A and I1
 coordination under review. Updated: 2026-11-25.
 
 Every requirement maps to its enforcing component, interface, test/evidence and runtime monitor.
-The trace gate rejects a registered requirement with no canonical row, an empty monitor cell, and a
-bare `—` monitor with no recorded reason. A no-monitor row must say `— (reason)` or `none — reason`.
+The trace gate rejects a missing canonical table or Requirement/Runtime monitor column, a registered
+requirement with no canonical row, an empty monitor cell, and a bare `—` monitor with no recorded reason. A no-monitor row must say `— (reason)` or `none — reason`.
 
 **Taxonomy.** `category` and `subtype` in `docs/req/requirements.yaml` are authoritative. `INV-xx` is
 a stable legacy ID, not a current type claim: only `category: invariant` rows are system invariants
@@ -14,7 +14,7 @@ a stable legacy ID, not a current type claim: only `category: invariant` rows ar
 security NFRs and remain in this matrix under their stable IDs. New type-prefixed entries
 (`COST-01`, `SEC-01`, `GOV-01`) follow the course category prefix and are not legacy IDs.
 
-## Canonical requirement matrix (all 29)
+## Canonical requirement matrix (all 32)
 
 | Requirement | Consequence | Enforcing component | Interface | Case | Test / evidence | Runtime monitor | ADR | Status | Owner |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -61,7 +61,7 @@ security NFRs and remain in this matrix under their stable IDs. New type-prefixe
 | GOV-01 | Memory deletion and export are explicit operator calls; `deleteAudience` cascades owner/derived/state/audience and never removes evidence; `deleteOlderThan(audienceId, days, nowMs)` is audience-scoped by age (M5 decision), so one audience's retention cannot remove another's rows | `src/storage/memory-store.ts` | `MemoryStore` (`deleteAudience`, `deleteOlderThan`, `exportAudience`) | C-78 | `test/offline/m6-memory-store.test.ts` (cross-table delete, evidence counts unchanged, per-audience retention leaves another audience's older rows, audience export scope) | none — no production caller; the counts are operator return values | ADR-009 | merged in #157 (`d86dbc1`); acceptance under review | M6 (enforcement); M5 acceptance |
 | NFR-06 | Synthesis, rendering and playback remain replaceable behind shared ports; a paired handle is handed off only while its connection remains open | `src/performance/fixed-synthesis.ts`, `src/performance/kokoro-synthesis.ts`, `src/performance/vts-connection.ts`, `src/performance/vts-pairing.ts`, `src/performance/browser/player-port.ts` | `SynthesisPort` / `RendererPort` / `PlayerPort` | C-11 | `test/offline/m1-performance.test.ts::T11: substitutes two configured fixed catalogs through the shared port`; `test/offline/m1-performance.test.ts::substitutes two configured real adapters with the fixture player remaining identified`; `test/offline/regressions.test.ts::preserves observable outcome and passed selection/intent under substitution` | — (no runtime monitor: a provider substitution needs its own deployment observation) | — | under review | M1 / M5 |
 
-All 29 registered requirements appear in the canonical table above. The M1 table below is
+All 32 registered requirements appear in the canonical table above. The M1 table below is
 supplemental evidence for the same requirements; it is not a second matrix.
 
 **Coverage status (2026-11-25).** Every registered requirement has at least one canonical row.

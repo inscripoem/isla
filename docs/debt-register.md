@@ -14,7 +14,7 @@ agent-induced bloat, evaluation debt, guardrail debt, human/cognitive debt.
 | hidden dependencies | DEBT-03, DEBT-12 | open |
 | agent-induced bloat | DEBT-06 | open |
 | evaluation debt | DEBT-01, DEBT-04, DEBT-08, DEBT-10, DEBT-13, DEBT-14, DEBT-16, DEBT-19 | open |
-| guardrail debt | DEBT-02, DEBT-07, DEBT-09, DEBT-11, DEBT-15, DEBT-20 | open |
+| guardrail debt | DEBT-02, DEBT-07, DEBT-09, DEBT-11, DEBT-15, DEBT-20, DEBT-21 | open |
 | human/cognitive debt | DEBT-18 | open |
 
 A category with no row is recorded as **none recorded**, not silently omitted. A row is not closed by
@@ -27,7 +27,7 @@ appearing in this table.
 | DEBT-03 | hidden dependency | `persona_version` is persisted `NULL` until C6 carries it (M4 interop) | version-aware trimming degrades after restart | M4/M6 | decide at issue #22 item 3 |
 | DEBT-04 | evaluation debt | trace fitness functions parse Markdown tables | fragile to format drift | R3/M6 | revisit machine-readable sources + generator |
 | DEBT-05 | untouchable code | `src/contracts/app/*` frozen | coordination cost | M5 | by design (ADR-006) |
-| DEBT-06 | agent-induced bloat | the artifact-closure branch carries several stacked slices (`a58e8f0`, `57ef721`, `1161c2f`, this D4 slice) | review/rebase churn; a slice can hide behind a green full suite | team/M6 | keep one slice per commit, review in order, do not merge before the prior slice is accepted |
+| DEBT-06 | agent-induced bloat | the artifact-closure branch carries several stacked slices (`7112bd1`, `8a9cd13`, `50bb859`, `b50a511`, `03af868`, `b2becdd`) | review/rebase churn; a slice can hide behind a green full suite | team/M6 | keep one slice per commit, review in order, do not merge before the prior slice is accepted |
 | DEBT-07 | guardrail debt | M4 reports 5 Windows-only `test:m6` failures (`m6-sqlite` ×3, `m6-02-boundary` ×2); Linux passes 181/14 and the cleanup branch 182/14 | no Windows test claim; CI is Linux-only | M6 | separate platform investigation; do not claim Windows coverage |
 | DEBT-09 | guardrail debt | Gates block merges: the active *Protect Main* ruleset requires the `verify` check (integration 15368) with no bypass actors visible to the M6 token, so a red gate step prevents a merge. Remaining limits: G1 uses the PR-creation cutover (evidence for PRs created at/after 2026-11-16T16:01:01Z; label/advise before; the M6 waiver covers #170/#171/#175 through 2026-11-27); `do_not_enforce_on_create` exempts branch creation; `strict_required_status_checks_policy` is false | merge protection is real; the G1 cutover decision is recorded in proposal §11 and Delta-006 | M6 + human/remote | maintain the cutover record; re-verify the ruleset when it changes (M6-GOV-16) |
 | DEBT-08 | evaluation debt | documentation claims about live configuration are not machine-checked; M6-GOV-11 cannot be satisfied by a docs-only slice | a false or stale claim can ship inside a reviewable document (BUG-017) | M6 | every claim names its command; a negative claim needs a positive read; refresh the thread at write time. Trigger: refusal experiment or a read-only claims check |
@@ -42,6 +42,7 @@ appearing in this table.
 | DEBT-18 | human/cognitive debt | No review-memo entry records the merged #192–#196 batch or the artifact-closure branch; reviewers must reconstruct 77+ commits | unreviewed changes and a fragile handoff | M5/team | use the review-memo template; record named verdicts; do not fabricate retroactive approvals |
 | DEBT-19 | evaluation debt | The dialogue context has a 2,000-character cap and no tokenizer, token cap or compaction; the 4,096-token proposal is not implemented | NFR-04/COST-01 and the context-quality claim cannot be measured; a provider may truncate | M4/M6 | keep the character cap; implement/measure token accounting before claiming the cap; M4 review of the proposal |
 | DEBT-20 | guardrail debt | The permission model is a local policy source; it is not part of the required `verify` job, so role/path enforcement is not blocking | a cross-module write could pass CI if review misses it | M5/M6/human | compile per-task config; add a review check; adopt a blocking gate only through a recorded decision |
+| DEBT-21 | guardrail debt | PR #199's TA-007 was committed before the replayed code commit, so G1's ordering check passes; it does not prove the tests were approved before the original implementation, which predates the replay | a green G1 can be read as stronger evidence than it is | M6/M5 | record the exception; future code needs a genuine TA before implementation; the human review owns the judgment; do not backdate |
 
 ## G1 fallback exception — 2026-11-18
 

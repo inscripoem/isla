@@ -20,6 +20,8 @@ export const requirementCategorySchema = z.enum([
   'quality',
 ])
 
+// Optional in the generated JSON Schema; test/offline/requirements.test.ts enforces presence for every
+// non-functional requirement. The JSON Schema is structural; the readiness test is the conditional rule.
 export const requirementSubtypeSchema = z.enum([
   'authority',
   'safety',

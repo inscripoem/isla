@@ -162,6 +162,29 @@ describe('traceability fitness functions reject defects (C-35)', () => {
     expect(codes(base, { [path]: mutated })).toContain('invariant-row-not-invariant')
   })
 
+  it('flags a missing canonical requirement table', () => {
+    const base = nodeTraceFs(ROOT)
+    const path = 'docs/architecture/trace-matrix.md'
+    const mutated = base
+      .read(path)
+      .replace('## Canonical requirement matrix (all 32)', '## Requirement matrix')
+    expect(codes(base, { [path]: mutated })).toContain('trace-canonical-missing')
+  })
+
+  it('flags a canonical table without a Requirement column', () => {
+    const base = nodeTraceFs(ROOT)
+    const path = 'docs/architecture/trace-matrix.md'
+    const mutated = base.read(path).replace('| Requirement |', '| Req |')
+    expect(codes(base, { [path]: mutated })).toContain('trace-requirement-column-missing')
+  })
+
+  it('flags a canonical table without a Runtime monitor column', () => {
+    const base = nodeTraceFs(ROOT)
+    const path = 'docs/architecture/trace-matrix.md'
+    const mutated = base.read(path).replace('| Runtime monitor |', '| Monitor |')
+    expect(codes(base, { [path]: mutated })).toContain('trace-monitor-column-missing')
+  })
+
   it('flags an invariant table without an Owner column', () => {
     const base = nodeTraceFs(ROOT)
     const path = 'docs/architecture/invariants.md'
@@ -547,7 +570,7 @@ ${cells}
         '| FR-06 | x | `src/storage/event-store.ts` | P | C-19 | `test/offline/m6-storage.test.ts::keeps the projection bookmark independent per session` | — | ADR-001 | in review | M6 |',
       ),
     })
-    const codes = collectTraceViolations(fs).map((v) => v.code)
+    const codes = collectTraceViolations(fs, { requireCoverage: false }).map((v) => v.code)
     expect(codes).not.toContain('trace-test-unknown')
     expect(codes).not.toContain('trace-test-missing')
   })
@@ -559,7 +582,7 @@ ${cells}
         '| FR-06 | x | `src/storage/event-store.ts` | P | C-19 | `test/offline/m6-storage.test.ts::a title nobody wrote` | — | ADR-001 | in review | M6 |',
       ),
     })
-    expect(collectTraceViolations(fs).map((v) => v.code)).toContain('trace-test-unknown')
+    expect(collectTraceViolations(fs, { requireCoverage: false }).map((v) => v.code)).toContain('trace-test-unknown')
   })
 
   it('rejects a citation pointing at a missing test file', () => {
@@ -568,7 +591,7 @@ ${cells}
         '| FR-06 | x | `src/storage/event-store.ts` | P | C-19 | `test/offline/not-there.test.ts::anything` | — | ADR-001 | in review | M6 |',
       ),
     })
-    expect(collectTraceViolations(fs).map((v) => v.code)).toContain('trace-test-missing')
+    expect(collectTraceViolations(fs, { requireCoverage: false }).map((v) => v.code)).toContain('trace-test-missing')
   })
 
   it('rejects a citation that names a test file without a path', () => {
@@ -577,7 +600,7 @@ ${cells}
         '| FR-06 | x | `src/storage/event-store.ts` | P | C-19 | `m6-storage.test.ts::a title` | — | ADR-001 | in review | M6 |',
       ),
     })
-    expect(collectTraceViolations(fs).map((v) => v.code)).toContain('trace-test-unresolved')
+    expect(collectTraceViolations(fs, { requireCoverage: false }).map((v) => v.code)).toContain('trace-test-unresolved')
   })
 
   it('reports a prose-only citation as advice, not a failure', () => {
@@ -587,9 +610,10 @@ ${cells}
         '| FR-06 | x | `src/storage/event-store.ts` | P | C-19 | `m6-storage.test.ts` (a prose note) | — | ADR-001 | in review | M6 |',
       ),
     })
-    const codes = collectTraceViolations(fs, { onAdvisory: (m) => advisories.push(m) }).map(
-      (v) => v.code,
-    )
+    const codes = collectTraceViolations(fs, {
+      requireCoverage: false,
+      onAdvisory: (m) => advisories.push(m),
+    }).map((v) => v.code)
     expect(codes).toEqual([])
     expect(advisories.join(' ')).toContain('unverified')
   })
@@ -600,7 +624,7 @@ ${cells}
         '| FR-06 | x | `src/storage/event-store.ts` | P | C-19 | `m6-storage.test.ts` | — | pending allocation (#25) | in review | M6 |',
       ),
     })
-    expect(collectTraceViolations(fs).map((v) => v.code)).toContain('trace-adr-unnumbered')
+    expect(collectTraceViolations(fs, { requireCoverage: false }).map((v) => v.code)).toContain('trace-adr-unnumbered')
   })
 
   it('accepts an unexpired row exemption but rejects it after expiry', () => {
@@ -610,12 +634,14 @@ ${cells}
     const fs = overridden(nodeTraceFs(ROOT), { [trace]: withRow(row) })
     expect(
       collectTraceViolations(fs, {
+        requireCoverage: false,
         adrBaseline: [{ key, expires: '2026-12-31' }],
         today: '2026-11-13',
       }).map((v) => v.code),
     ).toEqual([])
     expect(
       collectTraceViolations(fs, {
+        requireCoverage: false,
         adrBaseline: [{ key, expires: '2026-01-01' }],
         today: '2026-11-13',
       }).map((v) => v.code),
@@ -629,6 +655,7 @@ ${cells}
     const fs = overridden(nodeTraceFs(ROOT), { [trace]: withRow(edited) })
     expect(
       collectTraceViolations(fs, {
+        requireCoverage: false,
         adrBaseline: [{ key, expires: '2026-12-31' }],
         today: '2026-11-13',
       }).map((v) => v.code),

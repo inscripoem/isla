@@ -1,7 +1,9 @@
 # Category is the course requirement type. Subtype is the NFR sub-type.
 # INV-xx IDs are legacy stable identifiers; only category: invariant rows are system invariants.
+# subtype is optional in req-schema.json; test/offline/requirements.test.ts enforces it for every non-functional requirement.
+# D1 taxonomy decision: docs/req/taxonomy-decision.md (proposed; M5/registrar decision pending).
 version: "0.3"
-generatedFrom: docs/team/REQUIREMENTS.en.md
+generatedFrom: docs/team/REQUIREMENTS.en.md (2026-11-25 historical snapshot; this registry is authoritative)
 requirements:
   - id: FR-01
     title: Select one eligible message or wait and provide a supported reply intent

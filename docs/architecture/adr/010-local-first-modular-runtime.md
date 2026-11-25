@@ -1,8 +1,7 @@
-# ADR pending #25 — Local-first modular runtime with deterministic authority and layered AI context
+# ADR-010 — Local-first modular runtime with deterministic authority and layered AI context
 
-**Status:** proposed. **ADR ID pending #25** — this file is not an allocated numbered ADR and no human
-has accepted it. Date: 2026-11-25. Owner: M5 coordination with M4/M6.
-**Base:** `main` `a58e8f0`. **Supersedes:** none.
+**Status:** proposed. **Number:** ADR-010, reserved in [#25 comment 7159011745](https://github.com/inscripoem/isla/issues/25#issuecomment-7159011745) on 2026-11-25. The reservation does not approve the decision and no human has accepted it. Date: 2026-11-25. Owner: M5 coordination with M4/M6.
+**Base:** `main` `dba25e0`. **Supersedes:** none.
 **Related:** [`../architecture-blueprint.md`](../architecture-blueprint.md),
 [`../candidate-comparison.md`](../candidate-comparison.md),
 [`../context-assembly.md`](../context-assembly.md), ADR-001…ADR-009,
@@ -292,8 +291,8 @@ The canonical requirement-to-component-to-test-to-monitor matrix is
 
 ## 10. Open questions
 
-1. **ADR number.** This file is `pending #25`; a human must reserve a number before it becomes a
-   numbered ADR. It must not be cited as an accepted ADR before then.
+1. **ADR acceptance.** The number is ADR-010, reserved in #25; the decision remains proposed until a
+   human records acceptance. A reservation is not an approval.
 2. **Token cap.** The 4,096/70%/90% values need M4 owner review and a real tokenizer/measured prompt
    before enforcement.
 3. **Permission model adoption.** `.opencode/permissions.jsonc` is a policy source compiled per task;
@@ -301,7 +300,8 @@ The canonical requirement-to-component-to-test-to-monitor matrix is
 4. **G4 semantic evaluation.** G4 checks conditions/claims, not faithfulness/relevance. The pilot
    table exists and passes the condition scan; a fixed, labelled evaluation set and thresholds remain
    not run.
-5. **Requirement split IDs.** `COST-01`, `SEC-01` and `GOV-01` are proposed allocations pending #25.
+5. **Requirement split IDs.** `COST-01`, `SEC-01` and `GOV-01` are reserved in #25 (comment
+   7159011745); the reservation does not approve the taxonomy.
 6. **D5/D6.** Transcripts and the process report are submission artifacts outside this ADR.
 
 ---
