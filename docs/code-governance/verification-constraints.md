@@ -180,13 +180,12 @@ M6 (gate owner).
 
 **What this establishes and what it does not establish.**
 
-- A failing required check has been observed to block mergeability. PR #197
-  (`83666ff4fe63b13c1ecfba9439d7fe25d1a4e134`) had a red pull-request `verify` run
-  ([45565786945](https://github.com/inscripoem/isla/actions/runs/45565786945)); the failing step was G6
-  with `POL-G6-02` (`commit-unreachable`). GitHub reported `mergeStateStatus: BLOCKED`, and the PR was
-  closed unmerged on 2026-11-25; its content is not accepted. This is the negative evidence that an
-  applicable gate failure makes the PR unmergeable. An attempted merge command was not run, so a refused
-  merge call itself remains unobserved; PR #57 (`c1decc2`, 2026-10-29) remains the green-merge case.
+- PR #197 (`83666ff4fe63b13c1ecfba9439d7fe25d1a4e134`) was `BLOCKED` while the required pull-request
+  `verify` check was red ([45565786945](https://github.com/inscripoem/isla/actions/runs/45565786945)); the
+  failing step was G6 with `POL-G6-02` (`commit-missing`: the cited commit object `4273673` was absent).
+  The PR was closed unmerged on 2026-11-25; its content is not accepted. It also lacked the required human
+  approval, so this observation does not isolate the check as the cause of the blocked state. The refused
+  merge call itself remains unobserved. PR #57 (`c1decc2`, 2026-10-29) remains the green-merge case.
 - The maintainer records that they applied the setting (issue #84, 2026-10-29T10:15:50Z), consistent with
   the ruleset's `updated_at`. The previous required-check value is not recorded.
 - The maintainer records that an **administrator PR-only bypass** remains (same comment). It is not readable
