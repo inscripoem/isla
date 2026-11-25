@@ -9384,6 +9384,276 @@ entries:
         Full verify passed with 2136 tests passing and nine skipped across
         95 files. G1 evidence and G6 passed on the committed difference
         against main.
+  - date: "2026-11-17"
+    task: M4-A06-style-contract
+    branch: feat/m4-a06-style-contract
+    change: >-
+      Add the deterministic output-side style contract as a standalone pure
+      module (issue #146 A06; its A05 dependency landed in PR #151). New
+      src/dialogue/style-contract.ts defines StyleContract with code-owned
+      defaults aligned to the authored character in
+      src/dialogue/persona-content.ts and a code comment mapping each default
+      to the authored boundary or style note it executes: the verbal tic
+      hmph/nya with a two-line minimum gap (styleNotes[1] says sparingly,
+      never in every sentence), audience-shaming address violations
+      (boundaries[2]), medical-promise and real-supernatural or
+      guaranteed-protection boundary patterns in CJK and English
+      (boundaries[0] and [4]), self and audience reference sets matching the
+      authored templates, and forbiddenPatterns empty by default per the
+      proposal's risk note that a contract only covers patterns the author
+      explicitly rejects. deriveStyleContract(profile, overrides?) returns
+      the defaults with the profile id for provenance and a shallow merge of
+      overrides; prose styleNotes and boundaries are deliberately NOT parsed
+      into patterns (that would not be deterministic), and the limitation is
+      recorded in code. validateStyle(lines, contract, options?) runs seven
+      ordered deterministic checks: self-reference, audience-address,
+      tic-frequency (a window over the last minGapTurns recent turns plus the
+      candidate lines, reported at the later candidate line only, skipped
+      when the contract has no tic), sentence-length (report only; splitting
+      meaning-bearing sentences deterministically is not possible), forbidden,
+      boundary, and fact-contradiction, the last reusing the existing
+      scanContradictions from src/dialogue/consistency.ts with the actual
+      statement interfaces, respecting the module's work bounds and reporting
+      only findings actually returned, never claiming completeness.
+      Violation rules carry rule identity and indexes, never statement or
+      line text, the same redaction stance as the consistency audit.
+      repairStyledLines(lines, contract, options?) applies the deterministic
+      repair order - forbidden spans removed with whitespace collapse, tic
+      surplus occurrences removed keeping the first in each violating window,
+      a boundary-hit line replaced by the first intent template that itself
+      passes validateStyle for the given replyIntent, the original line kept
+      and reported when no template qualifies or no intent is given -
+      self-reference, audience-address, sentence-length and
+      fact-contradiction are report-only in v0 because no deterministic
+      repair exists without inventing content. The repair never adds a
+      provider call (NFR-04), never changes the line count (lines map
+      one-to-one to dialogue segments, so the MAX_DIALOGUE_SEGMENTS cap is
+      respected by construction), keeps an emptied line as an empty slot, and
+      DialogueStyleReport carries the pre-repair violations plus repaired and
+      fallbackUsed flags. This lands the standalone pure module only: the
+      one-line wiring call in DialoguePort.generate (after the text source
+      returns lines, before the sink write) is a named follow-up now that
+      PR #163 has merged, and this change claims no end-to-end effect. Tests:
+      new test/offline/m4-style.test.ts with eleven cases covering zero false
+      kills over every authored intent-template line under the default
+      contract, out-of-character self-reference, audience shaming, tic
+      frequency (consecutive lines, recentTurns extension, gap respected,
+      disabled), sentence length, a forbidden-pattern override removed with
+      the line count unchanged, boundary fallback replacement plus the
+      absent-intent and all-templates-violate paths, a standing-fact
+      contradiction reported without repair, the line-count and emptied-slot
+      invariant, contract derivation with overrides and profile id, and
+      purity (same inputs, deep-equal outputs). The scripts.test:m4 manifest
+      line in package.json grows by one file (test/offline/m4-style.test.ts);
+      M5 owns manifests per AGENTS.md and the growth is disclosed here and in
+      the PR body; src/dialogue/index.ts is deliberately not edited (the
+      module is importable by path). No change to src/contracts/app beyond
+      reading the already-exported MAX_DIALOGUE_SEGMENTS and ReplyIntent, no
+      new dependency, no I/O, no clock read, and no second provider call.
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    sessions: [ses_e262f0a3effeFpyJop8WexJbRu]
+    requirements: [NFR-03, NFR-04]
+    invariants: []
+    cases: []
+    commits: [fbcc0d320dab67de1467794100b76d85ccf89a8b]
+    supervision: >-
+      The M4 supervisor wrote the English task book
+      (m4-impl/A06/taskbook.md) fixing the contract shape, the default
+      values, the seven checks and their order, the repair order, the
+      redaction stance, the reuse points (scanContradictions, the frozen
+      contracts exports, isSubstantiveSpeech), the three allowed files, and
+      the test plan, including the scope decision that the dialogue-port
+      wiring is a named follow-up because PR #163 owned that file in flight
+      at implementation time. The implementation session
+      ses_e262f0a3effeFpyJop8WexJbRu wrote the two new files and the
+      manifest line on 2026-11-14 at the 205424f base; src/dialogue/index.ts
+      was deliberately not touched per the task book's stop rule. The
+      supervisor independently re-ran the gates and reviewed the diff.
+      Before the commit round the branch (which had no commits) was migrated
+      by stash and fast-forward rebase onto merged main a093f50; the
+      package.json manifest line conflicted with the growth PR #159 had
+      already merged and was resolved as main's eighteen-file line plus
+      m4-style.test.ts (nineteen files), with main's test:m5 line taken
+      verbatim; after PRs #165, #172, #173 and #164 merged while this PR was
+      open, the pushed commits were rebuilt onto main b58a5ad by patch
+      migration with the old branch SHAs kept as backup refs and a
+      force-with-lease push, the two new files re-applied and the manifest
+      line appended to main's unchanged eighteen-file test:m4 line; the
+      gates were re-run on each new base before committing.
+      One disclosure is recorded: the sentence splitter contains the literal
+      ellipsis character inside its character class because the task book's
+      own regex specified it; the CJK members of that class are written as
+      unicode escapes while the ellipsis is a functional literal, and it was
+      kept after disclosure (it can be normalized in the follow-up wiring
+      session). This AI-use entry is written by a separate genuine OpenCode
+      session per the 2026-11-15 tightened rule that repository code and all
+      ai-use-log content are session-written; that session's id and raw
+      stream are recorded outside the repository in
+      m4-impl/A06/opencode-sessions.md. The PR round makes two consecutive
+      JSONL stream (393,065 bytes, empty stderr) are kept outside the
+      repository at D:/isla-m4-05/m4-impl/A06/opencode-sessions.md and
+      D:/isla-m4-05/m4-impl/A06/impl-session-raw.json. The session writing
+      this entry also retains its conversation there. No export is stored in
+      the repository and no credential appears in repository files.
+        (feat/m4-a06-style-contract on b58a5ad). pnpm typecheck -> exit 0;
+        pnpm lint -> 0 warnings and 0 errors on 323 files; pnpm test:m4 ->
+        430 passed in 19 files (clean b58a5ad baseline 419 in 18 files, +11
+        style cases); pnpm test -> 2039 passed, 9 skipped and 1 failed in
+        the full suite, the single failure being the pre-existing
+        Windows-host baseline m6-02-provenance-command symlink case
+        (reproduced on clean main in earlier rounds and untouched by this
+        branch); pnpm build -> exit 0; the pnpm verify composite cannot run
+        its nested pnpm invocation on this host, so its four components were
+        verified individually and the remote verify run is the final
+      The standalone style-contract pure module, its deterministic
+      validation and repair, the new style test file, the one-line manifest
+      growth, and this AI-use entry. No wiring in DialoguePort.generate
+      (named follow-up after PR #163, which has since merged); no shared
+      contract or wire field change beyond reading already-exported frozen
+      constants; no storage, SQL, runtime, prompt or AGENTS.md change; no
+      new dependency; no quality, latency, cost, live-provider or
+      physical-output claim; no merge, approval, dismissal or checkpoint
+      acceptance is claimed. DialogueStyleReport is M4-owned; any M2 display
+      would be a separate diagnostic protocol proposal coordinated by M5.
+
+  - date: "2026-11-20"
+    task: M4-A06-style-contract-repair-soundness
+    branch: feat/m4-a06-style-contract
+    change: >-
+      Fix M5's blocking review at 81d1c55 and the two Medium findings that a
+      read-only cross-review of the first fix returned. The v0 repair accepted
+      a candidate boundary replacement by validating only the replaced line,
+      but tic-frequency is decided across a sliding window of the recent turns
+      plus the candidate lines, so a replacement could create a violation on
+      the adjacent line and the repaired output then failed validateStyle while
+      the report said the repair succeeded. Round 1 (ffbae03) compares the whole
+      output stream against a whole-stream baseline, freezes the replacement
+      candidates into the contract as boundaryFallbacks so repair no longer
+      calls resolveCharacterProfile, adds the report field
+      unrepairedBoundaryLines, and hand-authors tic-free boundary fallbacks in
+      src/dialogue/persona-content.ts as intentFallbackTemplates, kept out of
+      intentTemplates so spoken lines are unchanged. Round 1 is not presented
+      as correct: the cross-review session ses_e07bf27a9ffeCqh8XSq4oGHrH2
+      (OpenCode, cslabllm/CS5351/DeepSeek-V4-Flash, read-only review of ffbae03, verdict
+      sound with notes) found two Medium defects. First, fact-contradiction
+      violations carry their array position as rule, so replacing a line
+      renumbers them and a renumbered pre-existing contradiction looked newly
+      introduced, refusing a valid repair. Second, the target-line check
+      rejected any violation on the replaced line, including report-only kinds
+      (sentence-length, fact-contradiction), contradicting the stated intent.
+      It also noted a document/behaviour mismatch for unrepairedBoundaryLines
+      when no replyIntent is given, a defensive-only identical-candidate guard,
+      and that the zero-false-kills invariant did not cover the new fallbacks.
+      Round 2 (3dff0b8) adds stableViolationKey(), which drops the ordinal for
+      fact-contradiction, scopes the target-line check to the resolvable kinds
+      (boundary, tic-frequency, forbidden), corrects the document and adds four
+      tests, each verified to fail against the pre-review logic before it was
+      committed. The main merge (9351317) conflicted only in the log tail, and
+      resolving it by concatenation dropped one " - " date separator, collapsing
+      two mappings; yaml@2.9.1 refused the file with eight 'Map keys must be
+      unique' errors. The first entry-authoring session
+      (ses_e07b09de6ffey4eSJe2jzOF5LG) found the defect, stopped and asked
+      instead of writing into a broken file, and be06988 restores the
+      separator; the delta against main is exactly one added entry.
+
+      Rebase note (2026-11-25). This branch was rebuilt on main 3a54e6b after
+      the #189 merge: the fourteen commits recorded above and below were squashed
+      into one code commit (fbcc0d3) plus this log commit, because every log-touch commit
+      re-conflicted identically in docs/ai-use-log.yaml. The round, merge and
+      re-authoring SHAs quoted in the prose (ffbae03, 9351317, 3dff0b8, be06988,
+      a7c1942, a1c25c9, 8765b8c) describe what happened and are no longer objects
+      in this repository; the equivalence checks and session IDs they refer to
+      are unchanged.
+    requirements: [NFR-03]
+    invariants: [INV-14]
+    commits: [fbcc0d320dab67de1467794100b76d85ccf89a8b]
+    agent: opencode/build
+    provider: cslabllm
+    model: DeepSeek-V4-Flash
+    model_cli_id: "cslabllm/CS5351/DeepSeek-V4-Flash"
+    sessions: [ses_e07bf27a9ffeCqh8XSq4oGHrH2, ses_e07b09de6ffey4eSJe2jzOF5LG, ses_e07a928d0ffe4eSpzXlagEEm2e, ses_e0745f73dffeGvx3C9CgVwWja7, ses_e06ba3aa0ffe7evb6VIit7Ikgj]
+    supervision: >-
+      M5's review at 81d1c55 supplied the blocking finding and named the
+      accepting-only-the-replaced-line weakness; the rounds recorded here
+      address it. The cross-review in ses_e07bf27a9ffeCqh8XSq4oGHrH2 was a
+      separate read-only OpenCode session (cslabllm/CS5351/DeepSeek-V4-Flash): it read
+      ffbae03, reported the two Medium defects recorded above and made no edit.
+
+      Disclosure of how each part was authored, because the split matters
+      for G6. The round 1 and round 2 changes to style-contract.ts, persona.ts
+      and persona-content.ts were written inside an OpenCode session.
+      M5 reviewed that technical result at e5c3dac and accepted it, then
+      requested changes on the authoring evidence alone. The final src/ change
+      on this branch - commit a7c1942, removing the dead markEmptied branches
+      and the import that only fed them - WAS authored in OpenCode session
+      ses_e0745f73dffeGvx3C9CgVwWja7 (agent build, cslabllm/CS5351/DeepSeek-V4-Flash). That
+      session read the function, confirmed by grep that isSubstantiveSpeech had
+      no other caller, made the edit, and ran the style and dialogue suites
+      itself; the supervising assistant re-ran typecheck, oxlint and the full M4
+      suite before committing and rewrote no line of the session edit. 
+
+      The delivered src/ change was re-authored in OpenCode at a1c25c9, in
+      session ses_e06e1a493ffesriorAB1Kkyknl (agent build,
+      cslabllm/CS5351/DeepSeek-V4-Flash), which replaced
+      src/dialogue/style-contract.ts with its own implementation; only that file
+      changed, so the 18 acceptance tests are unchanged and still decide.
+      Equivalence beyond the tests was checked by restoring the previous
+      implementation, capturing 400 deterministic pseudo-random cases (35
+      exercised a boundary fallback, 6 left a boundary unrepaired, 38 carried a
+      fact-contradiction), restoring this implementation, and comparing every
+      field of validateStyle plus lines, violations, repaired, fallbackUsed and
+      unrepairedBoundaryLines: 400/400 identical. Two deliberate behaviour
+      changes were flagged by the session in its own review: the repair baseline
+      comparison became a multiset rather than a set, so a second contradiction
+      on one line cannot hide behind a shared key; and the baseline is scoped to
+      the lines a replacement can reach, because replacing a line renumbers
+      later findings. The second makes the cross-line contradiction check weaker
+      by construction - a candidate cannot be rejected for a contradiction
+      outside the window - and the session marked it High in its self review;
+      only fact-contradiction is unbounded and it is report-only at this stage,
+      so no repaired or scored output changes. Verified: m4-style 18/18;
+      test:m4 19 files / 455 tests; tsc -b exit 0; oxlint 0 warnings 0 errors
+      on 323 files.
+
+      This entry was written by ses_e07a928d0ffe4eSpzXlagEEm2e and updated in
+      place for this round. ses_e07b09de6ffey4eSJe2jzOF5LG is cited because it
+      found the lost separator that broke this log; it refused to write into the
+      broken file and produced no entry of its own.
+    human_review: >-
+      M5 requested changes at 81d1c55; these two rounds and the merge repair
+      remain under review and this entry claims no approval, dismissal or merge.
+      A human team member performs the final merge; no agent merges, enables
+      auto-merge, enqueues a merge or triggers one through a CLI, API, browser
+      or automation.
+    transcript_record: >-
+      The cross-review conversation ses_e07bf27a9ffeCqh8XSq4oGHrH2 and the
+      entry-authoring conversation ses_e07b09de6ffey4eSJe2jzOF5LG are retained
+      in the local OpenCode store; no raw export was copied outside the checkout
+      for this entry, and no credential appears in repository files.
+    verification:
+      base: 3a54e6b96f580f220fdfc8559ecfe38e1ab0d917
+      results: >-
+        Windows 11, Node 24.21.0, pnpm 12.11.2: the m4-style suite passed 18/18;
+        pnpm test:m4 passed 19 files / 455 tests; pnpm typecheck exited 0; pnpm
+        lint (oxlint) reported 0 warnings and 0 errors on 323 files. Cost on
+        this host: repair cost rose from 5.65 to 10.87 microseconds per call
+        because the whole-stream baseline is rechecked, while
+        deriveStyleContract costs 0.53 microseconds once per contract. The G6
+        ai-use-log gate passed with the changed-file list supplied and main's
+        log as the base.
+      limits: >-
+        No live provider, browser or CI run was performed for this slice, and no
+        acoustic, latency, cost or user-visible effect is claimed.
+        repairStyledLines still has no production caller, so the evidence is
+        test-level only.
+    scope: >-
+      src/dialogue/style-contract.ts, src/dialogue/persona.ts,
+      src/dialogue/persona-content.ts, test/offline/m4-style.test.ts and this
+      log entry. No frozen contract, storage schema, provider or deployment
+      change.
+
   - date: "2026-11-25"
     task: console-kokoro-voice-selection
     change: >-
@@ -9393,19 +9663,7 @@ entries:
       refusal, persistence, retry and stop behavior.
     requirements: [FR-04, FR-05, NFR-05, NFR-06]
     invariants: [INV-01, INV-03]
-    commits:
-      - "ab8f84dded49ed453ff30e7acbafcbe324b3f413"
-      - "246bf4b8ed7a9567d222e1ce41d4117361129d3c"
-      - "2408cd896d387316d922f37dfad7bee45cf196b7"
-      - "67fe018f70b6178da4f745662171db90bb57790a"
-      - "eff22ce1a0da36e5f1be1c634034089ea73a3c80"
-      - "b2fc9dcf001f4b5a4d3ee31ccf6139c8dd638561"
-      - "328c2f97e04aef16557124fae4c10a04e3aeb33c"
-      - "e859d26451867120361515b4957992b2d5d4788e"
-      - "355e477ce484e4e3b3b8ce606211b99b1e119f9b"
-      - "26bf07aeed7604c9356a5f69bb4d65b01e62ad23"
-      - "2e8d989ec47fbc8c56a2f4d5eab1bd198da40bda"
-      - "2e22bd435639f4724a9702d4eaba5536f2addb53"
+    commits: ["2889136a69f545a6aea4f63d192dc5f979586877"]
     agent: OpenCode V2 build
     provider: deepseek
     model: deepseek-flash
