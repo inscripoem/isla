@@ -10610,7 +10610,7 @@ entries:
       application protocol are unchanged.
     requirements: []
     invariants: []
-    commits: ["1efb322eff0ec02fdb70c5f639251556b27e8223"]
+    commits: ["9390bd77834258a17561f2afb3c223897c955acb"]
     agent: OpenCode V2 build
     provider: self-api
     model: deepseek-v4-flash
