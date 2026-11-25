@@ -10759,6 +10759,6 @@ entries:
       tools/avatar-relay/relay.ts, tools/avatar-relay/source.ts,
       test/offline/m2-avatar-viewport.test.ts,
       test/offline/m2-avatar-relay.test.ts, test/browser/console.tsx,
-      package.json, tsconfig.node.json and docs/ai-use-log.yaml. No shared
-      contract, RendererPort, receipt, storage, runtime or workflow file
-      changed.
+      package.json and docs/ai-use-log.yaml. The existing tsconfig.node.json
+      already included tools. No shared contract, RendererPort, receipt,
+      storage, runtime or workflow file changed.
