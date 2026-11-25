@@ -42,6 +42,11 @@ pass, and a G4 pass is not a quality result.
 - **Canonical coverage:** 32/32 requirements have a trace row; every monitor cell is a signal or a
   reasoned `—`; four current invariants remain in the invariant register.
 - **Cases:** 69 registered, 64 implemented, 5 pending (C-05, C-08, C-09, C-16, C-75).
+  C-05, C-08 and C-09 have exact offline scenario tests recorded as proposed verifiers in
+  `case-registry.yaml` and `trace-matrix.md`; they stay pending until the case owners confirm the
+  mapping and the accepted joint scope. C-75 has no composition-level rebuild-equality verifier:
+  M4's adapter from admitted turns to `DeriveSourceTurn` at the M5 composition boundary is missing
+  (`test/fixtures/memory/README.md`).
 - **Mutation:** the new trace checks were mutation-checked on this branch (missing requirement,
   bare monitor, non-invariant register row), as was the taxonomy subtype requirement. See the
   review memo and AI-use log for the red/green results.
