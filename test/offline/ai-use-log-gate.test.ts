@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   AI_USE_LOG_PATH,
   collectAiUseLogEntryViolations,
+  collectAiUseLogReferenceFindings,
   collectAiUseLogReferenceViolations,
   collectAiUseLogShapeViolations,
   collectAiUseLogViolations,
@@ -137,6 +138,34 @@ entries:
     expect(collectAiUseLogShapeViolations('version: "1"\n').join(' ')).toContain('entries')
   })
 
+  it('rejects a valid YAML document whose entries is not a list', () => {
+    const violations = collectAiUseLogShapeViolations('entries: {}\n')
+    expect(violations.join(' ')).toContain('cannot be read as an entries list')
+    expect(violations.join(' ')).not.toContain('not valid YAML')
+  })
+
+  it('rejects a recursive alias in an entry', () => {
+    const cyclic = (tail: string): string =>
+      [
+        'entries:',
+        '  - &a',
+        '    date: 2026-11-13',
+        '    task: t',
+        '    change: c',
+        '    agent: a',
+        '    requirements: [FR-06]',
+        '    invariants: []',
+        '    commits: []',
+        `    ${tail}`,
+        '',
+      ].join('\n')
+    for (const tail of ['self: *a', 'self: [*a]']) {
+      const violations = collectAiUseLogShapeViolations(cyclic(tail))
+      expect(violations, tail).toHaveLength(1)
+      expect(violations[0], tail).toContain('recursive alias')
+    }
+  })
+
   it('rejects invalid YAML', () => {
     expect(collectAiUseLogShapeViolations('entries: [\n  - date: 2026').join(' ')).toContain('not valid YAML')
   })
@@ -190,6 +219,26 @@ describe('the log change must add an entry (not merely touch or edit one)', () =
     expect(
       collectAiUseLogEntryViolations(['src/x.ts', AI_USE_LOG_PATH], 'entries: [\n', ADDED).join(' '),
     ).toContain('base is not valid YAML')
+  })
+
+  it('reports a base that cannot be read as an entries list', () => {
+    const violations = collectAiUseLogEntryViolations(
+      ['src/x.ts', AI_USE_LOG_PATH],
+      'entries: {}\n',
+      ADDED,
+    ).join(' ')
+    expect(violations).toContain('cannot be read as an entries list')
+    expect(violations).not.toContain('not valid YAML')
+  })
+
+  it('does not crash on a cyclic base (the reference check reports it)', () => {
+    expect(() =>
+      collectAiUseLogEntryViolations(
+        ['src/x.ts', AI_USE_LOG_PATH],
+        'entries: [&a { task: t, self: *a }]\n',
+        ADDED,
+      ),
+    ).not.toThrow()
   })
 
   it('does not apply when no code or prompt changed (a documentation fix is free)', () => {
@@ -449,22 +498,124 @@ describe('G6 historical classification follows entry identity, not position (mid
     ).toEqual([])
   })
 
+  it('does not treat a nested field reorder as an edit', () => {
+    const nested = (baseFirst: boolean): string =>
+      [
+        '  - date: 2026-11-13',
+        '    task: entry-nested',
+        '    requirements: [FR-06]',
+        '    invariants: []',
+        '    cases: []',
+        '    change: Nested detail.',
+        '    commits: []',
+        '    agent: opencode/build',
+        '    verification:',
+        ...(baseFirst
+          ? ['      base: abc1234', '      results: ok']
+          : ['      results: ok', '      base: abc1234']),
+        '',
+      ].join('\n')
+    expect(
+      collectAiUseLogReferenceViolations(log(nested(true)), deps({ baseLogText: log(nested(false)) })),
+    ).toEqual([])
+  })
+
   it('fails a base entry repeated in the head once as historical and once as new', () => {
     const violations = collectAiUseLogReferenceViolations(
       log(A, B, B),
       deps({ baseLogText: BASE }),
     )
     expect(violations).toHaveLength(1)
+    // The first copy is the base entry and stays historical; the second is new.
+    expect(violations[0]).toContain('entry 2')
     expect(violations[0]).toContain('not reachable from HEAD')
   })
 
+  it('does not treat an acyclic shared anchor as a cycle', () => {
+    const anchored = [
+      '  - &shared',
+      '    date: 2026-11-13',
+      '    task: entry-a',
+      '    requirements: [FR-06]',
+      '    invariants: []',
+      '    cases: []',
+      '    change: Base change A.',
+      '    commits: [abcdef1]',
+      '    agent: opencode/build',
+      '  - *shared',
+      '',
+    ].join('\n')
+    const base = log(anchored)
+    const head = log(anchored, entry('entry-new', 'New change.', '[abcdef1]'))
+    expect(collectAiUseLogReferenceFindings(head, deps({ baseLogText: base }))).toEqual([])
+  })
+
+  it('reads a base with no entries key as zero entries', () => {
+    for (const base of ['version: "1"\n', 'entries: null\n']) {
+      // B cites fedcba9, so every entry is strict: a silent historical
+      // classification would hide the violation.
+      expect(
+        collectAiUseLogReferenceViolations(log(B), deps({ baseLogText: base })),
+        base,
+      ).toHaveLength(1)
+    }
+  })
+
   it('fails closed when the base log is not valid YAML', () => {
-    const violations = collectAiUseLogReferenceViolations(
-      log(A),
-      deps({ baseLogText: 'entries: [\n' }),
-    )
-    expect(violations.join(' ')).toContain('base is not valid YAML')
-    expect(violations.join(' ')).toContain('cannot classify entries')
+    const findings = collectAiUseLogReferenceFindings(log(A), deps({ baseLogText: 'entries: [\n' }))
+    expect(findings).toHaveLength(1)
+    expect(findings[0]?.policy).toBe('POL-G6-03')
+    expect(findings[0]?.evidence).toEqual({ register: 'base-log' })
+    expect(findings[0]?.message).toContain('base is not valid YAML')
+    expect(findings[0]?.message).toContain('cannot classify entries')
+  })
+
+  it('fails closed when the base cannot be read as an entries list', () => {
+    const findings = collectAiUseLogReferenceFindings(log(A), deps({ baseLogText: 'entries: {}\n' }))
+    expect(findings).toHaveLength(1)
+    expect(findings[0]?.policy).toBe('POL-G6-03')
+    expect(findings[0]?.evidence).toEqual({ register: 'base-log' })
+    expect(findings[0]?.message).toContain('cannot be read as an entries list')
+    expect(findings[0]?.message).not.toContain('not valid YAML')
+  })
+
+  it('fails closed on a recursive alias in the base log', () => {
+    for (const base of [
+      'entries: [&a { task: t, self: *a }]\n',
+      'entries: [&a { task: t, self: [*a] }]\n',
+    ]) {
+      const findings = collectAiUseLogReferenceFindings(log(A), deps({ baseLogText: base }))
+      expect(findings, base).toHaveLength(1)
+      expect(findings[0]?.policy, base).toBe('POL-G6-03')
+      expect(findings[0]?.evidence, base).toEqual({ register: 'base-log' })
+      expect(findings[0]?.message, base).toContain('recursive alias')
+    }
+  })
+
+  it('fails closed on a recursive alias in the head log', () => {
+    const cyclic = (tail: string): string =>
+      [
+        '  - &a',
+        '    date: 2026-11-13',
+        '    task: entry-cyclic',
+        '    requirements: [FR-06]',
+        '    invariants: []',
+        '    cases: []',
+        '    change: Cyclic detail.',
+        '    commits: [abcdef1]',
+        '    agent: opencode/build',
+        `    ${tail}`,
+        '',
+      ].join('\n')
+    for (const tail of ['self: *a', 'self: [*a]']) {
+      const head = log(A, cyclic(tail))
+      const findings = collectAiUseLogReferenceFindings(head, deps({ baseLogText: BASE }))
+      expect(findings, tail).toHaveLength(1)
+      expect(findings[0]?.policy, tail).toBe('POL-G6-03')
+      expect(findings[0]?.evidence, tail).toEqual({ register: 'head-log' })
+      expect(findings[0]?.message, tail).toContain('entry-cyclic')
+      expect(findings[0]?.message, tail).toContain('recursive alias')
+    }
   })
 })
 

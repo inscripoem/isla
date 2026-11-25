@@ -108,9 +108,13 @@ rule classified an entry by its array position (`index < base entry count`). Whe
 its own entries before a base entry, that entry moved past the count and its previously accepted
 citations were re-checked as new and failed. The gate now compares each head entry with the entries
 of the base log by content: an identical entry is historical wherever it sits, including after a
-mid-insertion. A new entry, or one whose fields changed (a repointed commit, a reworded change), is
-still new and must cite a string commit reachable from HEAD. A base log that is supplied but cannot
-be parsed fails closed instead of silently making every entry historical.
+mid-insertion, and each repeated occurrence consumes one base match. A new entry, or one whose fields
+changed (a repointed commit, a reworded change), is still new and must cite a string commit reachable
+from HEAD. A base log that is supplied but cannot be read as an entry list fails closed instead of
+silently making every entry historical: that covers unparsable YAML, a document whose `entries` is
+not a list, and a recursive YAML alias. The same alias in the head fails closed too, and the gate
+writes the resulting POL-G6-03 record with evidence naming `base-log` or `head-log`; the record path
+now receives the base copy instead of rebuilding its dependencies without it.
 
 ## Cutover
 
