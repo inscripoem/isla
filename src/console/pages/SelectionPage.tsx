@@ -83,6 +83,7 @@ export function SelectionSection({ selection }: { readonly selection: SelectionV
       label: 'Turn id',
       value: selection.replyIntent === null ? 'none' : selection.replyIntent.turnId === null ? 'not reported' : selection.replyIntent.turnId,
       noneNeutral: true,
+      tone: selection.replyIntent !== null && selection.replyIntent.turnId === null ? 'plain' : undefined,
     },
     {
       label: 'Delivery classification',
@@ -93,16 +94,19 @@ export function SelectionSection({ selection }: { readonly selection: SelectionV
       label: 'Delivery output',
       value: selection.serverDelivery === null ? 'none' : selection.serverDelivery.outputId === null ? 'not reported' : selection.serverDelivery.outputId,
       noneNeutral: true,
+      tone: selection.serverDelivery !== null && selection.serverDelivery.outputId === null ? 'plain' : undefined,
     },
     {
       label: 'Delivery turn',
       value: selection.serverDelivery === null ? 'none' : selection.serverDelivery.turnId === null ? 'not reported' : selection.serverDelivery.turnId,
       noneNeutral: true,
+      tone: selection.serverDelivery !== null && selection.serverDelivery.turnId === null ? 'plain' : undefined,
     },
     {
       label: 'Delivery segment',
       value: selection.serverDelivery === null ? 'none' : selection.serverDelivery.segmentId === null ? 'not reported' : selection.serverDelivery.segmentId,
       noneNeutral: true,
+      tone: selection.serverDelivery !== null && selection.serverDelivery.segmentId === null ? 'plain' : undefined,
     },
   ]
   const selectionRows: readonly (readonly [string, ReactNode])[] = selectionFacts.map(

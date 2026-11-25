@@ -471,14 +471,45 @@
   align-items: center;
 }
 
+@media (max-width: 1200px) {
+  .isla-brand__face--kanban .isla-kanban {
+    transform: scale(0.75);
+    transform-origin: center;
+  }
+}
+
+@media (max-width: 900px) {
+  .isla-brand__face--kanban .isla-kanban {
+    transform: scale(0.54);
+    transform-origin: center;
+  }
+}
+
+@media (max-width: 640px) {
+  .isla-brand__face--kanban .isla-kanban {
+    transform: scale(0.47);
+  }
+}
+
 @media (max-width: 560px) {
   .isla-brand__face--kanban .isla-kanban {
-    transform: scale(0.62);
-    transform-origin: center;
+    transform: scale(0.46);
   }
 
   .isla-brand__studio {
     font-size: var(--isla-fs-2xl);
+  }
+}
+
+@media (max-width: 430px) {
+  .isla-brand__face--kanban .isla-kanban {
+    transform: scale(0.31);
+  }
+}
+
+@media (max-width: 360px) {
+  .isla-brand__face--kanban .isla-kanban {
+    transform: scale(0.26);
   }
 }
 
@@ -492,6 +523,8 @@
   flex: none;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  max-width: 100%;
   padding-top: var(--isla-space-xs);
 }
 

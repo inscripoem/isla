@@ -1,7 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
-import { formatUptime, idGlyph, statusToneStyle, type StatusTone } from './format'
+import { chatToneStyle, formatUptime, idGlyph, statusToneStyle, type StatusTone } from './format'
 import kanbanSheetUrl from '../assets/kanban/spritesheet.webp'
 
 /* ------------------------------------------------------------------ *
@@ -259,11 +259,15 @@ export function Card({
   // Expanded cards fill ONLY the left column's unfilled area below the
   // stage wall — never the stage itself, never full screen, no overlay.
   // Geometry is measured and applied as inline styles; a FLIP transition
-  // animates the move from the column slot into the free area.
+  // animates the move from the column slot into the free area. Under 1100px
+  // the deck stacks, so the floating geometry is disabled entirely and the
+  // expanded card stays in normal document flow (it must never cover the
+  // Control Deck inputs or buttons).
   useLayoutEffect(() => {
     const card = cardRef.current
     if (card === null) return
-    if (!floating) {
+    const narrow = window.matchMedia('(max-width: 1100px)')
+    const clearGeometry = (): void => {
       card.style.position = ''
       card.style.left = ''
       card.style.top = ''
@@ -271,6 +275,10 @@ export function Card({
       card.style.height = ''
       card.style.zIndex = ''
       card.style.transform = ''
+      card.style.willChange = ''
+    }
+    if (!floating) {
+      clearGeometry()
       return
     }
     const deck = card.closest('.console__deck')
@@ -278,7 +286,12 @@ export function Card({
     if (deck === null || wall === null) return
     const consoleEl = card.closest('.console')
     if (consoleEl === null) return
+    let listening = false
     const apply = (): void => {
+      if (narrow.matches) {
+        clearGeometry()
+        return
+      }
       // Document-anchored placement: the card occupies the left column's
       // unfilled area below the stage wall and scrolls with the page.
       const deckRect = deck.getBoundingClientRect()
@@ -296,32 +309,56 @@ export function Card({
       card.style.transform = 'none'
       card.style.willChange = 'auto'
     }
-    const first = card.getBoundingClientRect()
-    apply()
-    const last = card.getBoundingClientRect()
-    const dx = first.left - last.left
-    const dy = first.top - last.top
-    const sx = first.width / (last.width || 1)
-    const sy = first.height / (last.height || 1)
-    if (Math.abs(dx) > 1 || Math.abs(dy) > 1 || Math.abs(sx - 1) > 0.01 || Math.abs(sy - 1) > 0.01) {
-      card.animate(
-        [
-          { transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`, transformOrigin: 'top left' },
-          { transform: 'translate(0, 0) scale(1, 1)', transformOrigin: 'top left' },
-        ],
-        { duration: 420, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' },
-      )
-    }
-    const onResize = (): void => apply()
     const onSibling = (event: Event): void => {
       if ((event as CustomEvent).detail !== card) setOpen(false)
     }
-    window.addEventListener('resize', onResize)
-    window.addEventListener('isla-card-expand', onSibling as EventListener)
-    window.dispatchEvent(new CustomEvent('isla-card-expand', { detail: card }))
-    return () => {
-      window.removeEventListener('resize', onResize)
+    const stopListening = (): void => {
+      if (!listening) return
+      window.removeEventListener('resize', apply)
       window.removeEventListener('isla-card-expand', onSibling as EventListener)
+      listening = false
+    }
+    const startFloating = (): void => {
+      if (listening) return
+      if (narrow.matches) {
+        clearGeometry()
+        return
+      }
+      const first = card.getBoundingClientRect()
+      listening = true
+      apply()
+      const last = card.getBoundingClientRect()
+      const dx = first.left - last.left
+      const dy = first.top - last.top
+      const sx = first.width / (last.width || 1)
+      const sy = first.height / (last.height || 1)
+      if (Math.abs(dx) > 1 || Math.abs(dy) > 1 || Math.abs(sx - 1) > 0.01 || Math.abs(sy - 1) > 0.01) {
+        card.animate(
+          [
+            { transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy})`, transformOrigin: 'top left' },
+            { transform: 'translate(0, 0) scale(1, 1)', transformOrigin: 'top left' },
+          ],
+          { duration: 420, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' },
+        )
+      }
+      window.addEventListener('resize', apply)
+      window.addEventListener('isla-card-expand', onSibling as EventListener)
+      window.dispatchEvent(new CustomEvent('isla-card-expand', { detail: card }))
+    }
+    const onBreakpoint = (): void => {
+      if (narrow.matches) {
+        stopListening()
+        clearGeometry()
+        return
+      }
+      startFloating()
+    }
+    startFloating()
+    narrow.addEventListener('change', onBreakpoint)
+    return () => {
+      narrow.removeEventListener('change', onBreakpoint)
+      stopListening()
+      clearGeometry()
     }
   }, [floating])
 
@@ -512,7 +549,7 @@ export interface ChatRowProps {
 }
 
 export function ChatRow({ name, text, meta, detail, tone = 'neutral', pending }: ChatRowProps) {
-  const toneStyle = pending ? undefined : { ...chatVars(tone) }
+  const toneStyle = pending ? undefined : { ...chatToneStyle(tone) }
   return (
     <li className={`isla-chat__item ${pending ? 'isla-chat__item--pending' : ''}`.trim()} style={toneStyle}>
       <span className="isla-chat__name" aria-hidden="true">{idGlyph(name)}</span>
@@ -522,15 +559,6 @@ export function ChatRow({ name, text, meta, detail, tone = 'neutral', pending }:
       {detail !== undefined && detail !== null && <span className="isla-chat__detail">{detail}</span>}
     </li>
   )
-}
-
-function chatVars(tone: StatusTone): Record<string, string> {
-  const varName = `--isla-status-${tone}`
-  return {
-    '--chat-bar': `var(${varName})`,
-    '--chat-bg': `color-mix(in srgb, var(${varName}) 14%, white)`,
-    '--chat-name': `var(${varName})`,
-  }
 }
 
 /* ------------------------------------------------------------------ *

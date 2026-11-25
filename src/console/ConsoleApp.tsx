@@ -1106,7 +1106,33 @@ export function ConsoleApp({
   // The stage is the permanent centre of the cockpit: its subtitle streams
   // here and its facts read out below it.
   const { shown, typing } = useTypewriter(state.playback.subtitleText)
-  const speaking = !state.playback.idle && state.playback.lastStage !== null && state.playback.lastStage !== 'completed'
+  // Speaking is a narrower claim than "not idle": only the M1 `started`
+  // receipt proves output is actually playing. `accepted` is preparation, and
+  // cancelled/failed/unknown must never animate as a live voice.
+  const speaking = !state.playback.idle && state.playback.lastStage === 'started'
+  const preparing = !state.playback.idle && state.playback.lastStage === 'accepted'
+  const latestReceipt =
+    state.playback.receipts.length === 0
+      ? null
+      : state.playback.receipts[state.playback.receipts.length - 1]
+  const lastStageDisplay =
+    state.playback.lastStage ?? (state.playback.receipts.length > 0 ? latestReceipt?.stage ?? null : null)
+  const stageStateLabel =
+    session?.lifecycle === 'stopped'
+      ? 'Stopped'
+      : speaking
+        ? 'Speaking'
+        : preparing
+          ? 'Preparing'
+          : state.playback.lastStage !== null &&
+              (state.playback.lastStage === 'completed' ||
+                state.playback.lastStage === 'cancelled' ||
+                state.playback.lastStage === 'failed' ||
+                state.playback.lastStage === 'unknown')
+            ? capWord(state.playback.lastStage)
+            : state.playback.idle
+              ? 'Idle'
+              : 'Live'
   // Audience data charts: everything below is derived from what the console
   // actually observed — accepted inputs, request outcomes and the rolling
   // sequence feed. Nothing is invented.
@@ -1173,8 +1199,15 @@ export function ConsoleApp({
     {
       label: 'Last stage',
       tile: 'Last Stage',
-      value: state.playback.lastStage ?? 'none',
-      text: state.playback.lastStage === null ? 'No stage activity yet' : `Last stage: ${state.playback.lastStage}`,
+      // Transport loss/disposal can null the live stage while receipts remain;
+      // the newest local receipt is the only honest stage evidence then.
+      value: lastStageDisplay ?? 'none',
+      text:
+        lastStageDisplay === null
+          ? 'No stage activity yet'
+          : state.playback.lastStage === null
+            ? `Latest local receipt stage: ${lastStageDisplay}`
+            : `Last stage: ${lastStageDisplay}`,
     },
     {
       label: 'Last subtitle',
@@ -1271,8 +1304,21 @@ export function ConsoleApp({
                 <Tag tone="neutral" dot pulse={state.selection.stage === 'speaking'}>
                   {state.selection.stage}
                 </Tag>
-                <span className="isla-stage__output">
-                  {state.playback.idle ? 'No active output' : `Out ${state.playback.activeOutputId ?? 'unknown'}`}
+                <span className="isla-stage__meta">
+                  <span className="isla-stage__output">
+                    {state.playback.idle ? 'No active output' : `Out ${state.playback.activeOutputId ?? 'unknown'}`}
+                  </span>
+                  {latestReceipt !== null && (
+                    <span className="isla-stage__receipt">
+                      Receipt {latestReceipt.stage}
+                      {latestReceipt.reasonCode === null ? '' : ` · ${latestReceipt.reasonCode}`}
+                    </span>
+                  )}
+                  {state.playback.faults.length > 0 && (
+                    <span className="isla-stage__faults">
+                      {state.playback.faults.length} local fault{state.playback.faults.length === 1 ? '' : 's'}
+                    </span>
+                  )}
                 </span>
               </div>
 
@@ -1288,7 +1334,7 @@ export function ConsoleApp({
                 <AudioBars speaking={speaking && session?.lifecycle !== 'stopped'} />
                 <span className="isla-stage__state">
                   <Particle on={!state.playback.idle && session?.lifecycle !== 'stopped'} pulse={speaking} />
-                  {session?.lifecycle === 'stopped' ? 'Stopped' : speaking ? 'Speaking' : state.playback.idle ? 'Idle' : 'Live'}
+                  {stageStateLabel}
                 </span>
               </div>
 

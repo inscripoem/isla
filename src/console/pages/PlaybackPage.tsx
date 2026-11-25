@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import type { CSSProperties } from 'react'
 import type { PlaybackView } from '../console-state'
 import { Card, ChatRow, Empty, showRecords } from '../design/ui'
-import { formatDuration } from '../design/format'
+import { formatReceiptTime } from '../design/format'
 
 /**
  * Receipts section: local output observation. Receipts and faults here are
@@ -34,7 +34,7 @@ export interface PlaybackSectionProps {
   readonly localEvidenceNote: string
 }
 
-export function PlaybackSection({ playback }: PlaybackSectionProps) {
+export function PlaybackSection({ playback, localEvidenceNote }: PlaybackSectionProps) {
   const counts = useMemo(() => {
     const byStage = new Map<string, number>(METER_STAGES.map((stage) => [stage, 0]))
     for (const receipt of playback.receipts) {
@@ -54,6 +54,7 @@ export function PlaybackSection({ playback }: PlaybackSectionProps) {
       className="isla-rise"
       collapsible
     >
+      <p className="isla-card__caption">{localEvidenceNote}</p>
       {playback.receipts.length === 0 ? (
         <Empty>No receipts observed yet.</Empty>
       ) : (
@@ -80,7 +81,7 @@ export function PlaybackSection({ playback }: PlaybackSectionProps) {
             ))}
           </div>
           {playback.receipts.length > 7 && (
-            <button type="button" className="isla-viewall" onClick={() => showRecords('All local receipts', playback.receipts.slice().reverse().map((receipt) => ({ glyph: 'chart', title: `${receipt.stage} · ${receipt.outputId}`, meta: `${receipt.modality}${receipt.reasonCode === null ? '' : ` · ${receipt.reasonCode}`}${receipt.localTimeMs === null ? '' : ` · ${formatDuration(receipt.localTimeMs)}`}`, tone: receipt.stage === 'failed' ? 'bad' : receipt.stage === 'completed' ? 'ok' : 'plain', type: receipt.stage })))}>
+            <button type="button" className="isla-viewall" onClick={() => showRecords('All local receipts', playback.receipts.slice().reverse().map((receipt) => ({ glyph: 'chart', title: `${receipt.stage} · ${receipt.outputId}`, meta: `${receipt.modality}${receipt.reasonCode === null ? '' : ` · ${receipt.reasonCode}`}${receipt.localTimeMs === null ? '' : ` · ${formatReceiptTime(receipt.localTimeMs)}`}`, tone: receipt.stage === 'failed' ? 'bad' : receipt.stage === 'completed' ? 'ok' : 'plain', type: receipt.stage })))}>
               View all {playback.receipts.length} receipt records
             </button>
           )}
@@ -91,7 +92,7 @@ export function PlaybackSection({ playback }: PlaybackSectionProps) {
                 name="player"
                 tone={stageTone(receipt.stage)}
                 text={`${receipt.stage} · ${receipt.outputId}`}
-                meta={`${receipt.modality}${receipt.reasonCode === null ? '' : ` · ${receipt.reasonCode}`}${receipt.localTimeMs === null ? '' : ` · ${formatDuration(receipt.localTimeMs)}`}`}
+                meta={`${receipt.modality}${receipt.reasonCode === null ? '' : ` · ${receipt.reasonCode}`}${receipt.localTimeMs === null ? '' : ` · ${formatReceiptTime(receipt.localTimeMs)}`}`}
               />
             ))}
           </ul>

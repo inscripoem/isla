@@ -1,4 +1,4 @@
-import { Card, ChunkButton } from './design/ui'
+import { Alert, Card, ChunkButton } from './design/ui'
 import type { VoiceAuditionView } from './voice-audition'
 import type { VoiceLocale, VoiceSelectionState } from './voice-selection'
 
@@ -172,7 +172,7 @@ export function VoiceCard(props: VoiceCardProps) {
         {statusLine(props)}
       </p>
 
-      {props.operatorRequestError !== null && <p className="console__alert">{props.operatorRequestError}</p>}
+      {props.operatorRequestError !== null && <Alert>{props.operatorRequestError}</Alert>}
     </Card>
   )
 }

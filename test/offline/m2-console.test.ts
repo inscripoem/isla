@@ -3376,3 +3376,404 @@ describe('M2 #181 review follow-up (FR-05, NFR-04)', () => {
     expect(calls).toEqual(['pending:true', 'pending:false', 'error:submit'])
   })
 })
+
+/* ------------------------------------------------------------------ *
+ * PR #187 review fixes. Components are serialised with the Node server
+ * renderer, so no DOM, browser or extra package is required. Markup
+ * assertions keep the acceptance-visible text and tone classes under test.
+ * ------------------------------------------------------------------ */
+
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { PlaybackSection } from '../../src/console/pages/PlaybackPage'
+import { ControlDeck, EventsSection, SessionFacts } from '../../src/console/pages/SessionPage'
+import { SelectionSection } from '../../src/console/pages/SelectionPage'
+import { DiagnosticsPage } from '../../src/console/pages/DiagnosticsPage'
+import { VoiceCard, type VoiceCardProps } from '../../src/console/VoiceCard'
+import { chatToneStyle, formatReceiptTime, statusToneStyle } from '../../src/console/design/format'
+import type { ControlDeckProps } from '../../src/console/pages/SessionPage'
+import type { EventView, PlaybackView, SelectionView } from '../../src/console/console-state'
+import type { PerformerState } from '../../src/console/performer-machine'
+import type { VoiceAuditionView } from '../../src/console/voice-audition'
+import type { VoiceSelectionState } from '../../src/console/voice-selection'
+
+/** The serialised `<dt>label</dt><dd>…</dd>` pair for one fact row. */
+function factRow(html: string, label: string): string {
+  const marker = `<dt>${label}</dt>`
+  const start = html.indexOf(marker)
+  if (start < 0) throw new Error(`fact row was not rendered: ${label}`)
+  const end = html.indexOf('</dd>', start)
+  if (end < 0) throw new Error(`fact row has no value: ${label}`)
+  return html.slice(start, end + '</dd>'.length)
+}
+
+/** The serialised `<button>…label…</button>` element for one button. */
+function buttonFor(html: string, label: string): string {
+  const close = `${label}</button>`
+  const end = html.indexOf(close)
+  if (end < 0) throw new Error(`button was not rendered: ${label}`)
+  const start = html.lastIndexOf('<button', end)
+  return html.slice(start, end + close.length)
+}
+
+/** The serialised checkbox `<input>` element in the Control Deck. */
+function checkboxFor(html: string): string {
+  const type = html.indexOf('type="checkbox"')
+  if (type < 0) throw new Error('no checkbox was rendered')
+  const start = html.lastIndexOf('<input', type)
+  const end = html.indexOf('>', type)
+  return html.slice(start, end + 1)
+}
+
+function performerState(overrides: Partial<PerformerState> = {}): PerformerState {
+  return {
+    sessionId: SESSION,
+    epoch: 1,
+    lifecycle: 'running',
+    retiring: false,
+    disposed: false,
+    outputConfirmation: 'confirmed',
+    performer: false,
+    operator: false,
+    lastStage: null,
+    display: { subtitle: null, reaction: null },
+    error: null,
+    recovery: {
+      status: 'idle',
+      retiredSessionId: null,
+      successorSessionId: null,
+      recoveries: 0,
+      remainingRecoveries: null,
+    },
+    playerStatus: { idle: true, activeOutputId: null, lastStage: null },
+    ...overrides,
+  }
+}
+
+function controlDeckProps(overrides: Partial<ControlDeckProps> = {}): ControlDeckProps {
+  return {
+    state: opened(),
+    machine: performerState(),
+    source: 'local-audience',
+    onSourceChange: () => {},
+    draft: '',
+    onDraftChange: () => {},
+    allowDispatch: true,
+    machinePath: false,
+    onSubmit: () => {},
+    onControl: () => {},
+    onAttach: () => {},
+    onBootstrapOperator: () => {},
+    onReconnect: () => {},
+    operatorPending: false,
+    operatorError: null,
+    operatorButtonVisible: true,
+    recovery: { available: true, requestable: false },
+    recoveryAcknowledged: false,
+    onRecoveryAcknowledge: () => {},
+    onRequestRecovery: () => {},
+    cinema: false,
+    onToggleCinema: () => {},
+    onFullscreen: () => {},
+    ...overrides,
+  }
+}
+
+function selectionView(overrides: Partial<SelectionView> = {}): SelectionView {
+  return {
+    stage: 'idle',
+    acceptedInputs: [],
+    plan: null,
+    replyIntent: null,
+    serverDelivery: null,
+    ...overrides,
+  }
+}
+
+describe('PR #187 review fixes: receipt time and tone styles', () => {
+  it('labels receipt timestamps as browser receipt time with integer milliseconds', () => {
+    expect(formatReceiptTime(0)).toBe('browser receipt time 0 ms since page origin')
+    expect(formatReceiptTime(1234)).toBe('browser receipt time 1234 ms since page origin')
+    // Non-integer clock readings are rounded, never turned into audio durations.
+    expect(formatReceiptTime(987.6)).toBe('browser receipt time 988 ms since page origin')
+    expect(formatReceiptTime(null)).toBe('browser receipt time unknown')
+    expect(formatReceiptTime(Number.NaN)).toBe('browser receipt time unknown')
+    expect(formatReceiptTime(Number.POSITIVE_INFINITY)).toBe('browser receipt time unknown')
+  })
+
+  it('mixes every status tone against the dark page surface, never white', () => {
+    for (const style of [statusToneStyle('accepted'), chatToneStyle('rejected')]) {
+      for (const value of Object.values(style)) expect(value).not.toContain('white')
+    }
+    expect(statusToneStyle('accepted')['--tag-bg']).toContain('var(--isla-page-deep)')
+    expect(chatToneStyle('rejected')['--chat-bg']).toContain('var(--isla-page-deep)')
+  })
+})
+
+describe('PR #187 review fixes: Local Receipts evidence', () => {
+  it('keeps the local evidence note visible and labels browser receipt times', () => {
+    const receipts: readonly PerformanceReceipt[] = [
+      {
+        receiptId: 'receipt-1',
+        outputId: 'output-a',
+        sessionId: SESSION,
+        epoch: 1,
+        turnId: 'turn-1',
+        segmentId: 'segment-1',
+        modality: 'audio',
+        stage: 'started',
+        localTimeMs: 1234,
+        chunkIds: null,
+        reasonCode: null,
+        source: 'player',
+      },
+      {
+        receiptId: 'receipt-2',
+        outputId: 'output-a',
+        sessionId: SESSION,
+        epoch: 1,
+        turnId: 'turn-1',
+        segmentId: 'segment-1',
+        modality: 'audio',
+        stage: 'completed',
+        localTimeMs: 0,
+        chunkIds: null,
+        reasonCode: null,
+        source: 'player',
+      },
+    ]
+    const playback: PlaybackView = {
+      idle: true,
+      activeOutputId: null,
+      lastStage: 'completed',
+      subtitleText: null,
+      receipts,
+      faults: [],
+    }
+    const note = 'Receipts here are observed in this browser and are local evidence only.'
+    const html = renderToStaticMarkup(
+      createElement(PlaybackSection, {
+        playback,
+        localEvidenceNote: note,
+      }),
+    )
+
+    expect(html).toContain(note)
+    expect(html).toContain('browser receipt time 1234 ms since page origin')
+    expect(html).toContain('browser receipt time 0 ms since page origin')
+  })
+})
+
+describe('PR #187 review fixes: session and selection fact polarity', () => {
+  it('names the renderer capability revision and keeps idle retirements neutral', () => {
+    const html = renderToStaticMarkup(
+      createElement(SessionFacts, { state: openedWithLastSeq(4), machine: null }),
+    )
+
+    expect(html).toContain('<dt>Renderer capability revision</dt>')
+    expect(html).not.toContain('<dt>Capability revision</dt>')
+    expect(factRow(html, 'Retiring')).toContain('is-plain')
+    expect(factRow(html, 'Retiring')).not.toContain('is-bad')
+    expect(factRow(html, 'Session retiring')).toContain('is-plain')
+    expect(factRow(html, 'Session retiring')).not.toContain('is-bad')
+
+    // `none` is a normal absent value here, so it stays readable and neutral.
+    expect(factRow(html, 'Active turn')).toContain('>none</span>')
+    expect(factRow(html, 'Active turn')).not.toContain('isla-visually-hidden')
+  })
+
+  it('flags a synthetic plan and keeps an ordinary plan neutral', () => {
+    const plan = {
+      seq: 6,
+      disposition: 'respond' as const,
+      selectedEventIds: ['event-a'],
+      replyIntent: 'answer' as const,
+      reasonCode: 'provider-answered',
+      synthetic: true,
+    }
+    const synthetic = renderToStaticMarkup(
+      createElement(SelectionSection, { selection: selectionView({ stage: 'selected', plan }) }),
+    )
+    expect(factRow(synthetic, 'Plan synthetic')).toContain('is-bad')
+
+    const organic = renderToStaticMarkup(
+      createElement(SelectionSection, {
+        selection: selectionView({ stage: 'selected', plan: { ...plan, synthetic: false } }),
+      }),
+    )
+    expect(factRow(organic, 'Plan synthetic')).toContain('is-plain')
+    expect(factRow(organic, 'Plan synthetic')).not.toContain('is-bad')
+  })
+
+  it('keeps an absent plan value readable and neutral', () => {
+    const html = renderToStaticMarkup(createElement(SelectionSection, { selection: selectionView() }))
+    expect(factRow(html, 'Plan disposition')).toContain('>none</span>')
+    expect(factRow(html, 'Plan disposition')).not.toContain('isla-visually-hidden')
+  })
+
+  it('renders unreported identities as plain rather than as errors', () => {
+    const html = renderToStaticMarkup(
+      createElement(SelectionSection, {
+        selection: selectionView({
+          stage: 'delivered',
+          replyIntent: { seq: 7, turnId: null, replyIntent: 'answer' },
+          serverDelivery: {
+            seq: 8,
+            outputId: null,
+            turnId: null,
+            segmentId: null,
+            classification: 'fully-delivered',
+          },
+        }),
+      }),
+    )
+
+    for (const label of ['Turn id', 'Delivery output', 'Delivery turn', 'Delivery segment']) {
+      const row = factRow(html, label)
+      expect(row).toContain('is-plain')
+      expect(row).not.toContain('is-bad')
+      expect(row).toContain('>not reported</span>')
+    }
+  })
+})
+
+describe('PR #187 review fixes: Control Deck guards and availability', () => {
+  it('disables both authority actions when dispatch is not allowed', () => {
+    const html = renderToStaticMarkup(
+      createElement(ControlDeck, controlDeckProps({ allowDispatch: false })),
+    )
+    expect(buttonFor(html, 'Attach performer')).toContain('disabled')
+    expect(buttonFor(html, 'Bootstrap operator')).toContain('disabled')
+  })
+
+  it('disables both authority actions and hides the operator tag after disposal', () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        ControlDeck,
+        controlDeckProps({ machine: performerState({ disposed: true, operator: true }) }),
+      ),
+    )
+    expect(buttonFor(html, 'Attach performer')).toContain('disabled')
+    expect(buttonFor(html, 'Bootstrap operator')).toContain('disabled')
+    expect(html).not.toContain('>operator</span>')
+  })
+
+  it('keeps the operator tag while the machine is attached', () => {
+    const html = renderToStaticMarkup(
+      createElement(ControlDeck, controlDeckProps({ machine: performerState({ operator: true }) })),
+    )
+    expect(html).toContain('>operator</span>')
+  })
+
+  it('offers Reconnect whenever the connection is not open', () => {
+    const closed = renderToStaticMarkup(
+      createElement(ControlDeck, controlDeckProps({ state: withConnection(opened(), 'closed') })),
+    )
+    expect(closed).toContain('>Reconnect</button>')
+
+    const open = renderToStaticMarkup(createElement(ControlDeck, controlDeckProps({ state: opened() })))
+    expect(open).not.toContain('>Reconnect</button>')
+  })
+
+  it('offers the recovery acknowledgement before attach while recovery is available', () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        ControlDeck,
+        controlDeckProps({
+          machine: performerState({ performer: false, operator: false }),
+          recovery: { available: true, requestable: false },
+        }),
+      ),
+    )
+    expect(html).toContain('I acknowledge local playback in this session has ended.')
+    expect(checkboxFor(html)).not.toContain('disabled')
+  })
+
+  it('disables the recovery acknowledgement when recovery is unavailable', () => {
+    const html = renderToStaticMarkup(
+      createElement(ControlDeck, controlDeckProps({ recovery: { available: false, requestable: false } })),
+    )
+    expect(checkboxFor(html)).toContain('disabled')
+  })
+})
+
+describe('PR #187 review fixes: Voice card markup', () => {
+  it('renders the labeled combobox, status line and exact action labels without checkboxes', () => {
+    const state: VoiceSelectionState = {
+      voices: [{ id: 'voice-a', name: 'Voice A', locale: 'en-US' }],
+      draftVoiceId: 'voice-a',
+      activeVoiceId: 'voice-a',
+      selectionOutcome: 'idle',
+      pendingSelectionMessageId: null,
+      pendingListMessageId: null,
+      preview: { epoch: 0, requestMessageId: null, voiceId: null, wavBase64: null },
+      lastError: null,
+    }
+    const audition: VoiceAuditionView = {
+      phase: 'idle',
+      detail: null,
+      voiceId: null,
+      hasPreparedSample: false,
+    }
+    const props: VoiceCardProps = {
+      state,
+      audition,
+      connected: true,
+      retiring: false,
+      operator: false,
+      productPlaybackBusy: false,
+      voiceListUnavailable: false,
+      canEnableVoiceChanges: true,
+      operatorRequestPending: false,
+      operatorRequestError: null,
+      onDraftChange: () => {},
+      onPreview: () => {},
+      onStopPreview: () => {},
+      onApply: () => {},
+      onEnableVoiceChanges: () => {},
+    }
+    const html = renderToStaticMarkup(createElement(VoiceCard, props))
+
+    expect(html).toContain('console__voice-current')
+    expect(html).toContain('id="console-voice"')
+    expect(html).toContain('id="console-voice-status"')
+    for (const label of ['Preview voice', 'Stop preview', 'Use this voice', 'Enable voice changes']) {
+      expect(html).toContain(`>${label}</button>`)
+    }
+    expect(html).not.toContain('type="checkbox"')
+  })
+})
+
+describe('PR #187 review fixes: Events panel keeps every accepted event', () => {
+  it('renders more than seven events newest-first without dropping an earlier commit', () => {
+    const events: readonly EventView[] = [
+      { seq: 1, type: 'input.accepted', data: { eventId: 'event-1' } },
+      { seq: 2, type: 'selection.plan', data: { disposition: 'respond' } },
+      { seq: 3, type: 'turn.started', data: { turnId: 'turn-1' } },
+      { seq: 4, type: 'delivery.committed', data: { outputId: 'output-1' } },
+      { seq: 5, type: 'input.accepted', data: { eventId: 'event-2' } },
+      { seq: 6, type: 'selection.plan', data: { disposition: 'respond' } },
+      { seq: 7, type: 'turn.started', data: { turnId: 'turn-2' } },
+      { seq: 8, type: 'delivery.committed', data: { outputId: 'output-2' } },
+      { seq: 9, type: 'delivery.committed', data: { outputId: 'output-3' } },
+    ]
+    const html = renderToStaticMarkup(
+      createElement(EventsSection, { state: { ...opened(), events } }),
+    )
+
+    expect(html).toContain('#1 input.accepted')
+    expect(html).toContain('#4 delivery.committed')
+    expect(html).toContain('#8 delivery.committed')
+    expect(html).toContain('#9 delivery.committed')
+    expect((html.match(/delivery\.committed/g) ?? []).length).toBe(3)
+    // Newest-first: #9 must precede #1 in the rendered markup.
+    expect(html.indexOf('#9 delivery.committed')).toBeLessThan(html.indexOf('#1 input.accepted'))
+  })
+})
+
+describe('PR #187 review fixes: Diagnostics starts honestly', () => {
+  it('reports not started in the initial server-rendered socket state', () => {
+    const html = renderToStaticMarkup(createElement(DiagnosticsPage))
+    expect(html).toContain('>not started</span>')
+  })
+})

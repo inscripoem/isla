@@ -39,13 +39,19 @@ const TAG_TONE_VAR: Record<StatusTone, string> = {
 
 /** Inline style carrying only token references, never raw colours. */
 export function statusToneStyle(tone: StatusTone): Record<string, string> {
-  return { '--tag-bg': `color-mix(in srgb, ${TAG_TONE_VAR[tone]} 22%, white)`, '--tag-fg': `var(--isla-status-${tone})` }
+  // Mix against the dark page surface, never white: the status text keeps its
+  // token colour, so a light background would erase the >= 4.5:1 contrast the
+  // dark cockpit relies on.
+  return {
+    '--tag-bg': `color-mix(in srgb, ${TAG_TONE_VAR[tone]} 22%, var(--isla-page-deep))`,
+    '--tag-fg': `var(--isla-status-${tone})`,
+  }
 }
 
 export function chatToneStyle(tone: StatusTone): Record<string, string> {
   return {
     '--chat-bar': `var(--isla-status-${tone})`,
-    '--chat-bg': `color-mix(in srgb, ${TAG_TONE_VAR[tone]} 14%, white)`,
+    '--chat-bg': `color-mix(in srgb, ${TAG_TONE_VAR[tone]} 14%, var(--isla-page-deep))`,
     '--chat-name': `var(--isla-status-${tone})`,
   }
 }
@@ -58,6 +64,16 @@ export function formatDuration(ms: number | null): string {
   const minutes = Math.floor(ms / 60_000)
   const seconds = Math.round((ms % 60_000) / 1000)
   return `${minutes} m ${seconds} s`
+}
+
+/**
+ * Receipt timestamps are browser clock readings, not audio durations. Keep the
+ * exact integer millisecond value and name its origin so an 850 ms receipt is
+ * never mistaken for a runtime-reported duration.
+ */
+export function formatReceiptTime(ms: number | null): string {
+  if (ms === null || !Number.isFinite(ms)) return 'browser receipt time unknown'
+  return `browser receipt time ${Math.round(ms)} ms since page origin`
 }
 
 /** Seconds of uptime → `1 h 02 m` style (the raw value stays in the facts). */

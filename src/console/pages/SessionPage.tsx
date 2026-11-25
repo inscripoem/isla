@@ -97,10 +97,10 @@ export function ControlDeck(props: ControlDeckProps) {
   ]
 
   const recoveryRows: readonly (readonly [string, ReactNode])[] = [
-    ['Recovery status', <FactChip key="rs" value={recovery === undefined ? 'none' : recovery.status} />],
-    ['Retired session', <FactChip key="rd" value={recovery?.retiredSessionId ?? 'none'} />],
-    ['Successor session', <FactChip key="ss" value={recovery?.successorSessionId ?? 'none'} />],
-    ['Recoveries', <FactChip key="rc" value={recovery === undefined ? 'none' : String(recovery.recoveries)} />],
+    ['Recovery status', <FactChip key="rs" value={recovery === undefined ? 'none' : recovery.status} noneNeutral />],
+    ['Retired session', <FactChip key="rd" value={recovery?.retiredSessionId ?? 'none'} noneNeutral />],
+    ['Successor session', <FactChip key="ss" value={recovery?.successorSessionId ?? 'none'} noneNeutral />],
+    ['Recoveries', <FactChip key="rc" value={recovery === undefined ? 'none' : String(recovery.recoveries)} noneNeutral />],
     [
       'Remaining recoveries',
       <FactChip key="rr" value={recovery === undefined || recovery.remainingRecoveries === null ? 'unknown' : String(recovery.remainingRecoveries)} />,
@@ -348,7 +348,7 @@ export function SessionFacts({ state, machine }: { readonly state: ConsoleState;
     { label: 'Active turn', value: session === null ? 'unknown' : (session.activeTurnId ?? 'none'), group: 'Identity', glyph: 'route' },
     { label: 'Performer', value: session === null ? 'unknown' : session.performerStatus, group: 'Authority', glyph: 'mic' },
     { label: 'Output confirmation', value: session === null ? 'unknown' : session.outputConfirmation, group: 'Playback', glyph: 'check' },
-    { label: 'Capability revision', value: session === null ? 'unknown' : String(session.capabilityRevision), group: 'Identity', glyph: 'sliders' },
+    { label: 'Renderer capability revision', value: session === null ? 'unknown' : String(session.capabilityRevision), group: 'Identity', glyph: 'sliders' },
     { label: 'Accepted sequence', value: session === null ? 'unknown' : String(session.lastSeq), group: 'Identity', glyph: 'chart' },
     { label: 'Retiring', value: session === null ? 'unknown' : session.retiring ? 'yes' : 'no', group: 'Authority', glyph: 'medic' },
   ]
@@ -357,18 +357,18 @@ export function SessionFacts({ state, machine }: { readonly state: ConsoleState;
     ['Session', <FactChip key="sid" value={session === null ? 'unknown' : session.sessionId} />],
     ['Epoch', <FactChip key="ep" value={session === null ? 'unknown' : String(session.epoch)} />],
     ['Lifecycle', <FactChip key="lc" value={session === null ? 'unknown' : session.lifecycle} />],
-    ['Active turn', <FactChip key="at" value={session === null ? 'unknown' : (session.activeTurnId ?? 'none')} />],
+    ['Active turn', <FactChip key="at" value={session === null ? 'unknown' : (session.activeTurnId ?? 'none')} noneNeutral />],
     ['Performer', <FactChip key="pf" value={session === null ? 'unknown' : session.performerStatus} />],
     ['Output confirmation', <FactChip key="oc" value={session === null ? 'unknown' : session.outputConfirmation} />],
-    ['Capability revision', <FactChip key="cr" value={session === null ? 'unknown' : String(session.capabilityRevision)} />],
+    ['Renderer capability revision', <FactChip key="cr" value={session === null ? 'unknown' : String(session.capabilityRevision)} />],
     ['Accepted sequence', <FactChip key="sq" value={session === null ? 'unknown' : String(session.lastSeq)} />],
-    ['Retiring', <FactChip key="rt" value={session === null ? 'unknown' : session.retiring ? 'yes' : 'no'} />],
+    ['Retiring', <FactChip key="rt" value={session === null ? 'unknown' : session.retiring ? 'yes' : 'no'} tone={session === null || session.retiring ? undefined : 'plain'} />],
   ]
 
   const authorityRows: readonly (readonly [string, ReactNode])[] = [
     ['Performer attached', <FactChip key="pa" value={machine === null ? 'unknown' : machine.performer ? 'yes' : 'no'} />],
     ['Operator authority', <FactChip key="oa" value={machine === null ? 'unknown' : machine.operator ? 'yes' : 'no'} />],
-    ['Session retiring', <FactChip key="sr" value={session === null ? 'unknown' : session.retiring ? 'yes' : 'no'} />],
+    ['Session retiring', <FactChip key="sr" value={session === null ? 'unknown' : session.retiring ? 'yes' : 'no'} tone={session === null || session.retiring ? undefined : 'plain'} />],
   ]
 
   return (
@@ -412,7 +412,9 @@ export function SessionFacts({ state, machine }: { readonly state: ConsoleState;
 
 /**
  * Events and errors: only events above the accepted sequence are shown;
- * replayed history is never rendered. Collapsed by default.
+ * replayed history is never rendered. Every accepted event is rendered
+ * newest-first even while collapsed, because the delivery ledger must never
+ * lose an earlier `delivery.committed` record. Collapsed by default.
  */
 export function EventsSection({ state }: { readonly state: ConsoleState }) {
   return (
@@ -426,7 +428,7 @@ export function EventsSection({ state }: { readonly state: ConsoleState }) {
               View all {state.events.length} event records
             </button>
           )}
-          {[...state.events].slice(-7).reverse().map((event) => (
+          {[...state.events].reverse().map((event) => (
             <Collapse key={event.seq} label={`#${event.seq} ${event.type}`} icon={eventGlyph(event.type)}>
               <Code code={JSON.stringify(event.data, null, 2)} />
             </Collapse>
