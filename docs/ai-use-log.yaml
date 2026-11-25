@@ -10610,7 +10610,7 @@ entries:
       application protocol are unchanged.
     requirements: []
     invariants: []
-    commits: ["ea17ba078678ad50184450406d808e33f71a8117"]
+    commits: ["1efb322eff0ec02fdb70c5f639251556b27e8223"]
     agent: OpenCode V2 build
     provider: self-api
     model: deepseek-v4-flash
@@ -10619,7 +10619,7 @@ entries:
       Implemented in the OpenCode V2 build session from the task brief; the
       change was reviewed and verified locally.
     verification:
-      base: 71c45b61a99ad7dd46e3966d7cf82401050c5198
+      base: a5c92ddd381178bfa27418892ec490b2ce573e2c
       results: >-
         pnpm test:m5 passed 296 tests; pnpm test:m2 passed 119 tests;
         pnpm test:readiness passed 50 tests; pnpm test:trace passed 55 tests;
