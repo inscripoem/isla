@@ -51,6 +51,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_CHECKOUT: ${{ github.event_name == 'pull_request' && 'merge' || '' }}
           PUSH_BEFORE: ${{ github.event.before }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_REF_TYPE: ${{ github.ref_type }}
@@ -59,9 +60,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .cache
-          # Resolve the range the gates review: the PR base, a push's `before`, or the
-          # whole branch for a branch-creation push (merge-base with origin/main). An
-          # unresolvable range fails here rather than reviewing a narrower diff; see
+          # Resolve the range the gates review: for a pull request checked out as
+          # GitHub's synthetic merge commit, its first parent is the base branch tip
+          # used to build the merge; the event's base.sha can be older. A push uses
+          # `before`, or the merge base for a branch-creation push. An unresolvable
+          # range fails here rather than reviewing a narrower diff; see
           # src/evaluation/change-range.ts.
           BASE="$(pnpm -s gate:change-base)"
           if ! git diff --name-only -z "$BASE" HEAD > .cache/changed-files.nul; then
@@ -71,9 +74,9 @@ jobs:
           # NUL-separated all the way to the gates, so a path containing a space or a
           # newline stays one path.
           # The base copy of the log, so G6 can require the change to ADD an entry
-          # rather than edit an existing one. The comparison is against where this
-          # branch diverged, not the base branch tip: entries added to main after the
-          # branch point are not this change's, and counting them could tie the count.
+          # rather than edit an existing one. For a pull request BASE is the synthetic
+          # merge's first parent, so base-side main changes are already in the base
+          # copy; for a push the comparison remains where the branch diverged.
           # A log that did not exist at the base is an empty file: every entry is new.
           LOG_BASE="$(git merge-base "$BASE" HEAD || true)"
           if [ -z "$LOG_BASE" ]; then LOG_BASE="$BASE"; fi
