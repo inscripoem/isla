@@ -11250,3 +11250,44 @@ entries:
         No live provider, product run or merge. The heard-prefix section yields
         to recall when the cap is full, so it can be empty in a loaded recall
         case; that is the documented trim order, not a new policy.
+  - date: "2026-11-27"
+    task: M6-215-g6-base-selection
+    change: >-
+      Fix the pull-request base used by the diff gates and G6. When actions/checkout
+      supplies GitHub's synthetic merge commit, derive the base from its first parent
+      (the base-branch tip used to build the merge) instead of the older
+      github.event.pull_request.base.sha. The same base feeds the changed-file diff and
+      .cache/ai-use-log.base.yaml, so a base-side AI-use rewrite is classified as
+      historical rather than as a PR edit. The checkout must be a two-parent merge or
+      the helper fails closed. Push and branch-creation ranges and the new-entry
+      strictness are unchanged.
+    requirements: []
+    invariants: [INV-14]
+    commits: ["1ea187138a2dc0f3658d940b655ef1e029ab2a97"]
+    agent: OpenCode V2 build
+    provider: opencode-go
+    model: deepseek-v4.1-flash
+    sessions: []
+    supervision: >-
+      M5 reported the false red on PR #211 with the synthetic merge, payload base and
+      first-parent evidence. M6 reproduced the classification locally, confirmed that
+      the G6 policy was correct and the base input was stale, and proposed the
+      first-parent fix. The M6 owner approved the implementation. OpenCode wrote the
+      change and the regression tests; the owner reviewed the diff and command output
+      before the PR.
+    transcript_record: >-
+      The local OpenCode session was not exported for this slice; the code commit,
+      the two run URLs and the command output in the PR are the evidence.
+    verification:
+      base: 12b6719799aefd07fcb3bbbe9967c1e9b1826f37
+      results: >-
+        pnpm test:gates passed 7 files / 217 tests; pnpm test:trace 55; pnpm
+        test:readiness 51; pnpm verify passed 108 files / 2,537 tests with typecheck,
+        lint and build clean. The change-range regression fails when the merge-parent
+        selection is removed (3 tests) and when a non-merge checkout is accepted
+        (1 test), then passes after restore. A replay of the #211 synthetic merge uses
+        base 2f8d8e9 and passes G6; the old base e398a0b reproduces the false red.
+      limits: >-
+        The fix changes the base for pull-request diff gates only; push behavior and
+        the G6 policy semantics are not changed. #211 is already merged and is not
+        rewritten. No live provider or product behavior is claimed.

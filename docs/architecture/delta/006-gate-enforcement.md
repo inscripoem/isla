@@ -1,6 +1,6 @@
 # Delta-006 — Gate enforcement (G1, G4, G6, trace)
 
-Status: merged in `9492070`; cutover correction 2026-11-19. Date: 2026-11-13; review fixes 2026-11-14. ADR: ADR-006.
+Status: merged in `9492070`; cutover correction 2026-11-19; pull-request base acquisition 2026-11-27. Date: 2026-11-13; review fixes 2026-11-14. ADR: ADR-006.
 Branch `m6-gate-enforcement`, pull request #158. Revision type: **ADD-R** (enforcement added
 to existing gates; no interface, contract or schema change).
 
@@ -181,6 +181,28 @@ explicitly to M5 (PM) and M6 (gate owner); do not extend or reuse this exception
 the later code was approved. The waiver is debt, not a precedent; it does not change the ruleset, the
 `verify` requirement or any other gate. The waiver is historical for merged or closed PRs; #171 remains
 open. It does not accept CP04 or any console scope.
+
+## Pull-request base acquisition — 2026-11-27 (M6, #215)
+
+**Finding.** For a pull request, `actions/checkout` supplies GitHub's synthetic merge commit. Its
+first parent is the base-branch tip used to build the merge; `github.event.pull_request.base.sha` can
+name an older base. G6 and the other diff gates used the event base, so base-side changes that landed
+after that commit appeared as the PR's “new or edited” entries. PR #211 is the measured case: merge
+`a143de9` has first parent `2f8d8e9`, the payload named `e398a0b`, and the pull-request run
+`45649108085` failed G6 on base-side rewritten entries; the same head passed against `2f8d8e9`, and
+the push run `45649098101` passed.
+
+**Rule (effective 2026-11-27).** For a `pull_request` checked out as the synthetic merge commit, the
+gate base is **`HEAD^1`**, the base-branch tip used to build the merge. The changed-file diff and
+`.cache/ai-use-log.base.yaml` use that same base. The helper verifies the two-parent shape and fails
+closed when the checkout is not the expected merge. The push path (`before` or the branch-point merge
+base) is unchanged. The event base remains available for a pull request checked out at its head, but is
+not used for the synthetic-merge checkout.
+
+**What this does not change.** G6 still treats a genuinely new or edited entry as strict; an entry
+present in the base copy remains historical; the shape, log-update and reachability rules are
+unchanged. A base-side rewrite is historical because it is in the first-parent tree, not because the
+PR edited it.
 
 ## Limits
 

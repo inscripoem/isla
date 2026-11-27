@@ -227,3 +227,28 @@ bug: **symptom, reproduction, classification, root cause, fix, and the invariant
 - Status: found in the M6 CORE review before merge; fixed on the branch; never on `main`.
 - Invariant gap: evidence attribution had no check at the renderer API.
 
+
+## BUG-019 — G6 false red when main advanced after the recorded PR base
+- Symptom: PR #211 head `64bd58f` failed the pull-request G6 run `45649108085` with 14 “new or edited”
+  entries and 57 missing-commit findings, although the PR added only four M2 log entries and its push
+  run `45649098101` passed.
+- Reproduction: GitHub's synthetic merge `a143de9` has first parent `2f8d8e9`; CI used the payload base
+  `e398a0b`. `e398a0b..2f8d8e9` changes only `docs/ai-use-log.yaml`, and the base-side rewrite makes
+  historical entries look like PR edits. Running G6 on `a143de9` with base `e398a0b` fails; with base
+  `2f8d8e9` it passes.
+- Classification: verification tooling / CI base acquisition (false positive), not a product defect.
+- Root cause: the “changed files” step used `github.event.pull_request.base.sha` while
+  `actions/checkout` supplied the synthetic merge commit built against the current base tip. The event
+  base can be older; the gate then compared the merge tree against a base that did not contain main's
+  changes.
+- Fix: for a pull-request synthetic-merge checkout, derive `BASE` from `HEAD^1` and use it for both the
+  changed-file diff and `.cache/ai-use-log.base.yaml`; verify the two-parent shape and fail closed.
+  Push and branch-creation ranges are unchanged. The gate logic and new-entry strictness are unchanged.
+- Status: fixed on `m6-215-g6-base-20261127` (`1ea1871`), with `change-range` and G6 regressions,
+  `test:gates` 7 files / 217 tests, `test:trace` 55, `test:readiness` 51, `pnpm verify` 108 files /
+  2,537 tests. #211 remains merged; its head passes with the first-parent base.
+- Invariant gap: the gate's base acquisition was not covered by a regression test; the new
+  `change-range` tests pin the first-parent choice and the fail-closed merge shape.
+- Waiver note: #211 is in the G1 time-boxed waiver, so G1 ran as label/advise. That waiver did not
+  affect G6 and did not cause this false red; #200 is not in the waiver and its G1 approval-order
+  failure is separate. The fix does not extend or rely on the waiver.

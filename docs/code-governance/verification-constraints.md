@@ -1,7 +1,7 @@
 # Verification constraints
 
 Status: under review. Owned by M6. Date: 2026-10-12; taxonomy, mutation rule and gate truth updated
-2026-11-25.
+2026-11-25; pull-request base acquisition updated 2026-11-27.
 
 The rules the verification agent applies and the QA records the team maintains. The canonical
 requirement-to-component-to-test-to-monitor map is
@@ -120,6 +120,12 @@ their verification evidence is unchanged.
 | FR-06 (JSONL export carries `versions`) | C-22 | `m6-storage.test.ts` (version attribution) |
 | FR-06 (in-memory vs SQLite agreement) | C-45 | `m6-sqlite-backend.test.ts` (cross-backend integration: state, export, history, payload rejection) |
 | FR-06 / C-12 (replay isolation) | C-12 | `m6-storage.test.ts` (replay-isolation test) |
+
+**G6 base acquisition (#215, 2026-11-27).** For a pull request checked out as GitHub's synthetic
+merge commit, the base copy and changed-file diff are taken from `HEAD^1`, the base-branch tip used to
+build the merge. `github.event.pull_request.base.sha` can name an older base and is not used for that
+checkout. `change-range.test.ts` pins the first-parent choice, keeps the PR's own diff, and fails
+closed when the checkout is not a two-parent merge.
 
 Generated and durability suites (same invariants, wider evidence):
 
