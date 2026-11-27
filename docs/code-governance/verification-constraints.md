@@ -125,7 +125,9 @@ their verification evidence is unchanged.
 merge commit, the base copy and changed-file diff are taken from `HEAD^1`, the base-branch tip used to
 build the merge. `github.event.pull_request.base.sha` can name an older base and is not used for that
 checkout. `change-range.test.ts` pins the first-parent choice, keeps the PR's own diff, and fails
-closed when the checkout is not a two-parent merge.
+closed when the checkout is not a two-parent merge. It covers both directions: a base-side rewrite is
+historical (no false red), and a base-side log addition is absent from the PR diff, so a code-only PR
+still fails the log-update rule (no false negative).
 
 Generated and durability suites (same invariants, wider evidence):
 

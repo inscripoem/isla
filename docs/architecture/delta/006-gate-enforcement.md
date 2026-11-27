@@ -199,6 +199,12 @@ closed when the checkout is not the expected merge. The push path (`before` or t
 base) is unchanged. The event base remains available for a pull request checked out at its head, but is
 not used for the synthetic-merge checkout.
 
+**Mirror case covered.** Because the base copy is the first-parent tree, a log entry added on the
+base side is already present in both the base and the merge tree. It does not appear in the PR diff and
+cannot satisfy G6's log-update rule for a code-only PR; the head/base entry counts also stay equal.
+`change-range.test.ts` pins both directions: a base-side rewrite does not fail G6, and a base-side
+addition does not make a code-only PR pass.
+
 **What this does not change.** G6 still treats a genuinely new or edited entry as strict; an entry
 present in the base copy remains historical; the shape, log-update and reachability rules are
 unchanged. A base-side rewrite is historical because it is in the first-parent tree, not because the
