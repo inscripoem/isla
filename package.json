@@ -23,7 +23,7 @@
     "test:composition": "vitest run test/offline/composition.test.ts",
     "test:readiness": "vitest run test/offline/contracts.test.ts test/offline/requirements.test.ts test/offline/boundaries.test.ts",
     "test:trace": "vitest run test/offline/trace-fitness.test.ts",
-    "test:gates": "vitest run test/offline/test-approval-gate.test.ts test/offline/eval-gate.test.ts test/offline/ai-use-log-gate.test.ts test/offline/trace-fitness.test.ts test/offline/gate-git-facts.test.ts test/offline/gate-record.test.ts",
+    "test:gates": "vitest run test/offline/test-approval-gate.test.ts test/offline/eval-gate.test.ts test/offline/ai-use-log-gate.test.ts test/offline/trace-fitness.test.ts test/offline/gate-git-facts.test.ts test/offline/gate-record.test.ts test/offline/change-range.test.ts",
     "evaluation:report": "tsx src/evaluation/report-command.ts",
     "evaluation:run": "tsx src/evaluation/run-command.ts",
     "gate:ai-use-log": "tsx src/evaluation/ai-use-log-gate.ts",

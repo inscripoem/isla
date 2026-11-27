@@ -612,6 +612,22 @@ describe('G6 historical classification follows entry identity, not position (mid
     expect(violations[0]).toContain('new or edited')
   })
 
+  it('treats a base-side rewrite as historical only when the base copy includes it', () => {
+    const baseBefore = log(A, entry('entry-b', 'Base change B.', '[fedcba9]'))
+    const baseAfter = log(A, entry('entry-b', 'Base change B, reworded.', '[fedcba9]'))
+    const head = log(A, entry('entry-b', 'Base change B, reworded.', '[fedcba9]'))
+
+    // The #211 shape: main rewrote the entry, the PR branched before the rewrite,
+    // and the merge tree carries the rewritten entry. A base copy from the merge's
+    // first parent classifies it historical; a stale base copy does not.
+    expect(collectAiUseLogReferenceViolations(head, deps({ baseLogText: baseAfter }))).toEqual([])
+
+    const stale = collectAiUseLogReferenceViolations(head, deps({ baseLogText: baseBefore }))
+    expect(stale).toHaveLength(1)
+    expect(stale[0]).toContain('entry-b')
+    expect(stale[0]).toContain('new or edited')
+  })
+
   it('does not treat a field reorder as an edit', () => {
     const reordered = [
       '  - task: entry-b',

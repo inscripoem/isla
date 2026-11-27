@@ -23,12 +23,15 @@ import { pathToFileURL } from 'node:url'
  * commit: there is no parent and no merge base, so every path is new and the empty
  * tree is the honest base.
  *
- * Git is consulted only when the range actually needs it: a pull request and an
- * ordinary push are answered from the event payload alone.
+ * Git is consulted only when the range actually needs it: an ordinary push and a pull
+ * request checked out at its head are answered from the event payload; a pull request
+ * checked out as GitHub's synthetic merge commit is answered from that commit's first
+ * parent.
  */
 
 export type ChangeBaseSource =
   | 'pull-request'
+  | 'pull-request-merge-parent'
   | 'push'
   | 'merge-base'
   | 'empty-tree'
@@ -45,6 +48,13 @@ export interface ChangeBaseInput {
   readonly mergeBase?: string | null
   /** The parent commit of HEAD, or null when HEAD is a root commit. */
   readonly parent?: string | null
+  /**
+   * The pull-request checkout shape. `merge` means actions/checkout supplied
+   * GitHub's synthetic merge commit; its first parent is the base branch tip.
+   */
+  readonly pullRequestCheckout?: 'merge' | null
+  /** The first parent of the synthetic merge commit, when known. */
+  readonly pullRequestHeadParent?: string | null
   /** Git's empty tree, used as the base of a repository's root commit. */
   readonly emptyTree: string
 }
@@ -62,6 +72,20 @@ function present(value: string | null | undefined): value is string {
 
 export function resolveChangeBase(input: ChangeBaseInput): ChangeBase {
   if (input.event === 'pull_request') {
+    if (input.pullRequestCheckout === 'merge') {
+      if (!present(input.pullRequestHeadParent)) {
+        return {
+          kind: 'unavailable',
+          reason:
+            'the pull request was checked out as a merge commit without a first parent, so the base tree cannot be identified',
+        }
+      }
+      return {
+        kind: 'range',
+        base: input.pullRequestHeadParent.trim(),
+        source: 'pull-request-merge-parent',
+      }
+    }
     if (!present(input.pullRequestBase)) {
       return { kind: 'unavailable', reason: 'the pull request carried no base commit' }
     }
@@ -127,10 +151,30 @@ export function resolveFromEnvironment(env: NodeJS.ProcessEnv = process.env, cwd
   const event = env.EVENT_NAME ?? ''
   const pullRequestBase = env.PR_BASE_SHA ?? null
   const before = env.PUSH_BEFORE ?? null
+  const pullRequestCheckout = env.PR_CHECKOUT === 'merge' ? 'merge' : null
 
-  // A pull request needs no git. A push `before` is used only when the object exists:
-  // after a force-push the old tip is unreachable, so a fresh checkout may not have it.
+  // A pull request checked out at its head needs no git. A pull request checked out
+  // as GitHub's synthetic merge commit must use that commit's first parent: the
+  // payload's base.sha can be older than the main tip used to build the merge.
   if (event === 'pull_request') {
+    if (pullRequestCheckout === 'merge') {
+      const parents = git(cwd, ['rev-list', '--parents', '-n', '1', 'HEAD'])
+      const fields = parents?.split(/\s+/).filter((field) => field.length > 0) ?? []
+      if (fields.length !== 3) {
+        return {
+          kind: 'unavailable',
+          reason:
+            'the pull request checkout is not a two-parent merge commit, so the base tree cannot be identified',
+        }
+      }
+      return resolveChangeBase({
+        event,
+        pullRequestBase,
+        pullRequestCheckout,
+        pullRequestHeadParent: fields[1],
+        emptyTree: '',
+      })
+    }
     return resolveChangeBase({ event, pullRequestBase, before, emptyTree: '' })
   }
 

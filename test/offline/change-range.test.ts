@@ -58,6 +58,34 @@ describe('change range resolution (the diff the gates review)', () => {
     expect(resolveChangeBase(facts({ event: 'pull_request', pullRequestBase: null })).kind).toBe('unavailable')
   })
 
+  it('uses the synthetic merge first parent when the pull request checkout is a merge', () => {
+    expect(
+      resolveChangeBase(
+        facts({
+          event: 'pull_request',
+          pullRequestBase: 'a'.repeat(40),
+          pullRequestCheckout: 'merge',
+          pullRequestHeadParent: 'b'.repeat(40),
+        }),
+      ),
+    ).toEqual({
+      kind: 'range',
+      base: 'b'.repeat(40),
+      source: 'pull-request-merge-parent',
+    })
+  })
+
+  it('refuses a merge checkout that has no first parent', () => {
+    expect(
+      resolveChangeBase(
+        facts({ event: 'pull_request', pullRequestCheckout: 'merge', pullRequestHeadParent: null }),
+      ),
+    ).toEqual({
+      kind: 'unavailable',
+      reason: expect.stringContaining('first parent'),
+    })
+  })
+
   it('uses `before` for an ordinary push', () => {
     expect(resolveChangeBase(facts({ before: 'b'.repeat(40), mergeBase: 'c'.repeat(40) }))).toEqual({
       kind: 'range',
@@ -189,6 +217,50 @@ describe('change range resolution against a real repository', () => {
     expect(resolved).toEqual({
       kind: 'unavailable',
       reason: expect.stringContaining('merge base'),
+    })
+  })
+
+  it('uses the synthetic merge first parent for a pull request and keeps the PR diff', () => {
+    const directory = repo()
+    const baseCommit = commit(directory, 'README.md', 'base\n', 'base')
+    git(directory, ['switch', '-q', '-c', 'feature'])
+    commit(directory, 'src/feature.ts', 'export const feature = true\n', 'feature code')
+    git(directory, ['switch', '-q', 'main'])
+    const mainAdvance = commit(directory, 'docs/main.md', 'main advance\n', 'main advance')
+    git(directory, ['merge', '-q', '--no-ff', '-m', 'merge feature', 'feature'])
+    const mergeCommit = git(directory, ['rev-parse', 'HEAD'])
+    git(directory, ['update-ref', 'refs/remotes/origin/main', mainAdvance])
+
+    const resolved = resolveFromEnvironment(
+      { EVENT_NAME: 'pull_request', PR_CHECKOUT: 'merge', PR_BASE_SHA: baseCommit },
+      directory,
+    )
+    expect(resolved).toEqual({
+      kind: 'range',
+      base: mainAdvance,
+      source: 'pull-request-merge-parent',
+    })
+    if (resolved.kind !== 'range') throw new Error('unreachable')
+
+    // The gate diff is the PR's own change, not main's advance and not the old base.
+    const files = git(directory, ['diff', '--name-only', resolved.base, mergeCommit]).split('\n')
+    expect(files).toContain('src/feature.ts')
+    expect(files).not.toContain('docs/main.md')
+  })
+
+  it('fails closed when a pull request merge checkout is not a two-parent commit', () => {
+    const directory = repo()
+    const baseCommit = commit(directory, 'README.md', 'base\n', 'base')
+    commit(directory, 'src/feature.ts', 'export const feature = true\n', 'feature')
+
+    expect(
+      resolveFromEnvironment(
+        { EVENT_NAME: 'pull_request', PR_CHECKOUT: 'merge', PR_BASE_SHA: baseCommit },
+        directory,
+      ),
+    ).toEqual({
+      kind: 'unavailable',
+      reason: expect.stringContaining('two-parent merge'),
     })
   })
 })
