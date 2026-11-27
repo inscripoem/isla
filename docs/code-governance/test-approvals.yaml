@@ -219,3 +219,16 @@ approvals:
       - test/offline/m4-persona-probe.test.ts
       - test/offline/m4-style.test.ts
       - test/offline/m4-dialogue.test.ts
+  - id: TA-018
+    task: "M6 #215 - use the pull-request synthetic-merge first parent as the gate base"
+    approved_at: "2026-11-27T05:54:32Z"
+    approved_by: M6
+    scope:
+      - ".github/workflows/ci.yml"
+      - "src/evaluation/change-range.ts"
+      - "test/offline/change-range.test.ts"
+      - "test/offline/ai-use-log-gate.test.ts"
+      - "package.json"
+    tests:
+      - test/offline/change-range.test.ts
+      - test/offline/ai-use-log-gate.test.ts
