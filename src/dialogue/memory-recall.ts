@@ -1,6 +1,13 @@
 import type { AssembledTurn } from './context'
 import { mayRecallAcrossSessions } from './audience'
 import type { AudienceIdentity, MemoryScope } from './audience'
+import type { ListenerTurn } from './listener-history'
+import type {
+  RecallPort,
+  RecallRequest,
+  RecalledItem,
+} from './recall-ranking'
+import { RECALL_NEUTRAL_RECENCY } from './recall-ranking'
 
 /**
  * Delivery-memory recall: bring back confirmed turns that aged out of the
@@ -180,6 +187,87 @@ export function mayRecallCandidate(request: DeliveryRecallRequest, turn: Assembl
   })
 }
 
+/**
+ * One boundary-neutral memory subject presented to the cross-session rule
+ * (issue #146 A04). A confirmed reply is an `AssembledTurn`; a listener
+ * utterance is not, so it arrives as the session and the retention scope that
+ * the rule actually reads, plus the speaker for the audit surface.
+ */
+export interface RecallSubjectShape {
+  sessionId: string
+  scope: MemoryScope
+  role: 'character' | 'listener'
+  /**
+   * The confirmed turn behind a character candidate. Present so an owner
+   * callback written against `AssembledTurn` (the v1 shape) still receives the
+   * real record it expects. Absent for a listener subject, which has no
+   * assembled turn.
+   */
+  turn?: AssembledTurn
+}
+
+/**
+ * Same rule as `mayRecallCandidate`, for a candidate that is not necessarily an
+ * assembled turn: the multi-factor ranker's listener candidates (see
+ * ./recall-ranking). A character candidate is handed to the unchanged rule
+ * together with its own turn; a listener candidate is wrapped as the smallest
+ * record that carries a session and a retention scope, which is all
+ * `mayRecallCandidate` reads, and its scope is `'session-only'` - the
+ * documented standing of a non-durable audience utterance. The owner callback
+ * receives the candidate's original subject, never the wrapper.
+ *
+ * This is deliberately a thin delegate: the gates stay in exactly one
+ * implementation, so the v1 port and the v2 ranker cannot come to disagree
+ * about who may be recalled - the failure that consolidated the owner-evidence
+ * rule into `mayRecallCandidate` in the first place.
+ */
+export function mayRecallSubject(
+  subject: RecallSubjectShape,
+  request: {
+    sessionId: string
+    scope?: MemoryScope
+    audience?: AudienceIdentity
+    explicitlySelectedSessionIds?: readonly string[]
+    ownerAudienceIdOf?: (subject: RecallSubjectShape) => string | null
+  },
+): boolean {
+  const adapted: AssembledTurn =
+    subject.turn ??
+    ({
+      sessionId: subject.sessionId,
+      // Identity only, and never inspected by the rule: a listener utterance
+      // has no turn id (its identity is the event id).
+      turnId: '',
+      segments: [],
+      text: '',
+      interrupted: false,
+      personaVersion: null,
+      pinned: false,
+      salienceScore: 0,
+      salienceSignals: [],
+      scope: 'session-only',
+      kind: 'utterance',
+      characters: 0,
+    } satisfies AssembledTurn)
+  return mayRecallCandidate(
+    {
+      inputText: '',
+      replyIntent: '',
+      candidates: [],
+      sessionId: request.sessionId,
+      ...(request.scope === undefined ? {} : { scope: request.scope }),
+      ...(request.audience === undefined ? {} : { audience: request.audience }),
+      ...(request.explicitlySelectedSessionIds === undefined
+        ? {}
+        : { explicitlySelectedSessionIds: request.explicitlySelectedSessionIds }),
+      ...(request.ownerAudienceIdOf === undefined
+        ? {}
+        : { ownerAudienceIdOf: () => request.ownerAudienceIdOf?.(subject) ?? null }),
+    },
+    adapted,
+  )
+}
+
 /*
  * Stopword tables are data, not configuration: they ship with the module and
  * never come from the environment. A word listed here is one that shows up in
@@ -301,6 +389,145 @@ export function contentTokensOf(text: string): ReadonlyMap<string, number> {
     }
   }
   return tokens
+}
+
+/** One recalled listener utterance, with the score that selected it. */
+export interface RecalledListenerTurn {
+  turn: ListenerTurn
+  score: number
+}
+
+/** One recalled memory of either side, as the unified section renders it. */
+export type RecalledMemoryEntry = RecalledTurn | RecalledListenerTurn
+
+/**
+ * Adapt the v1 keyword port (./memory-recall) to the v2 `RecallPort` interface
+ * (./recall-ranking).
+ *
+ * Context assembly opts into the wider recall ranking by supplying a `recall`
+ * port; the keyword port it already ships with remains available, unchanged, as
+ * the deterministic baseline. This adapter lets that baseline be the ranking of
+ * a `recall`-supplied assembly as well, so a caller can choose precision-first
+ * behaviour without a second implementation:
+ *
+ *   - listener candidates are passed over and COUNTED, never scored: the
+ *     keyword port has no listener notion and inventing one here would be a
+ *     second admission rule rather than an adapter. The count is reported on
+ *     the adapter (`listenerCandidatesPassedOver`), not on the wrapped port;
+ *   - the character results keep the v1 score, order and `crossSessionDrops`
+ *     (they are read from the port object, so the counter is live - the adapter
+ *     forwards the wrapped port's count rather than reporting 0);
+ *   - ranking dimensions the v1 scorer does not have are reported as 0 with
+ *     `ageUnknown: true`, never as made-up estimates, and the weighted
+ *     `scoreParts` reconstruct to the v1 score when read against
+ *     `RECALL_WEIGHTS.similarity` alone. `RecalledItem.score` IS the v1 score.
+ */
+export interface KeywordRecallPort extends RecallPort {
+  /** Listener candidates the v1 scorer skipped in the most recent call. */
+  readonly listenerCandidatesPassedOver: number
+}
+
+/**
+ * Upper bound the v1 keyword score is mapped to for `scoreParts.similarity`.
+ *
+ * A v1 score is a sum of token weights with no fixed ceiling: a long message
+ * that repeats informative tokens can score far above the token weights because
+ * nothing normalises it. The map clamps at this value so `similarity` stays a
+ * 0..1 value; the untouched score travels in `scoreParts.v1Score`. The bound is
+ * read from the scorer's own tables rather than guessed, so a change to the
+ * token weights moves it with them.
+ */
+const V1_MAX_SCORE = 2 * INFORMATIVE_TOKEN_WEIGHT
+
+/** Clamp a number into 0..1; non-finite input yields 0. */
+function clampUnit(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return 0
+  return Math.min(1, value)
+}
+
+export function asRecallPort(port: DeliveryRecallPort): KeywordRecallPort {
+  let passedOver = 0
+  return {
+    get listenerCandidatesPassedOver(): number {
+      return passedOver
+    },
+    /*
+     * The wrapped port's own refusals are forwarded live, not copied at
+     * adaptation time: the counter describes the v1 port's most recent call,
+     * which is exactly what `RecallPort.crossSessionDrops` promises. A port
+     * that does not filter silently reports 0.
+     */
+    get crossSessionDrops(): number {
+      return port.crossSessionDrops ?? 0
+    },
+    recall(request: RecallRequest): readonly RecalledItem[] {
+      let listenerCandidates = 0
+      const characterTurns: AssembledTurn[] = []
+      for (const candidate of request.candidates) {
+        if (candidate.role === 'listener') listenerCandidates += 1
+        else characterTurns.push(candidate.turn)
+      }
+      passedOver = listenerCandidates
+      const recalled = port.recall({
+        inputText: request.inputText,
+        replyIntent: request.replyIntent,
+        candidates: characterTurns,
+        sessionId: request.sessionId,
+        ...(request.scope === undefined ? {} : { scope: request.scope }),
+        ...(request.audience === undefined ? {} : { audience: request.audience }),
+        ...(request.explicitlySelectedSessionIds === undefined
+          ? {}
+          : { explicitlySelectedSessionIds: request.explicitlySelectedSessionIds }),
+        ...(request.ownerAudienceIdOf === undefined
+          ? {}
+          : {
+              // Only a character turn reaches the v1 scorer, and the v2
+              // callback reads a `RecallSubjectShape`. The v1 signature passes
+              // the BARE turn (it must stay `(turn: AssembledTurn) => ...`), so
+              // the full subject is built here - a `{ ...turn, role }` spread is
+              // not a subject and would leave `subject.turn` undefined, giving
+              // every caller an owner of `null`.
+              ownerAudienceIdOf: (turn: AssembledTurn) =>
+                request.ownerAudienceIdOf?.({
+                  sessionId: turn.sessionId,
+                  scope: turn.scope,
+                  role: 'character',
+                  turn,
+                }) ?? null,
+            }),
+      })
+      return recalled.map((entry): RecalledItem => ({
+        role: 'character',
+        turn: entry.turn,
+        score: entry.score,
+        /*
+         * The v1 score is a SUM OF TOKEN WEIGHTS, not a 0..1 value, so it is
+         * reported as `v1Score` unchanged and `similarity` carries the same
+         * evidence squeezed into 0..1 for the shared `scoreParts` contract.
+         * The two are not interchangeable, and the other weighted terms are 0
+         * because the keyword scorer has no such dimension - which is why the
+         * weighted parts do NOT reconstruct the v1 score.
+         */
+        scoreParts: {
+          similarity: clampUnit(entry.score / V1_MAX_SCORE),
+          importance: 0,
+          recency: RECALL_NEUTRAL_RECENCY,
+          topic: 0,
+          usedBefore: 0,
+          intentBonus: 0,
+          useCount: 0,
+          rrfLatin: 0,
+          rrfCjk: 0,
+          // The keyword scorer has no script views, so there is no fusion to
+          // report; `v1Score` is the evidence it actually used.
+          lexicalFused: 0,
+          fusionViews: 'none',
+          v1Score: entry.score,
+          ageUnknown: true,
+        },
+      }))
+    },
+  }
 }
 
 /**

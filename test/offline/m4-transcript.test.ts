@@ -9,6 +9,7 @@ import {
 import {
   DEFAULT_STATE_PROFILE,
   LISTENER_LINE_PREFIX,
+  MAX_RECALLED_TURNS,
   TRANSCRIPT_HEADER,
   assembleDialogueContext,
   createDeliveryMemoryStore,
@@ -263,10 +264,17 @@ describe('M4 listener transcript', () => {
     ])
     const view = await assembleThroughPort({ memory, listenerHistory: listener.port })
 
-    // At most one listener-history read per generation, with the caller's limit
-    // and the selected input as the exclusive boundary.
+    // At most one listener-history read per generation, with the selected input
+    // as the exclusive boundary. The read asks for the recency window PLUS the
+    // v2 recall allowance (`MAX_RECALLED_TURNS`): the transcript still keeps only
+    // the newest `maxTurns` rows, but the rows just older than the window are the
+    // listener recall candidates and must reach the assembler to be rankable.
     expect(listener.calls).toEqual([
-      { sessionId: FIXTURE_SESSION_ID, limit: 8, beforeEventId: FIXTURE_EVENT_ID },
+      {
+        sessionId: FIXTURE_SESSION_ID,
+        limit: 8 + MAX_RECALLED_TURNS,
+        beforeEventId: FIXTURE_EVENT_ID,
+      },
     ])
 
     expect(view.transcript).toHaveLength(6)
@@ -438,6 +446,8 @@ describe('M4 listener transcript', () => {
     const view = await assembleThroughPort({ memory, listenerHistory: listener.port, request })
     const baseline = await assembleThroughPort({ memory, request })
 
+    // `maxTurns: 0` disables the window and, with it, the recall allowance: the
+    // read asks for nothing rather than for the bare allowance.
     expect(listener.calls).toEqual([
       { sessionId: FIXTURE_SESSION_ID, limit: 0, beforeEventId: FIXTURE_EVENT_ID },
     ])
@@ -597,7 +607,7 @@ describe('M4 listener transcript', () => {
     expect(listener.calls).toEqual([
       {
         sessionId: FIXTURE_SESSION_ID,
-        limit: request.contextLimits.maxTurns,
+        limit: request.contextLimits.maxTurns + MAX_RECALLED_TURNS,
         beforeEventId: request.selectedInput.eventId,
       },
     ])
@@ -628,7 +638,7 @@ describe('M4 listener transcript', () => {
     expect(listener.calls).toEqual([
       {
         sessionId: FIXTURE_SESSION_ID,
-        limit: 3,
+        limit: 3 + MAX_RECALLED_TURNS,
         beforeEventId: FIXTURE_EVENT_ID,
       },
     ])
@@ -665,7 +675,7 @@ describe('M4 listener transcript', () => {
     expect(listener.calls).toHaveLength(1)
     expect(listener.calls[0]).toEqual({
       sessionId: request.sessionId,
-      limit: request.contextLimits.maxTurns,
+      limit: request.contextLimits.maxTurns + MAX_RECALLED_TURNS,
       beforeEventId: 'event-selected-42',
     })
     // The request carries no admission field; the query must not invent one.

@@ -11095,3 +11095,158 @@ entries:
         The waiver is an M6-owned policy list; this change requests M6 review
         rather than deciding the exception. The gate's matching and ordering
         semantics are unchanged.
+  - date: "2026-11-25"
+    task: m4-a04-recall-ranking-v2
+    change: >-
+      Add an opt-in multi-factor recall ranker for non-window confirmed turns
+      and current-session audience turns. It scores Latin token Jaccard, CJK
+      3-gram cosine and RRF fusion as similarity, plus A03 importance, recency,
+      topic overlap and an in-session prior-use counter; replyIntent only
+      reorders already-admitted items. Character and listener recalls share
+      MAX_RECALLED_TURNS and the maxTurns stream bound. The v1 delivery-recall
+      path, the prompt when the new port is absent, and all shared contracts,
+      runtime and storage are unchanged. Listener recall stays session-only;
+      cross-session recall waits for X03.
+    requirements: []
+    invariants: []
+    commits: ["db86b8390bc904bf61bf02ce19b93f65e75e3112"]
+    agent: OpenCode V2 build
+    provider: deepseek
+    model: deepseek-v4-flash
+    sessions: ["ses_ded801693ffewtDrW1nbQdGBvG"]
+    supervision: >-
+      M4 supervised the same OpenCode session over three review rounds. The
+      supervisor reproduced the listener dead path under a conforming
+      ListenerHistoryPort, the unreachable v2 character recall and the
+      paraphrase rejected by the assembly floor, and sent each back with a
+      failing test. The final code preserves the ranker order, the shared
+      recall allowance and the off-path bytes.
+    verification:
+      base: 55e36d31534261b51baf274184a402e9945235bb
+      results: >-
+        pnpm test:m4 passed 23 files / 523 tests; pnpm typecheck clean; oxlint
+        0 warnings / 0 errors on 342 files; pnpm build passed; git diff --check
+        clean. pnpm test (full) passed 2258 with 9 skipped and 1 failed: the
+        pre-existing m6-02-provenance-command symlink EPERM on Windows, in an
+        M6 file this change does not touch. recall@3 on the frozen fixtures is
+        3/14 tuning and 0/7 held-out; it is a regression fixture, not a quality
+        claim.
+      limits: >-
+        No live provider, product run or merge. Listener recall is session-only
+        and production composition does not inject the port yet.
+  - date: "2026-11-25"
+    task: m4-a11-style-anchors-persona-probe
+    change: >-
+      Add default-off style anchors selected from turns already in the
+      assembled history (current persona version, 20-80 characters, not
+      interrupted/conflicting/duplicate, tic/address/emotion preferred) and
+      render them under "Voice reference (style only, not facts):" with the
+      entry lines charged to the history section. Add a 30-probe fixed persona
+      fixture with normal and OOC responses and deterministic style-contract
+      checks; no provider call. Disabled means no selection, no charge and
+      byte-identical prompt and budget numbers.
+    requirements: []
+    invariants: []
+    commits: ["db86b8390bc904bf61bf02ce19b93f65e75e3112"]
+    agent: OpenCode V2 build
+    provider: deepseek
+    model: deepseek-v4-flash
+    sessions: ["ses_ded801693ffewtDrW1nbQdGBvG"]
+    supervision: >-
+      M4 supervised the same OpenCode session. The supervisor found that the
+      anchor capacity ignored the listener transcript's share of the history
+      row and sent back a failing listener-plus-anchor budget test. The final
+      code bounds anchors by the history section's real remainder and keeps the
+      heard-prefix order unchanged.
+    verification:
+      base: 55e36d31534261b51baf274184a402e9945235bb
+      results: >-
+        pnpm test:m4 passed 23 files / 523 tests; pnpm typecheck clean; oxlint
+        0 warnings / 0 errors on 342 files; pnpm build passed; git diff --check
+        clean. pnpm test (full) passed 2258 with 9 skipped and 1 failed: the
+        pre-existing m6-02-provenance-command symlink EPERM on Windows, in an
+        M6 file this change does not touch. The 30-probe fixture covers name,
+        appearance, preference, boundary, tsundere and address; every normal
+        fixture has zero violations and every OOC fixture hits its named
+        violation.
+      limits: >-
+        No live LLM judge, product run or merge. Style anchors are off by
+        default and production composition does not enable them yet.
+  - date: "2026-11-25"
+    task: m4-a04-a11-pr214-review-fix
+    change: >-
+      Address the author's self-review on PR #214. Correct the paraphrase-floor
+      documentation (the alias-only flagship is 0.5, not 0.25; the overlapping
+      example states its pre-fusion literal and fused admitted value separately),
+      pin the flagship similarity to RECALL_PARAPHRASE_FLOOR, default
+      selectStyleAnchors to DEFAULT_STYLE_CONTRACT instead of an empty stub,
+      document the unpruned in-session use counter and the 0..1.1 score range,
+      and add the matching tests. Recall admission, the anchors off path and all
+      shared contracts are unchanged.
+    requirements: []
+    invariants: []
+    commits: ["501b017358bd478777a9f27e668878ca38d88932"]
+    agent: OpenCode V2 build
+    provider: deepseek
+    model: deepseek-v4-flash
+    sessions: ["ses_ded801693ffewtDrW1nbQdGBvG"]
+    supervision: >-
+      M4's self-review on PR #214 supplied two Medium and two Low findings.
+      OpenCode fixed the two Medium findings and recorded the two Low findings
+      as limits. A second comment-only pass corrected an inconsistency the first
+      pass introduced for the overlapping paraphrase example: the measured
+      admitted similarity is 1.0, not 0.667, so the comment now separates the
+      pre-fusion literal from the fused value.
+    verification:
+      base: f8e33f657fb76311eec48d2f80aef04c801ca4dd
+      results: >-
+        pnpm test:m4 passed 23 files / 536 tests; pnpm typecheck clean; oxlint
+        0 warnings / 0 errors on the five touched files. The full local pnpm
+        test still reports 11 environment failures outside M4: six trace-fitness
+        CRLF column checks, three opencode-policy symlink checks, one
+        ai-use-log CLI path check and one m6 provenance symlink check. None is in
+        an M4 file and the remote Linux CI is the authoritative run.
+      limits: >-
+        No live provider, product run or merge. The in-session use counter and
+        the non-normalised score range are documented limits, not fixed here.
+  - date: "2026-11-26"
+    task: m4-a04-a11-m5-review-fix
+    change: >-
+      Address M5's CHANGES_REQUESTED review on PR #214. Subtract the unified v2
+      recall rows from the heard-prefix turn allowance so listener recall cannot
+      push the stream past maxTurns; forward the real AssembledTurn subject and
+      the wrapped port's crossSessionDrops through asRecallPort without changing
+      the v1 DeliveryRecallRequest signature; apply a stricter caller
+      minSimilarity to paraphrase admission; exclude style anchors that restate
+      a standing fact; and skip the recall port entirely at maxTurns: 0. The A04
+      test helper keeps the durable history source as its default and opts into
+      the memory-entry source only for the partial+receipt heard-prefix case.
+    requirements: []
+    invariants: []
+    commits: ["675f74c84d1b178c3a2d0bec09ad702e3c9715b6"]
+    agent: OpenCode V2 build
+    provider: deepseek
+    model: deepseek-v4-flash
+    sessions: ["ses_dec3b9f17ffezV3HxyDwEoYUOq"]
+    supervision: >-
+      M5's review found one Medium and three Low issues plus two notes. A first
+      OpenCode pass changed the shipped v1 owner callback signature instead of
+      adapting it; the supervisor stopped it, discarded the partial work and
+      restarted with an explicit compatibility guard. A second pass fixed the
+      adapter only and left DeliveryRecallRequest and mayRecallCandidate
+      untouched. A third, test-only pass narrowed the record-source helper after
+      the supervisor rejected switching every A04 test from the durable history
+      path to the memory-entry path.
+    verification:
+      base: 7d607d71684fb79cb52473d5d66ef0c985c4fac3
+      results: >-
+        pnpm test:m4 passed 23 files / 542 tests; pnpm typecheck clean; oxlint
+        0 warnings / 0 errors on 380 files; git diff --check clean. The merge of
+        main c99bfa9 renumbered the M4 G1 records from TA-014/TA-015 to
+        TA-016/TA-017 because main took TA-014 for PR #211; both records still
+        precede the code commit in the branch history. The new regression tests
+        were checked against the reverted fixes.
+      limits: >-
+        No live provider, product run or merge. The heard-prefix section yields
+        to recall when the cap is full, so it can be empty in a loaded recall
+        case; that is the documented trim order, not a new policy.

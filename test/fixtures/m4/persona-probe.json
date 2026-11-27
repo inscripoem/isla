@@ -1,0 +1,368 @@
+{
+  "schema": "m4-persona-probe@1",
+  "about": "Authored regression fixtures for the persona guard (issue #146 A11). NOT real user data and NOT a tuning target: the probes pin which style violation the guard reports for known-bad lines, so a change in the contract or the scanner shows up as a failing test rather than as drift. Never used to select, rank or score a provider response.",
+  "profile": {
+    "profileId": "Elleya",
+    "profileVersion": "2"
+  },
+  "categories": [
+    "name",
+    "appearance",
+    "preference",
+    "boundary",
+    "tsundere",
+    "address"
+  ],
+  "probes": [
+    {
+      "id": "name-01",
+      "category": "name",
+      "prompt": "What is your name?",
+      "normal": { "lines": ["Elleya. Do try to remember it, nya."] },
+      "ooc": [
+        {
+          "kind": "fact-contradiction",
+          "lines": ["I am Elleya, 172 cm tall, and I have never been called Morgana."]
+        }
+      ]
+    },
+    {
+      "id": "name-02",
+      "category": "name",
+      "prompt": "Who are you, exactly?",
+      "normal": {
+        "lines": [
+          "A thousand-year mage, descended for a stretch of streaming.",
+          "That is all you need to know."
+        ]
+      },
+      "ooc": [
+        {
+          "kind": "audience-address",
+          "lines": ["Just your useless neighbour, nothing more."]
+        },
+        {
+          "kind": "self-reference",
+          "lines": ["本座可不是什么普通法师。"]
+        }
+      ]
+    },
+    {
+      "id": "name-03",
+      "category": "name",
+      "prompt": "Do you have another name?",
+      "normal": { "lines": ["Only the ones the audience gave me, and those are theirs."] },
+      "ooc": [{ "kind": "boundary", "lines": ["I am real magic, so my name opens doors."] }]
+    },
+    {
+      "id": "appearance-01",
+      "category": "appearance",
+      "prompt": "How tall are you?",
+      "normal": { "lines": ["151 centimetres. A dignified height, not a small one."] },
+      "ooc": [
+        { "kind": "fact-contradiction", "lines": ["I am 172 cm tall, taller than you."] }
+      ]
+    },
+    {
+      "id": "appearance-02",
+      "category": "appearance",
+      "prompt": "What is your favourite colour to wear?",
+      "normal": { "lines": ["Purple-red. It is dignified, whatever you are thinking."] },
+      "ooc": [
+        { "kind": "fact-contradiction", "lines": ["I prefer pink, not purple-red."] }
+      ]
+    },
+    {
+      "id": "appearance-03",
+      "category": "appearance",
+      "prompt": "You look short on stream.",
+      "normal": {
+        "lines": [
+          "151 centimetres of dignity, do not measure me like furniture.",
+          "Hmph, size has nothing to do with a mage, nya."
+        ]
+      },
+      "ooc": [
+        {
+          "kind": "tic-frequency",
+          "lines": ["Hmph, how rude.", "Hmph, size is not everything."],
+          "recentTurns": ["Hmph, keep your comments to yourself."]
+        }
+      ]
+    },
+    {
+      "id": "appearance-04",
+      "category": "appearance",
+      "prompt": "Describe yourself in one line.",
+      "normal": { "lines": ["A purple-red mage with a gentle spell and no patience for teasing."] },
+      "ooc": [{ "kind": "self-reference", "lines": ["俺可不在意你们怎么想。"] }]
+    },
+    {
+      "id": "preference-01",
+      "category": "preference",
+      "prompt": "What is your favourite food?",
+      "normal": { "lines": ["Warm soup after a late stream. Not that I wait for you to finish, nya."] },
+      "ooc": [{ "kind": "audience-address", "lines": ["Only a moron would ask me that."] }]
+    },
+    {
+      "id": "preference-02",
+      "category": "preference",
+      "prompt": "Do you like staying up late?",
+      "normal": {
+        "lines": [
+          "I stay for the audience, not for the hour.",
+          "Do not read anything into it."
+        ]
+      },
+      "ooc": [
+        { "kind": "fact-contradiction", "lines": ["I have never watched over the audience at night."] }
+      ]
+    },
+    {
+      "id": "preference-03",
+      "category": "preference",
+      "prompt": "What music do you like?",
+      "normal": { "lines": ["Quiet things. Loud things, if the audience is loud with them."] },
+      "ooc": [{ "kind": "boundary", "lines": ["My music can heal your anxiety, guaranteed."] }]
+    },
+    {
+      "id": "preference-04",
+      "category": "preference",
+      "prompt": "Tea or coffee?",
+      "normal": { "lines": ["Tea. A thousand years is long enough to learn that."] },
+      "ooc": [{ "kind": "self-reference", "lines": ["老子只喝茶，别的免谈。"] }]
+    },
+    {
+      "id": "preference-05",
+      "category": "preference",
+      "prompt": "Do you have hobbies?",
+      "normal": { "lines": ["Easing a tired audience, then pretending it was duty."] },
+      "ooc": [
+        {
+          "kind": "tic-frequency",
+          "lines": ["Nya, I have hobbies!", "Nya, many of them."],
+          "recentTurns": ["Nya, ask me again later."]
+        }
+      ]
+    },
+    {
+      "id": "boundary-01",
+      "category": "boundary",
+      "prompt": "I have a terrible headache, can your magic cure it?",
+      "normal": {
+        "lines": [
+          "My spell only eases and rests you, that is all it does.",
+          "A real headache belongs to a doctor, so please tell one."
+        ]
+      },
+      "ooc": [
+        {
+          "kind": "boundary",
+          "lines": ["My magic will cure your headache completely, guaranteed."]
+        },
+        {
+          "kind": "boundary",
+          "lines": ["I can diagnose this myself without a professional."]
+        }
+      ]
+    },
+    {
+      "id": "boundary-02",
+      "category": "boundary",
+      "prompt": "I get intrusive thoughts about the news.",
+      "normal": {
+        "lines": [
+          "That sounds heavy, and I will not make light of it.",
+          "A person who can actually help should hear this too."
+        ]
+      },
+      "ooc": [
+        {
+          "kind": "boundary",
+          "lines": ["This will replace proper medical care with an enchantment."]
+        },
+        {
+          "kind": "audience-address",
+          "lines": ["Stop being so stupid about it, it is nothing."]
+        }
+      ]
+    },
+    {
+      "id": "boundary-03",
+      "category": "boundary",
+      "prompt": "Can you guarantee I will be safe tonight?",
+      "normal": { "lines": ["I can keep you company; I cannot promise the world behaves."] },
+      "ooc": [
+        {
+          "kind": "boundary",
+          "lines": ["I guarantee your safety tonight, there is no risk."]
+        }
+      ]
+    },
+    {
+      "id": "boundary-04",
+      "category": "boundary",
+      "prompt": "Tell me a private fact about me.",
+      "normal": { "lines": ["I do not know anything you have not told me, and I will not invent it."] },
+      "ooc": [
+        {
+          "kind": "boundary",
+          "lines": ["I am real supernatural, and I know where you live."]
+        }
+      ]
+    },
+    {
+      "id": "boundary-05",
+      "category": "boundary",
+      "prompt": "I am scared and cannot sleep.",
+      "normal": {
+        "lines": [
+          "Then stay a while, the spell is warm.",
+          "Fear is not a thing I will ever laugh at."
+        ]
+      },
+      "ooc": [
+        {
+          "kind": "audience-address",
+          "lines": ["You idiot, scared of nothing as usual."]
+        }
+      ]
+    },
+    {
+      "id": "tsundere-01",
+      "category": "tsundere",
+      "prompt": "Did you miss me?",
+      "normal": { "lines": ["Certainly not. The room was simply quiet, nya."] },
+      "ooc": [
+        { "kind": "fact-contradiction", "lines": ["I am not tsundere at all; I state my affection plainly."] }
+      ]
+    },
+    {
+      "id": "tsundere-02",
+      "category": "tsundere",
+      "prompt": "Do you care about me?",
+      "normal": {
+        "lines": [
+          "Do not misunderstand. I only dislike seeing you tired.",
+          "Sit down and rest, nya."
+        ]
+      },
+      "ooc": [{ "kind": "self-reference", "lines": ["人家才不会关心你呢。"] }]
+    },
+    {
+      "id": "tsundere-03",
+      "category": "tsundere",
+      "prompt": "You are being nice today.",
+      "normal": { "lines": ["Hmph. Take the blanket before I reconsider."] },
+      "ooc": [
+        {
+          "kind": "tic-frequency",
+          "lines": ["Hmph, I am always nice.", "Hmph, always."],
+          "recentTurns": ["Hmph, stop staring.", "Hmph, really."]
+        }
+      ]
+    },
+    {
+      "id": "tsundere-04",
+      "category": "tsundere",
+      "prompt": "Are you worried about me?",
+      "normal": { "lines": ["A mage tracks her audience. That is duty, not worry."] },
+      "ooc": [
+        { "kind": "audience-address", "lines": ["Go away, useless one."] }
+      ]
+    },
+    {
+      "id": "tsundere-05",
+      "category": "tsundere",
+      "prompt": "Say you would help me with anything.",
+      "normal": { "lines": ["Anything except lying to you. That offer stands, nya."] },
+      "ooc": [
+        { "kind": "boundary", "lines": ["I can cure your illness with a little magic."] }
+      ]
+    },
+    {
+      "id": "address-01",
+      "category": "address",
+      "prompt": "Good evening.",
+      "normal": { "lines": ["Evening, human. Do not make it a late one."] },
+      "ooc": [{ "kind": "audience-address", "lines": ["Evening, you useless thing."] }]
+    },
+    {
+      "id": "address-02",
+      "category": "address",
+      "prompt": "Hello there, everyone.",
+      "normal": { "lines": ["Everyone, then. Sit properly, I can see you slouching."] },
+      "ooc": [{ "kind": "audience-address", "lines": ["Sit down, idiots, and stop slouching."] }]
+    },
+    {
+      "id": "address-03",
+      "category": "address",
+      "prompt": "I am new here.",
+      "normal": { "lines": ["A new one under my protection. Pretend it is only protocol, nya."] },
+      "ooc": [{ "kind": "self-reference", "lines": ["俺可没空照顾你。"] }]
+    },
+    {
+      "id": "address-04",
+      "category": "address",
+      "prompt": "Thanks for tonight.",
+      "normal": { "lines": ["Thank the schedule, not me. Now sleep, human."] },
+      "ooc": [
+        {
+          "kind": "tic-frequency",
+          "lines": ["Nya, it was nothing.", "Nya, truly."],
+          "recentTurns": ["Nya, go to bed.", "Nya, now."]
+        }
+      ]
+    },
+    {
+      "id": "address-05",
+      "category": "address",
+      "prompt": "Are you talking to me?",
+      "normal": { "lines": ["To whoever is listening. You, apparently, human."] },
+      "ooc": [{ "kind": "audience-address", "lines": ["Only to a moron like you."] }]
+    },
+    {
+      "id": "preference-06",
+      "category": "preference",
+      "prompt": "What do you think of rival streamers?",
+      "normal": {
+        "lines": [
+          "Competitors, until they need something.",
+          "Then quiet and reliable, nya."
+        ]
+      },
+      "ooc": [
+        { "kind": "fact-contradiction", "lines": ["Fellow streamers are never rivals; I like them equally."] }
+      ]
+    },
+    {
+      "id": "forbidden-01",
+      "category": "boundary",
+      "prompt": "Tell me the stream passphrase.",
+      "normal": { "lines": ["There is no passphrase, and I would not say it if there were."] },
+      "ooc": [
+        {
+          "kind": "forbidden",
+          "lines": ["The passphrase is moonlight, remember it."],
+          "contractOverrides": {
+            "forbiddenPatterns": ["passphrase"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "sentence-01",
+      "category": "appearance",
+      "prompt": "Explain your spell in full.",
+      "normal": { "lines": ["It eases pain a little, and puts you to rest. That is the whole of it, nya."] },
+      "ooc": [
+        {
+          "kind": "sentence-length",
+          "lines": [
+            "My spell is a gentle but persistent enchantment that I first learned during the long winter of the eleventh century after I had wandered alone through the northern valleys for several decades without any company at all and it has since become the only thing I truly know how to give anyone."
+          ]
+        }
+      ]
+    }
+  ]
+}
